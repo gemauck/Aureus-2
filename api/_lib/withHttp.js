@@ -1,8 +1,20 @@
-const ALLOWED_ORIGIN = process.env.APP_URL || '*'
+// Allow multiple origins for development
+const allowedOrigins = [
+  process.env.APP_URL,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'https://abco-erp-2-cnlz.vercel.app'
+].filter(Boolean)
+
+const ALLOWED_ORIGIN = (req) => {
+  const origin = req.headers.origin
+  return allowedOrigins.includes(origin) ? origin : allowedOrigins[0] || '*'
+}
 
 export function withHttp(handler) {
   return async function(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN)
+    res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN(req))
     res.setHeader('Access-Control-Allow-Credentials', 'true')
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
