@@ -694,9 +694,25 @@ const Clients = () => {
 
     // Filter clients
     const filteredClients = clients.filter(client => {
+        // Enhanced search across multiple fields
+        const searchLower = searchTerm.toLowerCase();
         const matchesSearch = searchTerm === '' || 
-            client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (client.contacts?.[0]?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+            client.name.toLowerCase().includes(searchLower) ||
+            client.industry.toLowerCase().includes(searchLower) ||
+            client.address.toLowerCase().includes(searchLower) ||
+            client.website.toLowerCase().includes(searchLower) ||
+            client.notes.toLowerCase().includes(searchLower) ||
+            // Search in all contacts
+            (client.contacts || []).some(contact => 
+                contact.name.toLowerCase().includes(searchLower) ||
+                contact.email.toLowerCase().includes(searchLower) ||
+                contact.phone.includes(searchTerm)
+            ) ||
+            // Search in all sites
+            (client.sites || []).some(site => 
+                site.name.toLowerCase().includes(searchLower) ||
+                site.address.toLowerCase().includes(searchLower)
+            );
         
         const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
         const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
@@ -1320,12 +1336,21 @@ const Clients = () => {
                         <div className="relative">
                             <input
                                 type="text"
-                                placeholder="Search clients..."
+                                placeholder="Search by name, industry, or contact..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                             />
                             <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm('')}
+                                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                                    title="Clear search"
+                                >
+                                    <i className="fas fa-times text-sm"></i>
+                                </button>
+                            )}
                         </div>
                     </div>
                     <div>
@@ -1356,6 +1381,30 @@ const Clients = () => {
                         </select>
                     </div>
                 </div>
+                
+                {/* Search Results Counter */}
+                {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                    <div className="mt-3 px-1">
+                        <div className="flex items-center justify-between text-sm text-gray-600">
+                            <span>
+                                Showing {filteredClients.length} of {clients.length} clients
+                                {searchTerm && ` matching "${searchTerm}"`}
+                            </span>
+                            {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                                <button
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setFilterIndustry('All Industries');
+                                        setFilterStatus('All Status');
+                                    }}
+                                    className="text-primary-600 hover:text-primary-700 font-medium"
+                                >
+                                    Clear all filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Content based on view mode */}
