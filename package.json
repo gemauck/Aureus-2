@@ -12,7 +12,8 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node prisma/seed.js",
-    "start:local": "node server/local.js"
+    "start:local": "node server/local.js",
+    "start:railway": "node server/railway.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
