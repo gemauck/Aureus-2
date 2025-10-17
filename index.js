@@ -6,8 +6,8 @@ import { fileURLToPath } from 'url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const rootDir = path.resolve(__dirname, '..')
-const apiDir = path.join(rootDir, 'api')
+const rootDir = __dirname
+const apiDir = path.join(__dirname, 'api')
 
 function toHandlerPath(urlPath) {
   const parts = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
