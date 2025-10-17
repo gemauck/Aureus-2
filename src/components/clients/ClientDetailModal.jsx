@@ -170,9 +170,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
         
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+        // Save contact changes immediately
+        onSave(updatedFormData);
         
         setNewContact({
             name: '',
@@ -364,9 +363,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Site Added', `Added site: ${newSite.name}`);
         
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+        // Save site changes immediately
+        onSave(updatedFormData);
         
             setNewSite({
                 name: '',
@@ -471,9 +469,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         
         setFormData(updatedFormData);
         
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+        // Save opportunity changes immediately
+        onSave(updatedFormData);
         
         // Reset form
         setNewOpportunity({
