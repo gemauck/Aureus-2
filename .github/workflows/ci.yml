@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: abcotronics-erp-modular
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Start Vercel Dev (no internet; simulate API only)
+        run: npx vercel dev --yes & sleep 3
+      - name: Run smoke tests
+        run: node tests/run.js
+        env:
+          DATABASE_URL: postgresql://user:pass@localhost:5432/db
+          JWT_SECRET: test_secret
+          APP_URL: http://localhost:3000
+
