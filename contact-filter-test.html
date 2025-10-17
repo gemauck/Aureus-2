@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Filter Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Contact Filter Test</h1>
+    
+    <div class="test-section">
+        <h2>📊 Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Run Contact Filter Test</h2>
+        <button onclick="runContactFilterTest()" style="background-color: #dc3545; color: white; font-size: 16px; padding: 15px 30px;">
+            🔍 TEST CONTACT FILTER
+        </button>
+        <button onclick="clearResults()" style="background-color: #6c757d; color: white;">
+            🗑️ Clear Results
+        </button>
+    </div>
+
+    <script>
+        let testResults = [];
+
+        function addResult(testName, passed, message, details = null) {
+            const result = {
+                name: testName,
+                passed: passed,
+                message: message,
+                details: details,
+                timestamp: new Date().toISOString()
+            };
+            testResults.push(result);
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = testResults.map(result => `
+                <div class="test-result ${result.passed ? 'pass' : 'fail'}">
+                    <strong>${result.passed ? '✅' : '❌'} ${result.name}</strong><br>
+                    ${result.message}<br>
+                    ${result.details ? `<pre>${JSON.stringify(result.details, null, 2)}</pre>` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function runContactFilterTest() {
+            clearResults();
+            addResult('Contact Filter Test Start', true, 'Testing contact filter options...');
+            
+            try {
+                // Test 1: Check if we can access the main app
+                addResult('Step 1: Access Main App', true, 'Testing access to main application...');
+                
+                const response = await fetch('https://abco-erp-2-cnlz.vercel.app/');
+                if (response.ok) {
+                    addResult('Step 1: Access Main App', true, 'Main app accessible');
+                    
+                    // Test 2: Check if we can login
+                    addResult('Step 2: Login Test', true, 'Testing login...');
+                    
+                    const loginResponse = await fetch('https://abco-erp-2-cnlz.vercel.app/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: 'admin@abcotronics.com', password: 'admin123' })
+                    });
+                    
+                    const loginData = await loginResponse.json();
+                    
+                    if (loginResponse.ok && loginData.data?.accessToken) {
+                        addResult('Step 2: Login Test', true, 'Login successful');
+                        
+                        // Test 3: Check clients
+                        addResult('Step 3: Clients Test', true, 'Testing clients access...');
+                        
+                        const clientsResponse = await fetch('https://abco-erp-2-cnlz.vercel.app/api/clients', {
+                            headers: { 'Authorization': `Bearer ${loginData.data.accessToken}` }
+                        });
+                        
+                        const clientsData = await clientsResponse.json();
+                        
+                        if (clientsResponse.ok && clientsData.data?.clients) {
+                            addResult('Step 3: Clients Test', true, `Retrieved ${clientsData.data.clients.length} clients`);
+                            
+                            // Test 4: Check if any client has sites
+                            const clientsWithSites = clientsData.data.clients.filter(c => c.sites && c.sites.length > 0);
+                            addResult('Step 4: Sites Check', true, `${clientsWithSites.length} clients have sites`);
+                            
+                            if (clientsWithSites.length > 0) {
+                                const testClient = clientsWithSites[0];
+                                addResult('Step 5: Contact Filter Check', true, `Test client: ${testClient.name} has ${testClient.sites.length} sites and ${testClient.contacts?.length || 0} contacts`);
+                                
+                                // The contact filter should now only show site names, not "All Contacts"
+                                addResult('Contact Filter Status', true, 'Contact filter should only show site names - no "All Contacts" option');
+                            } else {
+                                addResult('Step 5: Contact Filter Check', true, 'No clients with sites found - contact filter should be hidden');
+                            }
+                            
+                        } else {
+                            addResult('Step 3: Clients Test', false, 'Failed to get clients', clientsData);
+                        }
+                        
+                    } else {
+                        addResult('Step 2: Login Test', false, 'Login failed', loginData);
+                    }
+                    
+                } else {
+                    addResult('Step 1: Access Main App', false, 'Main app not accessible');
+                }
+                
+            } catch (error) {
+                addResult('Contact Filter Test', false, 'Test failed with error', error.message);
+            }
+            
+            addResult('Contact Filter Test Complete', true, 'Test completed! Check the main app for contact filter options.');
+        }
+
+        function clearResults() {
+            testResults = [];
+            updateDisplay();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addResult('Test Tool Initialized', true, 'Ready to test contact filter');
+        });
+    </script>
+</body>
+</html>

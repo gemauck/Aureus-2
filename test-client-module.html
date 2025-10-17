@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Module Comprehensive Testing</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        .test-data { background-color: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Client Module Comprehensive Testing Suite</h1>
+    
+    <div class="test-section">
+        <h2>🔧 Test Configuration</h2>
+        <div class="test-data">
+            <p><strong>API Base URL:</strong> <span id="apiBase">https://abco-erp-2-cnlz.vercel.app</span></p>
+            <p><strong>Test Token:</strong> <span id="testToken">Not logged in</span></p>
+            <button onclick="login()">🔑 Login</button>
+            <button onclick="logout()">🚪 Logout</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 Test Results Summary</h2>
+        <div id="testSummary">
+            <p>Tests: <span id="totalTests">0</span> | Passed: <span id="passedTests">0</span> | Failed: <span id="failedTests">0</span></p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>🔍 Individual Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Run All Tests</h2>
+        <button onclick="runAllTests()" style="background-color: #007bff; color: white; font-size: 16px; padding: 15px 30px;">
+            ▶️ Run Comprehensive Test Suite
+        </button>
+        <button onclick="clearResults()" style="background-color: #6c757d; color: white;">
+            🗑️ Clear Results
+        </button>
+    </div>
+
+    <script>
+        let testResults = [];
+        let authToken = null;
+        let testClientId = null;
+
+        // Test result tracking
+        function addTestResult(testName, passed, message, details = null) {
+            const result = {
+                name: testName,
+                passed: passed,
+                message: message,
+                details: details,
+                timestamp: new Date().toISOString()
+            };
+            testResults.push(result);
+            updateTestDisplay();
+        }
+
+        function updateTestDisplay() {
+            const resultsDiv = document.getElementById('testResults');
+            const totalTests = testResults.length;
+            const passedTests = testResults.filter(r => r.passed).length;
+            const failedTests = totalTests - passedTests;
+
+            document.getElementById('totalTests').textContent = totalTests;
+            document.getElementById('passedTests').textContent = passedTests;
+            document.getElementById('failedTests').textContent = failedTests;
+
+            resultsDiv.innerHTML = testResults.map(result => `
+                <div class="test-result ${result.passed ? 'pass' : 'fail'}">
+                    <strong>${result.passed ? '✅' : '❌'} ${result.name}</strong><br>
+                    ${result.message}<br>
+                    ${result.details ? `<small>Details: ${result.details}</small>` : ''}
+                </div>
+            `).join('');
+        }
+
+        // Authentication
+        async function login() {
+            try {
+                const response = await fetch(`${document.getElementById('apiBase').textContent}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'admin@abcotronics.com', password: 'admin123' })
+                });
+                
+                const data = await response.json();
+                if (data.data?.accessToken) {
+                    authToken = data.data.accessToken;
+                    document.getElementById('testToken').textContent = authToken.substring(0, 20) + '...';
+                    addTestResult('Authentication', true, 'Successfully logged in');
+                } else {
+                    addTestResult('Authentication', false, 'Login failed', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Authentication', false, 'Login error', error.message);
+            }
+        }
+
+        function logout() {
+            authToken = null;
+            document.getElementById('testToken').textContent = 'Not logged in';
+            addTestResult('Logout', true, 'Logged out successfully');
+        }
+
+        // API Helper
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+            
+            const options = { method, headers };
+            if (body) options.body = JSON.stringify(body);
+            
+            const response = await fetch(`${document.getElementById('apiBase').textContent}${endpoint}`, options);
+            const data = await response.json();
+            
+            return { response, data };
+        }
+
+        // Test Data
+        const testClientData = {
+            name: 'Comprehensive Test Client',
+            industry: 'Technology',
+            status: 'active',
+            revenue: 50000,
+            address: '123 Test Street, Test City',
+            website: 'https://testclient.com',
+            notes: 'This is a comprehensive test client',
+            contacts: [
+                {
+                    id: 'contact1',
+                    name: 'John Test Manager',
+                    email: 'john@testclient.com',
+                    phone: '+1234567890',
+                    role: 'Manager',
+                    siteId: 'site1'
+                },
+                {
+                    id: 'contact2',
+                    name: 'Jane Test Director',
+                    email: 'jane@testclient.com',
+                    phone: '+1234567891',
+                    role: 'Director',
+                    siteId: 'site2'
+                }
+            ],
+            sites: [
+                {
+                    id: 'site1',
+                    name: 'Main Office',
+                    address: '123 Test Street, Test City',
+                    contactPerson: 'John Test Manager',
+                    phone: '+1234567890',
+                    email: 'john@testclient.com',
+                    notes: 'Primary office location',
+                    latitude: '40.7128',
+                    longitude: '-74.0060'
+                },
+                {
+                    id: 'site2',
+                    name: 'Branch Office',
+                    address: '456 Test Avenue, Test City',
+                    contactPerson: 'Jane Test Director',
+                    phone: '+1234567891',
+                    email: 'jane@testclient.com',
+                    notes: 'Secondary office location',
+                    latitude: '40.7589',
+                    longitude: '-73.9851'
+                }
+            ],
+            opportunities: [
+                {
+                    id: 'opp1',
+                    name: 'Q1 Expansion',
+                    value: 25000,
+                    stage: 'proposal',
+                    probability: 75,
+                    notes: 'Potential expansion opportunity'
+                }
+            ],
+            contracts: [
+                {
+                    id: 'contract1',
+                    title: 'Annual Service Contract',
+                    value: 50000,
+                    startDate: '2024-01-01',
+                    endDate: '2024-12-31',
+                    status: 'Active',
+                    notes: 'Annual service agreement'
+                }
+            ],
+            activityLog: [
+                {
+                    id: 'activity1',
+                    date: '2024-01-15',
+                    action: 'Meeting',
+                    description: 'Initial client meeting',
+                    user: 'Test User'
+                }
+            ],
+            billingTerms: {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'USD',
+                retainerAmount: 5000,
+                taxExempt: false,
+                notes: 'Standard billing terms'
+            }
+        };
+
+        // Individual Tests
+        async function testClientCreation() {
+            try {
+                const { response, data } = await apiCall('/api/clients', 'POST', testClientData);
+                
+                if (response.ok && data.data?.client?.id) {
+                    testClientId = data.data.client.id;
+                    addTestResult('Client Creation', true, `Client created with ID: ${testClientId}`);
+                    
+                    // Verify all data was saved
+                    const savedClient = data.data.client;
+                    const tests = [
+                        { name: 'Client Name', expected: testClientData.name, actual: savedClient.name },
+                        { name: 'Client Industry', expected: testClientData.industry, actual: savedClient.industry },
+                        { name: 'Client Revenue', expected: testClientData.revenue, actual: savedClient.revenue },
+                        { name: 'Client Address', expected: testClientData.address, actual: savedClient.address },
+                        { name: 'Client Website', expected: testClientData.website, actual: savedClient.website },
+                        { name: 'Client Notes', expected: testClientData.notes, actual: savedClient.notes },
+                        { name: 'Contacts Count', expected: testClientData.contacts.length, actual: savedClient.contacts?.length || 0 },
+                        { name: 'Sites Count', expected: testClientData.sites.length, actual: savedClient.sites?.length || 0 },
+                        { name: 'Opportunities Count', expected: testClientData.opportunities.length, actual: savedClient.opportunities?.length || 0 },
+                        { name: 'Contracts Count', expected: testClientData.contracts.length, actual: savedClient.contracts?.length || 0 },
+                        { name: 'Activity Log Count', expected: testClientData.activityLog.length, actual: savedClient.activityLog?.length || 0 }
+                    ];
+                    
+                    tests.forEach(test => {
+                        if (test.expected === test.actual) {
+                            addTestResult(`Data Verification - ${test.name}`, true, `Correctly saved: ${test.actual}`);
+                        } else {
+                            addTestResult(`Data Verification - ${test.name}`, false, `Expected: ${test.expected}, Got: ${test.actual}`);
+                        }
+                    });
+                    
+                } else {
+                    addTestResult('Client Creation', false, 'Failed to create client', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Client Creation', false, 'Client creation error', error.message);
+            }
+        }
+
+        async function testClientRetrieval() {
+            if (!testClientId) {
+                addTestResult('Client Retrieval', false, 'No client ID available for testing');
+                return;
+            }
+            
+            try {
+                const { response, data } = await apiCall(`/api/clients/${testClientId}`);
+                
+                if (response.ok && data.data?.client) {
+                    const client = data.data.client;
+                    addTestResult('Client Retrieval', true, `Client retrieved: ${client.name}`);
+                    
+                    // Verify data persistence
+                    const persistenceTests = [
+                        { name: 'Contacts Persistence', data: client.contacts, expectedLength: testClientData.contacts.length },
+                        { name: 'Sites Persistence', data: client.sites, expectedLength: testClientData.sites.length },
+                        { name: 'Opportunities Persistence', data: client.opportunities, expectedLength: testClientData.opportunities.length },
+                        { name: 'Contracts Persistence', data: client.contracts, expectedLength: testClientData.contracts.length },
+                        { name: 'Activity Log Persistence', data: client.activityLog, expectedLength: testClientData.activityLog.length }
+                    ];
+                    
+                    persistenceTests.forEach(test => {
+                        if (test.data && test.data.length === test.expectedLength) {
+                            addTestResult(`Persistence - ${test.name}`, true, `Data persisted correctly: ${test.data.length} items`);
+                        } else {
+                            addTestResult(`Persistence - ${test.name}`, false, `Expected ${test.expectedLength} items, got ${test.data?.length || 0}`);
+                        }
+                    });
+                    
+                } else {
+                    addTestResult('Client Retrieval', false, 'Failed to retrieve client', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Client Retrieval', false, 'Client retrieval error', error.message);
+            }
+        }
+
+        async function testClientUpdate() {
+            if (!testClientId) {
+                addTestResult('Client Update', false, 'No client ID available for testing');
+                return;
+            }
+            
+            try {
+                const updateData = {
+                    ...testClientData,
+                    name: 'Updated Test Client',
+                    revenue: 75000,
+                    notes: 'This client has been updated',
+                    contacts: [
+                        ...testClientData.contacts,
+                        {
+                            id: 'contact3',
+                            name: 'Bob Test Engineer',
+                            email: 'bob@testclient.com',
+                            phone: '+1234567892',
+                            role: 'Engineer',
+                            siteId: 'site1'
+                        }
+                    ]
+                };
+                
+                const { response, data } = await apiCall(`/api/clients/${testClientId}`, 'PATCH', updateData);
+                
+                if (response.ok && data.data?.client) {
+                    const updatedClient = data.data.client;
+                    addTestResult('Client Update', true, `Client updated: ${updatedClient.name}`);
+                    
+                    // Verify update worked
+                    if (updatedClient.name === updateData.name && updatedClient.revenue === updateData.revenue) {
+                        addTestResult('Update Verification', true, 'Client data updated correctly');
+                    } else {
+                        addTestResult('Update Verification', false, 'Client data not updated correctly');
+                    }
+                    
+                    // Verify new contact was added
+                    if (updatedClient.contacts && updatedClient.contacts.length === updateData.contacts.length) {
+                        addTestResult('Contact Addition', true, `New contact added: ${updatedClient.contacts.length} total contacts`);
+                    } else {
+                        addTestResult('Contact Addition', false, `Expected ${updateData.contacts.length} contacts, got ${updatedClient.contacts?.length || 0}`);
+                    }
+                    
+                } else {
+                    addTestResult('Client Update', false, 'Failed to update client', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Client Update', false, 'Client update error', error.message);
+            }
+        }
+
+        async function testClientList() {
+            try {
+                const { response, data } = await apiCall('/api/clients');
+                
+                if (response.ok && data.data?.clients) {
+                    const clients = data.data.clients;
+                    addTestResult('Client List', true, `Retrieved ${clients.length} clients`);
+                    
+                    // Check if our test client is in the list
+                    const testClient = clients.find(c => c.id === testClientId);
+                    if (testClient) {
+                        addTestResult('Client List - Test Client Found', true, 'Test client found in list');
+                        
+                        // Verify test client has all data
+                        if (testClient.contacts && testClient.contacts.length > 0) {
+                            addTestResult('Client List - Contacts Present', true, `Test client has ${testClient.contacts.length} contacts`);
+                        } else {
+                            addTestResult('Client List - Contacts Present', false, 'Test client has no contacts in list');
+                        }
+                        
+                        if (testClient.sites && testClient.sites.length > 0) {
+                            addTestResult('Client List - Sites Present', true, `Test client has ${testClient.sites.length} sites`);
+                        } else {
+                            addTestResult('Client List - Sites Present', false, 'Test client has no sites in list');
+                        }
+                        
+                    } else {
+                        addTestResult('Client List - Test Client Found', false, 'Test client not found in list');
+                    }
+                    
+                } else {
+                    addTestResult('Client List', false, 'Failed to retrieve client list', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Client List', false, 'Client list error', error.message);
+            }
+        }
+
+        async function testClientDeletion() {
+            if (!testClientId) {
+                addTestResult('Client Deletion', false, 'No client ID available for testing');
+                return;
+            }
+            
+            try {
+                const { response, data } = await apiCall(`/api/clients/${testClientId}`, 'DELETE');
+                
+                if (response.ok) {
+                    addTestResult('Client Deletion', true, 'Client deleted successfully');
+                    
+                    // Verify deletion by trying to retrieve the client
+                    const { response: getResponse } = await apiCall(`/api/clients/${testClientId}`);
+                    if (getResponse.status === 404) {
+                        addTestResult('Deletion Verification', true, 'Client confirmed deleted (404 on retrieval)');
+                    } else {
+                        addTestResult('Deletion Verification', false, 'Client still exists after deletion');
+                    }
+                    
+                } else {
+                    addTestResult('Client Deletion', false, 'Failed to delete client', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Client Deletion', false, 'Client deletion error', error.message);
+            }
+        }
+
+        async function testEmailOptionality() {
+            try {
+                const clientWithoutEmail = {
+                    name: 'Test Client No Email',
+                    industry: 'Technology',
+                    status: 'active',
+                    revenue: 1000,
+                    contacts: [
+                        {
+                            id: 'contact_no_email',
+                            name: 'Contact Without Email',
+                            phone: '+1234567890',
+                            role: 'Manager'
+                            // No email field
+                        }
+                    ],
+                    sites: [],
+                    opportunities: [],
+                    contracts: [],
+                    activityLog: [],
+                    billingTerms: {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'USD',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }
+                };
+                
+                const { response, data } = await apiCall('/api/clients', 'POST', clientWithoutEmail);
+                
+                if (response.ok && data.data?.client?.id) {
+                    addTestResult('Email Optionality', true, 'Client created with contact that has no email');
+                    
+                    // Clean up
+                    await apiCall(`/api/clients/${data.data.client.id}`, 'DELETE');
+                    
+                } else {
+                    addTestResult('Email Optionality', false, 'Failed to create client with contact without email', JSON.stringify(data));
+                }
+            } catch (error) {
+                addTestResult('Email Optionality', false, 'Email optionality test error', error.message);
+            }
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            clearResults();
+            addTestResult('Test Suite Start', true, 'Starting comprehensive client module testing...');
+            
+            // Check authentication first
+            if (!authToken) {
+                addTestResult('Authentication Check', false, 'Please login first');
+                return;
+            }
+            
+            // Run tests in sequence
+            await testClientCreation();
+            await testClientRetrieval();
+            await testClientUpdate();
+            await testClientList();
+            await testEmailOptionality();
+            await testClientDeletion();
+            
+            addTestResult('Test Suite Complete', true, 'All tests completed!');
+        }
+
+        function clearResults() {
+            testResults = [];
+            testClientId = null;
+            updateTestDisplay();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addTestResult('Test Suite Initialized', true, 'Ready to run comprehensive tests');
+        });
+    </script>
+</body>
+</html>

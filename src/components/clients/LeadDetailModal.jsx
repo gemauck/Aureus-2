@@ -1,0 +1,1027 @@
+// Get React hooks from window
+const { useState, useEffect } = React;
+
+const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects }) => {
+    const [activeTab, setActiveTab] = useState('overview');
+    const [formData, setFormData] = useState(lead || {
+        name: '',
+        industry: '',
+        status: 'New',
+        source: 'Website',
+        stage: 'Awareness',
+        value: 0,
+        probability: 30,
+        notes: '',
+        contacts: [],
+        followUps: [],
+        projectIds: [],
+        comments: [],
+        activityLog: []
+    });
+    
+    const [editingContact, setEditingContact] = useState(null);
+    const [showContactForm, setShowContactForm] = useState(false);
+    const [newContact, setNewContact] = useState({
+        name: '',
+        role: '',
+        department: '',
+        email: '',
+        phone: '',
+        isPrimary: false
+    });
+    
+    const [newFollowUp, setNewFollowUp] = useState({
+        date: '',
+        time: '',
+        type: 'Call',
+        description: '',
+        completed: false
+    });
+    
+    const [newComment, setNewComment] = useState('');
+    const [selectedProjectIds, setSelectedProjectIds] = useState(formData.projectIds || []);
+
+    useEffect(() => {
+        if (lead) {
+            setFormData(lead);
+            setSelectedProjectIds(lead.projectIds || []);
+        }
+    }, [lead]);
+
+    const handleAddContact = () => {
+        if (!newContact.name || !newContact.email) {
+            alert('Name and email are required');
+            return;
+        }
+        
+        const updatedContacts = [...(formData.contacts || []), {
+            ...newContact,
+            id: Date.now()
+        }];
+        
+        setFormData({...formData, contacts: updatedContacts});
+        logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
+        setNewContact({
+            name: '',
+            role: '',
+            department: '',
+            email: '',
+            phone: '',
+            isPrimary: false
+        });
+        setShowContactForm(false);
+    };
+
+    const handleEditContact = (contact) => {
+        setEditingContact(contact);
+        setNewContact(contact);
+        setShowContactForm(true);
+    };
+
+    const handleUpdateContact = () => {
+        const updatedContacts = formData.contacts.map(c => 
+            c.id === editingContact.id ? {...newContact, id: c.id} : c
+        );
+        setFormData({...formData, contacts: updatedContacts});
+        logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
+        setEditingContact(null);
+        setNewContact({
+            name: '',
+            role: '',
+            department: '',
+            email: '',
+            phone: '',
+            isPrimary: false
+        });
+        setShowContactForm(false);
+    };
+
+    const handleDeleteContact = (contactId) => {
+        if (confirm('Remove this contact?')) {
+            setFormData({
+                ...formData,
+                contacts: formData.contacts.filter(c => c.id !== contactId)
+            });
+        }
+    };
+
+    const handleAddFollowUp = () => {
+        if (!newFollowUp.date || !newFollowUp.description) {
+            alert('Date and description are required');
+            return;
+        }
+        
+        const updatedFollowUps = [...(formData.followUps || []), {
+            ...newFollowUp,
+            id: Date.now(),
+            createdAt: new Date().toISOString()
+        }];
+        
+        setFormData({...formData, followUps: updatedFollowUps});
+        logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`);
+        setNewFollowUp({
+            date: '',
+            time: '',
+            type: 'Call',
+            description: '',
+            completed: false
+        });
+    };
+
+    const handleToggleFollowUp = (followUpId) => {
+        const followUp = formData.followUps.find(f => f.id === followUpId);
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? {...f, completed: !f.completed} : f
+        );
+        setFormData({...formData, followUps: updatedFollowUps});
+        if (followUp && !followUp.completed) {
+            logActivity('Follow-up Completed', `Completed: ${followUp.description}`);
+        }
+    };
+
+    const handleDeleteFollowUp = (followUpId) => {
+        if (confirm('Delete this follow-up?')) {
+            setFormData({
+                ...formData,
+                followUps: formData.followUps.filter(f => f.id !== followUpId)
+            });
+        }
+    };
+
+    const handleAddComment = () => {
+        if (!newComment.trim()) return;
+        
+        const updatedComments = [...(formData.comments || []), {
+            id: Date.now(),
+            text: newComment,
+            createdAt: new Date().toISOString(),
+            createdBy: 'Current User' // In real app, get from auth
+        }];
+        
+        setFormData({...formData, comments: updatedComments});
+        logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
+        setNewComment('');
+    };
+
+    const logActivity = (type, description, relatedId = null) => {
+        const activity = {
+            id: Date.now(),
+            type,
+            description,
+            timestamp: new Date().toISOString(),
+            user: 'Current User', // In real app, get from auth
+            relatedId
+        };
+        setFormData({
+            ...formData,
+            activityLog: [...(formData.activityLog || []), activity]
+        });
+    };
+
+    const handleDeleteComment = (commentId) => {
+        if (confirm('Delete this comment?')) {
+            setFormData({
+                ...formData,
+                comments: formData.comments.filter(c => c.id !== commentId)
+            });
+        }
+    };
+
+    const handleToggleProject = (projectId) => {
+        const newSelectedIds = selectedProjectIds.includes(projectId)
+            ? selectedProjectIds.filter(id => id !== projectId)
+            : [...selectedProjectIds, projectId];
+        setSelectedProjectIds(newSelectedIds);
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onSave({
+            ...formData,
+            projectIds: selectedProjectIds,
+            lastContact: new Date().toISOString().split('T')[0]
+        });
+    };
+
+    const leadProjects = allProjects?.filter(p => selectedProjectIds.includes(p.id)) || [];
+    // Only show available projects that belong to THIS lead (match by name)
+    const availableProjects = allProjects?.filter(p => 
+        !selectedProjectIds.includes(p.id) && 
+        p.client === formData.name
+    ) || [];
+    const upcomingFollowUps = (formData.followUps || [])
+        .filter(f => !f.completed)
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const getStageColor = (stage) => {
+        switch(stage) {
+            case 'Awareness': return 'bg-blue-100 text-blue-800';
+            case 'Interest': return 'bg-purple-100 text-purple-800';
+            case 'Desire': return 'bg-yellow-100 text-yellow-800';
+            case 'Action': return 'bg-green-100 text-green-800';
+            case 'Closed Won': return 'bg-emerald-100 text-emerald-800';
+            case 'Closed Lost': return 'bg-gray-100 text-gray-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+                {/* Header */}
+                <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
+                    <div>
+                        <h2 className="text-xl font-semibold text-gray-900">
+                            {lead ? formData.name : 'Add New Lead'}
+                        </h2>
+                        {lead && (
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-sm text-gray-600">{formData.industry}</span>
+                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${getStageColor(formData.stage)}`}>
+                                    {formData.stage}
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                    <button 
+                        onClick={onClose} 
+                        className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded transition-colors"
+                    >
+                        <i className="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="border-b border-gray-200 px-6">
+                    <div className="flex gap-6">
+                        {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveTab(tab)}
+                                className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+                                    activeTab === tab
+                                        ? 'border-primary-600 text-primary-600'
+                                        : 'border-transparent text-gray-600 hover:text-gray-900'
+                                }`}
+                            >
+                                <i className={`fas fa-${
+                                    tab === 'overview' ? 'info-circle' :
+                                    tab === 'contacts' ? 'users' :
+                                    tab === 'calendar' ? 'calendar-alt' :
+                                    tab === 'projects' ? 'folder-open' :
+                                    tab === 'activity' ? 'history' :
+                                    'comment-alt'
+                                } mr-2`}></i>
+                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                {tab === 'contacts' && formData.contacts?.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
+                                        {formData.contacts.length}
+                                    </span>
+                                )}
+                                {tab === 'projects' && selectedProjectIds.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
+                                        {selectedProjectIds.length}
+                                    </span>
+                                )}
+                                {tab === 'calendar' && upcomingFollowUps.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs">
+                                        {upcomingFollowUps.length}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    <form onSubmit={handleSubmit} className="space-y-6">
+                        {/* Overview Tab */}
+                        {activeTab === 'overview' && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                            Entity Name *
+                                        </label>
+                                        <input 
+                                            type="text" 
+                                            value={formData.name}
+                                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                            required 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
+                                        <select
+                                            value={formData.industry}
+                                            onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        >
+                                            <option value="">Select Industry</option>
+                                            <option>Mining</option>
+                                            <option>Forestry</option>
+                                            <option>Agriculture</option>
+                                            <option>Other</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                                        <select 
+                                            value={formData.status}
+                                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        >
+                                            <option>New</option>
+                                            <option>Contacted</option>
+                                            <option>Qualified</option>
+                                            <option>Disqualified</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
+                                        <select 
+                                            value={formData.source}
+                                            onChange={(e) => setFormData({...formData, source: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        >
+                                            <option>Website</option>
+                                            <option>Referral</option>
+                                            <option>LinkedIn</option>
+                                            <option>Cold Outreach</option>
+                                            <option>Trade Show</option>
+                                            <option>Advertisement</option>
+                                            <option>Other</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                                            AIDA Stage
+                                            <span className="ml-1.5 text-gray-500 cursor-help" title="AIDA Framework: Awareness → Interest → Desire → Action">
+                                                <i className="fas fa-info-circle text-xs"></i>
+                                            </span>
+                                        </label>
+                                        <select 
+                                            value={formData.stage}
+                                            onChange={(e) => setFormData({...formData, stage: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        >
+                                            <option value="Awareness">Awareness - Lead knows about us</option>
+                                            <option value="Interest">Interest - Lead shows engagement</option>
+                                            <option value="Desire">Desire - Lead wants our solution</option>
+                                            <option value="Action">Action - Ready to purchase</option>
+                                            <option value="Closed Won">Closed Won - Deal completed</option>
+                                            <option value="Closed Lost">Closed Lost - Deal lost</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Deal Value (ZAR)</label>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-2 text-sm text-gray-500">R</span>
+                                            <input 
+                                                type="number" 
+                                                value={formData.value}
+                                                onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
+                                                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                                min="0"
+                                                step="1000"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Probability (%)</label>
+                                        <input 
+                                            type="number" 
+                                            value={formData.probability}
+                                            onChange={(e) => setFormData({...formData, probability: parseInt(e.target.value) || 0})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                            min="0"
+                                            max="100"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
+                                    <textarea 
+                                        value={formData.notes}
+                                        onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                        rows="3"
+                                        placeholder="General information about this lead..."
+                                    ></textarea>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Contacts Tab */}
+                        {activeTab === 'contacts' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Contact Persons</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowContactForm(!showContactForm)}
+                                        className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center"
+                                    >
+                                        <i className="fas fa-plus mr-1.5"></i>
+                                        Add Contact
+                                    </button>
+                                </div>
+
+                                {showContactForm && (
+                                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                        <h4 className="font-medium text-gray-900 mb-3 text-sm">
+                                            {editingContact ? 'Edit Contact' : 'New Contact'}
+                                        </h4>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
+                                                <input
+                                                    type="text"
+                                                    value={newContact.name}
+                                                    onChange={(e) => setNewContact({...newContact, name: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Role</label>
+                                                <input
+                                                    type="text"
+                                                    value={newContact.role}
+                                                    onChange={(e) => setNewContact({...newContact, role: e.target.value})}
+                                                    placeholder="e.g., Manager, Director"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Department</label>
+                                                <input
+                                                    type="text"
+                                                    value={newContact.department}
+                                                    onChange={(e) => setNewContact({...newContact, department: e.target.value})}
+                                                    placeholder="e.g., Operations, Finance"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Email *</label>
+                                                <input
+                                                    type="email"
+                                                    value={newContact.email}
+                                                    onChange={(e) => setNewContact({...newContact, email: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
+                                                <input
+                                                    type="tel"
+                                                    value={newContact.phone}
+                                                    onChange={(e) => setNewContact({...newContact, phone: e.target.value})}
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div className="flex items-center">
+                                                <label className="flex items-center cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={newContact.isPrimary}
+                                                        onChange={(e) => setNewContact({...newContact, isPrimary: e.target.checked})}
+                                                        className="mr-2"
+                                                    />
+                                                    <span className="text-xs font-medium text-gray-700">Primary Contact</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-end gap-2 mt-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setShowContactForm(false);
+                                                    setEditingContact(null);
+                                                    setNewContact({
+                                                        name: '',
+                                                        role: '',
+                                                        department: '',
+                                                        email: '',
+                                                        phone: '',
+                                                        isPrimary: false
+                                                    });
+                                                }}
+                                                className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={editingContact ? handleUpdateContact : handleAddContact}
+                                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                            >
+                                                {editingContact ? 'Update' : 'Add'} Contact
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    {(!formData.contacts || formData.contacts.length === 0) ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            <i className="fas fa-users text-3xl mb-2"></i>
+                                            <p>No contacts added yet</p>
+                                        </div>
+                                    ) : (
+                                        formData.contacts.map(contact => (
+                                            <div key={contact.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">{contact.name}</h4>
+                                                            {contact.isPrimary && (
+                                                                <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded font-medium">
+                                                                    Primary
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                                                            {contact.role && (
+                                                                <div><i className="fas fa-briefcase mr-1.5 w-4"></i>{contact.role}</div>
+                                                            )}
+                                                            {contact.department && (
+                                                                <div><i className="fas fa-building mr-1.5 w-4"></i>{contact.department}</div>
+                                                            )}
+                                                            <div><i className="fas fa-envelope mr-1.5 w-4"></i>
+                                                                <a href={`mailto:${contact.email}`} className="text-primary-600 hover:underline">
+                                                                    {contact.email}
+                                                                </a>
+                                                            </div>
+                                                            {contact.phone && (
+                                                                <div><i className="fas fa-phone mr-1.5 w-4"></i>{contact.phone}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleEditContact(contact)}
+                                                            className="text-primary-600 hover:text-primary-700 p-1"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteContact(contact.id)}
+                                                            className="text-red-600 hover:text-red-700 p-1"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Calendar/Follow-ups Tab */}
+                        {activeTab === 'calendar' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Follow-ups & Meetings</h3>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
+                                            <input
+                                                type="date"
+                                                value={newFollowUp.date}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, date: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Time</label>
+                                            <input
+                                                type="time"
+                                                value={newFollowUp.time}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, time: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                                            <select
+                                                value={newFollowUp.type}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, type: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                            >
+                                                <option>Call</option>
+                                                <option>Meeting</option>
+                                                <option>Email</option>
+                                                <option>Visit</option>
+                                                <option>Demo</option>
+                                                <option>Proposal Review</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Description *</label>
+                                            <textarea
+                                                value={newFollowUp.description}
+                                                onChange={(e) => setNewFollowUp({...newFollowUp, description: e.target.value})}
+                                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                rows="2"
+                                                placeholder="What needs to be discussed..."
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleAddFollowUp}
+                                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1.5"></i>
+                                            Add Follow-up
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h4 className="font-medium text-gray-900 text-sm">Upcoming Follow-ups</h4>
+                                    {upcomingFollowUps.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            <i className="fas fa-calendar-alt text-3xl mb-2"></i>
+                                            <p>No upcoming follow-ups scheduled</p>
+                                        </div>
+                                    ) : (
+                                        upcomingFollowUps.map(followUp => (
+                                            <div key={followUp.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-start gap-3 flex-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={followUp.completed}
+                                                            onChange={() => handleToggleFollowUp(followUp.id)}
+                                                            className="mt-1"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                    followUp.type === 'Call' ? 'bg-blue-100 text-blue-700' :
+                                                                    followUp.type === 'Meeting' ? 'bg-purple-100 text-purple-700' :
+                                                                    followUp.type === 'Email' ? 'bg-green-100 text-green-700' :
+                                                                    followUp.type === 'Demo' ? 'bg-orange-100 text-orange-700' :
+                                                                    'bg-gray-100 text-gray-700'
+                                                                }`}>
+                                                                    {followUp.type}
+                                                                </span>
+                                                                <span className="text-sm font-medium text-gray-900">
+                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+
+                                {formData.followUps?.filter(f => f.completed).length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium text-gray-900 text-sm">Completed Follow-ups</h4>
+                                        {formData.followUps.filter(f => f.completed).map(followUp => (
+                                            <div key={followUp.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 opacity-60">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex items-start gap-3 flex-1">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={true}
+                                                            onChange={() => handleToggleFollowUp(followUp.id)}
+                                                            className="mt-1"
+                                                        />
+                                                        <div className="flex-1">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className="px-2 py-0.5 text-xs rounded font-medium bg-gray-200 text-gray-700">
+                                                                    {followUp.type}
+                                                                </span>
+                                                                <span className="text-sm font-medium text-gray-900 line-through">
+                                                                    {followUp.date} {followUp.time && `at ${followUp.time}`}
+                                                                </span>
+                                                            </div>
+                                                            <p className="text-sm text-gray-600 line-through">{followUp.description}</p>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteFollowUp(followUp.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Projects Tab */}
+                        {activeTab === 'projects' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Associated Projects</h3>
+                                    <div className="text-sm text-gray-600">
+                                        {selectedProjectIds.length} project{selectedProjectIds.length !== 1 ? 's' : ''} linked
+                                    </div>
+                                </div>
+
+                                {leadProjects.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium text-gray-900 text-sm">Linked Projects</h4>
+                                        {leadProjects.map(project => (
+                                            <div key={project.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">{project.name}</h4>
+                                                            <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                                                project.status === 'Review' ? 'bg-yellow-100 text-yellow-700' :
+                                                                project.status === 'Completed' ? 'bg-green-100 text-green-700' :
+                                                                'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                                {project.status}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 space-y-0.5">
+                                                            <div><i className="fas fa-tag mr-1.5 w-4"></i>{project.type}</div>
+                                                            <div><i className="fas fa-calendar mr-1.5 w-4"></i>{project.startDate} - {project.dueDate}</div>
+                                                            {project.assignedTo && (
+                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{project.assignedTo}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleProject(project.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Unlink Project"
+                                                    >
+                                                        <i className="fas fa-unlink"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {availableProjects.length > 0 && (
+                                    <div className="space-y-2">
+                                        <h4 className="font-medium text-gray-900 text-sm">Available Projects to Link</h4>
+                                        {availableProjects.map(project => (
+                                            <div key={project.id} className="bg-gray-50 border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <h4 className="font-semibold text-gray-900 text-sm mb-1">{project.name}</h4>
+                                                        <div className="text-xs text-gray-600">
+                                                            {project.client && <span className="mr-2"><i className="fas fa-building mr-1"></i>{project.client}</span>}
+                                                            <span><i className="fas fa-tag mr-1"></i>{project.type}</span>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleToggleProject(project.id)}
+                                                        className="text-primary-600 hover:text-primary-700 p-1"
+                                                        title="Link Project"
+                                                    >
+                                                        <i className="fas fa-link"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {availableProjects.length === 0 && leadProjects.length === 0 && (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <i className="fas fa-folder-open text-3xl mb-2"></i>
+                                        <p>No projects available</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Activity Timeline Tab */}
+                        {activeTab === 'activity' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Activity Timeline</h3>
+                                    <div className="text-sm text-gray-600">
+                                        {(formData.activityLog || []).length} activities
+                                    </div>
+                                </div>
+
+                                {(!formData.activityLog || formData.activityLog.length === 0) ? (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <i className="fas fa-history text-3xl mb-2"></i>
+                                        <p>No activity recorded yet</p>
+                                        <p className="text-xs mt-1">Activity will be logged automatically as you interact with this lead</p>
+                                    </div>
+                                ) : (
+                                    <div className="relative">
+                                        {/* Timeline line */}
+                                        <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                                        
+                                        <div className="space-y-4">
+                                            {[...(formData.activityLog || [])].reverse().map((activity, index) => {
+                                                const activityIcon = 
+                                                    activity.type === 'Contact Added' ? 'user-plus' :
+                                                    activity.type === 'Contact Updated' ? 'user-edit' :
+                                                    activity.type === 'Follow-up Added' ? 'calendar-plus' :
+                                                    activity.type === 'Follow-up Completed' ? 'calendar-check' :
+                                                    activity.type === 'Comment Added' ? 'comment' :
+                                                    activity.type === 'Status Changed' ? 'toggle-on' :
+                                                    activity.type === 'Stage Changed' ? 'arrow-right' :
+                                                    activity.type === 'Project Linked' ? 'link' :
+                                                    'info-circle';
+
+                                                const activityColor = 
+                                                    activity.type.includes('Deleted') ? 'bg-red-100 text-red-600 border-red-200' :
+                                                    activity.type.includes('Completed') ? 'bg-green-100 text-green-600 border-green-200' :
+                                                    activity.type.includes('Added') || activity.type.includes('Uploaded') ? 'bg-blue-100 text-blue-600 border-blue-200' :
+                                                    'bg-gray-100 text-gray-600 border-gray-200';
+
+                                                return (
+                                                    <div key={activity.id} className="relative flex items-start gap-3 pl-2">
+                                                        <div className={`w-8 h-8 rounded-full ${activityColor} border-2 flex items-center justify-center flex-shrink-0 bg-white z-10`}>
+                                                            <i className={`fas fa-${activityIcon} text-xs`}></i>
+                                                        </div>
+                                                        <div className="flex-1 bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
+                                                            <div className="flex justify-between items-start mb-1">
+                                                                <div className="font-medium text-gray-900 text-sm">{activity.type}</div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {new Date(activity.timestamp).toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-sm text-gray-600">{activity.description}</div>
+                                                            {activity.user && (
+                                                                <div className="text-xs text-gray-500 mt-1">
+                                                                    <i className="fas fa-user mr-1"></i>{activity.user}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Info box */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div className="flex items-start">
+                                        <i className="fas fa-info-circle text-blue-600 text-xs mt-0.5 mr-2"></i>
+                                        <div>
+                                            <p className="text-xs font-medium text-blue-900 mb-1">Activity Tracking</p>
+                                            <p className="text-xs text-blue-800">
+                                                All major actions are automatically logged in the activity timeline, providing a complete history 
+                                                of your interactions with this lead.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Notes/Comments Tab */}
+                        {activeTab === 'notes' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Notes & Comments</h3>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    <textarea
+                                        value={newComment}
+                                        onChange={(e) => setNewComment(e.target.value)}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-2"
+                                        rows="3"
+                                        placeholder="Add a comment or note..."
+                                    ></textarea>
+                                    <div className="flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={handleAddComment}
+                                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1.5"></i>
+                                            Add Comment
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    {(!formData.comments || formData.comments.length === 0) ? (
+                                        <div className="text-center py-8 text-gray-500 text-sm">
+                                            <i className="fas fa-comment-alt text-3xl mb-2"></i>
+                                            <p>No comments yet</p>
+                                        </div>
+                                    ) : (
+                                        formData.comments.map(comment => (
+                                            <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                                            <span className="text-primary-600 font-semibold text-xs">
+                                                                {comment.createdBy?.charAt(0) || 'U'}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy}</div>
+                                                            <div className="text-xs text-gray-500">
+                                                                {new Date(comment.createdAt).toLocaleString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeleteComment(comment.id)}
+                                                        className="text-red-600 hover:text-red-700 p-1"
+                                                        title="Delete"
+                                                    >
+                                                        <i className="fas fa-trash text-xs"></i>
+                                                    </button>
+                                                </div>
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.text}</p>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Footer Actions */}
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                            <div className="flex gap-2">
+                                {lead && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => onConvertToClient(formData)}
+                                        className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center"
+                                    >
+                                        <i className="fas fa-check-circle mr-2"></i>
+                                        Convert to Client
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button 
+                                    type="button" 
+                                    onClick={onClose} 
+                                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+                                >
+                                    <i className="fas fa-save mr-2"></i>
+                                    {lead ? 'Update Lead' : 'Create Lead'}
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Make available globally
+window.LeadDetailModal = LeadDetailModal;

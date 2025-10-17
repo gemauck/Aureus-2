@@ -1,0 +1,1029 @@
+// Get dependencies from window
+const { useState, useEffect } = React;
+const storage = window.storage;
+const DocumentModal = window.DocumentModal;
+const WorkflowModal = window.WorkflowModal;
+const ChecklistModal = window.ChecklistModal;
+const NoticeModal = window.NoticeModal;
+const WorkflowExecutionModal = window.WorkflowExecutionModal;
+
+const Teams = () => {
+    const [activeTab, setActiveTab] = useState('overview');
+    const [selectedTeam, setSelectedTeam] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    // Modal states
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+    const [showChecklistModal, setShowChecklistModal] = useState(false);
+    const [showNoticeModal, setShowNoticeModal] = useState(false);
+    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
+    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
+    
+    // Data states
+    const [documents, setDocuments] = useState([]);
+    const [workflows, setWorkflows] = useState([]);
+    const [checklists, setChecklists] = useState([]);
+    const [notices, setNotices] = useState([]);
+    const [workflowExecutions, setWorkflowExecutions] = useState([]);
+    
+    // Edit states
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingWorkflow, setEditingWorkflow] = useState(null);
+    const [editingChecklist, setEditingChecklist] = useState(null);
+    const [editingNotice, setEditingNotice] = useState(null);
+    const [executingWorkflow, setExecutingWorkflow] = useState(null);
+    const [viewingDocument, setViewingDocument] = useState(null);
+
+    // Team definitions
+    const teams = [
+        { 
+            id: 'management', 
+            name: 'Management', 
+            icon: 'fa-user-tie', 
+            color: 'blue',
+            description: 'Executive leadership and strategic planning',
+            members: 0
+        },
+        { 
+            id: 'technical', 
+            name: 'Technical', 
+            icon: 'fa-tools', 
+            color: 'purple',
+            description: 'Technical operations and system maintenance',
+            members: 0
+        },
+        { 
+            id: 'support', 
+            name: 'Support', 
+            icon: 'fa-headset', 
+            color: 'green',
+            description: 'Customer support and service delivery',
+            members: 0
+        },
+        { 
+            id: 'data-analytics', 
+            name: 'Data Analytics', 
+            icon: 'fa-chart-line', 
+            color: 'indigo',
+            description: 'Data analysis and business intelligence',
+            members: 0
+        },
+        { 
+            id: 'finance', 
+            name: 'Finance', 
+            icon: 'fa-coins', 
+            color: 'yellow',
+            description: 'Financial management and accounting',
+            members: 0
+        },
+        { 
+            id: 'business-development', 
+            name: 'Business Development', 
+            icon: 'fa-rocket', 
+            color: 'pink',
+            description: 'Growth strategies and new opportunities',
+            members: 0
+        },
+        { 
+            id: 'commercial', 
+            name: 'Commercial', 
+            icon: 'fa-handshake', 
+            color: 'orange',
+            description: 'Sales and commercial operations',
+            members: 0
+        },
+        { 
+            id: 'compliance', 
+            name: 'Compliance', 
+            icon: 'fa-shield-alt', 
+            color: 'red',
+            description: 'Regulatory compliance and risk management',
+            members: 0
+        }
+    ];
+
+    // Load data from localStorage
+    useEffect(() => {
+        const savedDocuments = storage.getTeamDocuments() || [];
+        const savedWorkflows = storage.getTeamWorkflows() || [];
+        const savedChecklists = storage.getTeamChecklists() || [];
+        const savedNotices = storage.getTeamNotices() || [];
+        const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
+
+        setDocuments(savedDocuments);
+        setWorkflows(savedWorkflows);
+        setChecklists(savedChecklists);
+        setNotices(savedNotices);
+        setWorkflowExecutions(savedExecutions);
+    }, []);
+
+    // Get counts for selected team
+    const getTeamCounts = (teamId) => {
+        return {
+            documents: documents.filter(d => d.team === teamId).length,
+            workflows: workflows.filter(w => w.team === teamId).length,
+            checklists: checklists.filter(c => c.team === teamId).length,
+            notices: notices.filter(n => n.team === teamId).length
+        };
+    };
+
+    // Filter data by selected team
+    const filteredDocuments = selectedTeam 
+        ? documents.filter(d => d.team === selectedTeam.id)
+        : documents;
+    
+    const filteredWorkflows = selectedTeam 
+        ? workflows.filter(w => w.team === selectedTeam.id)
+        : workflows;
+    
+    const filteredChecklists = selectedTeam 
+        ? checklists.filter(c => c.team === selectedTeam.id)
+        : checklists;
+    
+    const filteredNotices = selectedTeam 
+        ? notices.filter(n => n.team === selectedTeam.id)
+        : notices;
+
+    // Search functionality
+    const searchFilter = (items, searchFields) => {
+        if (!searchTerm) return items;
+        return items.filter(item => 
+            searchFields.some(field => 
+                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+        );
+    };
+
+    const displayDocuments = searchFilter(filteredDocuments, ['title', 'category', 'description']);
+    const displayWorkflows = searchFilter(filteredWorkflows, ['title', 'description']);
+    const displayChecklists = searchFilter(filteredChecklists, ['title', 'description']);
+    const displayNotices = searchFilter(filteredNotices, ['title', 'content']);
+
+    // Recent activity across all teams
+    const recentActivity = [
+        ...documents.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
+        ...workflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
+        ...checklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
+        ...notices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
+    ]
+        .sort((a, b) => new Date(b.createdAt || b.updatedAt || b.date) - new Date(a.createdAt || a.updatedAt || a.date))
+        .slice(0, 10);
+
+    // Save handlers
+    const handleSaveDocument = (documentData) => {
+        const existingIndex = documents.findIndex(d => d.id === documentData.id);
+        let updatedDocuments;
+        
+        if (existingIndex >= 0) {
+            updatedDocuments = [...documents];
+            updatedDocuments[existingIndex] = documentData;
+        } else {
+            updatedDocuments = [...documents, documentData];
+        }
+        
+        setDocuments(updatedDocuments);
+        storage.setTeamDocuments(updatedDocuments);
+        setEditingDocument(null);
+    };
+
+    const handleSaveWorkflow = (workflowData) => {
+        const existingIndex = workflows.findIndex(w => w.id === workflowData.id);
+        let updatedWorkflows;
+        
+        if (existingIndex >= 0) {
+            updatedWorkflows = [...workflows];
+            updatedWorkflows[existingIndex] = workflowData;
+        } else {
+            updatedWorkflows = [...workflows, workflowData];
+        }
+        
+        setWorkflows(updatedWorkflows);
+        storage.setTeamWorkflows(updatedWorkflows);
+        setEditingWorkflow(null);
+    };
+
+    const handleSaveChecklist = (checklistData) => {
+        const existingIndex = checklists.findIndex(c => c.id === checklistData.id);
+        let updatedChecklists;
+        
+        if (existingIndex >= 0) {
+            updatedChecklists = [...checklists];
+            updatedChecklists[existingIndex] = checklistData;
+        } else {
+            updatedChecklists = [...checklists, checklistData];
+        }
+        
+        setChecklists(updatedChecklists);
+        storage.setTeamChecklists(updatedChecklists);
+        setEditingChecklist(null);
+    };
+
+    const handleSaveNotice = (noticeData) => {
+        const existingIndex = notices.findIndex(n => n.id === noticeData.id);
+        let updatedNotices;
+        
+        if (existingIndex >= 0) {
+            updatedNotices = [...notices];
+            updatedNotices[existingIndex] = noticeData;
+        } else {
+            updatedNotices = [...notices, noticeData];
+        }
+        
+        setNotices(updatedNotices);
+        storage.setTeamNotices(updatedNotices);
+        setEditingNotice(null);
+    };
+
+    const handleWorkflowExecutionComplete = (executionData) => {
+        const execution = {
+            id: Date.now().toString(),
+            workflowId: executingWorkflow.id,
+            workflowTitle: executingWorkflow.title,
+            team: executingWorkflow.team,
+            ...executionData
+        };
+        
+        const updatedExecutions = [...workflowExecutions, execution];
+        setWorkflowExecutions(updatedExecutions);
+        localStorage.setItem('abcotronics_workflow_executions', JSON.stringify(updatedExecutions));
+    };
+
+    // Delete handlers
+    const handleDeleteDocument = (id) => {
+        if (confirm('Are you sure you want to delete this document?')) {
+            const updatedDocuments = documents.filter(d => d.id !== id);
+            setDocuments(updatedDocuments);
+            storage.setTeamDocuments(updatedDocuments);
+        }
+    };
+
+    const handleDeleteWorkflow = (id) => {
+        if (confirm('Are you sure you want to delete this workflow?')) {
+            const updatedWorkflows = workflows.filter(w => w.id !== id);
+            setWorkflows(updatedWorkflows);
+            storage.setTeamWorkflows(updatedWorkflows);
+        }
+    };
+
+    const handleDeleteChecklist = (id) => {
+        if (confirm('Are you sure you want to delete this checklist?')) {
+            const updatedChecklists = checklists.filter(c => c.id !== id);
+            setChecklists(updatedChecklists);
+            storage.setTeamChecklists(updatedChecklists);
+        }
+    };
+
+    const handleDeleteNotice = (id) => {
+        if (confirm('Are you sure you want to delete this notice?')) {
+            const updatedNotices = notices.filter(n => n.id !== id);
+            setNotices(updatedNotices);
+            storage.setTeamNotices(updatedNotices);
+        }
+    };
+
+    const handleExecuteWorkflow = (workflow) => {
+        setExecutingWorkflow(workflow);
+        setShowWorkflowExecutionModal(true);
+    };
+
+    const handleViewDocument = (document) => {
+        setViewingDocument(document);
+        setShowDocumentViewModal(true);
+    };
+
+    return (
+        <div className="space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div>
+                    <h1 className="text-lg font-semibold text-gray-900">Teams & Knowledge Hub</h1>
+                    <p className="text-xs text-gray-600">Centralized documentation, workflows, and team collaboration</p>
+                </div>
+                {selectedTeam && (
+                    <button
+                        onClick={() => setSelectedTeam(null)}
+                        className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                    >
+                        <i className="fas fa-arrow-left mr-1.5"></i>
+                        Back to All Teams
+                    </button>
+                )}
+            </div>
+
+            {/* Search and Filter Bar */}
+            {selectedTeam && (
+                <div className="bg-white rounded-lg border border-gray-200 p-3">
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1 relative">
+                            <input
+                                type="text"
+                                placeholder="Search documents, workflows, checklists..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            />
+                            <i className="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={() => setActiveTab('documents')}
+                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                    activeTab === 'documents'
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fas fa-file-alt mr-1"></i>
+                                Documents
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('workflows')}
+                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                    activeTab === 'workflows'
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fas fa-project-diagram mr-1"></i>
+                                Workflows
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('checklists')}
+                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                    activeTab === 'checklists'
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fas fa-tasks mr-1"></i>
+                                Checklists
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('notices')}
+                                className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                    activeTab === 'notices'
+                                        ? 'bg-primary-600 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                            >
+                                <i className="fas fa-bullhorn mr-1"></i>
+                                Notices
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Overview - All Teams Grid */}
+            {!selectedTeam && (
+                <div className="space-y-3">
+                    {/* Quick Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-0.5">Total Documents</p>
+                                    <p className="text-xl font-bold text-gray-900">{documents.length}</p>
+                                </div>
+                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-file-alt text-blue-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-0.5">Active Workflows</p>
+                                    <p className="text-xl font-bold text-gray-900">{workflows.filter(w => w.status === 'Active').length}</p>
+                                </div>
+                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-project-diagram text-purple-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-0.5">Checklists</p>
+                                    <p className="text-xl font-bold text-gray-900">{checklists.length}</p>
+                                </div>
+                                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-tasks text-green-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-xs text-gray-600 mb-0.5">Executions</p>
+                                    <p className="text-xl font-bold text-gray-900">{workflowExecutions.length}</p>
+                                </div>
+                                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-play-circle text-orange-600"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Teams Grid */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Department Teams</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                            {teams.map(team => {
+                                const counts = getTeamCounts(team.id);
+                                return (
+                                    <button
+                                        key={team.id}
+                                        onClick={() => setSelectedTeam(team)}
+                                        className="text-left border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group"
+                                    >
+                                        <div className="flex items-center justify-between mb-2">
+                                            <div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition`}>
+                                                <i className={`fas ${team.icon} text-${team.color}-600 text-lg`}></i>
+                                            </div>
+                                            <i className="fas fa-arrow-right text-gray-400 text-xs group-hover:text-primary-600 transition"></i>
+                                        </div>
+                                        <h3 className="font-semibold text-gray-900 text-sm mb-1">{team.name}</h3>
+                                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">{team.description}</p>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
+                                            <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>
+                                            <span><i className="fas fa-tasks mr-1"></i>{counts.checklists}</span>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Recent Activity */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Recent Activity</h2>
+                        {recentActivity.length > 0 ? (
+                            <div className="space-y-2">
+                                {recentActivity.map((item, idx) => {
+                                    const team = teams.find(t => t.id === item.team);
+                                    return (
+                                        <div key={idx} className="flex items-center gap-3 py-2 border-b last:border-b-0">
+                                            <div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                                <i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs`}></i>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium text-gray-900 truncate">{item.title}</p>
+                                                <p className="text-xs text-gray-500">
+                                                    {team?.name} • {item.type}
+                                                </p>
+                                            </div>
+                                            <span className="text-xs text-gray-400 whitespace-nowrap">
+                                                {new Date(item.createdAt || item.updatedAt || item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <i className="fas fa-history text-3xl text-gray-300 mb-2"></i>
+                                <p className="text-xs text-gray-500">No activity yet</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Team Detail View */}
+            {selectedTeam && (
+                <div className="space-y-3">
+                    {/* Team Header */}
+                    <div className={`bg-gradient-to-r from-${selectedTeam.color}-500 to-${selectedTeam.color}-600 rounded-lg p-4 text-white`}>
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className={`w-12 h-12 bg-white bg-opacity-20 rounded-lg flex items-center justify-center`}>
+                                <i className={`fas ${selectedTeam.icon} text-2xl`}></i>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold">{selectedTeam.name}</h2>
+                                <p className="text-xs opacity-90">{selectedTeam.description}</p>
+                            </div>
+                        </div>
+                        <div className="flex gap-4 text-sm">
+                            <div>
+                                <span className="opacity-75">Documents: </span>
+                                <span className="font-bold">{filteredDocuments.length}</span>
+                            </div>
+                            <div>
+                                <span className="opacity-75">Workflows: </span>
+                                <span className="font-bold">{filteredWorkflows.length}</span>
+                            </div>
+                            <div>
+                                <span className="opacity-75">Checklists: </span>
+                                <span className="font-bold">{filteredChecklists.length}</span>
+                            </div>
+                            <div>
+                                <span className="opacity-75">Notices: </span>
+                                <span className="font-bold">{filteredNotices.length}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => {
+                                setEditingDocument(null);
+                                setShowDocumentModal(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium"
+                        >
+                            <i className="fas fa-plus mr-1.5"></i>
+                            Add Document
+                        </button>
+                        <button
+                            onClick={() => {
+                                setEditingWorkflow(null);
+                                setShowWorkflowModal(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium"
+                        >
+                            <i className="fas fa-plus mr-1.5"></i>
+                            Create Workflow
+                        </button>
+                        <button
+                            onClick={() => {
+                                setEditingChecklist(null);
+                                setShowChecklistModal(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium"
+                        >
+                            <i className="fas fa-plus mr-1.5"></i>
+                            New Checklist
+                        </button>
+                        <button
+                            onClick={() => {
+                                setEditingNotice(null);
+                                setShowNoticeModal(true);
+                            }}
+                            className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium"
+                        >
+                            <i className="fas fa-plus mr-1.5"></i>
+                            Post Notice
+                        </button>
+                    </div>
+
+                    {/* Content Display Based on Active Tab */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+                        {activeTab === 'documents' && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Documents Library</h3>
+                                {displayDocuments.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {displayDocuments.map(doc => (
+                                            <div key={doc.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                                                        <i className="fas fa-file-alt text-blue-600"></i>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => handleViewDocument(doc)}
+                                                            className="p-1 text-gray-400 hover:text-blue-600 transition"
+                                                            title="View"
+                                                        >
+                                                            <i className="fas fa-eye text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingDocument(doc);
+                                                                setShowDocumentModal(true);
+                                                            }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteDocument(doc.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block">
+                                                    {doc.category}
+                                                </span>
+                                                <h4 className="font-semibold text-gray-900 text-sm mb-1">{doc.title}</h4>
+                                                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{doc.description}</p>
+                                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                                    <span>v{doc.version}</span>
+                                                    <span>{new Date(doc.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-file-alt text-4xl text-gray-300 mb-3"></i>
+                                        <p className="text-sm text-gray-500">No documents yet</p>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingDocument(null);
+                                                setShowDocumentModal(true);
+                                            }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Add First Document
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'workflows' && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Workflows & Processes</h3>
+                                {displayWorkflows.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {displayWorkflows.map(workflow => (
+                                            <div key={workflow.id} className="border border-gray-200 rounded-lg p-3">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                                                            <i className="fas fa-project-diagram text-purple-600"></i>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">{workflow.title}</h4>
+                                                            <p className="text-xs text-gray-600">{workflow.description}</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => handleExecuteWorkflow(workflow)}
+                                                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition font-medium"
+                                                            title="Execute Workflow"
+                                                        >
+                                                            <i className="fas fa-play mr-1"></i>
+                                                            Execute
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingWorkflow(workflow);
+                                                                setShowWorkflowModal(true);
+                                                            }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteWorkflow(workflow.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <span className={`px-2 py-1 text-xs rounded ${
+                                                        workflow.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                                        workflow.status === 'Draft' ? 'bg-gray-100 text-gray-700' :
+                                                        'bg-yellow-100 text-yellow-700'
+                                                    }`}>
+                                                        {workflow.status}
+                                                    </span>
+                                                    {workflow.tags && workflow.tags.map(tag => (
+                                                        <span key={tag} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded">
+                                                            {tag}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-4 text-xs text-gray-500">
+                                                    <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
+                                                    <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
+                                                    <span><i className="fas fa-play-circle mr-1"></i>
+                                                        {workflowExecutions.filter(e => e.workflowId === workflow.id).length} executions
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-project-diagram text-4xl text-gray-300 mb-3"></i>
+                                        <p className="text-sm text-gray-500">No workflows yet</p>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingWorkflow(null);
+                                                setShowWorkflowModal(true);
+                                            }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Create First Workflow
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'checklists' && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Checklists & Forms</h3>
+                                {displayChecklists.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {displayChecklists.map(checklist => (
+                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                                                            <i className="fas fa-tasks text-green-600"></i>
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-semibold text-gray-900 text-sm">{checklist.title}</h4>
+                                                            <p className="text-xs text-gray-600">{checklist.items?.length || 0} items</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingChecklist(checklist);
+                                                                setShowChecklistModal(true);
+                                                            }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteChecklist(checklist.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block">
+                                                    {checklist.category}
+                                                </span>
+                                                <p className="text-xs text-gray-600 mb-2">{checklist.description}</p>
+                                                <div className="flex items-center justify-between text-xs text-gray-500">
+                                                    <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
+                                                    <button className="text-primary-600 hover:text-primary-700 font-medium">
+                                                        Use Template →
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-tasks text-4xl text-gray-300 mb-3"></i>
+                                        <p className="text-sm text-gray-500">No checklists yet</p>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingChecklist(null);
+                                                setShowChecklistModal(true);
+                                            }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Create First Checklist
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'notices' && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Notice Board</h3>
+                                {displayNotices.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {displayNotices.map(notice => (
+                                            <div key={notice.id} className={`border-l-4 rounded-lg p-3 ${
+                                                notice.priority === 'Critical' || notice.priority === 'High' ? 'border-red-500 bg-red-50' :
+                                                notice.priority === 'Medium' ? 'border-yellow-500 bg-yellow-50' :
+                                                'border-blue-500 bg-blue-50'
+                                            }`}>
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-2 flex-1">
+                                                        <i className={`fas fa-bullhorn ${
+                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'text-red-600' :
+                                                            notice.priority === 'Medium' ? 'text-yellow-600' :
+                                                            'text-blue-600'
+                                                        }`}></i>
+                                                        <h4 className="font-semibold text-gray-900 text-sm">{notice.title}</h4>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <span className={`px-2 py-1 text-xs rounded font-medium ${
+                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'bg-red-100 text-red-700' :
+                                                            notice.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                                                            'bg-blue-100 text-blue-700'
+                                                        }`}>
+                                                            {notice.priority}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingNotice(notice);
+                                                                setShowNoticeModal(true);
+                                                            }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteNotice(notice.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <p className="text-sm text-gray-700 mb-2">{notice.content}</p>
+                                                <div className="flex items-center justify-between text-xs text-gray-600">
+                                                    <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
+                                                    <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-bullhorn text-4xl text-gray-300 mb-3"></i>
+                                        <p className="text-sm text-gray-500">No notices yet</p>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingNotice(null);
+                                                setShowNoticeModal(true);
+                                            }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Post First Notice
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Modals */}
+            {showDocumentModal && (
+                <DocumentModal
+                    isOpen={showDocumentModal}
+                    onClose={() => {
+                        setShowDocumentModal(false);
+                        setEditingDocument(null);
+                    }}
+                    team={selectedTeam}
+                    document={editingDocument}
+                    onSave={handleSaveDocument}
+                />
+            )}
+
+            {showWorkflowModal && (
+                <WorkflowModal
+                    isOpen={showWorkflowModal}
+                    onClose={() => {
+                        setShowWorkflowModal(false);
+                        setEditingWorkflow(null);
+                    }}
+                    team={selectedTeam}
+                    workflow={editingWorkflow}
+                    onSave={handleSaveWorkflow}
+                />
+            )}
+
+            {showChecklistModal && (
+                <ChecklistModal
+                    isOpen={showChecklistModal}
+                    onClose={() => {
+                        setShowChecklistModal(false);
+                        setEditingChecklist(null);
+                    }}
+                    team={selectedTeam}
+                    checklist={editingChecklist}
+                    onSave={handleSaveChecklist}
+                />
+            )}
+
+            {showNoticeModal && (
+                <NoticeModal
+                    isOpen={showNoticeModal}
+                    onClose={() => {
+                        setShowNoticeModal(false);
+                        setEditingNotice(null);
+                    }}
+                    team={selectedTeam}
+                    notice={editingNotice}
+                    onSave={handleSaveNotice}
+                />
+            )}
+
+            {showWorkflowExecutionModal && (
+                <WorkflowExecutionModal
+                    isOpen={showWorkflowExecutionModal}
+                    onClose={() => {
+                        setShowWorkflowExecutionModal(false);
+                        setExecutingWorkflow(null);
+                    }}
+                    workflow={executingWorkflow}
+                    onComplete={handleWorkflowExecutionComplete}
+                />
+            )}
+
+            {/* Document View Modal */}
+            {showDocumentViewModal && viewingDocument && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">{viewingDocument.title}</h3>
+                                <p className="text-xs text-gray-600">
+                                    {viewingDocument.category} • Version {viewingDocument.version}
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowDocumentViewModal(false);
+                                    setViewingDocument(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 transition"
+                            >
+                                <i className="fas fa-times text-lg"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-4 space-y-4">
+                            {viewingDocument.description && (
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <p className="text-sm text-blue-900">{viewingDocument.description}</p>
+                                </div>
+                            )}
+
+                            <div className="prose prose-sm max-w-none">
+                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900">
+                                    {viewingDocument.content}
+                                </pre>
+                            </div>
+
+                            {viewingDocument.attachments && viewingDocument.attachments.length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Attachments</h4>
+                                    <div className="space-y-2">
+                                        {viewingDocument.attachments.map((att, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
+                                                <div className="flex items-center gap-2">
+                                                    <i className="fas fa-file text-gray-400"></i>
+                                                    <span className="text-sm text-gray-900">{att.name}</span>
+                                                </div>
+                                                <span className="text-xs text-gray-500">
+                                                    {(att.size / 1024).toFixed(2)} KB
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {viewingDocument.tags && viewingDocument.tags.length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Tags</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {viewingDocument.tags.map(tag => (
+                                            <span key={tag} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs">
+                                                {tag}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                                <span>Created by {viewingDocument.createdBy}</span>
+                                <span>
+                                    Last updated: {new Date(viewingDocument.updatedAt).toLocaleDateString('en-ZA', {
+                                        month: 'short',
+                                        day: 'numeric',
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// Make available globally
+window.Teams = Teams;

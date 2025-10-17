@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Abcotronics ERP - Fuel Management Services</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏭</text></svg>">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin=""/>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#e0f2fe',
+                            100: '#bae6fd',
+                            200: '#7dd3fc',
+                            300: '#38bdf8',
+                            400: '#0ea5e9',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .sidebar-scrollbar::-webkit-scrollbar-thumb {
+            background: #0284c7;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    
+    <!-- React and ReactDOM - MUST load synchronously first -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <!-- Babel Standalone -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- PDF.js for PDF to Word Converter -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        // Configure PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    
+    <!-- Tesseract.js for OCR (Handwriting Recognition) -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
+    
+    <!-- Verify React loaded and expose globally -->
+    <script>
+        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
+            console.error('React failed to load!');
+            document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: React failed to load. Please refresh the page.</div>';
+        } else {
+            console.log('React loaded successfully:', React.version);
+            // Ensure React is on window
+            window.React = React;
+            window.ReactDOM = ReactDOM;
+        }
+    </script>
+
+    <!-- Map Component -->
+    <script type="text/babel" src="./src/components/maps/MapComponent.jsx"></script>
+    
+    <!-- Theme Provider -->
+    <script type="text/babel" src="./src/components/theme/ThemeProvider.jsx"></script>
+    
+    <!-- Load all components inline -->
+    <script type="text/babel" src="./src/utils/localStorage.js"></script>
+    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/auditLogger.js"></script>
+    <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
+    <script type="text/babel" src="./src/components/auth/LoginPage.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/Dashboard.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/LeadModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/Pipeline.jsx"></script>
+    <script src="./src/components/clients/PipelineIntegration.js"></script>
+    
+    <!-- Projects Components -->
+    <script type="text/babel" src="./src/components/projects/CustomFieldModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/TaskDetailModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/StatusManagementModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/KanbanView.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ListModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectProgressTracker.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/MonthlyDocumentCollectionTracker.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/CommentsPopup.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/DocumentCollectionModal.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectDetail.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/Projects.jsx"></script>
+    
+    <!-- Time Tracking Components -->
+    <script type="text/babel" src="./src/components/time/TimeModal.jsx"></script>
+    <script type="text/babel" src="./src/components/time/TimeTracking.jsx"></script>
+    
+    <!-- Teams Components -->
+    <script type="text/babel" src="./src/components/teams/DocumentModal.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/WorkflowModal.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/ChecklistModal.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/NoticeModal.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/WorkflowExecutionModal.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/Teams.jsx"></script>
+    
+    <!-- Users Components -->
+    <script type="text/babel" src="./src/components/users/UserModal.jsx"></script>
+    <script type="text/babel" src="./src/components/users/InviteUserModal.jsx"></script>
+    <script type="text/babel" src="./src/components/users/Users.jsx"></script>
+    
+    <!-- Manufacturing Components -->
+    <script type="text/babel" src="./src/components/manufacturing/locations/StockLocations.jsx"></script>
+    <script type="text/babel" src="./src/components/manufacturing/Manufacturing.jsx"></script>
+    
+    <!-- Tools Components -->
+    <script type="text/babel" src="./src/components/tools/TankSizeCalculator.jsx"></script>
+    <script type="text/babel" src="./src/components/tools/PDFToWordConverter.jsx"></script>
+    <script type="text/babel" src="./src/components/tools/HandwritingToWord.jsx"></script>
+    <script type="text/babel" src="./src/components/tools/UnitConverter.jsx"></script>
+    <script type="text/babel" src="./src/components/tools/Tools.jsx"></script>
+    
+    <!-- HR Components -->
+    <script type="text/babel" src="./src/components/hr/EmployeeManagement.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/LeaveManagement.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/LeaveBalance.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/Attendance.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/QuickBooksPayrollSync.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/Payroll.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/HR.jsx"></script>
+    
+    <!-- Reports Components -->
+    <script type="text/babel" src="./src/components/reports/AuditTrail.jsx"></script>
+    <script type="text/babel" src="./src/components/reports/Reports.jsx"></script>
+    
+    <!-- Layout -->
+    <script type="text/babel" src="./src/components/layout/MainLayout.jsx"></script>
+    
+    <!-- App Entry Point -->
+    <script type="text/babel" src="./src/App.jsx"></script>
+    
+    <!-- Mount App -->
+    <script type="text/babel">
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

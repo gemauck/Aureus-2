@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clear Manufacturing Data</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 500px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+        p {
+            color: #666;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        button {
+            background: #dc2626;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:hover {
+            background: #b91c1c;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+        }
+        .success {
+            display: none;
+            color: #059669;
+            font-weight: 600;
+            margin-top: 20px;
+            padding: 16px;
+            background: #d1fae5;
+            border-radius: 8px;
+        }
+        .info {
+            background: #dbeafe;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            color: #1e40af;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Clear Manufacturing Data</h1>
+        <p>This will remove all manufacturing example data from your browser's storage, including inventory items, BOMs, production orders, and stock movements.</p>
+        
+        <button onclick="clearManufacturingData()">Clear All Manufacturing Data</button>
+        
+        <div class="success" id="success">
+            ✅ Success! Manufacturing data has been cleared.<br>
+            <small>You can now close this page and refresh your ERP.</small>
+        </div>
+        
+        <div class="info">
+            <strong>Note:</strong> This only clears manufacturing data. Your clients, projects, and other data will remain intact.
+        </div>
+    </div>
+
+    <script>
+        function clearManufacturingData() {
+            // Clear all manufacturing-related localStorage items
+            localStorage.removeItem('manufacturing_inventory');
+            localStorage.removeItem('manufacturing_boms');
+            localStorage.removeItem('production_orders');
+            localStorage.removeItem('stock_movements');
+            
+            // Show success message
+            document.getElementById('success').style.display = 'block';
+            
+            console.log('Manufacturing data cleared successfully!');
+        }
+    </script>
+</body>
+</html>

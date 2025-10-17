@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Loading Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 3px; }
+        .pass { background-color: #d4edda; color: #155724; }
+        .fail { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 API Loading Test</h1>
+    
+    <div class="test-section">
+        <h2>📊 Test Results</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>🚀 Run API Tests</h2>
+        <button onclick="runAPITests()" style="background-color: #dc3545; color: white; font-size: 16px; padding: 15px 30px;">
+            🔍 TEST API LOADING
+        </button>
+        <button onclick="clearResults()" style="background-color: #6c757d; color: white;">
+            🗑️ Clear Results
+        </button>
+    </div>
+
+    <script>
+        let testResults = [];
+
+        function addResult(testName, passed, message, details = null) {
+            const result = {
+                name: testName,
+                passed: passed,
+                message: message,
+                details: details,
+                timestamp: new Date().toISOString()
+            };
+            testResults.push(result);
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            const resultsDiv = document.getElementById('testResults');
+            resultsDiv.innerHTML = testResults.map(result => `
+                <div class="test-result ${result.passed ? 'pass' : 'fail'}">
+                    <strong>${result.passed ? '✅' : '❌'} ${result.name}</strong><br>
+                    ${result.message}<br>
+                    ${result.details ? `<pre>${JSON.stringify(result.details, null, 2)}</pre>` : ''}
+                </div>
+            `).join('');
+        }
+
+        function runAPITests() {
+            clearResults();
+            addResult('API Test Start', true, 'Testing API availability...');
+            
+            // Test 1: Check if window.api exists
+            if (typeof window.api === 'object' && window.api !== null) {
+                addResult('Window API Object', true, 'window.api exists');
+                
+                // Test 2: Check specific methods
+                const methods = ['login', 'me', 'refresh', 'logout', 'listClients', 'createClient', 'updateClient', 'deleteClient'];
+                methods.forEach(method => {
+                    if (typeof window.api[method] === 'function') {
+                        addResult(`API Method: ${method}`, true, 'Method exists and is a function');
+                    } else {
+                        addResult(`API Method: ${method}`, false, 'Method missing or not a function');
+                    }
+                });
+                
+                // Test 3: Check window.storage
+                if (typeof window.storage === 'object' && window.storage !== null) {
+                    addResult('Window Storage', true, 'window.storage exists');
+                    
+                    const storageMethods = ['getToken', 'setToken', 'removeToken', 'getUser', 'setUser', 'removeUser'];
+                    storageMethods.forEach(method => {
+                        if (typeof window.storage[method] === 'function') {
+                            addResult(`Storage Method: ${method}`, true, 'Method exists and is a function');
+                        } else {
+                            addResult(`Storage Method: ${method}`, false, 'Method missing or not a function');
+                        }
+                    });
+                } else {
+                    addResult('Window Storage', false, 'window.storage does not exist');
+                }
+                
+            } else {
+                addResult('Window API Object', false, 'window.api does not exist or is not an object');
+            }
+            
+            // Test 4: Check if we can call debugAPI
+            if (typeof window.debugAPI === 'function') {
+                addResult('Debug API Function', true, 'window.debugAPI exists');
+                try {
+                    window.debugAPI();
+                    addResult('Debug API Call', true, 'debugAPI() executed successfully');
+                } catch (error) {
+                    addResult('Debug API Call', false, 'debugAPI() failed', error.message);
+                }
+            } else {
+                addResult('Debug API Function', false, 'window.debugAPI does not exist');
+            }
+            
+            addResult('API Test Complete', true, 'All API tests completed!');
+        }
+
+        function clearResults() {
+            testResults = [];
+            updateDisplay();
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addResult('Test Tool Initialized', true, 'Ready to test API loading');
+            
+            // Auto-run tests after a short delay
+            setTimeout(() => {
+                addResult('Auto Test', true, 'Auto-running API tests...');
+                runAPITests();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
