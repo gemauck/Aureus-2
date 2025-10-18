@@ -109,7 +109,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
     const [newComment, setNewComment] = useState('');
     const [showSiteForm, setShowSiteForm] = useState(false);
     const [editingSite, setEditingSite] = useState(null);
-    const [contactFilterSite, setContactFilterSite] = useState('');
         const [newSite, setNewSite] = useState({
             name: '',
             address: '',
@@ -147,12 +146,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         }
     }, [client]);
 
-    // Set default contact filter to first site when sites are available
-    useEffect(() => {
-        if (formData.sites && formData.sites.length > 0 && !contactFilterSite) {
-            setContactFilterSite(formData.sites[0].id);
-        }
-    }, [formData.sites, contactFilterSite]);
 
     const handleAddContact = () => {
         if (!newContact.name) {
@@ -201,9 +194,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
         
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+        // Save contact changes immediately
+        onSave(updatedFormData);
         
         setEditingContact(null);
         setNewContact({
@@ -228,9 +220,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             };
             setFormData(updatedFormData);
             
-            // AUTO-SAVE: Immediately save to parent
-            // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+            // Save contact deletion immediately
+            onSave(updatedFormData);
             
             console.log('✅ Contact deleted and saved');
         }
@@ -396,9 +387,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Site Updated', `Updated site: ${newSite.name}`);
         
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+        // Save site changes immediately
+        onSave(updatedFormData);
         
         setEditingSite(null);
             setNewSite({
@@ -427,9 +417,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             setFormData(updatedFormData);
             logActivity('Site Deleted', `Deleted site: ${site?.name}`);
             
-            // AUTO-SAVE: Immediately save to parent
-            // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+            // Save site deletion immediately
+            onSave(updatedFormData);
             
             console.log('✅ Site deleted and saved:', site?.name);
         }
@@ -747,23 +736,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Contact Persons</h3>
                                     <div className="flex items-center gap-3">
-                                        {/* SITE-SPECIFIC CONTACT FILTER - NO ALL CONTACTS OPTION */}
-                                        {(formData.sites && formData.sites.length > 0) && (
-                                            <div className="relative">
-                                                <select
-                                                    value={contactFilterSite}
-                                                    onChange={(e) => setContactFilterSite(e.target.value)}
-                                                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white"
-                                                    title="Filter contacts by site only"
-                                                >
-                                                    {(formData.sites || []).map(site => (
-                                                        <option key={site.id} value={site.id}>
-                                                            {site.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        )}
                                         {!showContactForm && (
                                             <button
                                                 type="button"
@@ -889,26 +861,16 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
 
                                 <div className="space-y-2">
                                     {(() => {
-                                        // Filter contacts based on selected site
-                                        const filteredContacts = (formData.contacts || []).filter(contact => {
-                                            // If no sites exist or no filter selected, show all contacts
-                                            if (!contactFilterSite || !formData.sites || formData.sites.length === 0) {
-                                                return true;
-                                            }
-                                            return contact.siteId === contactFilterSite;
-                                        });
+                                        // Show all contacts without filtering
+                                        const allContacts = formData.contacts || [];
 
-                                        return filteredContacts.length === 0 ? (
+                                        return allContacts.length === 0 ? (
                                             <div className="text-center py-8 text-gray-500 text-sm">
                                                 <i className="fas fa-users text-3xl mb-2"></i>
-                                                <p>
-                                                    {(!contactFilterSite || !formData.sites || formData.sites.length === 0) 
-                                                        ? 'No contacts added yet' 
-                                                        : 'No contacts linked to this site'}
-                                                </p>
+                                                <p>No contacts added yet</p>
                                             </div>
                                         ) : (
-                                            filteredContacts.map(contact => (
+                                            allContacts.map(contact => (
                                             <div 
                                                 key={contact.id} 
                                                 className={`${isDark ? 'bg-gray-700 border-gray-600 hover:border-primary-400' : 'bg-white border-gray-200 hover:border-primary-300'} rounded-lg p-3 transition cursor-pointer hover:shadow-md`}
