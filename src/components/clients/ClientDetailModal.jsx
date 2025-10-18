@@ -761,6 +761,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="text"
                                                     value={newContact.name}
                                                     onChange={(e) => setNewContact({...newContact, name: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="Contact name"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
@@ -770,6 +772,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="text"
                                                     value={newContact.role}
                                                     onChange={(e) => setNewContact({...newContact, role: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     placeholder="e.g., Manager, Director"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
@@ -780,6 +783,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="text"
                                                     value={newContact.department}
                                                     onChange={(e) => setNewContact({...newContact, department: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     placeholder="e.g., Operations, Finance"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
@@ -790,6 +794,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="email"
                                                     value={newContact.email}
                                                     onChange={(e) => setNewContact({...newContact, email: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="contact@company.com"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
@@ -799,6 +805,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="tel"
                                                     value={newContact.phone}
                                                     onChange={(e) => setNewContact({...newContact, phone: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="+27 11 123 4567"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
@@ -972,6 +980,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="text"
                                                     value={newSite.name}
                                                     onChange={(e) => setNewSite({...newSite, name: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                     placeholder="e.g., Main Mine, North Farm"
                                                 />
@@ -982,6 +991,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="text"
                                                     value={newSite.contactPerson}
                                                     onChange={(e) => setNewSite({...newSite, contactPerson: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="Contact person name"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
@@ -1086,6 +1097,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="tel"
                                                     value={newSite.phone}
                                                     onChange={(e) => setNewSite({...newSite, phone: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="+27 11 123 4567"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
@@ -1095,6 +1108,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     type="email"
                                                     value={newSite.email}
                                                     onChange={(e) => setNewSite({...newSite, email: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="site@company.com"
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
