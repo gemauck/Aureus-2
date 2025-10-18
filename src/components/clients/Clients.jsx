@@ -1241,14 +1241,6 @@ const Clients = () => {
                 </div>
                 <div className="flex gap-2">
                     <button 
-                        onClick={loadClients}
-                        className="px-2 py-1 bg-white border border-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-50"
-                        title="Refresh data"
-                    >
-                        <i className="fas fa-sync-alt mr-1"></i>
-                        Refresh
-                    </button>
-                    <button 
                         onClick={() => {
                             setSelectedClient(null);
                             setShowClientModal(true);
