@@ -426,7 +426,7 @@ const Clients = () => {
         storage.setLeads(leads);
     }, [leads]);
 
-    const handleSaveClient = async (clientFormData) => {
+    const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         console.log('=== SAVE CLIENT DEBUG ===');
         console.log('Received form data:', clientFormData);
         console.log('All fields:', Object.keys(clientFormData));
@@ -616,14 +616,18 @@ const Clients = () => {
             }
             
             // Silent save - no alert, just refresh and stay in view
-            setIsEditing(false);
+            if (!stayInEditMode) {
+                setIsEditing(false);
+            }
             
         } catch (error) {
             console.error('Failed to save client:', error);
             alert('Failed to save client: ' + error.message);
         }
         
-        setIsEditing(false);
+        if (!stayInEditMode) {
+            setIsEditing(false);
+        }
         setRefreshKey(k => k + 1);
     };
     

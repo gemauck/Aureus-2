@@ -163,8 +163,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
         
-        // Save contact changes immediately
-        onSave(updatedFormData);
+        // Save contact changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
         
         setNewContact({
             name: '',
@@ -196,8 +196,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
         
-        // Save contact changes immediately
-        onSave(updatedFormData);
+        // Save contact changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
         
         setEditingContact(null);
         setNewContact({
@@ -223,8 +223,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             };
             setFormData(updatedFormData);
             
-            // Save contact deletion immediately
-            onSave(updatedFormData);
+            // Save contact deletion immediately - stay in edit mode
+            onSave(updatedFormData, true);
             
             console.log('✅ Contact deleted and saved');
         }
@@ -356,8 +356,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Site Added', `Added site: ${newSite.name}`);
         
-        // Save site changes immediately
-        onSave(updatedFormData);
+        // Save site changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
         
             setNewSite({
                 name: '',
@@ -390,8 +390,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setFormData(updatedFormData);
         logActivity('Site Updated', `Updated site: ${newSite.name}`);
         
-        // Save site changes immediately
-        onSave(updatedFormData);
+        // Save site changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
         
         setEditingSite(null);
             setNewSite({
@@ -420,8 +420,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             setFormData(updatedFormData);
             logActivity('Site Deleted', `Deleted site: ${site?.name}`);
             
-            // Save site deletion immediately
-            onSave(updatedFormData);
+            // Save site deletion immediately - stay in edit mode
+            onSave(updatedFormData, true);
             
             console.log('✅ Site deleted and saved:', site?.name);
         }
@@ -460,8 +460,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         
         setFormData(updatedFormData);
         
-        // Save opportunity changes immediately
-        onSave(updatedFormData);
+        // Save opportunity changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
         
         // Reset form
         setNewOpportunity({
