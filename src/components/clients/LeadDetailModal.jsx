@@ -15,7 +15,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
         followUps: [],
         projectIds: [],
         comments: [],
-        activityLog: []
+        activityLog: [],
+        firstContactDate: new Date().toISOString().split('T')[0]
     });
     
     const [editingContact, setEditingContact] = useState(null);
@@ -324,6 +325,19 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                             <option>Agriculture</option>
                                             <option>Other</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">First Contact Date</label>
+                                        <input 
+                                            type="date" 
+                                            value={formData.firstContactDate || new Date().toISOString().split('T')[0]}
+                                            onChange={(e) => setFormData({...formData, firstContactDate: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                            required
+                                        />
                                     </div>
                                 </div>
 

@@ -909,18 +909,22 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                             </div>
                                         ) : (
                                             filteredContacts.map(contact => (
-                                            <div key={contact.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
+                                            <div 
+                                                key={contact.id} 
+                                                className={`${isDark ? 'bg-gray-700 border-gray-600 hover:border-primary-400' : 'bg-white border-gray-200 hover:border-primary-300'} rounded-lg p-3 transition cursor-pointer hover:shadow-md`}
+                                                onClick={() => handleEditContact(contact)}
+                                            >
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex-1">
                                                         <div className="flex items-center gap-2 mb-1">
-                                                            <h4 className="font-semibold text-gray-900 text-sm">{contact.name}</h4>
+                                                            <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{contact.name}</h4>
                                                             {contact.isPrimary && (
-                                                                <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs rounded font-medium">
+                                                                <span className={`px-2 py-0.5 text-xs rounded font-medium ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>
                                                                     Primary
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                                                        <div className={`grid grid-cols-2 gap-x-4 gap-y-1 text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
                                                             {contact.role && (
                                                                 <div><i className="fas fa-briefcase mr-1.5 w-4"></i>{contact.role}</div>
                                                             )}

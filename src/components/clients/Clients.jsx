@@ -89,7 +89,8 @@ const initialLeads = [
         followUps: [],
         projectIds: [],
         comments: [],
-        activityLog: []
+        activityLog: [],
+        firstContactDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 5 days ago
     },
     {
         id: 102,
@@ -123,7 +124,8 @@ const initialLeads = [
         ],
         projectIds: [],
         comments: [],
-        activityLog: []
+        activityLog: [],
+        firstContactDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 14 days ago
     },
     {
         id: 103,
@@ -205,7 +207,8 @@ const initialLeads = [
                 createdBy: 'David Buttemer'
             }
         ],
-        activityLog: []
+        activityLog: [],
+        firstContactDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30 days ago
     }
 ];
 
@@ -216,6 +219,23 @@ const Clients = () => {
         const savedClients = storage.getClients();
         return savedClients || [];
     });
+
+    // Utility function to calculate time since first contact
+    const getTimeSinceFirstContact = (firstContactDate) => {
+        if (!firstContactDate) return 'Not set';
+        
+        const firstContact = new Date(firstContactDate);
+        const now = new Date();
+        const diffTime = Math.abs(now - firstContact);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) return 'Today';
+        if (diffDays === 1) return '1 day ago';
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.ceil(diffDays / 7)} weeks ago`;
+        if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
+        return `${Math.ceil(diffDays / 365)} years ago`;
+    };
     const [leads, setLeads] = useState(initialLeads);
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
@@ -852,48 +872,56 @@ const Clients = () => {
         return (
             <div className="space-y-6">
                 {/* AIDA Framework Explanation */}
-                <div className="bg-gradient-to-r from-primary-50 to-blue-50 rounded-lg border border-primary-200 p-3">
-                    <div className="flex items-center gap-3">
+                <div className={`${isDark ? 'bg-gradient-to-r from-gray-800 to-gray-700 border-gray-600' : 'bg-gradient-to-r from-primary-50 to-blue-50 border-primary-200'} rounded-xl border shadow-sm p-6`}>
+                    <div className="flex items-center gap-4">
                         <div className="flex-shrink-0">
-                            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-                                <i className="fas fa-lightbulb text-white text-sm"></i>
+                            <div className={`w-12 h-12 ${isDark ? 'bg-gradient-to-r from-primary-500 to-primary-600' : 'bg-primary-600'} rounded-xl flex items-center justify-center shadow-lg`}>
+                                <i className="fas fa-lightbulb text-white text-xl"></i>
                             </div>
                         </div>
                         <div className="flex-1">
-                            <h3 className="text-sm font-semibold text-gray-900 mb-1">AIDA Sales Framework</h3>
-                            <p className="text-xs text-gray-600 mb-2">
+                            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>AIDA Sales Framework</h3>
+                            <p className={`text-base ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>
                                 Track sales opportunities through proven AIDA methodology. Drag cards between stages to update progress.
                             </p>
                         </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2 mt-2">
-                        <div className="bg-white rounded p-2 border border-gray-200">
-                            <div className="font-medium text-xs text-gray-900 mb-0.5">
-                                <i className="fas fa-eye text-gray-500 mr-1"></i>
-                                Awareness
+                    <div className="grid grid-cols-4 gap-4 mt-6">
+                        <div className={`${isDark ? 'bg-gradient-to-br from-gray-700 to-gray-800 border-gray-600' : 'bg-white border-gray-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
+                            <div className={`flex items-center gap-3 mb-2`}>
+                                <div className="w-8 h-8 bg-gray-500 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-eye text-white text-sm"></i>
+                                </div>
+                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Awareness</h4>
                             </div>
-                            <p className="text-[10px] text-gray-600">Initial contact made</p>
+                            <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Initial contact made</p>
                         </div>
-                        <div className="bg-white rounded p-2 border border-gray-200">
-                            <div className="font-medium text-xs text-gray-900 mb-0.5">
-                                <i className="fas fa-search text-blue-500 mr-1"></i>
-                                Interest
+                        <div className={`${isDark ? 'bg-gradient-to-br from-blue-700 to-blue-800 border-blue-600' : 'bg-white border-blue-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
+                            <div className={`flex items-center gap-3 mb-2`}>
+                                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-search text-white text-sm"></i>
+                                </div>
+                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Interest</h4>
                             </div>
-                            <p className="text-[10px] text-gray-600">Actively exploring</p>
+                            <p className={`text-xs ${isDark ? 'text-blue-100' : 'text-gray-600'}`}>Actively exploring</p>
                         </div>
-                        <div className="bg-white rounded p-2 border border-gray-200">
-                            <div className="font-medium text-xs text-gray-900 mb-0.5">
-                                <i className="fas fa-heart text-yellow-500 mr-1"></i>
-                                Desire
+                        <div className={`${isDark ? 'bg-gradient-to-br from-yellow-700 to-yellow-800 border-yellow-600' : 'bg-white border-yellow-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
+                            <div className={`flex items-center gap-3 mb-2`}>
+                                <div className="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-heart text-white text-sm"></i>
+                                </div>
+                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Desire</h4>
                             </div>
-                            <p className="text-[10px] text-gray-600">Wants solution</p>
+                            <p className={`text-xs ${isDark ? 'text-yellow-100' : 'text-gray-600'}`}>Wants solution</p>
                         </div>
-                        <div className="bg-white rounded p-2 border border-gray-200">
-                            <div className="font-medium text-xs text-gray-900 mb-0.5">
-                                <i className="fas fa-rocket text-green-500 mr-1"></i>
-                                Action
+                        <div className={`${isDark ? 'bg-gradient-to-br from-green-700 to-green-800 border-green-600' : 'bg-white border-green-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
+                            <div className={`flex items-center gap-3 mb-2`}>
+                                <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                                    <i className="fas fa-rocket text-white text-sm"></i>
+                                </div>
+                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Action</h4>
                             </div>
-                            <p className="text-[10px] text-gray-600">Ready to close</p>
+                            <p className={`text-xs ${isDark ? 'text-green-100' : 'text-gray-600'}`}>Ready to close</p>
                         </div>
                     </div>
                 </div>
@@ -921,12 +949,12 @@ const Clients = () => {
                     </div>
                 </div>
 
-                {/* Pipeline Board */}
-                <div className="flex gap-4 overflow-x-auto pb-4">
+                {/* Enhanced Pipeline Board */}
+                <div className="flex gap-6 overflow-x-auto pb-6">
                     {pipelineStages.map(stage => {
                         const stageLeads = leads.filter(lead => lead.stage === stage);
                         const stageOpps = clientOpportunities.filter(opp => opp.stage === stage);
-                        const stageCount = stageLeads.length;
+                        const stageCount = stageLeads.length + stageOpps.length;
                         const isDraggedOver = draggedItem && draggedItem.stage !== stage;
                         
                         const stageIcons = {
@@ -935,36 +963,53 @@ const Clients = () => {
                             'Desire': 'fa-heart',
                             'Action': 'fa-rocket'
                         };
+
+                        const stageColors = {
+                            'Awareness': 'from-gray-500 to-gray-600',
+                            'Interest': 'from-blue-500 to-blue-600',
+                            'Desire': 'from-yellow-500 to-yellow-600',
+                            'Action': 'from-green-500 to-green-600'
+                        };
                         
                         return (
                             <div 
                                 key={stage} 
-                                className={`flex-1 min-w-[280px] bg-gray-50 dark:bg-gray-800 rounded-lg p-4 transition-all ${
-                                    isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900' : ''
+                                className={`flex-1 min-w-[320px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
+                                    isDark ? 'border-gray-700' : 'border-gray-200'
+                                } ${
+                                    isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900 transform scale-105' : 'hover:shadow-xl'
                                 }`}
                                 onDragOver={handleDragOver}
                                 onDrop={(e) => handleDrop(e, stage)}
                             >
-                                <div className="mb-3 px-1">
-                                    <div className="flex items-center justify-between mb-1">
-                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                            <i className={`fas ${stageIcons[stage]} text-gray-500 dark:text-gray-400`}></i>
-                                            {stage}
-                                        </h3>
+                                {/* Stage Header with Gradient */}
+                                <div className={`bg-gradient-to-r ${stageColors[stage]} rounded-t-xl p-4 mb-4 -mx-1 -mt-1`}>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                                                <i className={`fas ${stageIcons[stage]} text-white text-sm`}></i>
+                                            </div>
+                                            <div>
+                                                <h3 className="text-white font-semibold text-lg">{stage}</h3>
+                                                <p className="text-white/80 text-sm">{stageCount} items</p>
+                                            </div>
+                                        </div>
                                         <span className="px-2 py-1 bg-white dark:bg-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
                                             {stageLeads.length + stageOpps.length}
                                         </span>
                                     </div>
-                                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">{stageCount} leads</div>
                                 </div>
 
                                 <div className="space-y-2">
                                     {stageLeads.length === 0 && stageOpps.length === 0 && (
-                                        <div className={`text-center py-8 rounded-lg border-2 border-dashed transition ${
-                                            isDraggedOver ? 'border-primary-400 bg-primary-50 dark:bg-primary-900' : 'border-gray-300 dark:border-gray-600'
+                                        <div className={`text-center py-12 rounded-xl border-2 border-dashed transition-all duration-300 ${
+                                            isDraggedOver ? 'border-primary-400 bg-primary-50 dark:bg-primary-900 scale-105' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
                                         }`}>
-                                            <i className="fas fa-inbox text-2xl text-gray-300 dark:text-gray-600 mb-2"></i>
-                                            <p className="text-xs text-gray-400 dark:text-gray-500">No items</p>
+                                            <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                                <i className="fas fa-plus text-2xl text-gray-400"></i>
+                                            </div>
+                                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No items yet</p>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500">Drag items here or add new ones</p>
                                         </div>
                                     )}
                                     
@@ -975,17 +1020,27 @@ const Clients = () => {
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenLead(lead)}
-                                            className={`bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md cursor-move transition ${
-                                                draggedItem?.id === lead.id ? 'opacity-50' : ''
+                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-xl p-4 border transition-all duration-300 cursor-move group ${
+                                                isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
+                                            } ${
+                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-lg hover:-translate-y-1'
                                             }`}
                                         >
-                                            <div className="flex items-start justify-between gap-2 mb-2">
-                                                <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">{lead.name}</div>
-                                                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 text-xs rounded-full font-medium shrink-0">LEAD</span>
+                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                                <div className="flex-1">
+                                                    <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-1 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors`}>{lead.name}</h4>
+                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.industry}</p>
                                             </div>
-                                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                                                <i className="fas fa-user mr-1"></i>
-                                                {lead.contacts?.[0]?.name || 'No contact'}
+                                                <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mb-3">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-600' : 'bg-gray-100'}`}>
+                                                    <i className="fas fa-user text-xs text-gray-500"></i>
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{lead.contacts?.[0]?.name || 'No contact'}</p>
+                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || 'No email'}</p>
+                                                </div>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <span className="text-xs text-gray-500 dark:text-gray-400">{lead.status}</span>
@@ -1147,25 +1202,29 @@ const Clients = () => {
 
     // Leads List View
     const LeadsListView = () => (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
             <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
+                <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
+                    <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lead</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Lead</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Contact</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Industry</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Time Since Contact</th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Actions</th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {filteredLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className="px-6 py-8 text-center text-sm text-gray-500">
-                                    <i className="fas fa-inbox text-3xl text-gray-300 mb-2"></i>
-                                    <p>No leads found</p>
+                                <td colSpan="7" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                                        <i className="fas fa-user-plus text-2xl text-gray-400"></i>
+                                    </div>
+                                    <p className="text-lg font-medium mb-2">No leads found</p>
+                                    <p className="text-sm">Get started by adding your first lead</p>
                                 </td>
                             </tr>
                         ) : (
@@ -1176,31 +1235,41 @@ const Clients = () => {
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm font-medium text-gray-900">{lead.name}</div>
+                                        <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-900">{lead.contacts?.[0]?.name || 'No contact'}</div>
-                                        <div className="text-xs text-gray-500">{lead.contacts?.[0]?.email || ''}</div>
+                                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.contacts?.[0]?.name || 'No contact'}</div>
+                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || ''}</div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.industry}</td>
+                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            lead.stage === 'Awareness' ? 'bg-gray-100 text-gray-800' :
-                                            lead.stage === 'Interest' ? 'bg-blue-100 text-blue-800' :
-                                            lead.stage === 'Desire' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-green-100 text-green-800'
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.stage === 'Awareness' ? (isDark ? 'bg-gray-700 text-gray-200' : 'bg-gray-100 text-gray-800') :
+                                            lead.stage === 'Interest' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                            lead.stage === 'Desire' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                         }`}>
                                             {lead.stage}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                            lead.status === 'New' ? 'bg-blue-100 text-blue-800' :
-                                            lead.status === 'Contacted' ? 'bg-yellow-100 text-yellow-800' :
-                                            'bg-green-100 text-green-800'
+                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                            lead.status === 'New' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
+                                            lead.status === 'Contacted' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
+                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
                                         }`}>
                                             {lead.status}
                                         </span>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                            {getTimeSinceFirstContact(lead.firstContactDate)}
+                                        </div>
+                                        {lead.firstContactDate && (
+                                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {new Date(lead.firstContactDate).toLocaleDateString()}
+                                            </div>
+                                        )}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <button
@@ -1352,7 +1421,7 @@ const Clients = () => {
                     <div className={`w-12 h-12 rounded-xl ${isDark ? 'bg-primary-600' : 'bg-primary-500'} flex items-center justify-center`}>
                         <i className="fas fa-users text-white text-lg"></i>
                     </div>
-                    <div>
+                <div>
                         <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
                         <p className="text-sm text-gray-600 dark:text-gray-400">Manage clients and leads</p>
                     </div>
@@ -1496,7 +1565,7 @@ const Clients = () => {
                                     Clear all filters
                                 </button>
                             )}
-                        </div>
+            </div>
                     </div>
                 )}
             </div>

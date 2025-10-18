@@ -14,7 +14,8 @@ const LeadModal = ({ lead, onSave, onClose }) => {
         assignedTo: 'Sarah Johnson',
         notes: '',
         nextAction: '',
-        status: 'New'
+        status: 'New',
+        firstContactDate: new Date().toISOString().split('T')[0]
     });
 
     const handleSubmit = (e) => {
@@ -90,6 +91,18 @@ const LeadModal = ({ lead, onSave, onClose }) => {
                                 className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                             />
                         </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1.5">First Contact Date</label>
+                            <input 
+                                type="date" 
+                                value={formData.firstContactDate || new Date().toISOString().split('T')[0]}
+                                onChange={(e) => setFormData({...formData, firstContactDate: e.target.value})}
+                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
+                                required
+                            />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">Lead Source</label>
                             <select 
