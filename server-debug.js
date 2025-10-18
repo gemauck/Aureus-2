@@ -50,7 +50,7 @@ app.post('/api/auth/login', async (req, res) => {
     
     // Import Prisma and bcrypt
     const { PrismaClient } = await import('@prisma/client')
-    const bcryptjs = await import('bcryptjs')
+    const bcryptjs = require('bcryptjs')
     const prisma = new PrismaClient()
     
     // Find user
@@ -72,7 +72,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     // Generate JWT tokens
-    const jsonwebtoken = await import('jsonwebtoken')
+    const jsonwebtoken = require('jsonwebtoken')
     const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
     
     const payload = { sub: user.id, email: user.email, role: user.role }
@@ -129,7 +129,7 @@ app.post('/api/create-admin', async (req, res) => {
     }
     
     // Create admin user
-    const bcryptjs = await import('bcryptjs')
+    const bcryptjs = require('bcryptjs')
     const passwordHash = await bcryptjs.hash('admin123', 10)
     
     const user = await prisma.user.create({
