@@ -48,9 +48,8 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password required' })
     }
     
-    // Import Prisma and bcrypt
+    // Import Prisma
     const { PrismaClient } = await import('@prisma/client')
-    const bcryptjs = require('bcryptjs')
     const prisma = new PrismaClient()
     
     // Find user
