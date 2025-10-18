@@ -1,8 +1,8 @@
-import { prisma } from './_lib/prisma.js'
-import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from './_lib/jwt.js'
-import { withHttp } from './_lib/withHttp.js'
-import { withLogging } from './_lib/logger.js'
+import { prisma } from '../_lib/prisma.js'
+import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../_lib/jwt.js'
+import { withHttp } from '../_lib/withHttp.js'
+import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')

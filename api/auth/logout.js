@@ -1,6 +1,6 @@
-import { badRequest, ok, serverError } from './_lib/response.js'
-import { withHttp } from './_lib/withHttp.js'
-import { withLogging } from './_lib/logger.js'
+import { badRequest, ok, serverError } from '../_lib/response.js'
+import { withHttp } from '../_lib/withHttp.js'
+import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
