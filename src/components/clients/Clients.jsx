@@ -1321,7 +1321,7 @@ const Clients = () => {
                             onClick={() => setIsEditing(!isEditing)}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                 isEditing 
-                                    ? '${isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'}' 
+                                    ? (isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700') 
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                         >
@@ -1382,7 +1382,7 @@ const Clients = () => {
                             onClick={() => setIsEditing(!isEditing)}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                 isEditing 
-                                    ? '${isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'}' 
+                                    ? (isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700') 
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                         >
