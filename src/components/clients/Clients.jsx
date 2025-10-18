@@ -211,7 +211,11 @@ const initialLeads = [
 
 const Clients = () => {
     const [viewMode, setViewMode] = useState('clients');
-    const [clients, setClients] = useState([]); // Start empty to prevent flash
+    const [clients, setClients] = useState(() => {
+        // Initialize with localStorage data if available
+        const savedClients = storage.getClients();
+        return savedClients || [];
+    });
     const [leads, setLeads] = useState(initialLeads);
     const [projects, setProjects] = useState([]);
     const [showClientModal, setShowClientModal] = useState(false);

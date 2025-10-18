@@ -39,7 +39,9 @@ const storage = {
     getClients: () => {
         try {
             const clients = localStorage.getItem('abcotronics_clients');
-            return clients ? JSON.parse(clients) : null;
+            const parsedClients = clients ? JSON.parse(clients) : null;
+            console.log('💾 getClients called, found:', parsedClients ? parsedClients.length : 'none');
+            return parsedClients;
         } catch (e) {
             console.error('Error loading clients:', e);
             return null;
@@ -47,7 +49,9 @@ const storage = {
     },
     
     setClients: (clients) => {
+        console.log('💾 setClients called with:', clients.length, 'clients');
         localStorage.setItem('abcotronics_clients', JSON.stringify(clients));
+        console.log('💾 Clients saved to localStorage successfully');
     },
     
     // Leads
