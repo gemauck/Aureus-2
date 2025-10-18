@@ -7,11 +7,10 @@ const storage = window.storage;
  * 
  * Features:
  * - Kanban board with drag-and-drop across AIDA stages
- * - Advanced filtering by value, probability, industry, age
+ * - Advanced filtering by value, industry, age
  * - Pipeline metrics and forecasting
  * - Activity tracking and timeline
  * - Win/loss analysis
- * - Deal probability calculator
  * - Expected close date tracking
  * - Quick actions and bulk operations
  */
@@ -26,7 +25,6 @@ const Pipeline = () => {
         search: '',
         minValue: '',
         maxValue: '',
-        minProbability: '',
         industry: 'All',
         ageRange: 'All',
         source: 'All'
@@ -101,7 +99,6 @@ const Pipeline = () => {
             itemType: 'New Lead',
             stage: lead.stage || 'Awareness',
             value: lead.value || 0,
-            probability: lead.probability || 30,
             createdDate: lead.createdDate || new Date().toISOString(),
             expectedCloseDate: lead.expectedCloseDate || null
         }));
@@ -118,7 +115,6 @@ const Pipeline = () => {
                         clientName: client.name,
                         stage: opp.stage || 'Awareness',
                         value: opp.value || 0,
-                        probability: opp.probability || 30,
                         createdDate: opp.createdDate || new Date().toISOString(),
                         expectedCloseDate: opp.expectedCloseDate || null
                     });
@@ -149,11 +145,6 @@ const Pipeline = () => {
         }
         if (filters.maxValue) {
             items = items.filter(item => item.value <= Number(filters.maxValue));
-        }
-
-        // Probability filter
-        if (filters.minProbability) {
-            items = items.filter(item => item.probability >= Number(filters.minProbability));
         }
 
         // Industry filter
@@ -188,8 +179,6 @@ const Pipeline = () => {
             switch (sortBy) {
                 case 'value-desc': return b.value - a.value;
                 case 'value-asc': return a.value - b.value;
-                case 'probability-desc': return b.probability - a.probability;
-                case 'probability-asc': return a.probability - b.probability;
                 case 'date-desc': return new Date(b.createdDate) - new Date(a.createdDate);
                 case 'date-asc': return new Date(a.createdDate) - new Date(b.createdDate);
                 case 'name-asc': return a.name.localeCompare(b.name);
@@ -206,22 +195,16 @@ const Pipeline = () => {
         const items = getFilteredItems();
         
         const totalValue = items.reduce((sum, item) => sum + item.value, 0);
-        const weightedValue = items.reduce((sum, item) => sum + (item.value * item.probability / 100), 0);
         const avgDealSize = items.length > 0 ? totalValue / items.length : 0;
         
         const stageBreakdown = pipelineStages.map(stage => {
             const stageItems = items.filter(item => item.stage === stage.name);
             const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
-            const stageWeighted = stageItems.reduce((sum, item) => sum + (item.value * item.probability / 100), 0);
             
             return {
                 stage: stage.name,
                 count: stageItems.length,
-                value: stageValue,
-                weighted: stageWeighted,
-                avgProbability: stageItems.length > 0 
-                    ? stageItems.reduce((sum, item) => sum + item.probability, 0) / stageItems.length 
-                    : 0
+                value: stageValue
             };
         });
 
@@ -233,7 +216,6 @@ const Pipeline = () => {
         return {
             totalDeals: items.length,
             totalValue,
-            weightedValue,
             avgDealSize,
             stageBreakdown,
             winRate,
@@ -313,7 +295,6 @@ const Pipeline = () => {
     // Render pipeline card
     const PipelineCard = ({ item }) => {
         const age = getDealAge(item.createdDate);
-        const weightedValue = (item.value * item.probability / 100);
 
         return (
             <div 
@@ -351,24 +332,11 @@ const Pipeline = () => {
                     </span>
                 </div>
 
-                {/* Value & Probability */}
+                {/* Value */}
                 <div className="flex items-center justify-between mb-2">
                     <span className="text-sm font-bold text-gray-900">
                         R {item.value.toLocaleString('en-ZA')}
                     </span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                        item.probability >= 70 ? 'bg-green-100 text-green-700' :
-                        item.probability >= 40 ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-gray-100 text-gray-700'
-                    }`}>
-                        {item.probability}%
-                    </span>
-                </div>
-
-                {/* Weighted Value */}
-                <div className="text-xs text-gray-500 mb-2">
-                    <i className="fas fa-calculator mr-1"></i>
-                    Weighted: R {Math.round(weightedValue).toLocaleString('en-ZA')}
                 </div>
 
                 {/* Age Badge */}
@@ -400,7 +368,6 @@ const Pipeline = () => {
             {pipelineStages.map(stage => {
                 const stageItems = filteredItems.filter(item => item.stage === stage.name);
                 const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
-                const stageWeighted = stageItems.reduce((sum, item) => sum + (item.value * item.probability / 100), 0);
                 const isDraggedOver = draggedItem && draggedItem.stage !== stage.name;
                 
                 return (
@@ -429,11 +396,8 @@ const Pipeline = () => {
                             
                             {/* Stage Metrics */}
                             <div className="mt-2 p-2 bg-white rounded border border-gray-200">
-                                <div className="text-xs text-gray-600 mb-1">
-                                    <span className="font-medium">Total:</span> R {stageValue.toLocaleString('en-ZA')}
-                                </div>
                                 <div className="text-xs text-gray-600">
-                                    <span className="font-medium">Weighted:</span> R {Math.round(stageWeighted).toLocaleString('en-ZA')}
+                                    <span className="font-medium">Total:</span> R {stageValue.toLocaleString('en-ZA')}
                                 </div>
                             </div>
                         </div>
@@ -476,8 +440,6 @@ const Pipeline = () => {
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Probability</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Weighted</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
                         </tr>
@@ -485,7 +447,7 @@ const Pipeline = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                         {filteredItems.length === 0 ? (
                             <tr>
-                                <td colSpan="8" className="px-4 py-8 text-center text-sm text-gray-500">
+                                <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
                                     <i className="fas fa-inbox text-3xl text-gray-300 mb-2"></i>
                                     <p>No deals found</p>
                                 </td>
@@ -493,7 +455,6 @@ const Pipeline = () => {
                         ) : (
                             filteredItems.map(item => {
                                 const age = getDealAge(item.createdDate);
-                                const weightedValue = (item.value * item.probability / 100);
                                 
                                 return (
                                     <tr 
@@ -526,20 +487,6 @@ const Pipeline = () => {
                                         <td className="px-4 py-3">
                                             <span className="text-sm font-medium text-gray-900">
                                                 R {item.value.toLocaleString('en-ZA')}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 text-xs font-medium rounded ${
-                                                item.probability >= 70 ? 'bg-green-100 text-green-700' :
-                                                item.probability >= 40 ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
-                                                {item.probability}%
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-sm text-gray-900">
-                                                R {Math.round(weightedValue).toLocaleString('en-ZA')}
                                             </span>
                                         </td>
                                         <td className="px-4 py-3">
@@ -583,13 +530,11 @@ const Pipeline = () => {
             });
             
             const monthValue = monthDeals.reduce((sum, item) => sum + item.value, 0);
-            const monthWeighted = monthDeals.reduce((sum, item) => sum + (item.value * item.probability / 100), 0);
             
             monthlyForecasts.push({
                 month: monthName,
                 deals: monthDeals.length,
                 value: monthValue,
-                weighted: monthWeighted,
                 items: monthDeals
             });
         }
@@ -602,10 +547,10 @@ const Pipeline = () => {
                         <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                             <div className="text-sm font-medium text-gray-600 mb-2">{forecast.month}</div>
                             <div className="text-2xl font-bold text-gray-900 mb-1">
-                                R {Math.round(forecast.weighted).toLocaleString('en-ZA')}
+                                R {forecast.value.toLocaleString('en-ZA')}
                             </div>
                             <div className="text-xs text-gray-500">
-                                {forecast.deals} deals • R {forecast.value.toLocaleString('en-ZA')} pipeline
+                                {forecast.deals} deals
                             </div>
                         </div>
                     ))}
@@ -640,9 +585,6 @@ const Pipeline = () => {
                                             <div className="text-right">
                                                 <div className="text-sm font-medium text-gray-900">
                                                     R {item.value.toLocaleString('en-ZA')}
-                                                </div>
-                                                <div className="text-xs text-gray-500">
-                                                    {item.probability}% • R {Math.round(item.value * item.probability / 100).toLocaleString('en-ZA')}
                                                 </div>
                                             </div>
                                         </div>
@@ -686,16 +628,11 @@ const Pipeline = () => {
             </div>
 
             {/* Metrics Dashboard */}
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-3 gap-4">
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                     <div className="text-xs text-gray-600 mb-1">Pipeline Value</div>
                     <div className="text-2xl font-bold text-gray-900">R {metrics.totalValue.toLocaleString('en-ZA')}</div>
                     <div className="text-xs text-gray-500 mt-1">{metrics.totalDeals} total deals</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="text-xs text-gray-600 mb-1">Weighted Forecast</div>
-                    <div className="text-2xl font-bold text-green-600">R {Math.round(metrics.weightedValue).toLocaleString('en-ZA')}</div>
-                    <div className="text-xs text-gray-500 mt-1">Probability-adjusted</div>
                 </div>
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                     <div className="text-xs text-gray-600 mb-1">Avg Deal Size</div>
@@ -751,8 +688,6 @@ const Pipeline = () => {
                     >
                         <option value="value-desc">Value: High to Low</option>
                         <option value="value-asc">Value: Low to High</option>
-                        <option value="probability-desc">Probability: High to Low</option>
-                        <option value="probability-asc">Probability: Low to High</option>
                         <option value="date-desc">Newest First</option>
                         <option value="date-asc">Oldest First</option>
                         <option value="name-asc">Name: A to Z</option>
@@ -761,7 +696,7 @@ const Pipeline = () => {
                 </div>
 
                 {/* Filters */}
-                <div className="grid grid-cols-6 gap-3">
+                <div className="grid grid-cols-5 gap-3">
                     <div className="relative">
                         <input
                             type="text"
@@ -786,14 +721,6 @@ const Pipeline = () => {
                         placeholder="Max Value"
                         value={filters.maxValue}
                         onChange={(e) => setFilters({ ...filters, maxValue: e.target.value })}
-                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                    />
-                    
-                    <input
-                        type="number"
-                        placeholder="Min Prob %"
-                        value={filters.minProbability}
-                        onChange={(e) => setFilters({ ...filters, minProbability: e.target.value })}
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
                     />
                     
@@ -823,7 +750,7 @@ const Pipeline = () => {
                 </div>
 
                 {/* Active Filters Count */}
-                {(filters.search || filters.minValue || filters.maxValue || filters.minProbability || 
+                {(filters.search || filters.minValue || filters.maxValue || 
                   filters.industry !== 'All' || filters.ageRange !== 'All') && (
                     <div className="flex items-center justify-between pt-2 border-t border-gray-200">
                         <span className="text-sm text-gray-600">
@@ -834,7 +761,6 @@ const Pipeline = () => {
                                 search: '',
                                 minValue: '',
                                 maxValue: '',
-                                minProbability: '',
                                 industry: 'All',
                                 ageRange: 'All',
                                 source: 'All'

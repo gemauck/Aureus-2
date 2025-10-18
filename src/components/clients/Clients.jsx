@@ -74,7 +74,6 @@ const initialLeads = [
         status: 'New',
         source: 'Website',
         stage: 'Awareness',
-        probability: 30,
         notes: 'Inquiry about fuel monitoring systems for 50 vehicle fleet',
         contacts: [
             {
@@ -99,7 +98,6 @@ const initialLeads = [
         status: 'Contacted',
         source: 'Referral',
         stage: 'Interest',
-        probability: 50,
         notes: 'Interested in GPS tracking and fuel telemetry for their logistics division',
         contacts: [
             {
@@ -134,7 +132,6 @@ const initialLeads = [
         status: 'Qualified',
         source: 'Trade Show',
         stage: 'Desire',
-        probability: 70,
         notes: 'Ready to move forward with implementation. Requires 100+ units',
         contacts: [
             {
@@ -176,7 +173,6 @@ const initialLeads = [
         status: 'Qualified',
         source: 'LinkedIn',
         stage: 'Action',
-        probability: 90,
         notes: 'Contract negotiations in final stage. Ready to sign this week',
         contacts: [
             {
@@ -912,11 +908,6 @@ const Clients = () => {
                         <div className="text-xs text-gray-500 mt-1">Active opportunities</div>
                     </div>
                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                        <div className="text-sm text-gray-600 mb-1">High Probability</div>
-                        <div className="text-2xl font-bold text-green-600">{leads.filter(l => l.probability >= 70).length}</div>
-                        <div className="text-xs text-gray-500 mt-1">70%+ probability</div>
-                    </div>
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
                         <div className="text-sm text-gray-600 mb-1">Total Opportunities</div>
                         <div className="text-2xl font-bold text-primary-600">{leads.length + clientOpportunities.length}</div>
                         <div className="text-xs text-gray-500 mt-1">{leads.length} leads + {clientOpportunities.length} expansions</div>
@@ -1006,7 +997,6 @@ const Clients = () => {
                                                 {lead.contacts?.[0]?.name || 'No contact'}
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-sm font-bold text-gray-900">{lead.probability}%</span>
                                                 <span className="text-xs text-gray-500">{lead.status}</span>
                                             </div>
                                         </div>
@@ -1035,7 +1025,6 @@ const Clients = () => {
                                                 </div>
                                                 <div className="flex items-center justify-between">
                                                     <span className="text-xs text-gray-500">Existing client</span>
-                                                    <span className="text-xs text-gray-500">{opp.probability}%</span>
                                                 </div>
                                             </div>
                                         );
@@ -1176,7 +1165,6 @@ const Clients = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Industry</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stage</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Probability</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
@@ -1184,7 +1172,7 @@ const Clients = () => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {filteredLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="7" className="px-6 py-8 text-center text-sm text-gray-500">
+                                <td colSpan="6" className="px-6 py-8 text-center text-sm text-gray-500">
                                     <i className="fas fa-inbox text-3xl text-gray-300 mb-2"></i>
                                     <p>No leads found</p>
                                 </td>
@@ -1214,7 +1202,6 @@ const Clients = () => {
                                             {lead.stage}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{lead.probability}%</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
                                             lead.status === 'New' ? 'bg-blue-100 text-blue-800' :

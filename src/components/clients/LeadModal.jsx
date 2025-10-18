@@ -11,7 +11,6 @@ const LeadModal = ({ lead, onSave, onClose }) => {
         source: 'Website',
         stage: 'Initial Contact',
         value: 0,
-        probability: 20,
         assignedTo: 'Sarah Johnson',
         notes: '',
         nextAction: '',
@@ -107,7 +106,7 @@ const LeadModal = ({ lead, onSave, onClose }) => {
                             </select>
                         </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-700 mb-1.5">Stage</label>
                             <select 
@@ -128,17 +127,6 @@ const LeadModal = ({ lead, onSave, onClose }) => {
                                 type="number" 
                                 value={formData.value}
                                 onChange={(e) => setFormData({...formData, value: parseInt(e.target.value) || 0})}
-                                className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1.5">Probability (%)</label>
-                            <input 
-                                type="number" 
-                                min="0" 
-                                max="100" 
-                                value={formData.probability}
-                                onChange={(e) => setFormData({...formData, probability: parseInt(e.target.value) || 0})}
                                 className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                             />
                         </div>

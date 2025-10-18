@@ -125,7 +125,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
     const [editingOpportunity, setEditingOpportunity] = useState(null);
     const [newOpportunity, setNewOpportunity] = useState({
         name: '',
-        probability: 50,
         stage: 'Awareness',
         expectedCloseDate: '',
         relatedSiteId: null,
@@ -475,7 +474,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Reset form
         setNewOpportunity({
             name: '',
-            probability: 50,
             stage: 'Awareness',
             expectedCloseDate: '',
             relatedSiteId: null,
@@ -509,7 +507,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setEditingOpportunity(null);
         setNewOpportunity({
             name: '',
-            probability: 50,
             stage: 'Awareness',
             expectedCloseDate: '',
             relatedSiteId: null,
@@ -1361,17 +1358,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Probability (%)</label>
-                                                <input
-                                                    type="number"
-                                                    value={newOpportunity.probability}
-                                                    onChange={(e) => setNewOpportunity({...newOpportunity, probability: parseInt(e.target.value) || 0})}
-                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                                    min="0"
-                                                    max="100"
-                                                />
-                                            </div>
-                                            <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Stage (AIDA)</label>
                                                 <select
                                                     value={newOpportunity.stage}
@@ -1425,7 +1411,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                     setEditingOpportunity(null);
                                                     setNewOpportunity({
                                                         name: '',
-                                                        probability: 50,
                                                         stage: 'Awareness',
                                                         expectedCloseDate: '',
                                                         relatedSiteId: null,
@@ -1486,10 +1471,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                                 </span>
                                                             </div>
                                                             <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600 mb-2">
-                                                                <div>
-                                                                    <i className="fas fa-percentage mr-1.5 w-4"></i>
-                                                                    {opportunity.probability}% probability
-                                                                </div>
                                                                 {opportunity.expectedCloseDate && (
                                                                     <div>
                                                                         <i className="fas fa-calendar mr-1.5 w-4"></i>
@@ -1502,17 +1483,6 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                                         {relatedSite.name}
                                                                     </div>
                                                                 )}
-                                                            </div>
-                                                            <div className="flex items-center gap-2">
-                                                                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                                                    <div 
-                                                                        className="h-full bg-green-500 transition-all"
-                                                                        style={{width: `${opportunity.probability}%`}}
-                                                                    ></div>
-                                                                </div>
-                                                                <span className="text-xs font-medium text-gray-600">
-                                                                    {opportunity.probability}%
-                                                                </span>
                                                             </div>
                                                             {opportunity.notes && (
                                                                 <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
