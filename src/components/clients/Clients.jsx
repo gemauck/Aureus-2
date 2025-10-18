@@ -281,6 +281,13 @@ const Clients = () => {
                     const savedClients = storage.getClients() || [];
                     console.log('📁 Saved clients for merge:', savedClients.length);
                     
+                    // If API returns no clients, use localStorage clients
+                    if (apiClients.length === 0 && savedClients.length > 0) {
+                        console.log('✅ No API clients, using localStorage clients');
+                        setClients(savedClients);
+                        return;
+                    }
+                    
                     const processedClients = apiClients.map(c => ({
                         id: c.id,
                         name: c.name,
