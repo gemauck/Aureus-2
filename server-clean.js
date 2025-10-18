@@ -37,6 +37,17 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// Me endpoint
+app.get('/api/me', (req, res) => {
+  // For testing, return the admin user
+  res.json({
+    id: '1',
+    email: 'admin@abcotronics.com',
+    name: 'Admin User',
+    role: 'ADMIN'
+  })
+})
+
 // Simple login endpoint - no external dependencies
 app.post('/api/auth/login', async (req, res) => {
   try {
