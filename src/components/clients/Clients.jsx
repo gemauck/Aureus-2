@@ -1235,15 +1235,17 @@ const Clients = () => {
                                 setSelectedClient(null);
                                 setIsEditing(false);
                             }}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} flex items-center space-x-2 transition-colors`}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
+                            title="Go back"
                         >
                             <i className="fas fa-arrow-left"></i>
-                            <span>Back to Clients</span>
                         </button>
-                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-300'}`}>|</div>
-                        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                            {selectedClient ? selectedClient.name : 'New Client'}
-                        </h1>
+                        <div className="flex items-center space-x-3">
+                            <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-primary-400' : 'bg-primary-600'}`}></div>
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                {selectedClient ? selectedClient.name : 'New Client'}
+                            </h1>
+                        </div>
                     </div>
                     <div className="flex items-center space-x-3">
                         <button
@@ -1293,15 +1295,17 @@ const Clients = () => {
                                 setSelectedLead(null);
                                 setIsEditing(false);
                             }}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} flex items-center space-x-2 transition-colors`}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
+                            title="Go back"
                         >
                             <i className="fas fa-arrow-left"></i>
-                            <span>Back to Leads</span>
                         </button>
-                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-300'}`}>|</div>
-                        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                            {selectedLead ? selectedLead.name : 'New Lead'}
-                        </h1>
+                        <div className="flex items-center space-x-3">
+                            <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-yellow-400' : 'bg-yellow-500'}`}></div>
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                                {selectedLead ? selectedLead.name : 'New Lead'}
+                            </h1>
+                        </div>
                     </div>
                     <div className="flex items-center space-x-3">
                         <button
@@ -1342,11 +1346,16 @@ const Clients = () => {
         <div className={`space-y-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen`}>
             {/* Header */}
             <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                <div className="flex items-center space-x-4">
+                    <div className={`w-12 h-12 rounded-xl ${isDark ? 'bg-primary-600' : 'bg-primary-500'} flex items-center justify-center`}>
+                        <i className="fas fa-users text-white text-lg"></i>
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                    </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                     <button 
                         onClick={() => {
                             setSelectedClient(null);
@@ -1354,10 +1363,10 @@ const Clients = () => {
                             setViewMode('client-detail');
                             setIsEditing(true);
                         }}
-                        className="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
+                        className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
                     >
-                        <i className="fas fa-plus mr-1"></i>
-                        Client
+                        <i className="fas fa-plus text-xs"></i>
+                        <span>Add Client</span>
                     </button>
                     <button 
                         onClick={() => {
@@ -1366,21 +1375,21 @@ const Clients = () => {
                             setViewMode('lead-detail');
                             setIsEditing(true);
                         }}
-                        className="px-2 py-1 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700"
+                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-all duration-200"
                     >
-                        <i className="fas fa-plus mr-1"></i>
-                        Lead
+                        <i className="fas fa-plus text-xs"></i>
+                        <span>Add Lead</span>
                     </button>
                 </div>
             </div>
 
             {/* View Tabs - Clients First */}
-            <div className="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-0.5 inline-flex">
+            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-1 inline-flex shadow-sm">
                 <button
                     onClick={() => setViewMode('clients')}
-                    className={`px-2 py-1 rounded text-xs font-medium transition ${
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'clients' 
-                            ? 'bg-primary-600 text-white' 
+                            ? 'bg-primary-600 text-white shadow-sm' 
                             : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
@@ -1389,9 +1398,9 @@ const Clients = () => {
                 </button>
                 <button
                     onClick={() => setViewMode('leads')}
-                    className={`px-2 py-1 rounded text-xs font-medium transition ${
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'leads' 
-                            ? 'bg-primary-600 text-white' 
+                            ? 'bg-primary-600 text-white shadow-sm' 
                             : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
@@ -1400,9 +1409,9 @@ const Clients = () => {
                 </button>
                 <button
                     onClick={() => setViewMode('pipeline')}
-                    className={`px-2 py-1 rounded text-xs font-medium transition ${
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
-                            ? 'bg-primary-600 text-white' 
+                            ? 'bg-primary-600 text-white shadow-sm' 
                             : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
