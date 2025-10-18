@@ -27,6 +27,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
         department: '',
         email: '',
         phone: '',
+        town: '',
         isPrimary: false
     });
     
@@ -67,6 +68,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
             department: '',
             email: '',
             phone: '',
+            town: '',
             isPrimary: false
         });
         setShowContactForm(false);
@@ -91,6 +93,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
             department: '',
             email: '',
             phone: '',
+            town: '',
             isPrimary: false
         });
         setShowContactForm(false);
@@ -491,6 +494,17 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                                                 />
                                             </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Town</label>
+                                                <input
+                                                    type="text"
+                                                    value={newContact.town}
+                                                    onChange={(e) => setNewContact({...newContact, town: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="e.g., Johannesburg, Cape Town"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
                                             <div className="flex items-center">
                                                 <label className="flex items-center cursor-pointer">
                                                     <input
@@ -566,6 +580,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                                             </div>
                                                             {contact.phone && (
                                                                 <div><i className="fas fa-phone mr-1.5 w-4"></i>{contact.phone}</div>
+                                                            )}
+                                                            {contact.town && (
+                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{contact.town}</div>
                                                             )}
                                                         </div>
                                                     </div>

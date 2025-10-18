@@ -94,6 +94,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         department: '',
         email: '',
         phone: '',
+        town: '',
         isPrimary: false,
         siteId: null
     });
@@ -171,6 +172,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             department: '',
             email: '',
             phone: '',
+            town: '',
             isPrimary: false,
             siteId: null
         });
@@ -204,6 +206,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             department: '',
             email: '',
             phone: '',
+            town: '',
             isPrimary: false,
             siteId: null
         });
@@ -811,6 +814,17 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                 />
                                             </div>
                                             <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Town</label>
+                                                <input
+                                                    type="text"
+                                                    value={newContact.town}
+                                                    onChange={(e) => setNewContact({...newContact, town: e.target.value})}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    placeholder="e.g., Johannesburg, Cape Town"
+                                                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                />
+                                            </div>
+                                            <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Linked Site</label>
                                                 <select
                                                     value={newContact.siteId || ''}
@@ -908,6 +922,9 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                             </div>
                                                             {contact.phone && (
                                                                 <div><i className="fas fa-phone mr-1.5 w-4"></i>{contact.phone}</div>
+                                                            )}
+                                                            {contact.town && (
+                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{contact.town}</div>
                                                             )}
                                                             {contact.siteId && (() => {
                                                                 const linkedSite = (formData.sites || []).find(s => s.id === contact.siteId);
