@@ -928,23 +928,23 @@ const Clients = () => {
 
                 {/* Stats */}
                 <div className="grid grid-cols-4 gap-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Leads</div>
-                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{leads.length}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Active opportunities</div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Total Leads</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{leads.length}</div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Active opportunities</div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
-                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Opportunities</div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Total Opportunities</div>
                         <div className="text-2xl font-bold text-primary-600">{leads.length + clientOpportunities.length}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{leads.length} leads + {clientOpportunities.length} expansions</div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>{leads.length} leads + {clientOpportunities.length} expansions</div>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4 flex items-center justify-between`}>
                         <div>
-                            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Conversion Rate</div>
+                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Conversion Rate</div>
                             <div className="text-2xl font-bold text-purple-600">
                                 {leads.length > 0 ? Math.round((leads.filter(l => l.stage === 'Action').length / leads.length) * 100) : 0}%
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">To action stage</div>
+                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>To action stage</div>
                         </div>
                     </div>
                 </div>
@@ -977,7 +977,7 @@ const Clients = () => {
                                 className={`flex-1 min-w-[320px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
                                     isDark ? 'border-gray-700' : 'border-gray-200'
                                 } ${
-                                    isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900 transform scale-105' : 'hover:shadow-xl'
+                                    isDraggedOver ? `ring-2 ring-primary-500 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} transform scale-105` : 'hover:shadow-xl'
                                 }`}
                                 onDragOver={handleDragOver}
                                 onDrop={(e) => handleDrop(e, stage)}
@@ -994,7 +994,7 @@ const Clients = () => {
                                                 <p className="text-white/80 text-sm">{stageCount} items</p>
                                             </div>
                                         </div>
-                                        <span className="px-2 py-1 bg-white dark:bg-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
+                                        <span className={`px-2 py-1 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-full text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} border`}>
                                             {stageLeads.length + stageOpps.length}
                                         </span>
                                     </div>
@@ -1003,13 +1003,13 @@ const Clients = () => {
                                 <div className="space-y-2">
                                     {stageLeads.length === 0 && stageOpps.length === 0 && (
                                         <div className={`text-center py-12 rounded-xl border-2 border-dashed transition-all duration-300 ${
-                                            isDraggedOver ? 'border-primary-400 bg-primary-50 dark:bg-primary-900 scale-105' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                                            isDraggedOver ? `border-primary-400 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} scale-105` : `${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-300 hover:border-gray-400'}`
                                         }`}>
                                             <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                                 <i className="fas fa-plus text-2xl text-gray-400"></i>
                                             </div>
-                                            <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-1">No items yet</p>
-                                            <p className="text-xs text-gray-400 dark:text-gray-500">Drag items here or add new ones</p>
+                                            <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-1`}>No items yet</p>
+                                            <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Drag items here or add new ones</p>
                                         </div>
                                     )}
                                     
@@ -1028,7 +1028,7 @@ const Clients = () => {
                                         >
                                             <div className="flex items-start justify-between gap-3 mb-3">
                                                 <div className="flex-1">
-                                                    <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-1 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors`}>{lead.name}</h4>
+                                                    <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-1 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
                                                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.industry}</p>
                                             </div>
                                                 <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
@@ -1043,7 +1043,7 @@ const Clients = () => {
                                                 </div>
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-500 dark:text-gray-400">{lead.status}</span>
+                                                <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.status}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -1057,20 +1057,20 @@ const Clients = () => {
                                                 onDragStart={() => handleDragStart(opp, 'opportunity')}
                                                 onDragEnd={handleDragEnd}
                                                 onClick={() => handleOpenClient(client)}
-                                                className={`bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md cursor-move transition ${
+                                                className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-3 border shadow-sm hover:shadow-md cursor-move transition ${
                                                     draggedItem?.id === opp.id ? 'opacity-50' : ''
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">{opp.name}</div>
-                                                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 text-xs rounded-full font-medium shrink-0">OPP</span>
+                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.name}</div>
+                                                    <span className={`px-2 py-0.5 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'} text-xs rounded-full font-medium shrink-0`}>OPP</span>
                                                 </div>
-                                                <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
                                                     <i className="fas fa-building mr-1"></i>
                                                     {opp.clientName}
                                                 </div>
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-500 dark:text-gray-400">Existing client</span>
+                                                    <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Existing client</span>
                                                 </div>
                                             </div>
                                         );
@@ -1311,7 +1311,7 @@ const Clients = () => {
                         </button>
                         <div className="flex items-center space-x-3">
                             <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-primary-400' : 'bg-primary-600'}`}></div>
-                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {selectedClient ? selectedClient.name : 'New Client'}
                             </h1>
                         </div>
@@ -1321,7 +1321,7 @@ const Clients = () => {
                             onClick={() => setIsEditing(!isEditing)}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                 isEditing 
-                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200' 
+                                    ? '${isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'}' 
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                         >
@@ -1372,7 +1372,7 @@ const Clients = () => {
                         </button>
                         <div className="flex items-center space-x-3">
                             <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-yellow-400' : 'bg-yellow-500'}`}></div>
-                            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {selectedLead ? selectedLead.name : 'New Lead'}
                             </h1>
                         </div>
@@ -1382,7 +1382,7 @@ const Clients = () => {
                             onClick={() => setIsEditing(!isEditing)}
                             className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                                 isEditing 
-                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200' 
+                                    ? '${isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700'}' 
                                     : 'bg-blue-600 text-white hover:bg-blue-700'
                             }`}
                         >
@@ -1422,8 +1422,8 @@ const Clients = () => {
                         <i className="fas fa-users text-white text-lg"></i>
                     </div>
                 <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                        <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>CRM & Sales</h1>
+                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Manage clients and leads</p>
                     </div>
                 </div>
                 <div className="flex gap-3">
@@ -1434,7 +1434,7 @@ const Clients = () => {
                             setViewMode('client-detail');
                             setIsEditing(true);
                         }}
-                        className="flex items-center space-x-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
+                        className={`flex items-center space-x-2 px-4 py-2 ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'} border rounded-lg text-sm font-medium transition-all duration-200`}
                     >
                         <i className="fas fa-plus text-xs"></i>
                         <span>Add Client</span>
@@ -1455,13 +1455,13 @@ const Clients = () => {
             </div>
 
             {/* View Tabs - Clients First */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-1 inline-flex shadow-sm">
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 inline-flex shadow-sm`}>
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'clients' 
                             ? 'bg-primary-600 text-white shadow-sm' 
-                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -1472,7 +1472,7 @@ const Clients = () => {
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'leads' 
                             ? 'bg-primary-600 text-white shadow-sm' 
-                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -1483,7 +1483,7 @@ const Clients = () => {
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
                             ? 'bg-primary-600 text-white shadow-sm' 
-                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
