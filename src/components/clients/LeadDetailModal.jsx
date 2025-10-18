@@ -1,7 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect } = React;
 
-const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects }) => {
+const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects, isFullPage = false, isEditing = false }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [formData, setFormData] = useState(lead || {
         name: '',

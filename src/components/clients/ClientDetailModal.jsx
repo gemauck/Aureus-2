@@ -3,7 +3,7 @@
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 const { useState, useEffect } = React;
 
-const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject }) => {
+const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [uploadingContract, setUploadingContract] = useState(false);
     const [formData, setFormData] = useState(client || {
@@ -570,8 +570,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         .sort((a, b) => new Date(a.date) - new Date(b.date));
 
         return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
-                <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col`}>
+            <div className={isFullPage ? `w-full h-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}` : "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"}>
+                <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} ${isFullPage ? 'w-full h-full rounded-none' : 'rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh]'} overflow-hidden flex flex-col`}>
                     {/* Header */}
                     <div className={`flex justify-between items-center px-3 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         <div className="min-w-0 flex-1">
@@ -584,22 +584,24 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                 </p>
                             )}
                         </div>
-                        <button 
-                            onClick={onClose} 
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
-                        >
-                            <i className="fas fa-times text-lg"></i>
-                        </button>
+                        {!isFullPage && (
+                            <button 
+                                onClick={onClose} 
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                            >
+                                <i className="fas fa-times text-lg"></i>
+                            </button>
+                        )}
                     </div>
 
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
-                    <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide">
+                    <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`}>
                         {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'contracts', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                                className={`${isFullPage ? 'py-4 px-2' : 'py-3'} text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                                     activeTab === tab
                                         ? 'border-primary-600 text-primary-600'
                                         : isDark 
@@ -656,12 +658,12 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div className={`flex-1 overflow-y-auto ${isFullPage ? 'p-8' : 'p-6'}`}>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className={`grid ${isFullPage ? 'grid-cols-3 gap-6' : 'grid-cols-2 gap-4'}`}>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                                             Entity Name *
