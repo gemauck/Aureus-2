@@ -423,7 +423,12 @@ const ClientsMobile = () => {
 
             {/* Floating Action Button */}
             <button
-                onClick={() => setShowClientModal(true)}
+                onClick={() => {
+                    setSelectedClient(null);
+                    setSelectedLead(null);
+                    setViewMode('client-detail');
+                    setIsEditing(true);
+                }}
                 className="fixed bottom-6 right-6 bg-primary-600 text-white w-14 h-14 rounded-full shadow-lg hover:bg-primary-700 transition-colors flex items-center justify-center z-50"
             >
                 <i className="fas fa-plus text-xl"></i>
