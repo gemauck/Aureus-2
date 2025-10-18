@@ -8,10 +8,7 @@ import { withLogging } from '../_lib/logger.js'
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   try {
-    const chunks = []
-    for await (const chunk of req) chunks.push(chunk)
-    const body = JSON.parse(Buffer.concat(chunks).toString())
-    const { email, password } = body || {}
+    const { email, password } = req.body || {}
     if (!email || !password) return badRequest(res, 'Email and password required')
 
     const user = await prisma.user.findUnique({ where: { email } })
