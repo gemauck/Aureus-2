@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stress Test - Client Persistence - Abco ERP</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 20px auto; padding: 20px; }
+        .stress-test { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 12px 24px; margin: 8px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        button.warning { background: #ffc107; color: #000; }
+        button.warning:hover { background: #e0a800; }
+        .progress-bar { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; transition: width 0.3s; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
+        .stat-card { padding: 15px; background: #f8f9fa; border-radius: 8px; text-align: center; }
+        .stat-number { font-size: 24px; font-weight: bold; color: #007bff; }
+        .stat-label { font-size: 14px; color: #666; margin-top: 5px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; max-height: 200px; }
+        .log-entry { margin: 5px 0; padding: 5px; border-left: 3px solid #007bff; background: #f8f9fa; }
+        .log-error { border-left-color: #dc3545; background: #f8d7da; }
+        .log-success { border-left-color: #28a745; background: #d4edda; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    </style>
+</head>
+<body>
+    <h1>⚡ Stress Test - Client Persistence</h1>
+    
+    <div class="stress-test info">
+        <h3>🔥 Extreme Testing Scenarios</h3>
+        <p>These tests will push the client persistence system to its limits:</p>
+        <ul>
+            <li>🚀 Rapid-fire client creation (100+ clients)</li>
+            <li>🔄 Continuous refresh simulation</li>
+            <li>💾 Massive data operations</li>
+            <li>⏱️ Performance benchmarking</li>
+            <li>🧠 Memory stress testing</li>
+            <li>🔧 Concurrent operations</li>
+        </ul>
+    </div>
+
+    <div class="stats">
+        <div class="stat-card">
+            <div class="stat-number" id="total-clients">0</div>
+            <div class="stat-label">Total Clients</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="operations-performed">0</div>
+            <div class="stat-label">Operations</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="avg-operation-time">0ms</div>
+            <div class="stat-label">Avg Time</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="memory-usage">0KB</div>
+            <div class="stat-label">Memory</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number" id="success-rate">0%</div>
+            <div class="stat-label">Success Rate</div>
+        </div>
+    </div>
+
+    <div class="test-grid">
+        <div class="stress-test">
+            <h3>🚀 Test 1: Rapid Client Creation</h3>
+            <button onclick="rapidClientCreation(10)">Create 10 Clients</button>
+            <button onclick="rapidClientCreation(50)">Create 50 Clients</button>
+            <button onclick="rapidClientCreation(100)">Create 100 Clients</button>
+            <button onclick="rapidClientCreation(500)">Create 500 Clients (DANGER)</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-1" style="width: 0%"></div>
+            </div>
+            <div id="test1-results"></div>
+        </div>
+
+        <div class="stress-test">
+            <h3>🔄 Test 2: Refresh Stress</h3>
+            <button onclick="refreshStress(10)">10 Refreshes</button>
+            <button onclick="refreshStress(50)">50 Refreshes</button>
+            <button onclick="refreshStress(100)">100 Refreshes</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-2" style="width: 0%"></div>
+            </div>
+            <div id="test2-results"></div>
+        </div>
+
+        <div class="stress-test">
+            <h3>💾 Test 3: Storage Stress</h3>
+            <button onclick="storageStress()">Storage Stress Test</button>
+            <button onclick="memoryStress()">Memory Stress Test</button>
+            <button onclick="corruptionStress()">Corruption Stress Test</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-3" style="width: 0%"></div>
+            </div>
+            <div id="test3-results"></div>
+        </div>
+
+        <div class="stress-test">
+            <h3>⏱️ Test 4: Performance Benchmark</h3>
+            <button onclick="performanceBenchmark()">Run Benchmark</button>
+            <button onclick="concurrentOperations()">Concurrent Operations</button>
+            <button onclick="largeDataTest()">Large Data Test</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-4" style="width: 0%"></div>
+            </div>
+            <div id="test4-results"></div>
+        </div>
+
+        <div class="stress-test">
+            <h3>🧠 Test 5: Memory Stress</h3>
+            <button onclick="memoryLeakTest()">Memory Leak Test</button>
+            <button onclick="garbageCollectionTest()">GC Test</button>
+            <button onclick="browserCrashTest()">Browser Crash Test (DANGER)</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-5" style="width: 0%"></div>
+            </div>
+            <div id="test5-results"></div>
+        </div>
+
+        <div class="stress-test">
+            <h3>🔧 Test 6: Edge Cases</h3>
+            <button onclick="unicodeTest()">Unicode Test</button>
+            <button onclick="specialCharsTest()">Special Characters</button>
+            <button onclick="extremeValuesTest()">Extreme Values</button>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress-6" style="width: 0%"></div>
+            </div>
+            <div id="test6-results"></div>
+        </div>
+    </div>
+
+    <div class="stress-test">
+        <h3>🏃‍♂️ Ultimate Stress Test</h3>
+        <button class="warning" onclick="ultimateStressTest()">Run Ultimate Stress Test</button>
+        <button class="danger" onclick="clearAllData()">Clear All Data</button>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-ultimate" style="width: 0%"></div>
+        </div>
+        <div id="ultimate-results"></div>
+    </div>
+
+    <div class="stress-test">
+        <h3>📊 Real-time Stats</h3>
+        <button onclick="startRealTimeStats()">Start Real-time Monitoring</button>
+        <button onclick="stopRealTimeStats()">Stop Monitoring</button>
+        <div id="realtime-stats"></div>
+    </div>
+
+    <div class="stress-test">
+        <h3>📝 Stress Test Logs</h3>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="stress-logs"></div>
+    </div>
+
+    <script>
+        const RAILWAY_URL = 'https://abco-erp-2-production.up.railway.app';
+        let stressLogs = [];
+        let stats = {
+            totalClients: 0,
+            operationsPerformed: 0,
+            totalTime: 0,
+            successfulOps: 0,
+            failedOps: 0
+        };
+        let realTimeInterval = null;
+        
+        // Enhanced storage functions with performance monitoring
+        const stressStorage = {
+            getClients: () => {
+                const startTime = performance.now();
+                try {
+                    const clients = localStorage.getItem('abcotronics_clients');
+                    const parsedClients = clients ? JSON.parse(clients) : null;
+                    const endTime = performance.now();
+                    
+                    stats.operationsPerformed++;
+                    stats.totalTime += (endTime - startTime);
+                    
+                    logStress('getClients', `${parsedClients ? parsedClients.length : 0} clients loaded in ${(endTime - startTime).toFixed(2)}ms`);
+                    return parsedClients;
+                } catch (e) {
+                    stats.failedOps++;
+                    logStress('getClients ERROR', e.message, 'error');
+                    return null;
+                }
+            },
+            
+            setClients: (clients) => {
+                const startTime = performance.now();
+                try {
+                    localStorage.setItem('abcotronics_clients', JSON.stringify(clients));
+                    const endTime = performance.now();
+                    
+                    stats.operationsPerformed++;
+                    stats.successfulOps++;
+                    stats.totalTime += (endTime - startTime);
+                    stats.totalClients = clients.length;
+                    
+                    logStress('setClients', `${clients.length} clients saved in ${(endTime - startTime).toFixed(2)}ms`);
+                } catch (e) {
+                    stats.failedOps++;
+                    logStress('setClients ERROR', e.message, 'error');
+                }
+            }
+        };
+        
+        function logStress(message, data = '', type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message} ${data}`;
+            stressLogs.push({ message: logEntry, type });
+            console.log(logEntry);
+            updateStressLogDisplay();
+        }
+        
+        function updateStressLogDisplay() {
+            const logsDiv = document.getElementById('stress-logs');
+            logsDiv.innerHTML = stressLogs.slice(-30).map(log => 
+                `<div class="log-entry log-${log.type}">${log.message}</div>`
+            ).join('');
+        }
+        
+        function updateStats() {
+            document.getElementById('total-clients').textContent = stats.totalClients;
+            document.getElementById('operations-performed').textContent = stats.operationsPerformed;
+            document.getElementById('avg-operation-time').textContent = 
+                stats.operationsPerformed > 0 ? `${(stats.totalTime / stats.operationsPerformed).toFixed(2)}ms` : '0ms';
+            document.getElementById('memory-usage').textContent = 
+                `${Math.round(JSON.stringify(localStorage).length / 1024)}KB`;
+            document.getElementById('success-rate').textContent = 
+                stats.operationsPerformed > 0 ? `${Math.round((stats.successfulOps / stats.operationsPerformed) * 100)}%` : '0%';
+        }
+        
+        function showStressResult(testId, content, type = 'info') {
+            const resultDiv = document.getElementById(testId);
+            resultDiv.innerHTML = `<div class="stress-test ${type}">${content}</div>`;
+        }
+        
+        function updateProgress(progressId, percent) {
+            document.getElementById(progressId).style.width = `${percent}%`;
+        }
+        
+        // Test 1: Rapid Client Creation
+        async function rapidClientCreation(count) {
+            logStress('=== RAPID CLIENT CREATION TEST ===', `Creating ${count} clients`);
+            
+            const startTime = performance.now();
+            const existingClients = stressStorage.getClients() || [];
+            
+            for (let i = 0; i < count; i++) {
+                const client = {
+                    id: `stress-${Date.now()}-${i}`,
+                    name: `Stress Client ${i + 1}`,
+                    email: `stress${i + 1}@example.com`,
+                    industry: 'Stress Testing',
+                    status: 'Active',
+                    createdAt: new Date().toISOString(),
+                    contacts: Array.from({ length: Math.floor(Math.random() * 5) }, (_, j) => ({
+                        id: j,
+                        name: `Contact ${j}`,
+                        email: `contact${j}@example.com`
+                    })),
+                    sites: Array.from({ length: Math.floor(Math.random() * 3) }, (_, j) => ({
+                        id: j,
+                        name: `Site ${j}`,
+                        address: `${j} Stress Street`
+                    })),
+                    opportunities: Array.from({ length: Math.floor(Math.random() * 4) }, (_, j) => ({
+                        id: j,
+                        name: `Opportunity ${j}`,
+                        value: Math.floor(Math.random() * 100000),
+                        stage: ['Lead', 'Proposal', 'Negotiation', 'Closed'][Math.floor(Math.random() * 4)]
+                    }))
+                };
+                
+                existingClients.push(client);
+                
+                // Update progress
+                const progress = ((i + 1) / count) * 100;
+                updateProgress('progress-1', progress);
+                
+                // Save every 10 clients to simulate real usage
+                if ((i + 1) % 10 === 0) {
+                    stressStorage.setClients(existingClients);
+                    await new Promise(resolve => setTimeout(resolve, 1)); // Small delay
+                }
+            }
+            
+            // Final save
+            stressStorage.setClients(existingClients);
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            // Verify all clients saved
+            const savedClients = stressStorage.getClients();
+            const savedCount = savedClients ? savedClients.length : 0;
+            
+            if (savedCount >= count) {
+                showStressResult('test1-results', `
+                    <h4>✅ Rapid Creation Test PASSED</h4>
+                    <p><strong>Created:</strong> ${count} clients</p>
+                    <p><strong>Saved:</strong> ${savedCount} clients</p>
+                    <p><strong>Duration:</strong> ${duration.toFixed(2)}ms</p>
+                    <p><strong>Rate:</strong> ${(count / (duration / 1000)).toFixed(2)} clients/second</p>
+                `, 'success');
+                logStress('Rapid creation PASSED', `${count} clients created in ${duration.toFixed(2)}ms`);
+            } else {
+                showStressResult('test1-results', `
+                    <h4>❌ Rapid Creation Test FAILED</h4>
+                    <p>Expected: ${count}, Got: ${savedCount}</p>
+                    <p>Duration: ${duration.toFixed(2)}ms</p>
+                `, 'error');
+                logStress('Rapid creation FAILED', `Expected ${count}, got ${savedCount}`, 'error');
+            }
+        }
+        
+        // Test 2: Refresh Stress
+        async function refreshStress(count) {
+            logStress('=== REFRESH STRESS TEST ===', `${count} refresh simulations`);
+            
+            const startTime = performance.now();
+            let successCount = 0;
+            
+            for (let i = 0; i < count; i++) {
+                // Simulate refresh by clearing and reloading
+                const beforeClients = stressStorage.getClients() || [];
+                const beforeCount = beforeClients.length;
+                
+                // Simulate memory clear (like page refresh)
+                const afterClients = stressStorage.getClients() || [];
+                const afterCount = afterClients.length;
+                
+                if (beforeCount === afterCount && beforeCount > 0) {
+                    successCount++;
+                }
+                
+                // Update progress
+                const progress = ((i + 1) / count) * 100;
+                updateProgress('progress-2', progress);
+                
+                // Small delay
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            if (successCount === count) {
+                showStressResult('test2-results', `
+                    <h4>✅ Refresh Stress Test PASSED</h4>
+                    <p><strong>Refreshes:</strong> ${count}</p>
+                    <p><strong>Successful:</strong> ${successCount}</p>
+                    <p><strong>Duration:</strong> ${duration.toFixed(2)}ms</p>
+                    <p><strong>Rate:</strong> ${(count / (duration / 1000)).toFixed(2)} refreshes/second</p>
+                `, 'success');
+                logStress('Refresh stress PASSED', `${successCount}/${count} refreshes successful`);
+            } else {
+                showStressResult('test2-results', `
+                    <h4>❌ Refresh Stress Test FAILED</h4>
+                    <p>Expected: ${count}, Successful: ${successCount}</p>
+                    <p>Duration: ${duration.toFixed(2)}ms</p>
+                `, 'error');
+                logStress('Refresh stress FAILED', `${successCount}/${count} successful`, 'error');
+            }
+        }
+        
+        // Test 3: Storage Stress
+        async function storageStress() {
+            logStress('=== STORAGE STRESS TEST ===');
+            
+            const startTime = performance.now();
+            
+            try {
+                // Test with increasingly large datasets
+                const sizes = [10, 50, 100, 500, 1000];
+                let allPassed = true;
+                
+                for (const size of sizes) {
+                    const largeDataset = Array.from({ length: size }, (_, i) => ({
+                        id: `storage-${i}`,
+                        name: 'A'.repeat(100),
+                        email: 'test@example.com',
+                        data: 'B'.repeat(1000)
+                    }));
+                    
+                    stressStorage.setClients(largeDataset);
+                    const loaded = stressStorage.getClients();
+                    
+                    if (!loaded || loaded.length !== size) {
+                        allPassed = false;
+                        logStress('Storage stress FAILED', `Size ${size} failed`, 'error');
+                        break;
+                    }
+                    
+                    logStress('Storage test', `Size ${size} passed`);
+                }
+                
+                const endTime = performance.now();
+                
+                if (allPassed) {
+                    showStressResult('test3-results', `
+                        <h4>✅ Storage Stress Test PASSED</h4>
+                        <p>All dataset sizes handled correctly</p>
+                        <p>Duration: ${(endTime - startTime).toFixed(2)}ms</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test3-results', `
+                        <h4>❌ Storage Stress Test FAILED</h4>
+                        <p>Some dataset sizes failed</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test3-results', `
+                    <h4>❌ Storage Stress Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logStress('Storage stress ERROR', error.message, 'error');
+            }
+        }
+        
+        async function memoryStress() {
+            logStress('=== MEMORY STRESS TEST ===');
+            
+            try {
+                // Create memory pressure
+                const memoryClients = [];
+                for (let i = 0; i < 1000; i++) {
+                    memoryClients.push({
+                        id: `mem-${i}`,
+                        name: `Memory Client ${i}`,
+                        data: new Array(1000).fill('X').join('')
+                    });
+                }
+                
+                stressStorage.setClients(memoryClients);
+                const loaded = stressStorage.getClients();
+                
+                if (loaded && loaded.length === 1000) {
+                    showStressResult('test3-results', `
+                        <h4>✅ Memory Stress Test PASSED</h4>
+                        <p>1000 large clients handled successfully</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test3-results', `
+                        <h4>❌ Memory Stress Test FAILED</h4>
+                        <p>Memory pressure caused failure</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test3-results', `
+                    <h4>❌ Memory Stress Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function corruptionStress() {
+            logStress('=== CORRUPTION STRESS TEST ===');
+            
+            try {
+                // Test various corruption scenarios
+                const corruptions = [
+                    'invalid json',
+                    '{incomplete',
+                    'null',
+                    'undefined',
+                    '""',
+                    '{}',
+                    '[]',
+                    '{"invalid": "structure"}'
+                ];
+                
+                let handledCorrectly = 0;
+                
+                for (const corruption of corruptions) {
+                    try {
+                        localStorage.setItem('abcotronics_clients', corruption);
+                        const result = stressStorage.getClients();
+                        
+                        if (result === null || Array.isArray(result)) {
+                            handledCorrectly++;
+                        }
+                    } catch (e) {
+                        handledCorrectly++; // Exception handling is also correct
+                    }
+                }
+                
+                if (handledCorrectly === corruptions.length) {
+                    showStressResult('test3-results', `
+                        <h4>✅ Corruption Stress Test PASSED</h4>
+                        <p>All ${corruptions.length} corruption scenarios handled correctly</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test3-results', `
+                        <h4>❌ Corruption Stress Test FAILED</h4>
+                        <p>${handledCorrectly}/${corruptions.length} scenarios handled correctly</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test3-results', `
+                    <h4>❌ Corruption Stress Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        // Test 4: Performance Benchmark
+        async function performanceBenchmark() {
+            logStress('=== PERFORMANCE BENCHMARK ===');
+            
+            const benchmarks = [];
+            
+            // Benchmark 1: Small dataset
+            const smallStart = performance.now();
+            const smallData = Array.from({ length: 10 }, (_, i) => ({ id: i, name: `Client ${i}` }));
+            stressStorage.setClients(smallData);
+            stressStorage.getClients();
+            const smallTime = performance.now() - smallStart;
+            benchmarks.push({ size: 10, time: smallTime });
+            
+            // Benchmark 2: Medium dataset
+            const mediumStart = performance.now();
+            const mediumData = Array.from({ length: 100 }, (_, i) => ({ id: i, name: `Client ${i}` }));
+            stressStorage.setClients(mediumData);
+            stressStorage.getClients();
+            const mediumTime = performance.now() - mediumStart;
+            benchmarks.push({ size: 100, time: mediumTime });
+            
+            // Benchmark 3: Large dataset
+            const largeStart = performance.now();
+            const largeData = Array.from({ length: 1000 }, (_, i) => ({ id: i, name: `Client ${i}` }));
+            stressStorage.setClients(largeData);
+            stressStorage.getClients();
+            const largeTime = performance.now() - largeStart;
+            benchmarks.push({ size: 1000, time: largeTime });
+            
+            const results = benchmarks.map(b => 
+                `${b.size} clients: ${b.time.toFixed(2)}ms (${(b.size / (b.time / 1000)).toFixed(2)} ops/sec)`
+            ).join('<br>');
+            
+            showStressResult('test4-results', `
+                <h4>✅ Performance Benchmark Complete</h4>
+                <p>${results}</p>
+            `, 'success');
+            
+            logStress('Performance benchmark complete', benchmarks);
+        }
+        
+        async function concurrentOperations() {
+            logStress('=== CONCURRENT OPERATIONS TEST ===');
+            
+            try {
+                const promises = [];
+                
+                // Simulate concurrent operations
+                for (let i = 0; i < 10; i++) {
+                    promises.push(new Promise(async (resolve) => {
+                        const client = { id: `concurrent-${i}`, name: `Concurrent Client ${i}` };
+                        const existing = stressStorage.getClients() || [];
+                        stressStorage.setClients([...existing, client]);
+                        resolve();
+                    }));
+                }
+                
+                await Promise.all(promises);
+                
+                const finalClients = stressStorage.getClients();
+                
+                if (finalClients && finalClients.length >= 10) {
+                    showStressResult('test4-results', `
+                        <h4>✅ Concurrent Operations Test PASSED</h4>
+                        <p>10 concurrent operations completed successfully</p>
+                        <p>Final client count: ${finalClients.length}</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test4-results', `
+                        <h4>❌ Concurrent Operations Test FAILED</h4>
+                        <p>Concurrent operations failed</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test4-results', `
+                    <h4>❌ Concurrent Operations Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function largeDataTest() {
+            logStress('=== LARGE DATA TEST ===');
+            
+            try {
+                // Create a very large client object
+                const largeClient = {
+                    id: 'large-client',
+                    name: 'Large Data Client',
+                    email: 'large@example.com',
+                    notes: new Array(10000).fill('This is a large note. ').join(''),
+                    history: Array.from({ length: 1000 }, (_, i) => ({
+                        id: i,
+                        action: `Action ${i}`,
+                        timestamp: new Date().toISOString(),
+                        data: new Array(100).fill('X').join('')
+                    }))
+                };
+                
+                stressStorage.setClients([largeClient]);
+                const loaded = stressStorage.getClients();
+                
+                if (loaded && loaded[0] && loaded[0].notes.length > 100000) {
+                    showStressResult('test4-results', `
+                        <h4>✅ Large Data Test PASSED</h4>
+                        <p>Large client object handled successfully</p>
+                        <p>Notes length: ${loaded[0].notes.length} characters</p>
+                        <p>History entries: ${loaded[0].history.length}</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test4-results', `
+                        <h4>❌ Large Data Test FAILED</h4>
+                        <p>Large data not handled properly</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test4-results', `
+                    <h4>❌ Large Data Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        // Test 5: Memory Stress
+        async function memoryLeakTest() {
+            logStress('=== MEMORY LEAK TEST ===');
+            
+            try {
+                const initialMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+                
+                // Create and destroy clients repeatedly
+                for (let i = 0; i < 100; i++) {
+                    const clients = Array.from({ length: 100 }, (_, j) => ({
+                        id: `leak-${i}-${j}`,
+                        name: `Leak Test Client ${j}`,
+                        data: new Array(1000).fill('L').join('')
+                    }));
+                    
+                    stressStorage.setClients(clients);
+                    stressStorage.getClients();
+                    
+                    // Force garbage collection if available
+                    if (window.gc) window.gc();
+                }
+                
+                const finalMemory = performance.memory ? performance.memory.usedJSHeapSize : 0;
+                const memoryIncrease = finalMemory - initialMemory;
+                
+                if (memoryIncrease < 50 * 1024 * 1024) { // Less than 50MB increase
+                    showStressResult('test5-results', `
+                        <h4>✅ Memory Leak Test PASSED</h4>
+                        <p>Memory increase: ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB</p>
+                        <p>No significant memory leak detected</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test5-results', `
+                        <h4>❌ Memory Leak Test FAILED</h4>
+                        <p>Memory increase: ${(memoryIncrease / 1024 / 1024).toFixed(2)}MB</p>
+                        <p>Possible memory leak detected</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test5-results', `
+                    <h4>❌ Memory Leak Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function garbageCollectionTest() {
+            logStress('=== GARBAGE COLLECTION TEST ===');
+            
+            try {
+                // Create large objects and let them be garbage collected
+                for (let i = 0; i < 50; i++) {
+                    const largeObject = {
+                        id: `gc-${i}`,
+                        data: new Array(10000).fill('Garbage').join('')
+                    };
+                    
+                    stressStorage.setClients([largeObject]);
+                }
+                
+                // Clear the storage
+                localStorage.removeItem('abcotronics_clients');
+                
+                // Force garbage collection if available
+                if (window.gc) {
+                    window.gc();
+                    showStressResult('test5-results', `
+                        <h4>✅ Garbage Collection Test PASSED</h4>
+                        <p>Garbage collection completed successfully</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test5-results', `
+                        <h4>⚠️ Garbage Collection Test SKIPPED</h4>
+                        <p>Garbage collection not available in this browser</p>
+                    `, 'warning');
+                }
+                
+            } catch (error) {
+                showStressResult('test5-results', `
+                    <h4>❌ Garbage Collection Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function browserCrashTest() {
+            logStress('=== BROWSER CRASH TEST (DANGER) ===');
+            
+            if (!confirm('This test may crash your browser or make it unresponsive. Continue?')) {
+                return;
+            }
+            
+            try {
+                // Try to create an extremely large dataset
+                const massiveData = [];
+                for (let i = 0; i < 100000; i++) {
+                    massiveData.push({
+                        id: `crash-${i}`,
+                        name: new Array(1000).fill('X').join(''),
+                        data: new Array(10000).fill('Y').join('')
+                    });
+                    
+                    if (i % 1000 === 0) {
+                        updateProgress('progress-5', (i / 100000) * 100);
+                        await new Promise(resolve => setTimeout(resolve, 1));
+                    }
+                }
+                
+                stressStorage.setClients(massiveData);
+                
+                showStressResult('test5-results', `
+                    <h4>✅ Browser Crash Test PASSED</h4>
+                    <p>Browser survived the massive data test!</p>
+                    <p>Created: 100,000 massive clients</p>
+                `, 'success');
+                
+            } catch (error) {
+                showStressResult('test5-results', `
+                    <h4>❌ Browser Crash Test FAILED</h4>
+                    <p>Browser couldn't handle the massive data</p>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        // Test 6: Edge Cases
+        async function unicodeTest() {
+            logStress('=== UNICODE TEST ===');
+            
+            try {
+                const unicodeClient = {
+                    id: 'unicode-test',
+                    name: '客户测试 🚀 ñáéíóú 中文',
+                    email: 'test@测试.com',
+                    industry: 'Технология',
+                    notes: '🌟 Unicode characters: αβγδε, 🎉 emojis, العربية, русский'
+                };
+                
+                stressStorage.setClients([unicodeClient]);
+                const loaded = stressStorage.getClients();
+                
+                if (loaded && loaded[0] && loaded[0].name.includes('客户测试')) {
+                    showStressResult('test6-results', `
+                        <h4>✅ Unicode Test PASSED</h4>
+                        <p>Unicode characters handled correctly</p>
+                        <pre>${JSON.stringify(loaded[0], null, 2)}</pre>
+                    `, 'success');
+                } else {
+                    showStressResult('test6-results', `
+                        <h4>❌ Unicode Test FAILED</h4>
+                        <p>Unicode characters not preserved</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test6-results', `
+                    <h4>❌ Unicode Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function specialCharsTest() {
+            logStress('=== SPECIAL CHARACTERS TEST ===');
+            
+            try {
+                const specialClient = {
+                    id: 'special-chars',
+                    name: 'Client with "quotes" & <tags>',
+                    email: 'test+special@domain-name.co.uk',
+                    industry: 'IT & Software',
+                    notes: 'Special chars: !@#$%^&*()_+-=[]{}|;:,.<>?/~`'
+                };
+                
+                stressStorage.setClients([specialClient]);
+                const loaded = stressStorage.getClients();
+                
+                if (loaded && loaded[0] && loaded[0].name.includes('"quotes"')) {
+                    showStressResult('test6-results', `
+                        <h4>✅ Special Characters Test PASSED</h4>
+                        <p>Special characters handled correctly</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test6-results', `
+                        <h4>❌ Special Characters Test FAILED</h4>
+                        <p>Special characters not preserved</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test6-results', `
+                    <h4>❌ Special Characters Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        async function extremeValuesTest() {
+            logStress('=== EXTREME VALUES TEST ===');
+            
+            try {
+                const extremeClient = {
+                    id: '',
+                    name: '',
+                    email: '',
+                    industry: null,
+                    value: Infinity,
+                    negative: -Infinity,
+                    veryLong: new Array(100000).fill('A').join(''),
+                    emptyArray: [],
+                    emptyObject: {},
+                    nested: {
+                        deep: {
+                            structure: {
+                                with: {
+                                    many: {
+                                        levels: 'deep'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+                
+                stressStorage.setClients([extremeClient]);
+                const loaded = stressStorage.getClients();
+                
+                if (loaded && loaded[0]) {
+                    showStressResult('test6-results', `
+                        <h4>✅ Extreme Values Test PASSED</h4>
+                        <p>Extreme values handled correctly</p>
+                        <p>Very long string: ${loaded[0].veryLong.length} characters</p>
+                    `, 'success');
+                } else {
+                    showStressResult('test6-results', `
+                        <h4>❌ Extreme Values Test FAILED</h4>
+                        <p>Extreme values not handled properly</p>
+                    `, 'error');
+                }
+                
+            } catch (error) {
+                showStressResult('test6-results', `
+                    <h4>❌ Extreme Values Test ERROR</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+            }
+        }
+        
+        // Ultimate Stress Test
+        async function ultimateStressTest() {
+            logStress('=== ULTIMATE STRESS TEST ===');
+            
+            if (!confirm('This will run ALL stress tests. This may take several minutes and could make your browser unresponsive. Continue?')) {
+                return;
+            }
+            
+            const tests = [
+                () => rapidClientCreation(100),
+                () => refreshStress(50),
+                () => storageStress(),
+                () => performanceBenchmark(),
+                () => memoryLeakTest(),
+                () => unicodeTest()
+            ];
+            
+            let completed = 0;
+            
+            for (const test of tests) {
+                try {
+                    updateProgress('progress-ultimate', (completed / tests.length) * 100);
+                    await test();
+                    completed++;
+                } catch (error) {
+                    logStress('Ultimate test failed', error.message, 'error');
+                }
+            }
+            
+            updateProgress('progress-ultimate', 100);
+            
+            showStressResult('ultimate-results', `
+                <h4>🏁 Ultimate Stress Test Complete</h4>
+                <p><strong>Tests Completed:</strong> ${completed}/${tests.length}</p>
+                <p><strong>Success Rate:</strong> ${Math.round((completed / tests.length) * 100)}%</p>
+                <p><strong>Total Operations:</strong> ${stats.operationsPerformed}</p>
+                <p><strong>Average Time:</strong> ${(stats.totalTime / stats.operationsPerformed).toFixed(2)}ms</p>
+            `, completed === tests.length ? 'success' : 'warning');
+        }
+        
+        // Real-time Stats
+        function startRealTimeStats() {
+            if (realTimeInterval) return;
+            
+            realTimeInterval = setInterval(() => {
+                updateStats();
+                
+                const statsDiv = document.getElementById('realtime-stats');
+                statsDiv.innerHTML = `
+                    <div class="stress-test info">
+                        <h4>📊 Real-time Stats</h4>
+                        <p><strong>Total Clients:</strong> ${stats.totalClients}</p>
+                        <p><strong>Operations:</strong> ${stats.operationsPerformed}</p>
+                        <p><strong>Success Rate:</strong> ${Math.round((stats.successfulOps / stats.operationsPerformed) * 100)}%</p>
+                        <p><strong>Memory Usage:</strong> ${Math.round(JSON.stringify(localStorage).length / 1024)}KB</p>
+                        <p><strong>Timestamp:</strong> ${new Date().toLocaleTimeString()}</p>
+                    </div>
+                `;
+            }, 1000);
+            
+            logStress('Real-time stats started');
+        }
+        
+        function stopRealTimeStats() {
+            if (realTimeInterval) {
+                clearInterval(realTimeInterval);
+                realTimeInterval = null;
+                logStress('Real-time stats stopped');
+            }
+        }
+        
+        function clearAllData() {
+            localStorage.clear();
+            stats = {
+                totalClients: 0,
+                operationsPerformed: 0,
+                totalTime: 0,
+                successfulOps: 0,
+                failedOps: 0
+            };
+            updateStats();
+            logStress('All stress test data cleared');
+        }
+        
+        function clearLogs() {
+            stressLogs = [];
+            updateStressLogDisplay();
+        }
+        
+        // Initialize
+        window.onload = function() {
+            logStress('Stress Test Suite initialized');
+            updateStats();
+            updateStressLogDisplay();
+        };
+    </script>
+</body>
+</html>

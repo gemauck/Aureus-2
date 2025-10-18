@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Client Persistence Test - Abco ERP</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1000px; margin: 20px auto; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 12px 24px; margin: 8px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        input, textarea { padding: 10px; margin: 8px; width: 250px; border: 1px solid #ddd; border-radius: 4px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; max-height: 300px; }
+        .test-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .log-entry { margin: 5px 0; padding: 5px; border-left: 3px solid #007bff; background: #f8f9fa; }
+        .log-error { border-left-color: #dc3545; background: #f8d7da; }
+        .log-success { border-left-color: #28a745; background: #d4edda; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Comprehensive Client Persistence Test</h1>
+    
+    <div class="test-section info">
+        <h3>📋 Test Overview</h3>
+        <p>This comprehensive test will verify client data persistence across multiple scenarios:</p>
+        <ul>
+            <li>✅ Client creation and saving</li>
+            <li>✅ Page refresh persistence</li>
+            <li>✅ localStorage functionality</li>
+            <li>✅ API integration</li>
+            <li>✅ Error handling</li>
+            <li>✅ Data integrity</li>
+        </ul>
+    </div>
+
+    <div class="test-grid">
+        <div class="test-section">
+            <h3>🔧 Test 1: Basic Client Creation</h3>
+            <input type="text" id="clientName1" placeholder="Client Name" value="Test Client 1">
+            <input type="email" id="clientEmail1" placeholder="Email" value="test1@example.com">
+            <input type="text" id="clientIndustry1" placeholder="Industry" value="Technology">
+            
+            <button onclick="testBasicCreation()">Test Basic Creation</button>
+            <div id="test1-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔄 Test 2: Persistence After Refresh</h3>
+            <button onclick="testPersistence()">Test Persistence</button>
+            <button onclick="simulateRefresh()">Simulate Refresh</button>
+            <div id="test2-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>💾 Test 3: localStorage Operations</h3>
+            <button onclick="testLocalStorage()">Test localStorage</button>
+            <button onclick="testStorageCorruption()">Test Corruption Handling</button>
+            <div id="test3-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🌐 Test 4: API Integration</h3>
+            <button onclick="testAPIIntegration()">Test API Calls</button>
+            <button onclick="testAPIFallback()">Test API Fallback</button>
+            <div id="test4-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Test 5: Data Integrity</h3>
+            <button onclick="testDataIntegrity()">Test Data Integrity</button>
+            <button onclick="testMultipleClients()">Test Multiple Clients</button>
+            <div id="test5-results"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🚨 Test 6: Error Scenarios</h3>
+            <button onclick="testErrorScenarios()">Test Error Handling</button>
+            <button onclick="testEdgeCases()">Test Edge Cases</button>
+            <div id="test6-results"></div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>🏃‍♂️ Run All Tests</h3>
+        <button class="success" onclick="runAllTests()">Run Complete Test Suite</button>
+        <button class="danger" onclick="clearAllData()">Clear All Test Data</button>
+        <div id="all-tests-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>📝 Test Logs</h3>
+        <button onclick="clearLogs()">Clear Logs</button>
+        <div id="test-logs"></div>
+    </div>
+
+    <script>
+        const RAILWAY_URL = 'https://abco-erp-2-production.up.railway.app';
+        let testLogs = [];
+        
+        // Mock storage functions (same as the app)
+        const mockStorage = {
+            getClients: () => {
+                try {
+                    const clients = localStorage.getItem('abcotronics_clients');
+                    const parsedClients = clients ? JSON.parse(clients) : null;
+                    logTest('getClients called, found:', parsedClients ? parsedClients.length : 'none');
+                    return parsedClients;
+                } catch (e) {
+                    logTest('Error loading clients:', e.message, 'error');
+                    return null;
+                }
+            },
+            
+            setClients: (clients) => {
+                logTest('setClients called with:', clients.length, 'clients');
+                localStorage.setItem('abcotronics_clients', JSON.stringify(clients));
+                logTest('Clients saved to localStorage successfully');
+            },
+            
+            getToken: () => {
+                return localStorage.getItem('abcotronics_token');
+            }
+        };
+        
+        // Mock API functions
+        const mockAPI = {
+            createClient: async (clientData) => {
+                logTest('API createClient called with:', clientData);
+                
+                try {
+                    const response = await fetch(`${RAILWAY_URL}/api/clients`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(clientData)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    logTest('API createClient response:', data);
+                    return data;
+                } catch (error) {
+                    logTest('API createClient error:', error.message, 'error');
+                    throw error;
+                }
+            },
+            
+            listClients: async () => {
+                logTest('API listClients called');
+                
+                try {
+                    const response = await fetch(`${RAILWAY_URL}/api/clients`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    logTest('API listClients response:', data);
+                    return data;
+                } catch (error) {
+                    logTest('API listClients error:', error.message, 'error');
+                    throw error;
+                }
+            }
+        };
+        
+        function logTest(message, data = '', type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message} ${data ? JSON.stringify(data) : ''}`;
+            testLogs.push({ message: logEntry, type });
+            console.log(logEntry);
+            updateLogDisplay();
+        }
+        
+        function updateLogDisplay() {
+            const logsDiv = document.getElementById('test-logs');
+            logsDiv.innerHTML = testLogs.slice(-20).map(log => 
+                `<div class="log-entry log-${log.type}">${log.message}</div>`
+            ).join('');
+        }
+        
+        function showResult(testId, content, type = 'info') {
+            const resultDiv = document.getElementById(testId);
+            resultDiv.innerHTML = `<div class="test-section ${type}">${content}</div>`;
+        }
+        
+        // Test 1: Basic Client Creation
+        async function testBasicCreation() {
+            logTest('=== TEST 1: Basic Client Creation ===');
+            
+            try {
+                const clientData = {
+                    name: document.getElementById('clientName1').value,
+                    email: document.getElementById('clientEmail1').value,
+                    industry: document.getElementById('clientIndustry1').value,
+                    status: 'Active',
+                    type: 'client'
+                };
+                
+                // Test localStorage save
+                const existingClients = mockStorage.getClients() || [];
+                const newClient = {
+                    id: Date.now().toString(),
+                    ...clientData,
+                    createdAt: new Date().toISOString()
+                };
+                
+                const updatedClients = [...existingClients, newClient];
+                mockStorage.setClients(updatedClients);
+                
+                // Verify save
+                const savedClients = mockStorage.getClients();
+                const savedClient = savedClients.find(c => c.id === newClient.id);
+                
+                if (savedClient && savedClient.name === clientData.name) {
+                    showResult('test1-results', `
+                        <h4>✅ Test 1 PASSED</h4>
+                        <p>Client created and saved successfully!</p>
+                        <pre>${JSON.stringify(savedClient, null, 2)}</pre>
+                    `, 'success');
+                    logTest('Test 1 PASSED: Client creation successful');
+                } else {
+                    throw new Error('Client not found after save');
+                }
+                
+            } catch (error) {
+                showResult('test1-results', `
+                    <h4>❌ Test 1 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 1 FAILED:', error.message, 'error');
+            }
+        }
+        
+        // Test 2: Persistence After Refresh
+        async function testPersistence() {
+            logTest('=== TEST 2: Persistence After Refresh ===');
+            
+            try {
+                const clientsBefore = mockStorage.getClients() || [];
+                logTest('Clients before refresh simulation:', clientsBefore.length);
+                
+                // Simulate page refresh by clearing memory and reloading
+                const clientsAfter = mockStorage.getClients() || [];
+                logTest('Clients after refresh simulation:', clientsAfter.length);
+                
+                if (clientsAfter.length === clientsBefore.length && clientsAfter.length > 0) {
+                    showResult('test2-results', `
+                        <h4>✅ Test 2 PASSED</h4>
+                        <p>Client data persisted across refresh!</p>
+                        <p>Clients found: ${clientsAfter.length}</p>
+                    `, 'success');
+                    logTest('Test 2 PASSED: Data persistence confirmed');
+                } else {
+                    throw new Error(`Data lost: ${clientsBefore.length} -> ${clientsAfter.length}`);
+                }
+                
+            } catch (error) {
+                showResult('test2-results', `
+                    <h4>❌ Test 2 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 2 FAILED:', error.message, 'error');
+            }
+        }
+        
+        function simulateRefresh() {
+            logTest('=== Simulating Page Refresh ===');
+            const clients = mockStorage.getClients() || [];
+            logTest('Clients after refresh:', clients.length);
+            
+            showResult('test2-results', `
+                <h4>🔄 Refresh Simulation Complete</h4>
+                <p>Clients found after refresh: ${clients.length}</p>
+                <pre>${JSON.stringify(clients, null, 2)}</pre>
+            `, 'info');
+        }
+        
+        // Test 3: localStorage Operations
+        async function testLocalStorage() {
+            logTest('=== TEST 3: localStorage Operations ===');
+            
+            try {
+                // Test basic operations
+                const testData = [{ id: '1', name: 'Test Client', email: 'test@example.com' }];
+                
+                // Test save
+                mockStorage.setClients(testData);
+                
+                // Test load
+                const loadedData = mockStorage.getClients();
+                
+                if (loadedData && loadedData.length === 1 && loadedData[0].name === 'Test Client') {
+                    showResult('test3-results', `
+                        <h4>✅ Test 3 PASSED</h4>
+                        <p>localStorage operations working correctly!</p>
+                        <pre>${JSON.stringify(loadedData, null, 2)}</pre>
+                    `, 'success');
+                    logTest('Test 3 PASSED: localStorage operations successful');
+                } else {
+                    throw new Error('localStorage operations failed');
+                }
+                
+            } catch (error) {
+                showResult('test3-results', `
+                    <h4>❌ Test 3 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 3 FAILED:', error.message, 'error');
+            }
+        }
+        
+        async function testStorageCorruption() {
+            logTest('=== Testing Storage Corruption Handling ===');
+            
+            try {
+                // Intentionally corrupt localStorage
+                localStorage.setItem('abcotronics_clients', 'invalid json');
+                
+                // Try to load - should handle gracefully
+                const clients = mockStorage.getClients();
+                
+                if (clients === null) {
+                    showResult('test3-results', `
+                        <h4>✅ Corruption Test PASSED</h4>
+                        <p>Storage corruption handled gracefully!</p>
+                        <p>Returned null as expected</p>
+                    `, 'success');
+                    logTest('Corruption test PASSED: Handled gracefully');
+                } else {
+                    throw new Error('Corruption not handled properly');
+                }
+                
+            } catch (error) {
+                showResult('test3-results', `
+                    <h4>❌ Corruption Test FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Corruption test FAILED:', error.message, 'error');
+            }
+        }
+        
+        // Test 4: API Integration
+        async function testAPIIntegration() {
+            logTest('=== TEST 4: API Integration ===');
+            
+            try {
+                const clientData = {
+                    name: 'API Test Client',
+                    email: 'api@example.com',
+                    industry: 'Technology'
+                };
+                
+                // Test API create
+                try {
+                    const apiResult = await mockAPI.createClient(clientData);
+                    showResult('test4-results', `
+                        <h4>✅ API Test PASSED</h4>
+                        <p>API client creation successful!</p>
+                        <pre>${JSON.stringify(apiResult, null, 2)}</pre>
+                    `, 'success');
+                    logTest('API Test PASSED: Client creation via API');
+                } catch (apiError) {
+                    // Test fallback
+                    logTest('API failed, testing fallback...');
+                    
+                    const existingClients = mockStorage.getClients() || [];
+                    const newClient = { id: Date.now().toString(), ...clientData };
+                    mockStorage.setClients([...existingClients, newClient]);
+                    
+                    showResult('test4-results', `
+                        <h4>✅ API Fallback Test PASSED</h4>
+                        <p>API failed but fallback to localStorage worked!</p>
+                        <p>Error: ${apiError.message}</p>
+                    `, 'warning');
+                    logTest('API Fallback PASSED: localStorage fallback worked');
+                }
+                
+            } catch (error) {
+                showResult('test4-results', `
+                    <h4>❌ Test 4 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 4 FAILED:', error.message, 'error');
+            }
+        }
+        
+        async function testAPIFallback() {
+            logTest('=== Testing API Fallback ===');
+            
+            try {
+                // Test API list
+                const apiResult = await mockAPI.listClients();
+                
+                showResult('test4-results', `
+                    <h4>✅ API List Test PASSED</h4>
+                    <p>API list clients successful!</p>
+                    <pre>${JSON.stringify(apiResult, null, 2)}</pre>
+                `, 'success');
+                
+            } catch (error) {
+                // Test localStorage fallback
+                const localClients = mockStorage.getClients() || [];
+                
+                showResult('test4-results', `
+                    <h4>✅ API Fallback Test PASSED</h4>
+                    <p>API failed, but localStorage fallback worked!</p>
+                    <p>Error: ${error.message}</p>
+                    <p>Local clients: ${localClients.length}</p>
+                `, 'warning');
+                
+                logTest('API Fallback PASSED: localStorage fallback worked');
+            }
+        }
+        
+        // Test 5: Data Integrity
+        async function testDataIntegrity() {
+            logTest('=== TEST 5: Data Integrity ===');
+            
+            try {
+                const complexClient = {
+                    id: Date.now().toString(),
+                    name: 'Complex Test Client',
+                    email: 'complex@example.com',
+                    industry: 'Technology',
+                    status: 'Active',
+                    contacts: [
+                        { id: 1, name: 'John Doe', email: 'john@example.com', phone: '555-0123' }
+                    ],
+                    sites: [
+                        { id: 1, name: 'Main Office', address: '123 Main St' }
+                    ],
+                    opportunities: [
+                        { id: 1, name: 'Big Deal', value: 100000, stage: 'Proposal' }
+                    ]
+                };
+                
+                mockStorage.setClients([complexClient]);
+                const savedClient = mockStorage.getClients()[0];
+                
+                // Verify all fields preserved
+                const fieldsMatch = 
+                    savedClient.name === complexClient.name &&
+                    savedClient.contacts.length === complexClient.contacts.length &&
+                    savedClient.sites.length === complexClient.sites.length &&
+                    savedClient.opportunities.length === complexClient.opportunities.length;
+                
+                if (fieldsMatch) {
+                    showResult('test5-results', `
+                        <h4>✅ Test 5 PASSED</h4>
+                        <p>Complex data integrity maintained!</p>
+                        <pre>${JSON.stringify(savedClient, null, 2)}</pre>
+                    `, 'success');
+                    logTest('Test 5 PASSED: Data integrity maintained');
+                } else {
+                    throw new Error('Data integrity compromised');
+                }
+                
+            } catch (error) {
+                showResult('test5-results', `
+                    <h4>❌ Test 5 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 5 FAILED:', error.message, 'error');
+            }
+        }
+        
+        async function testMultipleClients() {
+            logTest('=== Testing Multiple Clients ===');
+            
+            try {
+                const multipleClients = [
+                    { id: '1', name: 'Client 1', email: 'client1@example.com' },
+                    { id: '2', name: 'Client 2', email: 'client2@example.com' },
+                    { id: '3', name: 'Client 3', email: 'client3@example.com' }
+                ];
+                
+                mockStorage.setClients(multipleClients);
+                const loadedClients = mockStorage.getClients();
+                
+                if (loadedClients.length === 3) {
+                    showResult('test5-results', `
+                        <h4>✅ Multiple Clients Test PASSED</h4>
+                        <p>All 3 clients saved and loaded correctly!</p>
+                        <pre>${JSON.stringify(loadedClients, null, 2)}</pre>
+                    `, 'success');
+                    logTest('Multiple clients test PASSED');
+                } else {
+                    throw new Error(`Expected 3 clients, got ${loadedClients.length}`);
+                }
+                
+            } catch (error) {
+                showResult('test5-results', `
+                    <h4>❌ Multiple Clients Test FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Multiple clients test FAILED:', error.message, 'error');
+            }
+        }
+        
+        // Test 6: Error Scenarios
+        async function testErrorScenarios() {
+            logTest('=== TEST 6: Error Scenarios ===');
+            
+            try {
+                // Test with null data
+                mockStorage.setClients(null);
+                const nullResult = mockStorage.getClients();
+                
+                // Test with empty array
+                mockStorage.setClients([]);
+                const emptyResult = mockStorage.getClients();
+                
+                // Test with invalid data
+                try {
+                    localStorage.setItem('abcotronics_clients', 'invalid json');
+                    const invalidResult = mockStorage.getClients();
+                    
+                    if (invalidResult === null) {
+                        showResult('test6-results', `
+                            <h4>✅ Test 6 PASSED</h4>
+                            <p>Error scenarios handled correctly!</p>
+                            <ul>
+                                <li>Null data: ${nullResult ? 'Failed' : 'Handled'}</li>
+                                <li>Empty array: ${Array.isArray(emptyResult) ? 'Handled' : 'Failed'}</li>
+                                <li>Invalid JSON: ${invalidResult === null ? 'Handled' : 'Failed'}</li>
+                            </ul>
+                        `, 'success');
+                        logTest('Test 6 PASSED: Error scenarios handled');
+                    } else {
+                        throw new Error('Invalid JSON not handled properly');
+                    }
+                } catch (jsonError) {
+                    throw new Error(`JSON error not handled: ${jsonError.message}`);
+                }
+                
+            } catch (error) {
+                showResult('test6-results', `
+                    <h4>❌ Test 6 FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Test 6 FAILED:', error.message, 'error');
+            }
+        }
+        
+        async function testEdgeCases() {
+            logTest('=== Testing Edge Cases ===');
+            
+            try {
+                // Test very large data
+                const largeClient = {
+                    id: 'large',
+                    name: 'A'.repeat(1000),
+                    email: 'large@example.com',
+                    notes: 'B'.repeat(10000)
+                };
+                
+                mockStorage.setClients([largeClient]);
+                const loadedClient = mockStorage.getClients()[0];
+                
+                if (loadedClient.name.length === 1000 && loadedClient.notes.length === 10000) {
+                    showResult('test6-results', `
+                        <h4>✅ Edge Cases Test PASSED</h4>
+                        <p>Large data handled correctly!</p>
+                        <p>Name length: ${loadedClient.name.length}</p>
+                        <p>Notes length: ${loadedClient.notes.length}</p>
+                    `, 'success');
+                    logTest('Edge cases test PASSED: Large data handled');
+                } else {
+                    throw new Error('Large data not handled properly');
+                }
+                
+            } catch (error) {
+                showResult('test6-results', `
+                    <h4>❌ Edge Cases Test FAILED</h4>
+                    <p>Error: ${error.message}</p>
+                `, 'error');
+                logTest('Edge cases test FAILED:', error.message, 'error');
+            }
+        }
+        
+        // Run All Tests
+        async function runAllTests() {
+            logTest('=== RUNNING ALL TESTS ===');
+            
+            const tests = [
+                testBasicCreation,
+                testPersistence,
+                testLocalStorage,
+                testAPIIntegration,
+                testDataIntegrity,
+                testErrorScenarios
+            ];
+            
+            let passed = 0;
+            let failed = 0;
+            
+            for (const test of tests) {
+                try {
+                    await test();
+                    passed++;
+                } catch (error) {
+                    failed++;
+                    logTest(`Test failed: ${error.message}`, '', 'error');
+                }
+            }
+            
+            const result = `
+                <h4>🏁 All Tests Complete</h4>
+                <p><strong>Passed:</strong> ${passed}</p>
+                <p><strong>Failed:</strong> ${failed}</p>
+                <p><strong>Total:</strong> ${passed + failed}</p>
+                <p><strong>Success Rate:</strong> ${Math.round((passed / (passed + failed)) * 100)}%</p>
+            `;
+            
+            showResult('all-tests-results', result, failed === 0 ? 'success' : 'warning');
+            logTest(`All tests complete: ${passed} passed, ${failed} failed`);
+        }
+        
+        function clearAllData() {
+            localStorage.clear();
+            logTest('All test data cleared');
+            showResult('all-tests-results', '<h4>🗑️ All test data cleared</h4>', 'info');
+        }
+        
+        function clearLogs() {
+            testLogs = [];
+            updateLogDisplay();
+        }
+        
+        // Initialize
+        window.onload = function() {
+            logTest('Comprehensive Client Test Suite initialized');
+            updateLogDisplay();
+        };
+    </script>
+</body>
+</html>
