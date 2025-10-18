@@ -6,13 +6,41 @@ const ThemeContext = createContext();
 
 const ThemeProvider = ({ children }) => {
     const [theme, setTheme] = useState('light');
+    const [systemPreference, setSystemPreference] = useState('light');
 
-    // Load theme from localStorage on mount
+    // Detect system preference
     useEffect(() => {
-        const savedTheme = localStorage.getItem('abcotronics_theme') || 'light';
-        setTheme(savedTheme);
-        applyTheme(savedTheme);
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        setSystemPreference(mediaQuery.matches ? 'dark' : 'light');
+        
+        const handleChange = (e) => {
+            setSystemPreference(e.matches ? 'dark' : 'light');
+        };
+        
+        mediaQuery.addEventListener('change', handleChange);
+        return () => mediaQuery.removeEventListener('change', handleChange);
     }, []);
+
+    // Load theme from localStorage on mount, with system preference fallback
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('abcotronics_theme');
+        const useSystemPreference = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+        
+        let initialTheme = 'light';
+        
+        if (useSystemPreference) {
+            initialTheme = systemPreference;
+        } else if (savedTheme) {
+            initialTheme = savedTheme;
+        } else {
+            // First time user - use system preference
+            initialTheme = systemPreference;
+            localStorage.setItem('abcotronics_use_system_theme', 'true');
+        }
+        
+        setTheme(initialTheme);
+        applyTheme(initialTheme);
+    }, [systemPreference]);
 
     // Apply theme to document
     const applyTheme = (newTheme) => {
@@ -26,11 +54,32 @@ const ThemeProvider = ({ children }) => {
         const newTheme = theme === 'light' ? 'dark' : 'light';
         setTheme(newTheme);
         applyTheme(newTheme);
+        localStorage.setItem('abcotronics_use_system_theme', 'false');
+    };
+
+    // Toggle system preference following
+    const toggleSystemPreference = () => {
+        const currentlyFollowing = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+        localStorage.setItem('abcotronics_use_system_theme', (!currentlyFollowing).toString());
+        
+        if (!currentlyFollowing) {
+            // Start following system preference
+            setTheme(systemPreference);
+            applyTheme(systemPreference);
+        }
+    };
+
+    // Check if following system preference
+    const isFollowingSystem = () => {
+        return localStorage.getItem('abcotronics_use_system_theme') === 'true';
     };
 
     const value = {
         theme,
         toggleTheme,
+        toggleSystemPreference,
+        isFollowingSystem: isFollowingSystem(),
+        systemPreference,
         isDark: theme === 'dark'
     };
 

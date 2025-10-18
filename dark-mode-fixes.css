@@ -1,0 +1,458 @@
+/* Comprehensive Dark Mode Fixes for Abco ERP */
+
+/* Base dark mode styles */
+.dark {
+    color-scheme: dark;
+}
+
+/* Background colors */
+.dark body {
+    background-color: #111827;
+    color: #f9fafb;
+}
+
+.dark .bg-white {
+    background-color: #1f2937 !important;
+}
+
+.dark .bg-gray-50 {
+    background-color: #374151 !important;
+}
+
+.dark .bg-gray-100 {
+    background-color: #4b5563 !important;
+}
+
+.dark .bg-gray-200 {
+    background-color: #6b7280 !important;
+}
+
+/* Text colors */
+.dark .text-gray-900 {
+    color: #f9fafb !important;
+}
+
+.dark .text-gray-800 {
+    color: #f3f4f6 !important;
+}
+
+.dark .text-gray-700 {
+    color: #e5e7eb !important;
+}
+
+.dark .text-gray-600 {
+    color: #d1d5db !important;
+}
+
+.dark .text-gray-500 {
+    color: #9ca3af !important;
+}
+
+.dark .text-gray-400 {
+    color: #6b7280 !important;
+}
+
+.dark .text-gray-300 {
+    color: #4b5563 !important;
+}
+
+/* Border colors */
+.dark .border-gray-200 {
+    border-color: #374151 !important;
+}
+
+.dark .border-gray-300 {
+    border-color: #4b5563 !important;
+}
+
+.dark .border-gray-400 {
+    border-color: #6b7280 !important;
+}
+
+.dark .border-gray-500 {
+    border-color: #9ca3af !important;
+}
+
+/* Card and component backgrounds */
+.dark .bg-white {
+    background-color: #1f2937 !important;
+}
+
+.dark .bg-gray-50 {
+    background-color: #374151 !important;
+}
+
+.dark .bg-gray-100 {
+    background-color: #4b5563 !important;
+}
+
+/* Pipeline board dark mode */
+.dark .pipeline-stage {
+    background-color: #374151 !important;
+}
+
+.dark .pipeline-item {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+/* Stats cards */
+.dark .stat-card {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .stat-value {
+    color: #f9fafb !important;
+}
+
+.dark .stat-label {
+    color: #9ca3af !important;
+}
+
+/* Tables */
+.dark table {
+    background-color: #1f2937 !important;
+}
+
+.dark th {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.dark td {
+    background-color: #1f2937 !important;
+    color: #f9fafb !important;
+    border-color: #4b5563 !important;
+}
+
+.dark tr:hover {
+    background-color: #374151 !important;
+}
+
+/* Form elements */
+.dark input {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+.dark input:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
+.dark input::placeholder {
+    color: #9ca3af !important;
+}
+
+.dark textarea {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+.dark select {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+/* Buttons */
+.dark .btn-primary {
+    background-color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+.dark .btn-secondary {
+    background-color: #6b7280 !important;
+    border-color: #6b7280 !important;
+    color: #ffffff !important;
+}
+
+.dark .btn-outline {
+    background-color: transparent !important;
+    border-color: #6b7280 !important;
+    color: #d1d5db !important;
+}
+
+.dark .btn-outline:hover {
+    background-color: #374151 !important;
+    border-color: #9ca3af !important;
+    color: #f9fafb !important;
+}
+
+/* Modals */
+.dark .modal-content {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .modal-header {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .modal-footer {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+/* Sidebar */
+.dark .sidebar {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .sidebar-item {
+    color: #d1d5db !important;
+}
+
+.dark .sidebar-item:hover {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+}
+
+.dark .sidebar-item.active {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+/* Navigation */
+.dark .nav-tabs {
+    border-color: #374151 !important;
+}
+
+.dark .nav-tab {
+    color: #9ca3af !important;
+}
+
+.dark .nav-tab.active {
+    color: #3b82f6 !important;
+    border-color: #3b82f6 !important;
+}
+
+/* Dropdowns */
+.dark .dropdown-menu {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .dropdown-item {
+    color: #d1d5db !important;
+}
+
+.dark .dropdown-item:hover {
+    background-color: #374151 !important;
+    color: #f9fafb !important;
+}
+
+/* Status badges */
+.dark .badge-success {
+    background-color: #065f46 !important;
+    color: #10b981 !important;
+}
+
+.dark .badge-warning {
+    background-color: #92400e !important;
+    color: #f59e0b !important;
+}
+
+.dark .badge-error {
+    background-color: #991b1b !important;
+    color: #ef4444 !important;
+}
+
+.dark .badge-info {
+    background-color: #1e40af !important;
+    color: #60a5fa !important;
+}
+
+/* Progress bars */
+.dark .progress-bar {
+    background-color: #374151 !important;
+}
+
+.dark .progress-fill {
+    background-color: #3b82f6 !important;
+}
+
+/* Kanban board specific fixes */
+.dark .kanban-column {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+}
+
+.dark .kanban-card {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+    color: #f9fafb !important;
+}
+
+.dark .kanban-card:hover {
+    background-color: #374151 !important;
+}
+
+/* Client cards */
+.dark .client-card {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .client-card:hover {
+    background-color: #374151 !important;
+}
+
+/* Pipeline specific fixes */
+.dark .pipeline-board {
+    background-color: #374151 !important;
+}
+
+.dark .pipeline-stage-header {
+    color: #f9fafb !important;
+}
+
+.dark .pipeline-item {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .pipeline-item:hover {
+    background-color: #374151 !important;
+}
+
+/* Search and filters */
+.dark .search-input {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+.dark .filter-select {
+    background-color: #374151 !important;
+    border-color: #4b5563 !important;
+    color: #f9fafb !important;
+}
+
+/* Charts and graphs */
+.dark .chart-container {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+/* Loading states */
+.dark .loading-skeleton {
+    background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%) !important;
+}
+
+/* Tooltips */
+.dark .tooltip {
+    background-color: #1f2937 !important;
+    color: #f9fafb !important;
+    border-color: #374151 !important;
+}
+
+/* Alerts and notifications */
+.dark .alert {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .alert-success {
+    background-color: #064e3b !important;
+    border-color: #065f46 !important;
+    color: #10b981 !important;
+}
+
+.dark .alert-warning {
+    background-color: #78350f !important;
+    border-color: #92400e !important;
+    color: #f59e0b !important;
+}
+
+.dark .alert-error {
+    background-color: #7f1d1d !important;
+    border-color: #991b1b !important;
+    color: #ef4444 !important;
+}
+
+.dark .alert-info {
+    background-color: #1e3a8a !important;
+    border-color: #1e40af !important;
+    color: #60a5fa !important;
+}
+
+/* Specific component fixes */
+.dark .dashboard-card {
+    background-color: #1f2937 !important;
+    border-color: #374151 !important;
+}
+
+.dark .dashboard-metric {
+    color: #f9fafb !important;
+}
+
+.dark .dashboard-label {
+    color: #9ca3af !important;
+}
+
+/* Mobile specific dark mode fixes */
+@media (max-width: 768px) {
+    .dark .mobile-card {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+    
+    .dark .mobile-nav {
+        background-color: #1f2937 !important;
+        border-color: #374151 !important;
+    }
+    
+    .dark .mobile-nav-item {
+        color: #d1d5db !important;
+    }
+    
+    .dark .mobile-nav-item.active {
+        background-color: #374151 !important;
+        color: #f9fafb !important;
+    }
+}
+
+/* Print styles - ensure dark mode doesn't affect printing */
+@media print {
+    .dark * {
+        background: white !important;
+        color: black !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .dark {
+        --tw-bg-opacity: 1;
+        --tw-text-opacity: 1;
+    }
+    
+    .dark .bg-white {
+        background-color: #000000 !important;
+    }
+    
+    .dark .text-gray-900 {
+        color: #ffffff !important;
+    }
+    
+    .dark .border-gray-200 {
+        border-color: #ffffff !important;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .dark * {
+        transition: none !important;
+        animation: none !important;
+    }
+}

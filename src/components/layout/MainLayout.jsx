@@ -5,8 +5,9 @@ const MainLayout = () => {
     const [currentPage, setCurrentPage] = useState('dashboard');
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [showThemeMenu, setShowThemeMenu] = useState(false);
     const { user, logout } = window.useAuth();
-    const { theme, toggleTheme, isDark } = window.useTheme();
+    const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
 
     // Auto-close sidebar on mobile when page changes
     React.useEffect(() => {
@@ -39,6 +40,18 @@ const MainLayout = () => {
         window.addEventListener('navigateToPage', handleNavigate);
         return () => window.removeEventListener('navigateToPage', handleNavigate);
     }, []);
+
+    // Close theme menu when clicking outside
+    React.useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (showThemeMenu && !event.target.closest('.theme-selector')) {
+                setShowThemeMenu(false);
+            }
+        };
+        
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, [showThemeMenu]);
 
     // Get components from window
     const Dashboard = window.Dashboard;
@@ -205,13 +218,66 @@ const MainLayout = () => {
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                        <button 
-                            onClick={toggleTheme}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
-                            title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-                        >
-                            <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-base lg:text-sm`}></i>
-                        </button>
+                        {/* Theme Selector Dropdown */}
+                        <div className="relative theme-selector">
+                            <button 
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'}`}
+                                title="Theme options"
+                                onClick={() => setShowThemeMenu(!showThemeMenu)}
+                            >
+                                <div className="flex items-center space-x-2">
+                                    <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                                    <span className="text-xs font-medium hidden lg:block">
+                                        {isDark ? 'Light' : 'Dark'}
+                                    </span>
+                                </div>
+                            </button>
+                            
+                            {/* Theme Menu */}
+                            {showThemeMenu && (
+                                <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 backdrop-blur-sm`}>
+                                    <div className="p-3">
+                                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-2`}>
+                                            Theme Settings
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                toggleTheme();
+                                                setShowThemeMenu(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                        >
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-xs`}></i>
+                                            </div>
+                                            <div>
+                                                <div>Switch to {isDark ? 'Light' : 'Dark'} Mode</div>
+                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    {isDark ? 'Enable light theme' : 'Enable dark theme'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                toggleSystemPreference();
+                                                setShowThemeMenu(false);
+                                            }}
+                                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                        >
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isFollowingSystem ? 'border-green-500 bg-green-500' : isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'} text-xs ${isFollowingSystem ? 'text-white' : ''}`}></i>
+                                            </div>
+                                            <div>
+                                                <div>{isFollowingSystem ? 'Following System' : 'Follow System'}</div>
+                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                    System: {systemPreference === 'dark' ? 'Dark' : 'Light'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <button className={`relative ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
                             <i className="fas fa-bell text-base lg:text-sm"></i>
                             <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] lg:text-[8px] rounded-full w-4 h-4 lg:w-3.5 lg:h-3.5 flex items-center justify-center font-medium">3</span>

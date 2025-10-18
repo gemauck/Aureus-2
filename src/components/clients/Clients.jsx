@@ -218,10 +218,9 @@ const Clients = () => {
     });
     const [leads, setLeads] = useState(initialLeads);
     const [projects, setProjects] = useState([]);
-    const [showClientModal, setShowClientModal] = useState(false);
-    const [showLeadModal, setShowLeadModal] = useState(false);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
+    const [isEditing, setIsEditing] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
@@ -457,12 +456,12 @@ const Clients = () => {
             // Always save to localStorage first for immediate persistence
             console.log('Saving to localStorage with all fields:', comprehensiveClient);
             
-            if (selectedClient) {
+        if (selectedClient) {
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
                 storage.setClients(updated);
                 console.log('✅ Updated client in localStorage, new count:', updated.length);
-            } else {
+        } else {
                 const newClients = [...clients, comprehensiveClient];
                 setClients(newClients);
                 storage.setClients(newClients);
@@ -596,17 +595,15 @@ const Clients = () => {
                 }
             }
             
-            // Silent save - no alert, just close modal and refresh
-            setShowClientModal(false);
-            setSelectedClient(null);
+            // Silent save - no alert, just refresh and stay in view
+            setIsEditing(false);
             
         } catch (error) {
             console.error('Failed to save client:', error);
             alert('Failed to save client: ' + error.message);
         }
         
-        setShowClientModal(false);
-        setSelectedClient(null);
+        setIsEditing(false);
         setRefreshKey(k => k + 1);
     };
     
@@ -628,8 +625,7 @@ const Clients = () => {
             };
             setLeads([...leads, newLead]);
         }
-        setShowLeadModal(false);
-        setSelectedLead(null);
+        setIsEditing(false);
     };
 
     const handleDeleteClient = async (clientId) => {
@@ -732,17 +728,21 @@ const Clients = () => {
 
     const handleOpenClient = (client) => {
         setSelectedClient(client);
-        setShowClientModal(true);
+        setSelectedLead(null);
+        setViewMode('client-detail');
+        setIsEditing(false);
     };
 
     const handleOpenLead = (lead) => {
         setSelectedLead(lead);
-        setShowLeadModal(true);
+        setSelectedClient(null);
+        setViewMode('lead-detail');
+        setIsEditing(false);
     };
 
     const handleNavigateToProject = (projectId) => {
         sessionStorage.setItem('openProjectId', projectId);
-        setShowClientModal(false);
+        setViewMode('clients');
         setSelectedClient(null);
         window.dispatchEvent(new CustomEvent('navigateToPage', { 
             detail: { page: 'projects', projectId } 
@@ -777,7 +777,8 @@ const Clients = () => {
         };
         setClients([...clients, newClient]);
         setLeads(leads.filter(l => l.id !== lead.id));
-        setShowLeadModal(false);
+        setViewMode('clients');
+        setSelectedLead(null);
         alert('Lead converted to client!');
     };
 
@@ -899,23 +900,23 @@ const Clients = () => {
 
                 {/* Stats */}
                 <div className="grid grid-cols-4 gap-4">
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                        <div className="text-sm text-gray-600 mb-1">Total Leads</div>
-                        <div className="text-2xl font-bold text-gray-900">{leads.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">Active opportunities</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Leads</div>
+                        <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">{leads.length}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Active opportunities</div>
                     </div>
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                        <div className="text-sm text-gray-600 mb-1">Total Opportunities</div>
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4">
+                        <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Total Opportunities</div>
                         <div className="text-2xl font-bold text-primary-600">{leads.length + clientOpportunities.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">{leads.length} leads + {clientOpportunities.length} expansions</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{leads.length} leads + {clientOpportunities.length} expansions</div>
                     </div>
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 flex items-center justify-between">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
                         <div>
-                            <div className="text-sm text-gray-600 mb-1">Conversion Rate</div>
+                            <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">Conversion Rate</div>
                             <div className="text-2xl font-bold text-purple-600">
                                 {leads.length > 0 ? Math.round((leads.filter(l => l.stage === 'Action').length / leads.length) * 100) : 0}%
                             </div>
-                            <div className="text-xs text-gray-500 mt-1">To action stage</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">To action stage</div>
                         </div>
                     </div>
                 </div>
@@ -938,32 +939,32 @@ const Clients = () => {
                         return (
                             <div 
                                 key={stage} 
-                                className={`flex-1 min-w-[280px] bg-gray-50 rounded-lg p-4 transition-all ${
-                                    isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50' : ''
+                                className={`flex-1 min-w-[280px] bg-gray-50 dark:bg-gray-800 rounded-lg p-4 transition-all ${
+                                    isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-900' : ''
                                 }`}
                                 onDragOver={handleDragOver}
                                 onDrop={(e) => handleDrop(e, stage)}
                             >
                                 <div className="mb-3 px-1">
                                     <div className="flex items-center justify-between mb-1">
-                                        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                                            <i className={`fas ${stageIcons[stage]} text-gray-500`}></i>
+                                        <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                            <i className={`fas ${stageIcons[stage]} text-gray-500 dark:text-gray-400`}></i>
                                             {stage}
                                         </h3>
-                                        <span className="px-2 py-1 bg-white rounded-full text-xs font-medium text-gray-700 border border-gray-200">
+                                        <span className="px-2 py-1 bg-white dark:bg-gray-700 rounded-full text-xs font-medium text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600">
                                             {stageLeads.length + stageOpps.length}
                                         </span>
                                     </div>
-                                    <div className="text-xs text-gray-600 font-medium">{stageCount} leads</div>
+                                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium">{stageCount} leads</div>
                                 </div>
 
                                 <div className="space-y-2">
                                     {stageLeads.length === 0 && stageOpps.length === 0 && (
                                         <div className={`text-center py-8 rounded-lg border-2 border-dashed transition ${
-                                            isDraggedOver ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
+                                            isDraggedOver ? 'border-primary-400 bg-primary-50 dark:bg-primary-900' : 'border-gray-300 dark:border-gray-600'
                                         }`}>
-                                            <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
-                                            <p className="text-xs text-gray-400">No items</p>
+                                            <i className="fas fa-inbox text-2xl text-gray-300 dark:text-gray-600 mb-2"></i>
+                                            <p className="text-xs text-gray-400 dark:text-gray-500">No items</p>
                                         </div>
                                     )}
                                     
@@ -974,20 +975,20 @@ const Clients = () => {
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenLead(lead)}
-                                            className={`bg-white rounded-lg p-3 border border-gray-200 shadow-sm hover:shadow-md cursor-move transition ${
+                                            className={`bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md cursor-move transition ${
                                                 draggedItem?.id === lead.id ? 'opacity-50' : ''
                                             }`}
                                         >
                                             <div className="flex items-start justify-between gap-2 mb-2">
-                                                <div className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">{lead.name}</div>
-                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-medium shrink-0">LEAD</span>
+                                                <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">{lead.name}</div>
+                                                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 text-xs rounded-full font-medium shrink-0">LEAD</span>
                                             </div>
-                                            <div className="text-xs text-gray-600 mb-2">
+                                            <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                                                 <i className="fas fa-user mr-1"></i>
                                                 {lead.contacts?.[0]?.name || 'No contact'}
                                             </div>
                                             <div className="flex items-center justify-between">
-                                                <span className="text-xs text-gray-500">{lead.status}</span>
+                                                <span className="text-xs text-gray-500 dark:text-gray-400">{lead.status}</span>
                                             </div>
                                         </div>
                                     ))}
@@ -1001,20 +1002,20 @@ const Clients = () => {
                                                 onDragStart={() => handleDragStart(opp, 'opportunity')}
                                                 onDragEnd={handleDragEnd}
                                                 onClick={() => handleOpenClient(client)}
-                                                className={`bg-white rounded-lg p-3 border border-gray-200 shadow-sm hover:shadow-md cursor-move transition ${
+                                                className={`bg-white dark:bg-gray-700 rounded-lg p-3 border border-gray-200 dark:border-gray-600 shadow-sm hover:shadow-md cursor-move transition ${
                                                     draggedItem?.id === opp.id ? 'opacity-50' : ''
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">{opp.name}</div>
-                                                    <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium shrink-0">OPP</span>
+                                                    <div className="font-medium text-sm text-gray-900 dark:text-gray-100 line-clamp-2 flex-1">{opp.name}</div>
+                                                    <span className="px-2 py-0.5 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 text-xs rounded-full font-medium shrink-0">OPP</span>
                                                 </div>
-                                                <div className="text-xs text-gray-600 mb-2">
+                                                <div className="text-xs text-gray-600 dark:text-gray-400 mb-2">
                                                     <i className="fas fa-building mr-1"></i>
                                                     {opp.clientName}
                                                 </div>
                                                 <div className="flex items-center justify-between">
-                                                    <span className="text-xs text-gray-500">Existing client</span>
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">Existing client</span>
                                                 </div>
                                             </div>
                                         );
@@ -1233,7 +1234,9 @@ const Clients = () => {
                     <button 
                         onClick={() => {
                             setSelectedClient(null);
-                            setShowClientModal(true);
+                            setSelectedLead(null);
+                            setViewMode('client-detail');
+                            setIsEditing(true);
                         }}
                         className="px-2 py-1 bg-white border border-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-50"
                     >
@@ -1243,7 +1246,9 @@ const Clients = () => {
                     <button 
                         onClick={() => {
                             setSelectedLead(null);
-                            setShowLeadModal(true);
+                            setSelectedClient(null);
+                            setViewMode('lead-detail');
+                            setIsEditing(true);
                         }}
                         className="px-2 py-1 bg-primary-600 text-white rounded text-xs font-medium hover:bg-primary-700"
                     >
