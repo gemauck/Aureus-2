@@ -450,38 +450,24 @@ const Clients = () => {
             console.log('📝 Sites in comprehensive client:', comprehensiveClient.sites);
             console.log('📝 Opportunities in comprehensive client:', comprehensiveClient.opportunities);
             
+            // Always save to localStorage first for immediate persistence
+            console.log('Saving to localStorage with all fields:', comprehensiveClient);
+            
+            if (selectedClient) {
+                const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
+                setClients(updated);
+                storage.setClients(updated);
+                console.log('✅ Updated client in localStorage, new count:', updated.length);
+            } else {
+                const newClients = [...clients, comprehensiveClient];
+                setClients(newClients);
+                storage.setClients(newClients);
+                console.log('✅ Added new client to localStorage, new count:', newClients.length);
+            }
+            
             if (!token) {
-                // Save to localStorage only - comprehensive save
-                console.log('Saving to localStorage with all fields:', comprehensiveClient);
-                console.log('Current clients before localStorage save:', clients.length);
-                
-        if (selectedClient) {
-                    const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
-                    console.log('Before update - clients count:', clients.length, 'updated count:', updated.length);
-                    if (updated.length !== clients.length) {
-                        console.error('❌ CRITICAL: Client count changed during update!');
-                        console.log('Original clients:', clients);
-                        console.log('Updated clients:', updated);
-                        // Don't update if count changed
-                        return;
-                    }
-                    setClients(updated);
-                    storage.setClients(updated);
-                    console.log('✅ Client updated in localStorage, new count:', updated.length);
-        } else {
-                    const newClients = [...clients, comprehensiveClient];
-                    console.log('Before add - clients count:', clients.length, 'new count:', newClients.length);
-                    if (newClients.length !== clients.length + 1) {
-                        console.error('❌ CRITICAL: Client count not increased by 1!');
-                        console.log('Original clients:', clients);
-                        console.log('New clients:', newClients);
-                        // Don't update if count is wrong
-                        return;
-                    }
-                    setClients(newClients);
-                    storage.setClients(newClients);
-                    console.log('✅ New client added to localStorage, new count:', newClients.length);
-                }
+                // No token, localStorage save already done above
+                console.log('No token, localStorage save completed');
             } else {
                 // Use API - but still save comprehensive data to localStorage
                 try {
