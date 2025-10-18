@@ -1,5 +1,7 @@
 // Mobile-optimized Clients component
 const { useState, useEffect } = React;
+const ClientDetailModal = window.ClientDetailModal;
+const LeadDetailModal = window.LeadDetailModal;
 
 const ClientsMobile = () => {
     const [viewMode, setViewMode] = useState('clients');
@@ -10,8 +12,8 @@ const ClientsMobile = () => {
     });
     const [leads, setLeads] = useState(initialLeads);
     const [projects, setProjects] = useState([]);
-    const [showClientModal, setShowClientModal] = useState(false);
-    const [showLeadModal, setShowLeadModal] = useState(false);
+    const [viewMode, setViewMode] = useState('clients');
+    const [isEditing, setIsEditing] = useState(false);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -130,8 +132,7 @@ const ClientsMobile = () => {
                 }
             }
             
-            setShowClientModal(false);
-            setSelectedClient(null);
+            setIsEditing(false);
             
         } catch (error) {
             console.error('Error saving client:', error);
@@ -140,12 +141,16 @@ const ClientsMobile = () => {
 
     const handleOpenClient = (client) => {
         setSelectedClient(client);
-        setShowClientModal(true);
+        setSelectedLead(null);
+        setViewMode('client-detail');
+        setIsEditing(false);
     };
 
     const handleOpenLead = (lead) => {
         setSelectedLead(lead);
-        setShowLeadModal(true);
+        setSelectedClient(null);
+        setViewMode('lead-detail');
+        setIsEditing(false);
     };
 
     const filteredClients = clients.filter(client => {
@@ -424,37 +429,88 @@ const ClientsMobile = () => {
                 <i className="fas fa-plus text-xl"></i>
             </button>
 
-            {/* Modals */}
-            {showClientModal && (
-                <ClientDetailModal
-                    client={selectedClient}
-                    onSave={handleSaveClient}
-                    onClose={() => {
-                        setShowClientModal(false);
-                        setSelectedClient(null);
-                    }}
-                    allProjects={projects}
-                />
+            {/* Full-page views */}
+            {viewMode === 'client-detail' && (
+                <div className="fixed inset-0 bg-white dark:bg-gray-900 z-50 overflow-y-auto">
+                    <div className="p-4">
+                        <div className="flex items-center justify-between mb-6">
+                            <button
+                                onClick={() => {
+                                    setViewMode('clients');
+                                    setSelectedClient(null);
+                                    setIsEditing(false);
+                                }}
+                                className="flex items-center space-x-2 text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-arrow-left"></i>
+                                <span>Back</span>
+                            </button>
+                            <button
+                                onClick={() => setIsEditing(!isEditing)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                            >
+                                {isEditing ? 'View' : 'Edit'}
+                            </button>
+                        </div>
+                        <ClientDetailModal
+                            client={selectedClient}
+                            onSave={handleSaveClient}
+                            onClose={() => {
+                                setViewMode('clients');
+                                setSelectedClient(null);
+                                setIsEditing(false);
+                            }}
+                            allProjects={projects}
+                            isFullPage={true}
+                            isEditing={isEditing}
+                        />
+                    </div>
+                </div>
             )}
 
-            {showLeadModal && (
-                <LeadDetailModal
-                    lead={selectedLead}
-                    onSave={(leadData) => {
-                        if (selectedLead) {
-                            const updated = leads.map(l => l.id === selectedLead.id ? leadData : l);
-                            setLeads(updated);
-                        } else {
-                            setLeads([...leads, leadData]);
-                        }
-                        setShowLeadModal(false);
-                        setSelectedLead(null);
-                    }}
-                    onClose={() => {
-                        setShowLeadModal(false);
-                        setSelectedLead(null);
-                    }}
-                />
+            {viewMode === 'lead-detail' && (
+                <div className="fixed inset-0 bg-white dark:bg-gray-900 z-50 overflow-y-auto">
+                    <div className="p-4">
+                        <div className="flex items-center justify-between mb-6">
+                            <button
+                                onClick={() => {
+                                    setViewMode('leads');
+                                    setSelectedLead(null);
+                                    setIsEditing(false);
+                                }}
+                                className="flex items-center space-x-2 text-gray-600 hover:text-gray-800"
+                            >
+                                <i className="fas fa-arrow-left"></i>
+                                <span>Back</span>
+                            </button>
+                            <button
+                                onClick={() => setIsEditing(!isEditing)}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                            >
+                                {isEditing ? 'View' : 'Edit'}
+                            </button>
+                        </div>
+                        <LeadDetailModal
+                            lead={selectedLead}
+                            onSave={(leadData) => {
+                                if (selectedLead) {
+                                    const updated = leads.map(l => l.id === selectedLead.id ? leadData : l);
+                                    setLeads(updated);
+                                } else {
+                                    setLeads([...leads, leadData]);
+                                }
+                                setIsEditing(false);
+                            }}
+                            onClose={() => {
+                                setViewMode('leads');
+                                setSelectedLead(null);
+                                setIsEditing(false);
+                            }}
+                            isFullPage={true}
+                            isEditing={isEditing}
+                        />
+                    </div>
+                </div>
             )}
         </div>
     );

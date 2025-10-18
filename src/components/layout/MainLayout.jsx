@@ -58,7 +58,7 @@ const MainLayout = () => {
     const Clients = window.Clients;
     const Pipeline = window.Pipeline;
     const Projects = window.Projects;
-    const Teams = window.Teams;
+    const Teams = window.TeamsEnhanced || window.Teams; // Use enhanced version if available
     const Users = window.Users;
     const TimeTracking = window.TimeTracking;
     const HR = window.HR;
