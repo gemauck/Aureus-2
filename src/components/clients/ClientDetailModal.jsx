@@ -3,7 +3,7 @@
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 const { useState, useEffect } = React;
 
-const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false }) => {
+const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false }) => {
     const [activeTab, setActiveTab] = useState('overview');
     const [uploadingContract, setUploadingContract] = useState(false);
     const [formData, setFormData] = useState(client || {

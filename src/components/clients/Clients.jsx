@@ -1277,6 +1277,7 @@ const Clients = () => {
                     onNavigateToProject={handleNavigateToProject}
                     isFullPage={true}
                     isEditing={isEditing}
+                    hideSearchFilters={true}
                 />
             </div>
         </div>
@@ -1337,6 +1338,7 @@ const Clients = () => {
                     allProjects={projects}
                     isFullPage={true}
                     isEditing={isEditing}
+                    hideSearchFilters={true}
                 />
             </div>
         </div>
@@ -1420,8 +1422,9 @@ const Clients = () => {
                 </button>
             </div>
 
-            {/* Search and Filters */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
+            {/* Search and Filters - Hidden in full-page views */}
+            {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                     <div className="sm:col-span-2 lg:col-span-1">
                         <div className="relative">
@@ -1497,6 +1500,7 @@ const Clients = () => {
                     </div>
                 )}
             </div>
+            )}
 
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
