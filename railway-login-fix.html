@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Railway Login Fix - Abco ERP</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 12px 24px; margin: 8px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        input { padding: 10px; margin: 8px; width: 250px; border: 1px solid #ddd; border-radius: 4px; }
+        pre { background: #f8f9fa; padding: 15px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+        .credentials { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Railway Login Fix - Abco ERP</h1>
+    <p><strong>Railway URL:</strong> <a href="https://abco-erp-2-production.up.railway.app/" target="_blank">https://abco-erp-2-production.up.railway.app/</a></p>
+    
+    <div class="section info">
+        <h3>📋 Step 1: Create Admin User</h3>
+        <p>First, let's create the admin user in your Railway database:</p>
+        <button onclick="createAdminUser()">Create Admin User</button>
+        <div id="create-result"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔐 Step 2: Test Login</h3>
+        <div class="credentials">
+            <strong>Default Credentials:</strong><br>
+            Email: <code>admin@abcotronics.com</code><br>
+            Password: <code>admin123</code>
+        </div>
+        
+        <input type="email" id="email" placeholder="Email" value="admin@abcotronics.com">
+        <input type="password" id="password" placeholder="Password" value="admin123">
+        <button onclick="testLogin()">Test Login</button>
+        <div id="login-result"></div>
+    </div>
+
+    <div class="section">
+        <h3>🔍 Step 3: Check API Health</h3>
+        <button onclick="checkHealth()">Check API Health</button>
+        <div id="health-result"></div>
+    </div>
+
+    <script>
+        const RAILWAY_URL = 'https://abco-erp-2-production.up.railway.app';
+        
+        async function createAdminUser() {
+            const resultDiv = document.getElementById('create-result');
+            resultDiv.innerHTML = '<p>Creating admin user...</p>';
+            
+            try {
+                const response = await fetch(`${RAILWAY_URL}/api/create-admin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="section success">
+                            <h4>✅ Admin User Created Successfully!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="section error">
+                            <h4>❌ Failed to Create Admin User</h4>
+                            <pre>Status: ${response.status}\n${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="section error">
+                        <h4>❌ Connection Error</h4>
+                        <pre>Error: ${error.message}</pre>
+                        <p>This might mean Railway is still deploying. Wait a few minutes and try again.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        async function testLogin() {
+            const resultDiv = document.getElementById('login-result');
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            resultDiv.innerHTML = '<p>Testing login...</p>';
+            
+            try {
+                const response = await fetch(`${RAILWAY_URL}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="section success">
+                            <h4>✅ Login Successful!</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                            <p><strong>🎉 You can now login to your Railway app!</strong></p>
+                            <a href="${RAILWAY_URL}" target="_blank">
+                                <button>Go to Railway App</button>
+                            </a>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="section error">
+                            <h4>❌ Login Failed</h4>
+                            <pre>Status: ${response.status}\n${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="section error">
+                        <h4>❌ Login Request Failed</h4>
+                        <pre>Error: ${error.message}</pre>
+                    </div>
+                `;
+            }
+        }
+        
+        async function checkHealth() {
+            const resultDiv = document.getElementById('health-result');
+            resultDiv.innerHTML = '<p>Checking API health...</p>';
+            
+            try {
+                const response = await fetch(`${RAILWAY_URL}/api/health`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="section success">
+                            <h4>✅ API is Healthy</h4>
+                            <pre>${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="section error">
+                            <h4>❌ API Health Check Failed</h4>
+                            <pre>Status: ${response.status}\n${JSON.stringify(data, null, 2)}</pre>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <div class="section error">
+                        <h4>❌ API Connection Failed</h4>
+                        <pre>Error: ${error.message}</pre>
+                        <p>Railway might still be deploying. Wait a few minutes and try again.</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // Auto-check health on load
+        window.onload = function() {
+            checkHealth();
+        };
+    </script>
+</body>
+</html>
