@@ -552,7 +552,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         onSave({
             ...formData,
             lastContact: new Date().toISOString().split('T')[0]
-        });
+        }); // Main form save - will exit edit mode
     };
 
     // Get projects that belong to this client (match by name)

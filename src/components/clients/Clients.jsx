@@ -627,8 +627,8 @@ const Clients = () => {
         
         if (!stayInEditMode) {
             setIsEditing(false);
+            setRefreshKey(k => k + 1);
         }
-        setRefreshKey(k => k + 1);
     };
     
     const handleSaveLead = (leadFormData) => {
