@@ -59,7 +59,7 @@ const MainLayout = () => {
     const Pipeline = window.Pipeline;
     const Projects = window.Projects;
     const Teams = window.TeamsEnhanced || window.Teams; // Use enhanced version if available
-    const Users = window.Users;
+    const Users = window.UserManagement;
     const TimeTracking = window.TimeTracking;
     const HR = window.HR;
     const Manufacturing = window.Manufacturing;
