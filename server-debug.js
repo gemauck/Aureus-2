@@ -48,11 +48,52 @@ app.post('/api/auth/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password required' })
     }
     
-    // For now, just return success to test the endpoint
+    // Import Prisma and bcrypt
+    const { PrismaClient } = await import('@prisma/client')
+    const bcrypt = await import('bcryptjs')
+    const prisma = new PrismaClient()
+    
+    // Find user
+    const user = await prisma.user.findUnique({ 
+      where: { email } 
+    })
+    
+    if (!user || !user.passwordHash) {
+      await prisma.$disconnect()
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    // Verify password
+    const valid = await bcrypt.compare(password, user.passwordHash)
+    
+    if (!valid) {
+      await prisma.$disconnect()
+      return res.status(401).json({ error: 'Invalid credentials' })
+    }
+    
+    // Generate JWT tokens
+    const jwt = await import('jsonwebtoken')
+    const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+    
+    const payload = { sub: user.id, email: user.email, role: user.role }
+    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
+    const refreshToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+    
+    // Set refresh token cookie
+    res.setHeader('Set-Cookie', [
+      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax`
+    ])
+    
+    await prisma.$disconnect()
+    
     res.json({ 
-      message: 'Login endpoint working',
-      received: { email, password: '***' },
-      timestamp: new Date().toISOString()
+      accessToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
     })
     
   } catch (error) {
