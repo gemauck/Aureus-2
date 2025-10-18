@@ -1,4 +1,4 @@
-const API_BASE = 'https://abco-erp-2-cnlz.vercel.app/api'
+const API_BASE = 'https://abco-erp-2-production.up.railway.app/api'
 
 async function request(path, options = {}) {
   const token = window.storage?.getToken?.()
@@ -37,8 +37,8 @@ async function request(path, options = {}) {
 const api = {
   // Auth
   async login(email, password) {
-    const res = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-    if (res?.data?.accessToken) window.storage.setToken(res.data.accessToken)
+    const res = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    if (res?.accessToken) window.storage.setToken(res.accessToken)
     return res
   },
   
