@@ -48,6 +48,99 @@ app.get('/api/me', (req, res) => {
   })
 })
 
+// Clients endpoints
+app.get('/api/clients', (req, res) => {
+  // For now, return empty clients array
+  // In production, this would fetch from database
+  res.json({
+    data: {
+      clients: []
+    }
+  })
+})
+
+app.post('/api/clients', (req, res) => {
+  try {
+    console.log('📝 Creating client:', req.body)
+    
+    // Generate a unique ID for the new client
+    const newClient = {
+      id: Date.now().toString(), // Simple ID generation
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    
+    // In production, this would save to database
+    // For now, just return the created client
+    res.json({
+      data: {
+        client: newClient
+      }
+    })
+  } catch (error) {
+    console.error('Error creating client:', error)
+    res.status(500).json({ error: 'Failed to create client', details: error.message })
+  }
+})
+
+app.get('/api/clients/:id', (req, res) => {
+  try {
+    const clientId = req.params.id
+    console.log('📖 Getting client:', clientId)
+    
+    // In production, this would fetch from database
+    res.json({
+      data: {
+        client: {
+          id: clientId,
+          name: 'Sample Client',
+          email: 'client@example.com'
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error getting client:', error)
+    res.status(500).json({ error: 'Failed to get client', details: error.message })
+  }
+})
+
+app.patch('/api/clients/:id', (req, res) => {
+  try {
+    const clientId = req.params.id
+    console.log('📝 Updating client:', clientId, req.body)
+    
+    // In production, this would update in database
+    res.json({
+      data: {
+        client: {
+          id: clientId,
+          ...req.body,
+          updatedAt: new Date().toISOString()
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error updating client:', error)
+    res.status(500).json({ error: 'Failed to update client', details: error.message })
+  }
+})
+
+app.delete('/api/clients/:id', (req, res) => {
+  try {
+    const clientId = req.params.id
+    console.log('🗑️ Deleting client:', clientId)
+    
+    // In production, this would delete from database
+    res.json({
+      message: 'Client deleted successfully'
+    })
+  } catch (error) {
+    console.error('Error deleting client:', error)
+    res.status(500).json({ error: 'Failed to delete client', details: error.message })
+  }
+})
+
 // Simple login endpoint - no external dependencies
 app.post('/api/auth/login', async (req, res) => {
   try {
