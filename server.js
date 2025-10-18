@@ -14,26 +14,34 @@ function toHandlerPath(urlPath) {
   if (parts.length === 0) return path.join(apiDir, 'health.js')
 
   const candidates = []
-  if (parts.length >= 2) {
-    candidates.push(path.join(apiDir, `${parts[0]}.js`))
+  
+  // Direct file matches (e.g., /api/health -> api/health.js)
+  candidates.push(path.join(apiDir, `${parts.join('/')}.js`))
+  
+  // Nested directory matches (e.g., /api/auth/login -> api/auth/login.js)
+  if (parts.length > 1) {
+    candidates.push(path.join(apiDir, ...parts, 'index.js'))
+    candidates.push(path.join(apiDir, ...parts.slice(0, -1), `${parts[parts.length - 1]}.js`))
   }
+  
+  // Dynamic route matches (e.g., /api/clients/123 -> api/clients/[id].js)
+  if (parts.length === 2) {
+    candidates.push(path.join(apiDir, parts[0], '[id].js'))
+  }
+  
+  // Single part matches (e.g., /api/login -> api/login.js)
   if (parts.length === 1) {
     candidates.push(path.join(apiDir, `${parts[0]}.js`))
   }
-  if (parts.length === 2) {
-    candidates.push(path.join(apiDir, '[id].js'))
-  }
-  if (parts.length >= 2) {
-    candidates.push(path.join(apiDir, ...parts.slice(0, -1), `${parts[parts.length - 1]}.js`))
-  }
-  candidates.push(path.join(apiDir, ...parts, 'index.js'))
   
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
+      console.log(`✅ Found handler: ${path.relative(apiDir, candidate)}`)
       return candidate
     }
   }
   
+  console.log(`❌ No handler found for: ${urlPath}`)
   return path.join(apiDir, 'health.js')
 }
 
