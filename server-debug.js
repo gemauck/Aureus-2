@@ -50,7 +50,7 @@ app.post('/api/auth/login', async (req, res) => {
     
     // Import Prisma and bcrypt
     const { PrismaClient } = await import('@prisma/client')
-    const bcrypt = await import('bcryptjs')
+    const bcryptjs = await import('bcryptjs')
     const prisma = new PrismaClient()
     
     // Find user
@@ -64,7 +64,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     // Verify password
-    const valid = await bcrypt.default.compare(password, user.passwordHash)
+    const valid = await bcryptjs.compare(password, user.passwordHash)
     
     if (!valid) {
       await prisma.$disconnect()
@@ -72,12 +72,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     // Generate JWT tokens
-    const jwt = await import('jsonwebtoken')
+    const jsonwebtoken = await import('jsonwebtoken')
     const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
     
     const payload = { sub: user.id, email: user.email, role: user.role }
-    const accessToken = jwt.default.sign(payload, JWT_SECRET, { expiresIn: '15m' })
-    const refreshToken = jwt.default.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+    const accessToken = jsonwebtoken.sign(payload, JWT_SECRET, { expiresIn: '15m' })
+    const refreshToken = jsonwebtoken.sign(payload, JWT_SECRET, { expiresIn: '7d' })
     
     // Set refresh token cookie
     res.setHeader('Set-Cookie', [
@@ -129,8 +129,8 @@ app.post('/api/create-admin', async (req, res) => {
     }
     
     // Create admin user
-    const bcrypt = await import('bcryptjs')
-    const passwordHash = await bcrypt.default.hash('admin123', 10)
+    const bcryptjs = await import('bcryptjs')
+    const passwordHash = await bcryptjs.hash('admin123', 10)
     
     const user = await prisma.user.create({
       data: {
