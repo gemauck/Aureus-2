@@ -64,7 +64,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     // Verify password
-    const valid = await bcrypt.compare(password, user.passwordHash)
+    const valid = await bcrypt.default.compare(password, user.passwordHash)
     
     if (!valid) {
       await prisma.$disconnect()
@@ -76,8 +76,8 @@ app.post('/api/auth/login', async (req, res) => {
     const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
     
     const payload = { sub: user.id, email: user.email, role: user.role }
-    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
-    const refreshToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' })
+    const accessToken = jwt.default.sign(payload, JWT_SECRET, { expiresIn: '15m' })
+    const refreshToken = jwt.default.sign(payload, JWT_SECRET, { expiresIn: '7d' })
     
     // Set refresh token cookie
     res.setHeader('Set-Cookie', [
@@ -130,7 +130,7 @@ app.post('/api/create-admin', async (req, res) => {
     
     // Create admin user
     const bcrypt = await import('bcryptjs')
-    const passwordHash = await bcrypt.hash('admin123', 10)
+    const passwordHash = await bcrypt.default.hash('admin123', 10)
     
     const user = await prisma.user.create({
       data: {
