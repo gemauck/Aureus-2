@@ -1222,13 +1222,129 @@ const Clients = () => {
         </div>
     );
 
+    // Full-page Client Detail View
+    const ClientDetailView = () => (
+        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            {/* Header with breadcrumb */}
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <button 
+                            onClick={() => {
+                                setViewMode('clients');
+                                setSelectedClient(null);
+                                setIsEditing(false);
+                            }}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} flex items-center space-x-2 transition-colors`}
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                            <span>Back to Clients</span>
+                        </button>
+                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-300'}`}>|</div>
+                        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            {selectedClient ? selectedClient.name : 'New Client'}
+                        </h1>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={() => setIsEditing(!isEditing)}
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                isEditing 
+                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200' 
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
+                        >
+                            <i className={`fas fa-${isEditing ? 'eye' : 'edit'} mr-2`}></i>
+                            {isEditing ? 'View Mode' : 'Edit Mode'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Full-page client detail content */}
+            <div className="p-6">
+                <ClientDetailModal
+                    client={selectedClient}
+                    onSave={handleSaveClient}
+                    onClose={() => {
+                        setViewMode('clients');
+                        setSelectedClient(null);
+                        setIsEditing(false);
+                    }}
+                    allProjects={projects}
+                    onNavigateToProject={handleNavigateToProject}
+                    isFullPage={true}
+                    isEditing={isEditing}
+                />
+            </div>
+        </div>
+    );
+
+    // Full-page Lead Detail View
+    const LeadDetailView = () => (
+        <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+            {/* Header with breadcrumb */}
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <button 
+                            onClick={() => {
+                                setViewMode('leads');
+                                setSelectedLead(null);
+                                setIsEditing(false);
+                            }}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-800'} flex items-center space-x-2 transition-colors`}
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                            <span>Back to Leads</span>
+                        </button>
+                        <div className={`${isDark ? 'text-gray-400' : 'text-gray-300'}`}>|</div>
+                        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
+                            {selectedLead ? selectedLead.name : 'New Lead'}
+                        </h1>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        <button
+                            onClick={() => setIsEditing(!isEditing)}
+                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                                isEditing 
+                                    ? 'bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200' 
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                            }`}
+                        >
+                            <i className={`fas fa-${isEditing ? 'eye' : 'edit'} mr-2`}></i>
+                            {isEditing ? 'View Mode' : 'Edit Mode'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Full-page lead detail content */}
+            <div className="p-6">
+                <LeadDetailModal
+                    lead={selectedLead}
+                    onSave={handleSaveLead}
+                    onClose={() => {
+                        setViewMode('leads');
+                        setSelectedLead(null);
+                        setIsEditing(false);
+                    }}
+                    onConvertToClient={convertLeadToClient}
+                    allProjects={projects}
+                    isFullPage={true}
+                    isEditing={isEditing}
+                />
+            </div>
+        </div>
+    );
+
     return (
-        <div className="space-y-3">
+        <div className={`space-y-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen`}>
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-lg font-semibold text-gray-900">CRM & Sales</h1>
-                    <p className="text-xs text-gray-600">Manage clients and leads</p>
+                    <h1 className="text-lg font-semibold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">Manage clients and leads</p>
                 </div>
                 <div className="flex gap-2">
                     <button 
@@ -1238,7 +1354,7 @@ const Clients = () => {
                             setViewMode('client-detail');
                             setIsEditing(true);
                         }}
-                        className="px-2 py-1 bg-white border border-gray-300 text-gray-700 rounded text-xs font-medium hover:bg-gray-50"
+                        className="px-2 py-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded text-xs font-medium hover:bg-gray-50 dark:hover:bg-gray-700"
                     >
                         <i className="fas fa-plus mr-1"></i>
                         Client
@@ -1259,13 +1375,13 @@ const Clients = () => {
             </div>
 
             {/* View Tabs - Clients First */}
-            <div className="bg-white rounded border border-gray-200 p-0.5 inline-flex">
+            <div className="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 p-0.5 inline-flex">
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`px-2 py-1 rounded text-xs font-medium transition ${
                         viewMode === 'clients' 
                             ? 'bg-primary-600 text-white' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -1276,7 +1392,7 @@ const Clients = () => {
                     className={`px-2 py-1 rounded text-xs font-medium transition ${
                         viewMode === 'leads' 
                             ? 'bg-primary-600 text-white' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -1287,7 +1403,7 @@ const Clients = () => {
                     className={`px-2 py-1 rounded text-xs font-medium transition ${
                         viewMode === 'pipeline' 
                             ? 'bg-primary-600 text-white' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                            : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
@@ -1377,33 +1493,8 @@ const Clients = () => {
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && <PipelineView />}
-
-            {/* Modals */}
-            {showClientModal && (
-                <ClientDetailModal
-                    client={selectedClient}
-                    onSave={handleSaveClient}
-                    onClose={() => {
-                        setShowClientModal(false);
-                        setSelectedClient(null);
-                    }}
-                    allProjects={projects}
-                    onNavigateToProject={handleNavigateToProject}
-                />
-            )}
-
-            {showLeadModal && (
-                <LeadDetailModal
-                    lead={selectedLead}
-                    onSave={handleSaveLead}
-                    onClose={() => {
-                        setShowLeadModal(false);
-                        setSelectedLead(null);
-                    }}
-                    onConvertToClient={convertLeadToClient}
-                    allProjects={projects}
-                />
-            )}
+            {viewMode === 'client-detail' && <ClientDetailView />}
+            {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>
     );
 };
