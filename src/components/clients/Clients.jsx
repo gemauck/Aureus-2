@@ -920,13 +920,6 @@ const Clients = () => {
                             </div>
                             <div className="text-xs text-gray-500 mt-1">To action stage</div>
                         </div>
-                        <button
-                            onClick={() => setRefreshKey(k => k + 1)}
-                            className="p-2 rounded-lg hover:bg-gray-100 transition"
-                            title="Refresh Pipeline"
-                        >
-                            <i className="fas fa-sync-alt text-sm text-gray-400"></i>
-                        </button>
                     </div>
                 </div>
 
@@ -1297,14 +1290,6 @@ const Clients = () => {
                 >
                     <i className="fas fa-stream mr-2"></i>
                     Pipeline
-                </button>
-                <button
-                    onClick={clearCacheAndReload}
-                    className="px-2 py-1 rounded text-xs font-medium transition bg-yellow-500 text-white hover:bg-yellow-600"
-                    title="Clear cache and reload fresh data"
-                >
-                    <i className="fas fa-sync-alt mr-2"></i>
-                    Refresh Data
                 </button>
             </div>
 
