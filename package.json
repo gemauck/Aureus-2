@@ -12,7 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "seed": "node prisma/seed.js",
-    "start": "node server-simple.js",
+    "start": "node server-debug.js",
     "start:local": "node server/local.js",
     "start:railway": "node server/railway.js"
   },
