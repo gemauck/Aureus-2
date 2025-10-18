@@ -44,7 +44,7 @@ const api = {
   
   async me() {
     const res = await request('/me')
-    return res?.data
+    return res
   },
   
   async refresh() {

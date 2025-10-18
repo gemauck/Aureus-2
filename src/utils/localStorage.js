@@ -19,7 +19,8 @@ const storage = {
     getUser: () => {
         try {
             const user = localStorage.getItem('abcotronics_user');
-            return user ? JSON.parse(user) : null;
+            if (!user || user === 'undefined' || user === 'null') return null;
+            return JSON.parse(user);
         } catch (e) {
             console.error('Error loading user:', e);
             return null;
