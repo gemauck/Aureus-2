@@ -101,44 +101,44 @@ const MainLayout = () => {
             {/* Mobile Overlay */}
             {mobileMenuOpen && (
                 <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden sidebar-overlay"
                     onClick={() => setMobileMenuOpen(false)}
                 ></div>
             )}
 
             {/* Sidebar */}
             <div className={`
-                ${sidebarOpen ? 'w-48' : 'w-12'} 
+                ${sidebarOpen ? 'w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
-                ${mobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto' : 'hidden lg:flex'}
+                ${mobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto sidebar-mobile open' : 'hidden lg:flex'}
                 lg:flex
             `}>
                 {/* Logo */}
-                <div className={`h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen ? (
-                        <div>
-                            <h1 className="text-sm font-bold text-primary-600">Abcotronics</h1>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ERP</p>
+                        <div className="flex-1">
+                            <h1 className="text-lg lg:text-sm font-bold text-primary-600">Abcotronics</h1>
+                            <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ERP</p>
                         </div>
                     ) : (
-                        <div className="text-sm font-bold text-primary-600">A</div>
+                        <div className="text-lg lg:text-sm font-bold text-primary-600">A</div>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1 rounded transition-colors`}
+                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                     >
-                        <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-sm`}></i>
+                        <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-base lg:text-sm`}></i>
                     </button>
                 </div>
 
                 {/* Menu Items */}
-                <nav className="flex-1 overflow-y-auto sidebar-scrollbar py-1.5">
+                <nav className="flex-1 overflow-y-auto sidebar-scrollbar py-2">
                     {menuItems.map(item => (
                         <button
                             key={item.id}
                             onClick={() => setCurrentPage(item.id)}
-                            className={`w-full flex items-center px-2 py-1.5 transition-colors text-xs ${
+                            className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-sm lg:text-xs touch-target ${
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 
                                     : isDark 
@@ -146,31 +146,31 @@ const MainLayout = () => {
                                         : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
-                            <i className={`fas ${item.icon} ${sidebarOpen ? 'mr-2' : ''} w-3 text-xs`}></i>
+                            <i className={`fas ${item.icon} ${sidebarOpen ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-sm lg:text-xs`}></i>
                             {sidebarOpen && <span className="font-medium">{item.label}</span>}
                         </button>
                     ))}
                 </nav>
 
                 {/* User Profile */}
-                <div className="border-t border-gray-200 p-2">
+                <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} p-3 lg:p-2`}>
                     <div className="flex items-center">
-                        <div className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-xs">
+                        <div className="w-8 h-8 lg:w-6 lg:h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm lg:text-xs">
                             {user?.name?.charAt(0) || 'U'}
                         </div>
                         {sidebarOpen && (
-                            <div className="ml-2 flex-1 min-w-0">
-                                <p className="text-xs font-medium text-gray-700 truncate">{user?.name}</p>
-                                <p className="text-xs text-gray-500 truncate">{user?.role}</p>
+                            <div className="ml-3 lg:ml-2 flex-1 min-w-0">
+                                <p className={`text-sm lg:text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
+                                <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
                             </div>
                         )}
                         {sidebarOpen && (
                             <button 
                                 onClick={logout}
-                                className="text-gray-500 hover:text-gray-700 p-1 hover:bg-gray-100 rounded transition-colors"
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                                 title="Logout"
                             >
-                                <i className="fas fa-sign-out-alt text-xs"></i>
+                                <i className="fas fa-sign-out-alt text-sm lg:text-xs"></i>
                             </button>
                         )}
                     </div>
@@ -180,15 +180,15 @@ const MainLayout = () => {
             {/* Main Content */}
             <div className="flex-1 overflow-auto">
                 {/* Header */}
-                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-10 flex items-center justify-between px-4`}>
+                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile`}>
                     <div className="flex items-center">
                         <button 
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className={`lg:hidden ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-2 p-2 rounded transition-colors`}
+                            className={`lg:hidden ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
                         >
-                            <i className="fas fa-bars text-sm"></i>
+                            <i className="fas fa-bars text-base"></i>
                         </button>
-                        <div className="relative">
+                        <div className="relative hidden lg:block">
                             <input
                                 type="text"
                                 placeholder="Search..."
@@ -200,27 +200,30 @@ const MainLayout = () => {
                             />
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
+                        <div className="lg:hidden">
+                            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Abcotronics ERP</h2>
+                        </div>
                     </div>
                     <div className="flex items-center space-x-2">
                         <button 
                             onClick={toggleTheme}
-                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1 rounded transition-colors`}
+                            className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                             title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
                         >
-                            <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                            <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-base lg:text-sm`}></i>
                         </button>
-                        <button className={`relative ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1 rounded transition-colors`}>
-                            <i className="fas fa-bell text-sm"></i>
-                            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[8px] rounded-full w-3.5 h-3.5 flex items-center justify-center font-medium">3</span>
+                        <button className={`relative ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                            <i className="fas fa-bell text-base lg:text-sm"></i>
+                            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] lg:text-[8px] rounded-full w-4 h-4 lg:w-3.5 lg:h-3.5 flex items-center justify-center font-medium">3</span>
                         </button>
-                        <button className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1 rounded transition-colors`}>
-                            <i className="fas fa-cog text-sm"></i>
+                        <button className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                            <i className="fas fa-cog text-base lg:text-sm"></i>
                         </button>
                     </div>
                 </header>
 
                 {/* Page Content */}
-                <main className="p-2 sm:p-4 overflow-x-auto">
+                <main className="p-4 lg:p-2 sm:p-4 overflow-x-auto">
                     {renderPage()}
                 </main>
             </div>

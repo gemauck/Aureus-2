@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0284c7">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Abco ERP">
     <title>Abcotronics ERP - Fuel Management Services</title>
     
     <!-- Favicon -->
@@ -15,6 +20,9 @@
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Mobile Optimizations CSS -->
+    <link rel="stylesheet" href="mobile-optimizations.css">
     
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -46,7 +54,99 @@
     <style>
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            touch-action: manipulation;
         }
+        
+        /* Mobile-specific optimizations */
+        @media (max-width: 768px) {
+            body {
+                font-size: 16px; /* Prevents zoom on iOS */
+                line-height: 1.5;
+            }
+            
+            /* Prevent horizontal scroll */
+            html, body {
+                overflow-x: hidden;
+                width: 100%;
+            }
+            
+            /* Touch-friendly buttons */
+            button, .btn, [role="button"] {
+                min-height: 44px;
+                min-width: 44px;
+                touch-action: manipulation;
+            }
+            
+            /* Better form inputs */
+            input, textarea, select {
+                font-size: 16px; /* Prevents zoom on iOS */
+                border-radius: 8px;
+            }
+            
+            /* Improved scrolling */
+            .overflow-y-auto {
+                -webkit-overflow-scrolling: touch;
+            }
+            
+            /* Mobile table to card conversion */
+            .table-responsive {
+                display: none;
+            }
+            
+            .table-mobile {
+                display: block;
+            }
+            
+            .mobile-card {
+                background: white;
+                border-radius: 12px;
+                padding: 16px;
+                margin-bottom: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                border: 1px solid #e5e7eb;
+            }
+            
+            .dark .mobile-card {
+                background: #1f2937;
+                border-color: #374151;
+            }
+            
+            /* Mobile modal optimizations */
+            .modal {
+                margin: 0;
+                max-height: 100vh;
+                border-radius: 0;
+            }
+            
+            .modal-dialog {
+                margin: 0;
+                max-width: 100%;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .modal-content {
+                flex: 1;
+                border-radius: 0;
+                border: none;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+        }
+        
+        @media (min-width: 769px) {
+            .table-mobile {
+                display: none;
+            }
+            
+            .table-responsive {
+                display: block;
+            }
+        }
+        
         .sidebar-scrollbar::-webkit-scrollbar {
             width: 6px;
         }
@@ -125,6 +225,8 @@
     <script type="text/babel" src="./src/components/dashboard/Dashboard.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientsMobile.jsx"></script>
     <script type="text/babel" src="./src/components/clients/LeadModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
@@ -191,6 +293,58 @@
     
     <!-- App Entry Point -->
     <script type="text/babel" src="./src/App.jsx"></script>
+    
+    <!-- Mobile Detection and Responsive Component Loading -->
+    <script type="text/babel">
+        // Mobile detection utility
+        window.isMobile = () => {
+            return window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        };
+        
+        // Responsive component wrapper
+        window.ResponsiveComponent = ({ mobileComponent, desktopComponent, children }) => {
+            const [isMobile, setIsMobile] = React.useState(window.isMobile());
+            
+            React.useEffect(() => {
+                const handleResize = () => {
+                    setIsMobile(window.isMobile());
+                };
+                
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+            
+            if (isMobile && mobileComponent) {
+                return React.createElement(mobileComponent, children?.props || {});
+            } else if (desktopComponent) {
+                return React.createElement(desktopComponent, children?.props || {});
+            }
+            
+            return children;
+        };
+        
+        // Enhanced MainLayout with mobile detection
+        window.MainLayoutEnhanced = () => {
+            const [isMobile, setIsMobile] = React.useState(window.isMobile());
+            
+            React.useEffect(() => {
+                const handleResize = () => {
+                    setIsMobile(window.isMobile());
+                };
+                
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
+            }, []);
+            
+            // Use mobile-optimized Clients component on mobile
+            if (isMobile && window.ClientsMobile) {
+                // Temporarily replace Clients with ClientsMobile for mobile
+                window.Clients = window.ClientsMobile;
+            }
+            
+            return React.createElement(window.MainLayout);
+        };
+    </script>
     
     <!-- Mount App -->
     <script type="text/babel">
