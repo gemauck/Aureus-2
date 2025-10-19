@@ -37,6 +37,19 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  try {
+    console.log('🔓 Logout request received')
+    res.json({
+      message: 'Logged out successfully'
+    })
+  } catch (error) {
+    console.error('Logout error:', error)
+    res.status(500).json({ error: 'Logout failed' })
+  }
+})
+
 // Me endpoint
 app.get('/api/me', (req, res) => {
   // For testing, return the admin user

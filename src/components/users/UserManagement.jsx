@@ -73,14 +73,18 @@ const UserManagement = () => {
             const data = await response.json();
 
             if (response.ok) {
-                setWhatsappMessage(data.whatsappMessage);
-                setInvitationLink(data.invitationLink);
                 setShowInviteModal(false);
                 setNewInvitation({ email: '', name: '', role: 'user' });
                 loadUsers(); // Refresh the list
                 
                 // Show success message with email confirmation
-                showEmailSentModal(data.invitation);
+                // Handle both direct response and nested data response
+                const invitation = data.invitation || data.data?.invitation;
+                if (invitation) {
+                    showEmailSentModal(invitation);
+                } else {
+                    alert('Invitation sent successfully!');
+                }
             } else {
                 alert(data.message || 'Failed to send invitation');
             }
