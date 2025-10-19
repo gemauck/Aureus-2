@@ -234,6 +234,7 @@
     
     <!-- Load all components inline -->
     <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/localStorage.js"></script>
     <script type="text/babel" src="./src/utils/authStorage.js"></script>
     <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
     <script type="text/babel" src="./src/utils/auditLogger.js"></script>
@@ -248,6 +249,7 @@
     <script type="text/babel" src="./src/components/common/LoadingState.jsx"></script>
     <script type="text/babel" src="./src/components/common/QuickFallback.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
@@ -383,10 +385,10 @@
         // Set up components for immediate loading
         console.log('⚡ Setting up components for immediate loading...');
         
-        // Use simple components initially for instant loading
-        window.Dashboard = window.DashboardSimple;
-        window.Clients = window.ClientsSimple;
-        window.Projects = window.ProjectsSimple; // Use simple projects component
+        // Use original components with full functionality
+        window.Dashboard = window.DashboardSimple; // Keep simple dashboard for performance
+        window.Clients = window.Clients; // Use original Clients with full functionality
+        window.Projects = window.Projects; // Use original Projects with full functionality
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
         window.TimeTracking = window.TimeTrackingDatabaseFirst || window.QuickTimeTracking;
         

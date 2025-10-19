@@ -53,11 +53,11 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window with fallbacks
-    const Dashboard = window.Dashboard || window.DashboardSimple || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    // Get components from window - prioritize original components over simple ones
+    const Dashboard = window.DashboardSimple || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
-    const Projects = window.Projects || window.ProjectsDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
+    const Projects = window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
     const Teams = window.TeamsEnhanced || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>);
     const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
