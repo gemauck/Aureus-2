@@ -29,12 +29,40 @@ const DashboardDatabaseFirst = () => {
         setError(null);
 
         try {
+            // Check if user is authenticated
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No auth token, showing empty dashboard');
+                setDashboardData({
+                    clients: [],
+                    leads: [],
+                    projects: [],
+                    invoices: [],
+                    timeEntries: [],
+                    stats: {
+                        totalClients: 0,
+                        totalLeads: 0,
+                        totalProjects: 0,
+                        totalInvoices: 0,
+                        totalRevenue: 0,
+                        activeProjects: 0,
+                        pendingInvoices: 0
+                    }
+                });
+                setIsLoading(false);
+                return;
+            }
+
             if (!window.DatabaseAPI) {
                 throw new Error('DatabaseAPI not available');
             }
 
-            // Load all data in parallel
-            const [clients, leads, projects, invoices, timeEntries] = await Promise.all([
+            // Load all data in parallel with timeout
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timeout')), 10000)
+            );
+
+            const dataPromise = Promise.all([
                 window.DatabaseAPI.getClients().catch(err => {
                     console.warn('Failed to load clients:', err);
                     return [];
@@ -56,6 +84,8 @@ const DashboardDatabaseFirst = () => {
                     return [];
                 })
             ]);
+
+            const [clients, leads, projects, invoices, timeEntries] = await Promise.race([dataPromise, timeoutPromise]);
 
             // Calculate statistics
             const stats = {

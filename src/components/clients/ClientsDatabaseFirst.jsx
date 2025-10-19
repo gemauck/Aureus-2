@@ -43,8 +43,7 @@ const ClientsDatabaseFirst = () => {
                 return;
             }
 
-            const res = await window.api.listClients();
-            const apiClients = res?.data?.clients || [];
+            const apiClients = await window.DatabaseAPI.getClients();
             console.log('📡 Database returned clients:', apiClients.length);
             
             const processedClients = apiClients.map(c => ({
@@ -99,8 +98,7 @@ const ClientsDatabaseFirst = () => {
             const token = window.storage?.getToken?.();
             if (!token) return;
 
-            const leadsRes = await window.api.getLeads?.();
-            const apiLeads = leadsRes?.data || [];
+            const apiLeads = await window.DatabaseAPI.getLeads();
             console.log('📡 Database returned leads:', apiLeads.length);
             
             setLeads(apiLeads);

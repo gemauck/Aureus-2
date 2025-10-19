@@ -240,6 +240,8 @@
     <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
     <script type="text/babel" src="./src/components/auth/LoginPage.jsx"></script>
     <!-- Load database-first components FIRST -->
+    <script type="text/babel" src="./src/components/common/LoadingState.jsx"></script>
+    <script type="text/babel" src="./src/components/common/QuickFallback.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
@@ -376,14 +378,38 @@
         // Set up component references for database-first architecture
         console.log('🗄️ Setting up database-first components...');
         
-        // Assign database-first components directly
-        window.Dashboard = window.DashboardDatabaseFirst;
-        window.Clients = window.ClientsDatabaseFirst;
-        window.Projects = window.ProjectsDatabaseFirst;
-        window.Invoicing = window.InvoicingDatabaseFirst;
-        window.TimeTracking = window.TimeTrackingDatabaseFirst;
+        // Use fallback components initially for fast loading
+        window.Dashboard = window.DashboardDatabaseFirst || window.QuickDashboard;
+        window.Clients = window.ClientsDatabaseFirst || window.QuickClients;
+        window.Projects = window.ProjectsDatabaseFirst || window.QuickProjects;
+        window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
+        window.TimeTracking = window.TimeTrackingDatabaseFirst || window.QuickTimeTracking;
         
-        console.log('✅ All components set to database-first versions!');
+        // Switch to database-first components when they're ready
+        setTimeout(() => {
+            if (window.DashboardDatabaseFirst) {
+                window.Dashboard = window.DashboardDatabaseFirst;
+                console.log('✅ Dashboard switched to database-first version');
+            }
+            if (window.ClientsDatabaseFirst) {
+                window.Clients = window.ClientsDatabaseFirst;
+                console.log('✅ Clients switched to database-first version');
+            }
+            if (window.ProjectsDatabaseFirst) {
+                window.Projects = window.ProjectsDatabaseFirst;
+                console.log('✅ Projects switched to database-first version');
+            }
+            if (window.InvoicingDatabaseFirst) {
+                window.Invoicing = window.InvoicingDatabaseFirst;
+                console.log('✅ Invoicing switched to database-first version');
+            }
+            if (window.TimeTrackingDatabaseFirst) {
+                window.TimeTracking = window.TimeTrackingDatabaseFirst;
+                console.log('✅ TimeTracking switched to database-first version');
+            }
+        }, 1000);
+        
+        console.log('✅ All components set up with fallbacks!');
             
             return React.createElement(window.MainLayout);
         };
