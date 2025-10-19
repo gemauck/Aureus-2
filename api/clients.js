@@ -75,8 +75,27 @@ async function handler(req, res) {
       console.log('🔍 Creating client with data:', clientData)
       console.log('🔍 Request body type field:', body.type)
       try {
-        const client = await prisma.client.create({ data: clientData })
-        console.log('✅ Client created successfully:', client.id, 'Type:', client.type)
+        // Use raw SQL to ensure type field is properly handled
+        const result = await prisma.$queryRaw`
+          INSERT INTO "Client" (
+            "id", "name", "type", "industry", "status", "revenue", "lastContact",
+            "address", "website", "notes", "contacts", "followUps", "projectIds",
+            "comments", "sites", "contracts", "activityLog", "billingTerms", "ownerId",
+            "createdAt", "updatedAt"
+          ) VALUES (
+            gen_random_uuid()::text, ${clientData.name}, ${clientData.type}, ${clientData.industry},
+            ${clientData.status}, ${clientData.revenue}, ${clientData.lastContact},
+            ${clientData.address}, ${clientData.website}, ${clientData.notes},
+            ${JSON.stringify(clientData.contacts)}, ${JSON.stringify(clientData.followUps)},
+            ${JSON.stringify(clientData.projectIds)}, ${JSON.stringify(clientData.comments)},
+            ${JSON.stringify(clientData.sites)}, ${JSON.stringify(clientData.contracts)},
+            ${JSON.stringify(clientData.activityLog)}, ${JSON.stringify(clientData.billingTerms)},
+            ${clientData.ownerId}, NOW(), NOW()
+          ) RETURNING *
+        `
+        
+        const client = result[0]
+        console.log('✅ Client created successfully with raw SQL:', client.id, 'Type:', client.type)
         return created(res, { client })
       } catch (dbError) {
         console.error('❌ Database error creating client:', dbError)
