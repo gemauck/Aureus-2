@@ -652,6 +652,11 @@ const Clients = () => {
                 }]
             };
             setLeads([...leads, newLead]);
+            
+            // For new leads, redirect to main leads view to show the newly added lead
+            setViewMode('leads');
+            setSelectedLead(null);
+            setCurrentLeadTab('overview');
         }
     };
 
