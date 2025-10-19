@@ -424,13 +424,6 @@ const Users = () => {
                                             <i className="fas fa-edit mr-1"></i>
                                             Edit
                                         </button>
-                                        <button
-                                            onClick={() => handleDeleteUser(user)}
-                                            className="flex-1 px-2 py-1 text-xs bg-red-50 text-red-600 rounded hover:bg-red-100 transition font-medium"
-                                        >
-                                            <i className="fas fa-trash mr-1"></i>
-                                            Delete
-                                        </button>
                                     </div>
                                 </div>
                             );

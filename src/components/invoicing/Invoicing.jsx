@@ -864,13 +864,6 @@ const Invoicing = () => {
                                         >
                                             <i className="fas fa-file-medical"></i>
                                         </button>
-                                        <button 
-                                            onClick={() => handleDeleteInvoice(invoice.id)}
-                                            className="text-red-600 hover:text-red-900"
-                                            title="Delete"
-                                        >
-                                            <i className="fas fa-trash"></i>
-                                        </button>
                                     </td>
                                 </tr>
                             ))
@@ -946,17 +939,6 @@ const Invoicing = () => {
                                             title="Edit"
                                         >
                                             <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button 
-                                            onClick={() => {
-                                                if (confirm('Delete this template?')) {
-                                                    setRecurringInvoices(recurringInvoices.filter(r => r.id !== recurring.id));
-                                                }
-                                            }}
-                                            className="text-red-600 hover:text-red-900"
-                                            title="Delete"
-                                        >
-                                            <i className="fas fa-trash"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -1040,17 +1022,6 @@ const Invoicing = () => {
                                             >
                                                 <i className="fas fa-edit"></i>
                                             </button>
-                                            <button 
-                                                onClick={() => {
-                                                    if (confirm('Delete this expense?')) {
-                                                        setExpenses(expenses.filter(e => e.id !== expense.id));
-                                                    }
-                                                }}
-                                                className="text-red-600 hover:text-red-900"
-                                                title="Delete"
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
                                         </td>
                                     </tr>
                                 );
@@ -1115,17 +1086,6 @@ const Invoicing = () => {
                                             title="Download"
                                         >
                                             <i className="fas fa-download"></i>
-                                        </button>
-                                        <button 
-                                            onClick={() => {
-                                                if (confirm('Delete this credit note?')) {
-                                                    setCreditNotes(creditNotes.filter(cn => cn.id !== creditNote.id));
-                                                }
-                                            }}
-                                            className="text-red-600 hover:text-red-900"
-                                            title="Delete"
-                                        >
-                                            <i className="fas fa-trash"></i>
                                         </button>
                                     </td>
                                 </tr>
@@ -1195,19 +1155,6 @@ const Invoicing = () => {
                                                 {deposit.appliedAmount >= deposit.amount ? 'Fully Applied' :
                                                  deposit.appliedAmount > 0 ? 'Partially Applied' : 'Unapplied'}
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button 
-                                                onClick={() => {
-                                                    if (confirm('Delete this deposit?')) {
-                                                        setDeposits(deposits.filter(d => d.id !== deposit.id));
-                                                    }
-                                                }}
-                                                className="text-red-600 hover:text-red-900"
-                                                title="Delete"
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
                                         </td>
                                     </tr>
                                 );

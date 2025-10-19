@@ -1254,13 +1254,12 @@ const Clients = () => {
                                     )}
                                 </div>
                             </th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {sortedClients.length === 0 ? (
                             <tr>
-                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -1288,17 +1287,6 @@ const Clients = () => {
                                         </span>
                                     </td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{client.lastContact}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteClient(client.id);
-                                            }}
-                                            className="text-red-600 hover:text-red-900"
-                                        >
-                                            <i className="fas fa-trash"></i>
-                                        </button>
-                                    </td>
                                 </tr>
                             ))
                         )}
@@ -1321,13 +1309,12 @@ const Clients = () => {
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Time Since Contact</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Actions</th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {filteredLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="7" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -1378,17 +1365,6 @@ const Clients = () => {
                                                 {new Date(lead.firstContactDate).toLocaleDateString()}
                                             </div>
                                         )}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteLead(lead.id);
-                                            }}
-                                            className="text-red-600 hover:text-red-900"
-                                        >
-                                            <i className="fas fa-trash"></i>
-                                        </button>
                                     </td>
                                 </tr>
                             ))
