@@ -231,6 +231,7 @@
     <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsMobile.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientsMobileOptimized.jsx"></script>
     <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Pipeline.jsx"></script>
@@ -348,11 +349,10 @@
             }, []);
             
             // Use mobile-optimized Clients component on mobile
-            // Temporarily disabled to fix leads popup issue
-            // if (isMobile && window.ClientsMobile) {
-            //     // Temporarily replace Clients with ClientsMobile for mobile
-            //     window.Clients = window.ClientsMobile;
-            // }
+            if (isMobile && window.ClientsMobileOptimized) {
+                // Replace Clients with optimized mobile version
+                window.Clients = window.ClientsMobileOptimized;
+            }
             
             return React.createElement(window.MainLayout);
         };
