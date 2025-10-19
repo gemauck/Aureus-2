@@ -11,6 +11,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "migrate:production": "node migrate-production.js",
     "seed": "node prisma/seed.js",
     "start": "node server-production.js",
     "start:local": "node server/local.js",
