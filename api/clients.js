@@ -35,6 +35,13 @@ async function handler(req, res) {
       const body = await parseJsonBody(req)
       if (!body.name) return badRequest(res, 'name required')
 
+      // Ensure type column exists in database
+      try {
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client'`
+      } catch (error) {
+        console.log('Type column already exists or error adding it:', error.message)
+      }
+
       const clientData = {
         name: body.name,
         type: body.type || 'client', // Handle type field for leads vs clients
