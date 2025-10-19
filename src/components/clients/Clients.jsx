@@ -1476,28 +1476,32 @@ const Clients = () => {
     );
 
     return (
-        <div className={`space-y-3 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} min-h-screen`}>
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                    <div className={`w-12 h-12 rounded-xl ${isDark ? 'bg-primary-600' : 'bg-primary-500'} flex items-center justify-center`}>
+        <div className="space-y-6">
+            {/* Modern Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
                         <i className="fas fa-users text-white text-lg"></i>
                     </div>
-                <div>
-                        <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>CRM & Sales</h1>
-                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Manage clients and leads</p>
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
+                        <p className="text-gray-600 dark:text-gray-400">Manage clients and leads</p>
                     </div>
                 </div>
-                <div className="flex gap-3">
+                
+                {/* Modern Action Buttons */}
+                <div className="flex items-center gap-3">
                     <button 
                         onClick={() => {
                             setSelectedClient(null);
                             setSelectedLead(null);
                             setViewMode('client-detail');
                         }}
-                        className={`flex items-center space-x-2 px-4 py-2 ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'} border rounded-lg text-sm font-medium transition-all duration-200`}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
                     >
-                        <i className="fas fa-plus text-xs"></i>
+                        <div className="w-5 h-5 bg-blue-100 rounded-md flex items-center justify-center">
+                            <i className="fas fa-plus text-blue-600 text-xs"></i>
+                        </div>
                         <span>Add Client</span>
                     </button>
                     <button 
@@ -1506,22 +1510,24 @@ const Clients = () => {
                             setSelectedClient(null);
                             setViewMode('lead-detail');
                         }}
-                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-all duration-200"
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
                     >
-                        <i className="fas fa-plus text-xs"></i>
+                        <div className="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center">
+                            <i className="fas fa-plus text-xs"></i>
+                        </div>
                         <span>Add Lead</span>
                     </button>
                 </div>
             </div>
 
-            {/* View Tabs - Clients First */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 inline-flex shadow-sm`}>
+            {/* Modern View Tabs */}
+            <div className="bg-white rounded-xl border border-gray-200 p-1 inline-flex shadow-sm">
                 <button
                     onClick={() => setViewMode('clients')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'clients' 
-                            ? 'bg-primary-600 text-white shadow-sm' 
-                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -1529,10 +1535,10 @@ const Clients = () => {
                 </button>
                 <button
                     onClick={() => setViewMode('leads')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'leads' 
-                            ? 'bg-primary-600 text-white shadow-sm' 
-                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -1540,10 +1546,10 @@ const Clients = () => {
                 </button>
                 <button
                     onClick={() => setViewMode('pipeline')}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
-                            ? 'bg-primary-600 text-white shadow-sm' 
-                            : `${isDark ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'}`
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
@@ -1551,84 +1557,86 @@ const Clients = () => {
                 </button>
             </div>
 
-            {/* Search and Filters - Hidden in full-page views */}
+            {/* Modern Search and Filters */}
             {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 sm:p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                    <div className="sm:col-span-2 lg:col-span-1">
-                        <div className="relative">
-                            <input
-                                type="text"
-                                placeholder="Search by name, industry, or contact..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                            />
-                            <i className="fas fa-search absolute left-3 top-3 text-gray-400 text-sm"></i>
-                            {searchTerm && (
-                                <button
-                                    onClick={() => setSearchTerm('')}
-                                    className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                                    title="Clear search"
-                                >
-                                    <i className="fas fa-times text-sm"></i>
-                                </button>
-                            )}
+                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="sm:col-span-2 lg:col-span-1">
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    placeholder="Search by name, industry, or contact..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                                />
+                                <i className="fas fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
+                                {searchTerm && (
+                                    <button
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 transition-colors"
+                                        title="Clear search"
+                                    >
+                                        <i className="fas fa-times text-sm"></i>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                        <div>
+                            <select
+                                value={filterIndustry}
+                                onChange={(e) => setFilterIndustry(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                            >
+                                <option value="All Industries">All Industries</option>
+                                <option value="Mining">Mining</option>
+                                <option value="Forestry">Forestry</option>
+                                <option value="Agriculture">Agriculture</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value)}
+                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                            >
+                                <option value="All Status">All Status</option>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                                <option value="New">New</option>
+                                <option value="Contacted">Contacted</option>
+                                <option value="Qualified">Qualified</option>
+                            </select>
                         </div>
                     </div>
-                    <div>
-                        <select
-                            value={filterIndustry}
-                            onChange={(e) => setFilterIndustry(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                        >
-                            <option value="All Industries">All Industries</option>
-                            <option value="Mining">Mining</option>
-                            <option value="Forestry">Forestry</option>
-                            <option value="Agriculture">Agriculture</option>
-                            <option value="Other">Other</option>
-                        </select>
-                    </div>
-                    <div>
-                        <select
-                            value={filterStatus}
-                            onChange={(e) => setFilterStatus(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                        >
-                            <option value="All Status">All Status</option>
-                            <option value="Active">Active</option>
-                            <option value="Inactive">Inactive</option>
-                            <option value="New">New</option>
-                            <option value="Contacted">Contacted</option>
-                            <option value="Qualified">Qualified</option>
-                        </select>
-                    </div>
-                </div>
-                
-                {/* Search Results Counter */}
-                {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
-                    <div className="mt-3 px-1">
-                        <div className="flex items-center justify-between text-sm text-gray-600">
-                            <span>
-                                Showing {filteredClients.length} of {clients.length} clients
-                                {searchTerm && ` matching "${searchTerm}"`}
-                            </span>
-                            {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                    
+                    {/* Modern Search Results Counter */}
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                    <span>
+                                        Showing {filteredClients.length} of {clients.length} clients
+                                        {searchTerm && ` matching "${searchTerm}"`}
+                                    </span>
+                                </div>
                                 <button
                                     onClick={() => {
                                         setSearchTerm('');
                                         setFilterIndustry('All Industries');
                                         setFilterStatus('All Status');
                                     }}
-                                    className="text-primary-600 hover:text-primary-700 font-medium"
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
                                 >
-                                    Clear all filters
+                                    <i className="fas fa-times text-xs"></i>
+                                    Clear filters
                                 </button>
-                            )}
-            </div>
-                    </div>
-                )}
-            </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
             )}
 
             {/* Content based on view mode */}

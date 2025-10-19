@@ -213,7 +213,6 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                                 {project ? 'Update Project' : 'Create Project'}
                             </button>
                         </div>
-                    </div>
                 </form>
             </div>
         </div>
