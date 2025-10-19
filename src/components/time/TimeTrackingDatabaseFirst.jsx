@@ -408,12 +408,6 @@ const TimeTrackingDatabaseFirst = () => {
                                             >
                                                 Edit
                                             </button>
-                                            <button
-                                                onClick={() => handleDeleteTimeEntry(entry.id)}
-                                                className={`${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-900'}`}
-                                            >
-                                                Delete
-                                            </button>
                                         </div>
                                     </td>
                                 </tr>
