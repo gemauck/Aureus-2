@@ -7,6 +7,3 @@ healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[build.buildCommand]
-command = "npm install && npx prisma generate && npx prisma migrate deploy"
