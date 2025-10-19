@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Component Test</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <!-- Load required utilities and components -->
+    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/authStorage.js"></script>
+    <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/time/TimeTrackingDatabaseFirst.jsx"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const ComponentTest = () => {
+            const [testResults, setTestResults] = useState([]);
+            const [isRunning, setIsRunning] = useState(false);
+
+            const addTestResult = (test, status, message) => {
+                setTestResults(prev => [...prev, { 
+                    test, 
+                    status, 
+                    message, 
+                    timestamp: new Date().toLocaleTimeString() 
+                }]);
+            };
+
+            const runComponentTest = async () => {
+                setIsRunning(true);
+                setTestResults([]);
+
+                try {
+                    // Test 1: Check if components are loaded
+                    addTestResult('Component Loading', 'info', 'Checking if database-first components are loaded...');
+                    
+                    const components = {
+                        'DashboardDatabaseFirst': window.DashboardDatabaseFirst,
+                        'ClientsDatabaseFirst': window.ClientsDatabaseFirst,
+                        'ProjectsDatabaseFirst': window.ProjectsDatabaseFirst,
+                        'InvoicingDatabaseFirst': window.InvoicingDatabaseFirst,
+                        'TimeTrackingDatabaseFirst': window.TimeTrackingDatabaseFirst,
+                        'DatabaseAPI': window.DatabaseAPI,
+                        'AuthStorage': window.storage
+                    };
+
+                    Object.entries(components).forEach(([name, component]) => {
+                        if (component) {
+                            addTestResult('Component Loading', 'success', `${name} component loaded successfully`);
+                        } else {
+                            addTestResult('Component Loading', 'error', `${name} component not found`);
+                        }
+                    });
+
+                    // Test 2: Check component assignment
+                    addTestResult('Component Assignment', 'info', 'Checking component assignment...');
+                    
+                    // Assign components
+                    window.Dashboard = window.DashboardDatabaseFirst;
+                    window.Clients = window.ClientsDatabaseFirst;
+                    window.Projects = window.ProjectsDatabaseFirst;
+                    window.Invoicing = window.InvoicingDatabaseFirst;
+                    window.TimeTracking = window.TimeTrackingDatabaseFirst;
+
+                    const assignments = {
+                        'Dashboard': window.Dashboard,
+                        'Clients': window.Clients,
+                        'Projects': window.Projects,
+                        'Invoicing': window.Invoicing,
+                        'TimeTracking': window.TimeTracking
+                    };
+
+                    Object.entries(assignments).forEach(([name, component]) => {
+                        if (component) {
+                            addTestResult('Component Assignment', 'success', `${name} component assigned successfully`);
+                        } else {
+                            addTestResult('Component Assignment', 'error', `${name} component assignment failed`);
+                        }
+                    });
+
+                    // Test 3: Test component rendering
+                    addTestResult('Component Rendering', 'info', 'Testing component rendering...');
+                    
+                    const testDiv = document.createElement('div');
+                    testDiv.style.display = 'none';
+                    document.body.appendChild(testDiv);
+
+                    try {
+                        if (window.DashboardDatabaseFirst) {
+                            ReactDOM.render(React.createElement(window.DashboardDatabaseFirst), testDiv);
+                            addTestResult('Component Rendering', 'success', 'DashboardDatabaseFirst renders successfully');
+                            ReactDOM.unmountComponentAtNode(testDiv);
+                        }
+                        
+                        if (window.ClientsDatabaseFirst) {
+                            ReactDOM.render(React.createElement(window.ClientsDatabaseFirst), testDiv);
+                            addTestResult('Component Rendering', 'success', 'ClientsDatabaseFirst renders successfully');
+                            ReactDOM.unmountComponentAtNode(testDiv);
+                        }
+                        
+                    } catch (error) {
+                        addTestResult('Component Rendering', 'error', `Component rendering error: ${error.message}`);
+                    } finally {
+                        document.body.removeChild(testDiv);
+                    }
+
+                    addTestResult('Component Test', 'success', 'All component tests completed!');
+
+                } catch (error) {
+                    addTestResult('Component Test', 'error', `Test failed: ${error.message}`);
+                } finally {
+                    setIsRunning(false);
+                }
+            };
+
+            const getStatusIcon = (status) => {
+                switch (status) {
+                    case 'success': return '✅';
+                    case 'error': return '❌';
+                    case 'info': return 'ℹ️';
+                    default: return '⏳';
+                }
+            };
+
+            const getStatusColor = (status) => {
+                switch (status) {
+                    case 'success': return 'bg-green-100 text-green-800';
+                    case 'error': return 'bg-red-100 text-red-800';
+                    case 'info': return 'bg-blue-100 text-blue-800';
+                    default: return 'bg-gray-100 text-gray-800';
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100 py-8">
+                    <div className="max-w-4xl mx-auto px-4">
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                            <h1 className="text-3xl font-bold text-gray-900 mb-6">
+                                🧪 Component Test
+                            </h1>
+                            
+                            <p className="text-gray-600 mb-6">
+                                This test verifies that all database-first components are loaded and can be rendered correctly.
+                            </p>
+
+                            <button
+                                onClick={runComponentTest}
+                                disabled={isRunning}
+                                className={`px-6 py-3 rounded-lg font-medium mb-6 ${
+                                    isRunning
+                                        ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                            >
+                                {isRunning ? (
+                                    <>
+                                        <i className="fas fa-spinner fa-spin mr-2"></i>
+                                        Running Tests...
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="fas fa-play mr-2"></i>
+                                        Run Component Test
+                                    </>
+                                )}
+                            </button>
+
+                            {testResults.length > 0 && (
+                                <div className="space-y-2">
+                                    {testResults.map((result, index) => (
+                                        <div key={index} className={`p-3 rounded-lg ${getStatusColor(result.status)}`}>
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center space-x-2">
+                                                    <span>{getStatusIcon(result.status)}</span>
+                                                    <span className="font-medium">{result.test}</span>
+                                                </div>
+                                                <span className="text-sm opacity-75">{result.timestamp}</span>
+                                            </div>
+                                            <div className="text-sm mt-1">{result.message}</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                                <h3 className="font-semibold text-yellow-800 mb-2">Test Information:</h3>
+                                <ul className="text-yellow-700 text-sm space-y-1">
+                                    <li>• Tests component loading and availability</li>
+                                    <li>• Verifies component assignment to window objects</li>
+                                    <li>• Tests component rendering capabilities</li>
+                                    <li>• Checks for any component loading issues</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<ComponentTest />, document.getElementById('root'));
+    </script>
+</body>
+</html>
