@@ -167,6 +167,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         onSave(updatedFormData, true);
         
         // Switch to contacts tab to show the added contact
+        console.log('🔄 Setting active tab to contacts');
         setActiveTab('contacts');
         
         setNewContact({
@@ -365,6 +366,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         onSave(updatedFormData, true);
         
         // Switch to sites tab to show the added site
+        console.log('🔄 Setting active tab to sites');
         setActiveTab('sites');
         
             setNewSite({
