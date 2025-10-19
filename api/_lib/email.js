@@ -2,15 +2,27 @@
 import nodemailer from 'nodemailer';
 
 // Create transporter with your email credentials
+// Try Gmail SMTP first (more reliable), fallback to Hostinger
 const transporter = nodemailer.createTransporter({
-    host: 'smtp.hostinger.com', // Your SMTP host
-    port: 465, // Your SMTP port (e.g., 465 for SSL, 587 for TLS)
-    secure: true, // Use SSL/TLS
+    service: 'gmail', // Use Gmail service for better reliability
     auth: {
         user: 'garethm@abcotronics.co.za', // Your email address
-        pass: 'GazMauck1989*' // Your email password
+        pass: 'GazMauck1989*' // Your email password or app-specific password
     }
 });
+
+// Alternative Hostinger configuration (commented out)
+/*
+const transporter = nodemailer.createTransporter({
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,
+    auth: {
+        user: 'garethm@abcotronics.co.za',
+        pass: 'GazMauck1989*'
+    }
+});
+*/
 
 // Verify connection configuration
 transporter.verify((error, success) => {

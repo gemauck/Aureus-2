@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Test - Abcotronics ERP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+        .error { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+        .info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📧 Email Service Test</h1>
+        <p>This tool helps diagnose email sending issues in the Abcotronics ERP system.</p>
+
+        <div class="test-section info">
+            <h3>🔍 Current Email Configuration</h3>
+            <p><strong>SMTP Host:</strong> smtp.hostinger.com</p>
+            <p><strong>SMTP Port:</strong> 465 (SSL)</p>
+            <p><strong>From Email:</strong> garethm@abcotronics.co.za</p>
+            <p><strong>Test Email:</strong> gemauck@gmail.com</p>
+        </div>
+
+        <div class="test-section">
+            <h3>🧪 Test Email Sending</h3>
+            <p>Click the button below to test sending an email invitation:</p>
+            <button onclick="testEmailSending()">Send Test Email</button>
+            <button onclick="checkEmailStatus()">Check Email Status</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Test Results</h3>
+            <div id="log" class="log">Ready to test...\n</div>
+        </div>
+
+        <div class="test-section info">
+            <h3>🔧 Troubleshooting Steps</h3>
+            <ol>
+                <li><strong>Check Spam Folder:</strong> The email might be in your spam/junk folder</li>
+                <li><strong>Verify Email Address:</strong> Make sure gemauck@gmail.com is correct</li>
+                <li><strong>SMTP Credentials:</strong> Verify the Hostinger SMTP credentials are correct</li>
+                <li><strong>Network Issues:</strong> Check if there are any firewall or network restrictions</li>
+                <li><strong>Server Logs:</strong> Check Railway deployment logs for email errors</li>
+            </ol>
+        </div>
+
+        <div class="test-section info">
+            <h3>📞 Alternative Solutions</h3>
+            <ul>
+                <li><strong>Use Different Email Provider:</strong> Try Gmail SMTP instead of Hostinger</li>
+                <li><strong>Manual Invitation:</strong> Send invitation manually via email client</li>
+                <li><strong>Direct User Creation:</strong> Create user account directly in the system</li>
+                <li><strong>WhatsApp Invitation:</strong> Use WhatsApp for invitation links (if available)</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : 'info';
+            logElement.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = 'Log cleared...\n';
+        }
+
+        async function testEmailSending() {
+            log('🚀 Starting email test...', 'info');
+            
+            try {
+                const response = await fetch('/api/users/invite', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${localStorage.getItem('token') || 'test-token'}`
+                    },
+                    body: JSON.stringify({
+                        email: 'gemauck@gmail.com',
+                        name: 'Test User',
+                        role: 'user'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('✅ Email invitation sent successfully!', 'success');
+                    log(`📧 Response: ${JSON.stringify(data, null, 2)}`, 'info');
+                } else {
+                    log(`❌ Email sending failed: ${data.error || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Network error: ${error.message}`, 'error');
+            }
+        }
+
+        async function checkEmailStatus() {
+            log('🔍 Checking email service status...', 'info');
+            
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    log('✅ Server is running', 'success');
+                    log(`📊 Server info: ${JSON.stringify(data, null, 2)}`, 'info');
+                } else {
+                    log('❌ Server health check failed', 'error');
+                }
+            } catch (error) {
+                log(`❌ Cannot reach server: ${error.message}`, 'error');
+            }
+        }
+
+        // Auto-check server status on load
+        window.addEventListener('load', () => {
+            log('🔧 Email Test Tool Loaded', 'info');
+            checkEmailStatus();
+        });
+    </script>
+</body>
+</html>
