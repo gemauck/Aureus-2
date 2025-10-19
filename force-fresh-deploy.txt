@@ -1,0 +1,11 @@
+Force fresh Railway deployment - package-lock.json updated with nodemailer dependency
+
+This file forces Railway to perform a completely fresh build without using any cached layers.
+
+Changes made:
+- Updated package-lock.json to include nodemailer@6.10.1
+- Fixed npm ci dependency sync issue
+- Removed edit mode from contacts and leads
+- Fixed contact addition to stay in contacts tab
+
+Deployment timestamp: 2025-10-19 05:32 UTC

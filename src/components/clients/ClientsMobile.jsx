@@ -12,7 +12,6 @@ const ClientsMobile = () => {
     });
     const [leads, setLeads] = useState(initialLeads);
     const [projects, setProjects] = useState([]);
-    const [viewMode, setViewMode] = useState('clients');
     const [isEditing, setIsEditing] = useState(false);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
@@ -288,7 +287,11 @@ const ClientsMobile = () => {
                         }
                     </p>
                     <button
-                        onClick={() => setShowClientModal(true)}
+                        onClick={() => {
+                            setSelectedClient(null);
+                            setViewMode('client-detail');
+                            setIsEditing(true);
+                        }}
                         className="bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
                     >
                         Add Client
@@ -357,7 +360,11 @@ const ClientsMobile = () => {
                         Start building your pipeline by adding leads
                     </p>
                     <button
-                        onClick={() => setShowLeadModal(true)}
+                        onClick={() => {
+                            setSelectedLead(null);
+                            setViewMode('lead-detail');
+                            setIsEditing(true);
+                        }}
                         className="bg-primary-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-700 transition-colors"
                     >
                         Add Lead
@@ -376,13 +383,21 @@ const ClientsMobile = () => {
                         <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Clients</h1>
                         <div className="flex items-center space-x-2">
                             <button
-                                onClick={() => setShowClientModal(true)}
+                                onClick={() => {
+                                    setSelectedClient(null);
+                                    setViewMode('client-detail');
+                                    setIsEditing(true);
+                                }}
                                 className="bg-primary-600 text-white p-2 rounded-lg hover:bg-primary-700 transition-colors"
                             >
                                 <i className="fas fa-plus"></i>
                             </button>
                             <button
-                                onClick={() => setShowLeadModal(true)}
+                                onClick={() => {
+                                    setSelectedLead(null);
+                                    setViewMode('lead-detail');
+                                    setIsEditing(true);
+                                }}
                                 className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 transition-colors"
                             >
                                 <i className="fas fa-user-plus"></i>
