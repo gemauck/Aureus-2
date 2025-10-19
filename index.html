@@ -242,6 +242,7 @@
     <!-- Load simple components FIRST for immediate loading -->
     <script type="text/babel" src="./src/components/dashboard/DashboardSimple.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsSimple.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectsSimple.jsx"></script>
     
     <!-- Load database-first components for later use -->
     <script type="text/babel" src="./src/components/common/LoadingState.jsx"></script>
@@ -385,7 +386,7 @@
         // Use simple components initially for instant loading
         window.Dashboard = window.DashboardSimple;
         window.Clients = window.ClientsSimple;
-        window.Projects = window.ProjectsDatabaseFirst || window.QuickProjects;
+        window.Projects = window.ProjectsSimple; // Use simple projects component
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
         window.TimeTracking = window.TimeTrackingDatabaseFirst || window.QuickTimeTracking;
         
