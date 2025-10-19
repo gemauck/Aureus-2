@@ -642,45 +642,112 @@ const Clients = () => {
         }
     };
     
-    const handleSaveLead = (leadFormData) => {
+    const handleSaveLead = async (leadFormData) => {
         console.log('=== SAVE LEAD DEBUG ===');
         console.log('Received lead data:', leadFormData);
         console.log('Selected lead:', selectedLead);
         
-        if (selectedLead) {
-            // Update existing lead
-            const updatedLead = { ...selectedLead, ...leadFormData };
-            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-            setLeads(updatedLeads);
-            // Update selectedLead to reflect the changes immediately
-            setSelectedLead(updatedLead);
-            // Save to localStorage for persistence
-            window.storage?.setLeads?.(updatedLeads);
-            console.log('✅ Lead updated and saved to localStorage');
-        } else {
-            // Create new lead
-            const newLead = {
-                id: Math.max(100, ...leads.map(l => l.id)) + 1,
-                ...leadFormData,
-                lastContact: new Date().toISOString().split('T')[0],
-                activityLog: [{
-                    id: Date.now(),
-                    type: 'Lead Created',
-                    description: `Lead created: ${leadFormData.name}`,
-                    timestamp: new Date().toISOString(),
-                    user: 'Current User'
-                }]
-            };
-            const updatedLeads = [...leads, newLead];
-            setLeads(updatedLeads);
-            // Save to localStorage for persistence
-            window.storage?.setLeads?.(updatedLeads);
-            console.log('✅ New lead created and saved to localStorage');
-            
-            // For new leads, redirect to main leads view to show the newly added lead
-            setViewMode('leads');
-            setSelectedLead(null);
-            setCurrentLeadTab('overview');
+        try {
+            if (selectedLead) {
+                // Update existing lead
+                const updatedLead = { ...selectedLead, ...leadFormData };
+                
+                // Try to save to database first
+                const token = window.storage?.getToken?.();
+                if (token && window.api?.updateClient) {
+                    try {
+                        console.log('🌐 Calling API to update lead:', updatedLead.id);
+                        await window.api.updateClient(updatedLead.id, updatedLead);
+                        console.log('✅ Lead updated in database');
+                    } catch (error) {
+                        console.warn('⚠️ Failed to update lead in database, saving to localStorage:', error);
+                    }
+                }
+                
+                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                setLeads(updatedLeads);
+                // Update selectedLead to reflect the changes immediately
+                setSelectedLead(updatedLead);
+                // Save to localStorage for persistence
+                window.storage?.setLeads?.(updatedLeads);
+                console.log('✅ Lead updated and saved to localStorage');
+            } else {
+                // Create new lead
+                const newLead = {
+                    id: Math.max(100, ...leads.map(l => l.id)) + 1,
+                    ...leadFormData,
+                    type: 'lead', // Ensure it's marked as a lead
+                    lastContact: new Date().toISOString().split('T')[0],
+                    activityLog: [{
+                        id: Date.now(),
+                        type: 'Lead Created',
+                        description: `Lead created: ${leadFormData.name}`,
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User'
+                    }]
+                };
+                
+                // Try to save to database first
+                const token = window.storage?.getToken?.();
+                if (token && window.api?.createClient) {
+                    try {
+                        console.log('🌐 Calling API to create lead:', newLead);
+                        const savedLead = await window.api.createClient(newLead);
+                        console.log('✅ Lead created in database:', savedLead);
+                        
+                        // Use the saved lead from database (with proper ID)
+                        const updatedLeads = [...leads, savedLead];
+                        setLeads(updatedLeads);
+                        window.storage?.setLeads?.(updatedLeads);
+                        console.log('✅ New lead created and saved to database + localStorage');
+                    } catch (error) {
+                        console.warn('⚠️ Failed to create lead in database, saving to localStorage:', error);
+                        // Fallback to localStorage
+                        const updatedLeads = [...leads, newLead];
+                        setLeads(updatedLeads);
+                        window.storage?.setLeads?.(updatedLeads);
+                        console.log('✅ New lead created and saved to localStorage (fallback)');
+                    }
+                } else {
+                    // No token or API, save to localStorage only
+                    const updatedLeads = [...leads, newLead];
+                    setLeads(updatedLeads);
+                    window.storage?.setLeads?.(updatedLeads);
+                    console.log('✅ New lead created and saved to localStorage (no token)');
+                }
+                
+                // For new leads, redirect to main leads view to show the newly added lead
+                setViewMode('leads');
+                setSelectedLead(null);
+                setCurrentLeadTab('overview');
+            }
+        } catch (error) {
+            console.error('❌ Error saving lead:', error);
+            // Still save to localStorage as fallback
+            if (selectedLead) {
+                const updatedLead = { ...selectedLead, ...leadFormData };
+                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                setLeads(updatedLeads);
+                setSelectedLead(updatedLead);
+                window.storage?.setLeads?.(updatedLeads);
+            } else {
+                const newLead = {
+                    id: Math.max(100, ...leads.map(l => l.id)) + 1,
+                    ...leadFormData,
+                    type: 'lead',
+                    lastContact: new Date().toISOString().split('T')[0],
+                    activityLog: [{
+                        id: Date.now(),
+                        type: 'Lead Created',
+                        description: `Lead created: ${leadFormData.name}`,
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User'
+                    }]
+                };
+                const updatedLeads = [...leads, newLead];
+                setLeads(updatedLeads);
+                window.storage?.setLeads?.(updatedLeads);
+            }
         }
     };
 
