@@ -233,7 +233,6 @@
     <script type="text/babel" src="./src/components/theme/ThemeProvider.jsx"></script>
     
     <!-- Load all components inline -->
-    <script type="text/babel" src="./src/utils/localStorage.js"></script>
     <script type="text/babel" src="./src/utils/api.js"></script>
     <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
     <script type="text/babel" src="./src/utils/auditLogger.js"></script>
@@ -253,6 +252,7 @@
     <script type="text/babel" src="./src/components/common/AdvancedSearch.jsx"></script>
     <script type="text/babel" src="./src/components/clients/BulkOperations.jsx"></script>
     <script type="text/babel" src="./src/components/invoicing/RecurringInvoices.jsx"></script>
+    <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
     <script src="./src/components/clients/PipelineIntegration.js"></script>
     
     <!-- Projects Components -->
@@ -268,10 +268,12 @@
     <script type="text/babel" src="./src/components/projects/DocumentCollectionModal.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectDetail.jsx"></script>
     <script type="text/babel" src="./src/components/projects/Projects.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
     
     <!-- Time Tracking Components -->
     <script type="text/babel" src="./src/components/time/TimeModal.jsx"></script>
     <script type="text/babel" src="./src/components/time/TimeTracking.jsx"></script>
+    <script type="text/babel" src="./src/components/time/TimeTrackingDatabaseFirst.jsx"></script>
     
     <!-- Teams Components -->
     <script type="text/babel" src="./src/components/teams/DocumentModal.jsx"></script>
@@ -366,13 +368,18 @@
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
             
-            // Use database-first Clients component (no localStorage dependency)
+            // Use database-first components (no localStorage dependency)
             if (window.ClientsDatabaseFirst) {
-                // Replace Clients with database-first version
                 window.Clients = window.ClientsDatabaseFirst;
-            } else if (isMobile && window.ClientsMobileOptimized) {
-                // Fallback to mobile version if database-first not available
-                window.Clients = window.ClientsMobileOptimized;
+            }
+            if (window.ProjectsDatabaseFirst) {
+                window.Projects = window.ProjectsDatabaseFirst;
+            }
+            if (window.InvoicingDatabaseFirst) {
+                window.Invoicing = window.InvoicingDatabaseFirst;
+            }
+            if (window.TimeTrackingDatabaseFirst) {
+                window.TimeTracking = window.TimeTrackingDatabaseFirst;
             }
             
             return React.createElement(window.MainLayout);
