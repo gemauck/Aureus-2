@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Script Loading</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <h1>Debug Script Loading</h1>
+    <div id="debug-info"></div>
+
+    <script>
+        // Test script loading
+        function testScriptLoading() {
+            const debugDiv = document.getElementById('debug-info');
+            const testUrls = [
+                './src/utils/localStorage.js',
+                './src/components/auth/AuthProvider.jsx',
+                './src/components/clients/Clients.jsx'
+            ];
+
+            testUrls.forEach(url => {
+                const script = document.createElement('script');
+                script.type = 'text/babel';
+                script.src = url;
+                script.onload = () => {
+                    debugDiv.innerHTML += `<p style="color: green;">✅ ${url} loaded successfully</p>`;
+                };
+                script.onerror = (error) => {
+                    debugDiv.innerHTML += `<p style="color: red;">❌ ${url} failed to load: ${error}</p>`;
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // Test current URL
+        document.getElementById('debug-info').innerHTML += `<p>Current URL: ${window.location.href}</p>`;
+        document.getElementById('debug-info').innerHTML += `<p>Base URL: ${window.location.origin}</p>`;
+        document.getElementById('debug-info').innerHTML += `<p>Path: ${window.location.pathname}</p>`;
+
+        // Test script loading
+        setTimeout(testScriptLoading, 1000);
+    </script>
+</body>
+</html>

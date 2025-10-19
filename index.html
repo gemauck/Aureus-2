@@ -214,6 +214,18 @@
         }
     </script>
 
+    <!-- Debug Script Loading -->
+    <script>
+        console.log('🔍 Debug: Current URL:', window.location.href);
+        console.log('🔍 Debug: Base URL:', window.location.origin);
+        console.log('🔍 Debug: Pathname:', window.location.pathname);
+        
+        // Test if we can access the localStorage utility
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('🔍 Debug: DOM Content Loaded');
+        });
+    </script>
+
     <!-- Map Component -->
     <script type="text/babel" src="./src/components/maps/MapComponent.jsx"></script>
     

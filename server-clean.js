@@ -11,7 +11,18 @@ const PORT = process.env.PORT || 3000
 // Middleware
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
-app.use(express.static(__dirname))
+
+// Serve static files with proper MIME types
+app.use(express.static(__dirname, {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js') || path.endsWith('.jsx')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    }
+    if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    }
+  }
+}))
 
 // CORS headers
 app.use((req, res, next) => {
