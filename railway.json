@@ -5,7 +5,7 @@
     "buildCommand": "npm install && npm run prisma:generate && npm run migrate:production"
   },
   "deploy": {
-    "startCommand": "npm start",
+    "startCommand": "npm run prisma:generate && npm start",
     "healthcheckPath": "/api/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
