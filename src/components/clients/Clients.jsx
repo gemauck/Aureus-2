@@ -1,8 +1,18 @@
 // Get dependencies from window
 const { useState, useEffect } = React;
-const storage = window.storage;
+const storage = window.storage || {};
 const ClientDetailModal = window.ClientDetailModal;
 const LeadDetailModal = window.LeadDetailModal;
+
+// Safe storage helper functions
+const safeStorage = {
+    getClients: () => storage.getClients ? safeStorage.getClients() : null,
+    setClients: (data) => storage.setClients ? safeStorage.setClients(data) : null,
+    getLeads: () => storage.getLeads ? safeStorage.getLeads() : null,
+    setLeads: (data) => storage.setLeads ? safeStorage.setLeads(data) : null,
+    getProjects: () => storage.getProjects ? safeStorage.getProjects() : null,
+    setProjects: (data) => storage.setProjects ? storage.setProjects(data) : null,
+};
 
 // Initial data with opportunities
 const initialClients = [
@@ -257,7 +267,7 @@ const Clients = () => {
     
     // Track localStorage changes
     useEffect(() => {
-        const savedClients = storage.getClients();
+        const savedClients = safeStorage.getClients();
         console.log('💾 localStorage clients:', savedClients ? savedClients.length : 'none');
     }, [refreshKey]);
     
@@ -270,7 +280,7 @@ const Clients = () => {
     // Function to clear localStorage and reload fresh data
     const clearCacheAndReload = async () => {
         console.log('🧹 Clearing localStorage cache and reloading fresh data');
-        storage.setClients([]);
+        safeStorage.setClients([]);
         await loadClients();
     };
 
@@ -279,12 +289,12 @@ const Clients = () => {
         console.log('🔄 loadClients called');
         try {
             // Check if user is logged in first
-            const token = window.storage?.getToken?.();
+            const token = window.storage?.getToken?.() || null;
             console.log('🔑 Token status:', token ? 'present' : 'none');
             
             if (!token) {
                 console.log('No auth token, loading clients from localStorage only');
-                const savedClients = storage.getClients();
+                const savedClients = safeStorage.getClients();
                 console.log('📁 Saved clients from localStorage:', savedClients ? savedClients.length : 'none');
         if (savedClients) {
                     console.log('✅ Setting clients from localStorage');
@@ -300,7 +310,7 @@ const Clients = () => {
                     console.log('📡 API returned clients:', apiClients.length);
                     
                     // Get localStorage clients to merge projectIds
-                    const savedClients = storage.getClients() || [];
+                    const savedClients = storage.getClients ? safeStorage.getClients() || [] : [];
                     console.log('📁 Saved clients for merge:', savedClients.length);
                     
                     // If API returns no clients, use localStorage clients
@@ -346,17 +356,17 @@ const Clients = () => {
                     console.log('✅ Clients set from API');
                     
                     // Save processed data to localStorage for offline access
-                    storage.setClients(processedClients);
+                    safeStorage.setClients(processedClients);
                     console.log('✅ Clients saved to localStorage');
                 } catch (apiError) {
                     console.error('❌ API error loading clients:', apiError);
                     if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
                         console.log('🔑 Token expired, clearing and using localStorage');
-                        window.storage.removeToken();
-                        window.storage.removeUser();
+                        window.storage?.removeToken?.();
+                        window.storage?.removeUser?.();
                     }
                     // Always fall back to localStorage on any API error
-                    const savedClients = storage.getClients();
+                    const savedClients = safeStorage.getClients();
                     console.log('📁 API error occurred, checking localStorage:', savedClients ? savedClients.length : 'no clients');
                     if (savedClients) {
                         console.log('✅ Falling back to localStorage clients:', savedClients.length);
@@ -369,7 +379,7 @@ const Clients = () => {
             }
         } catch (e) {
             console.error('❌ Failed to load clients:', e);
-            const savedClients = storage.getClients();
+            const savedClients = safeStorage.getClients();
             console.log('📁 Final fallback - saved clients:', savedClients ? savedClients.length : 'none');
             if (savedClients) {
                 console.log('✅ Final fallback - setting clients from localStorage');
@@ -378,8 +388,8 @@ const Clients = () => {
                 console.log('⚠️ Final fallback - no saved clients, keeping initial state');
             }
         }
-        const savedLeads = storage.getLeads();
-        const savedProjects = storage.getProjects();
+        const savedLeads = safeStorage.getLeads();
+        const savedProjects = safeStorage.getProjects();
         if (savedLeads) setLeads(savedLeads);
         if (savedProjects) setProjects(savedProjects);
     };
@@ -403,8 +413,8 @@ const Clients = () => {
     // Refresh data when switching to pipeline view
     useEffect(() => {
         if (viewMode === 'pipeline') {
-            const savedClients = storage.getClients();
-            const savedLeads = storage.getLeads();
+            const savedClients = safeStorage.getClients();
+            const savedLeads = safeStorage.getLeads();
             if (savedClients) {
                 const clientsWithOpportunities = savedClients.map(client => ({
                     ...client,
@@ -418,11 +428,11 @@ const Clients = () => {
     
     // Save data
     useEffect(() => {
-        storage.setClients(clients);
+        safeStorage.setClients(clients);
     }, [clients]);
     
     useEffect(() => {
-        storage.setLeads(leads);
+        safeStorage.setLeads(leads);
     }, [leads]);
 
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
@@ -435,7 +445,7 @@ const Clients = () => {
         
         try {
             // Check if user is logged in
-            const token = window.storage?.getToken?.();
+            const token = window.storage?.getToken?.() || null;
             
             // Create comprehensive client object with ALL fields
             const comprehensiveClient = {
@@ -478,13 +488,13 @@ const Clients = () => {
         if (selectedClient) {
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
-                storage.setClients(updated);
+                safeStorage.setClients(updated);
                 setSelectedClient(comprehensiveClient); // Update selectedClient to show new data immediately
                 console.log('✅ Updated client in localStorage, new count:', updated.length);
         } else {
                 const newClients = [...clients, comprehensiveClient];
                 setClients(newClients);
-                storage.setClients(newClients);
+                safeStorage.setClients(newClients);
                 console.log('✅ Added new client to localStorage, new count:', newClients.length);
                 
                 // For new clients, redirect to main clients view to show the newly added client
@@ -574,7 +584,7 @@ const Clients = () => {
                             return;
                         }
                         setClients(updated);
-                        storage.setClients(updated);
+                        safeStorage.setClients(updated);
                         console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
                     } else {
                         const newClients = [...clients, comprehensiveClient];
@@ -587,7 +597,7 @@ const Clients = () => {
                             return;
                         }
                         setClients(newClients);
-                        storage.setClients(newClients);
+                        safeStorage.setClients(newClients);
                         console.log('✅ Added new client to localStorage after API success, new count:', newClients.length);
                     }
                     console.log('✅ Comprehensive client data saved to localStorage');
@@ -596,8 +606,8 @@ const Clients = () => {
                     console.error('API error saving client:', apiError);
                     if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
                         console.log('Token expired, falling back to localStorage only');
-                        window.storage.removeToken();
-                        window.storage.removeUser();
+                        window.storage?.removeToken?.();
+                        window.storage?.removeUser?.();
                     }
                     
                     // Always fall back to localStorage on any API error
@@ -608,12 +618,12 @@ const Clients = () => {
                     if (selectedClient) {
                         const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                         setClients(updated);
-                        storage.setClients(updated);
+                        safeStorage.setClients(updated);
                         console.log('✅ Updated client in localStorage, new count:', updated.length);
                     } else {
                         const newClients = [...clients, comprehensiveClient];
                         setClients(newClients);
-                        storage.setClients(newClients);
+                        safeStorage.setClients(newClients);
                         console.log('✅ Added new client to localStorage, new count:', newClients.length);
                     }
                     console.log('✅ Fallback: Client saved to localStorage only');
@@ -868,7 +878,7 @@ const Clients = () => {
                     lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
                 );
                 setLeads(updatedLeads);
-                storage.setLeads(updatedLeads);
+                safeStorage.setLeads(updatedLeads);
             } else if (draggedType === 'opportunity') {
                 const updatedClients = clients.map(client => {
                     if (client.id === draggedItem.clientId) {
@@ -880,7 +890,7 @@ const Clients = () => {
                     return client;
                 });
                 setClients(updatedClients);
-                storage.setClients(updatedClients);
+                safeStorage.setClients(updatedClients);
             }
 
             setDraggedItem(null);
