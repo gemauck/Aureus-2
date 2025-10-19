@@ -342,6 +342,10 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         const updatedFormData = {...formData, comments: updatedComments};
         setFormData(updatedFormData);
         logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
+        
+        // Save comment changes immediately
+        onSave(updatedFormData, true);
+        
         setNewComment('');
         
         // AUTO-SAVE: Immediately save to parent

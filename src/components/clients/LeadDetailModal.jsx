@@ -64,8 +64,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
     }, [lead]);
 
     const handleAddContact = () => {
-        if (!newContact.name || !newContact.email) {
-            alert('Name and email are required');
+        if (!newContact.name) {
+            alert('Name is required');
             return;
         }
         
@@ -198,8 +198,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
             createdBy: 'Current User' // In real app, get from auth
         }];
         
-        setFormData({...formData, comments: updatedComments});
+        const updatedFormData = {...formData, comments: updatedComments};
+        setFormData(updatedFormData);
         logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
+        
+        // Save comment changes immediately
+        onSave(updatedFormData, true);
+        
         setNewComment('');
     };
 

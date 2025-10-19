@@ -236,7 +236,16 @@ const Clients = () => {
         if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
         return `${Math.ceil(diffDays / 365)} years ago`;
     };
-    const [leads, setLeads] = useState(initialLeads);
+    const [leads, setLeads] = useState(() => {
+        // Initialize leads from localStorage if available, otherwise use initial data
+        const savedLeads = window.storage?.getLeads?.();
+        if (savedLeads && savedLeads.length > 0) {
+            console.log('📁 Loading leads from localStorage:', savedLeads.length);
+            return savedLeads;
+        }
+        console.log('📁 No saved leads, using initial data');
+        return initialLeads;
+    });
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
@@ -636,9 +645,19 @@ const Clients = () => {
     };
     
     const handleSaveLead = (leadFormData) => {
+        console.log('=== SAVE LEAD DEBUG ===');
+        console.log('Received lead data:', leadFormData);
+        console.log('Selected lead:', selectedLead);
+        
         if (selectedLead) {
-            setLeads(leads.map(l => l.id === selectedLead.id ? { ...selectedLead, ...leadFormData } : l));
+            // Update existing lead
+            const updatedLeads = leads.map(l => l.id === selectedLead.id ? { ...selectedLead, ...leadFormData } : l);
+            setLeads(updatedLeads);
+            // Save to localStorage for persistence
+            window.storage?.setLeads?.(updatedLeads);
+            console.log('✅ Lead updated and saved to localStorage');
         } else {
+            // Create new lead
             const newLead = {
                 id: Math.max(100, ...leads.map(l => l.id)) + 1,
                 ...leadFormData,
@@ -651,7 +670,11 @@ const Clients = () => {
                     user: 'Current User'
                 }]
             };
-            setLeads([...leads, newLead]);
+            const updatedLeads = [...leads, newLead];
+            setLeads(updatedLeads);
+            // Save to localStorage for persistence
+            window.storage?.setLeads?.(updatedLeads);
+            console.log('✅ New lead created and saved to localStorage');
             
             // For new leads, redirect to main leads view to show the newly added lead
             setViewMode('leads');
