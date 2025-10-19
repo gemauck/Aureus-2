@@ -53,18 +53,18 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window
-    const Dashboard = window.Dashboard;
-    const Clients = window.Clients;
+    // Get components from window with fallbacks
+    const Dashboard = window.Dashboard || window.DashboardSimple || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
-    const Projects = window.Projects;
-    const Teams = window.TeamsEnhanced || window.Teams; // Use enhanced version if available
-    const Users = window.UserManagement;
-    const TimeTracking = window.TimeTracking;
-    const HR = window.HR;
-    const Manufacturing = window.Manufacturing;
-    const Tools = window.Tools;
-    const Reports = window.Reports;
+    const Projects = window.Projects || window.ProjectsDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
+    const Teams = window.TeamsEnhanced || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>);
+    const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
+    const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
+    const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
+    const Manufacturing = window.Manufacturing || (() => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>);
+    const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
+    const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
 
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
@@ -83,29 +83,29 @@ const MainLayout = () => {
     const renderPage = () => {
         switch(currentPage) {
             case 'dashboard': 
-                return Dashboard ? <Dashboard /> : <div>Loading Dashboard...</div>;
+                return <Dashboard />;
             case 'clients': 
-                return Clients ? <Clients /> : <div>Loading Clients...</div>;
+                return <Clients />;
             case 'projects': 
-                return Projects ? <Projects /> : <div>Loading Projects...</div>;
+                return <Projects />;
             case 'teams': 
-                return Teams ? <Teams /> : <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>;
+                return <Teams />;
             case 'users': 
-                return Users ? <Users /> : <div>Loading Users...</div>;
+                return <Users />;
             case 'time': 
-                return TimeTracking ? <TimeTracking /> : <div>Loading Time Tracking...</div>;
+                return <TimeTracking />;
             case 'hr': 
-                return HR ? <HR /> : <div>Loading HR...</div>;
+                return <HR />;
             case 'manufacturing': 
-                return Manufacturing ? <Manufacturing /> : <div>Loading Manufacturing...</div>;
+                return <Manufacturing />;
             case 'tools': 
-                return Tools ? <Tools /> : <div>Loading Tools...</div>;
+                return <Tools />;
             case 'reports': 
-                return Reports ? <Reports /> : <div>Loading Reports...</div>;
+                return <Reports />;
             case 'documents': 
                 return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
             default: 
-                return Dashboard ? <Dashboard /> : <div>Loading...</div>;
+                return <Dashboard />;
         }
     };
 
