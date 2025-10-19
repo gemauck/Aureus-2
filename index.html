@@ -239,9 +239,16 @@
     <script type="text/babel" src="./src/utils/auditLogger.js"></script>
     <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
     <script type="text/babel" src="./src/components/auth/LoginPage.jsx"></script>
+    <!-- Load database-first components FIRST -->
+    <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
+    <script type="text/babel" src="./src/components/time/TimeTrackingDatabaseFirst.jsx"></script>
+    
+    <!-- Load other components -->
     <script type="text/babel" src="./src/components/dashboard/Dashboard.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardEnhanced.jsx"></script>
-    <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
@@ -249,12 +256,10 @@
     <script type="text/babel" src="./src/components/clients/ClientsMobileOptimized.jsx"></script>
     <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
-    <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Pipeline.jsx"></script>
     <script type="text/babel" src="./src/components/common/AdvancedSearch.jsx"></script>
     <script type="text/babel" src="./src/components/clients/BulkOperations.jsx"></script>
     <script type="text/babel" src="./src/components/invoicing/RecurringInvoices.jsx"></script>
-    <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
     <script src="./src/components/clients/PipelineIntegration.js"></script>
     
     <!-- Projects Components -->
@@ -371,21 +376,35 @@
             }, []);
             
         // Use database-first components (no localStorage dependency)
-        if (window.ClientsDatabaseFirst) {
-            window.Clients = window.ClientsDatabaseFirst;
-        }
-        if (window.ProjectsDatabaseFirst) {
-            window.Projects = window.ProjectsDatabaseFirst;
-        }
-        if (window.InvoicingDatabaseFirst) {
-            window.Invoicing = window.InvoicingDatabaseFirst;
-        }
-        if (window.TimeTrackingDatabaseFirst) {
-            window.TimeTracking = window.TimeTrackingDatabaseFirst;
-        }
+        // This ensures all data operations use the database instead of localStorage
+        console.log('🔄 Replacing components with database-first versions...');
+        
         if (window.DashboardDatabaseFirst) {
             window.Dashboard = window.DashboardDatabaseFirst;
+            console.log('✅ Dashboard replaced with database-first version');
         }
+        
+        if (window.ClientsDatabaseFirst) {
+            window.Clients = window.ClientsDatabaseFirst;
+            console.log('✅ Clients replaced with database-first version');
+        }
+        
+        if (window.ProjectsDatabaseFirst) {
+            window.Projects = window.ProjectsDatabaseFirst;
+            console.log('✅ Projects replaced with database-first version');
+        }
+        
+        if (window.InvoicingDatabaseFirst) {
+            window.Invoicing = window.InvoicingDatabaseFirst;
+            console.log('✅ Invoicing replaced with database-first version');
+        }
+        
+        if (window.TimeTrackingDatabaseFirst) {
+            window.TimeTracking = window.TimeTrackingDatabaseFirst;
+            console.log('✅ TimeTracking replaced with database-first version');
+        }
+        
+        console.log('🎉 All components replaced with database-first versions!');
             
             return React.createElement(window.MainLayout);
         };
