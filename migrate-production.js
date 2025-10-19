@@ -5,7 +5,7 @@
  * This script adds the 'type' column to the Client table in production
  */
 
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient } from '@prisma/client';
 
 async function migrateProduction() {
     const prisma = new PrismaClient();
@@ -51,9 +51,5 @@ async function migrateProduction() {
     }
 }
 
-// Run migration if this script is executed directly
-if (require.main === module) {
-    migrateProduction();
-}
-
-module.exports = { migrateProduction };
+// Run migration
+migrateProduction();
