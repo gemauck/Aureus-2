@@ -205,24 +205,7 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                         ></textarea>
                     </div>
                     
-                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-gray-200">
-                        {project && onDelete ? (
-                            <button 
-                                type="button" 
-                                onClick={() => {
-                                    if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-                                        onDelete(project.id);
-                                    }
-                                }}
-                                className="px-3 py-1.5 text-xs bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                            >
-                                <i className="fas fa-trash mr-1.5"></i>
-                                Delete Project
-                            </button>
-                        ) : (
-                            <div></div>
-                        )}
-                        <div className="flex gap-2">
+                    <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-200">
                             <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                                 Cancel
                             </button>

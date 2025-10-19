@@ -509,35 +509,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
-                            {existingData && !isCommentsField && (
-                                <button 
-                                    onClick={() => {
-                                        if (confirm('Delete this entry?')) {
-                                            handleDeleteProgress(selectedProject, selectedMonth, selectedField);
-                                            setShowProgressModal(false);
-                                        }
-                                    }}
-                                    className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded transition-colors"
-                                    title="Delete Entry"
-                                >
-                                    <i className="fas fa-trash text-sm"></i>
-                                </button>
-                            )}
-                            {isCommentsField && existingComments.length > 0 && (
-                                <button 
-                                    onClick={() => {
-                                        if (confirm('Delete all comments?')) {
-                                            handleDeleteProgress(selectedProject, selectedMonth, selectedField);
-                                            setShowProgressModal(false);
-                                        }
-                                    }}
-                                    className="text-red-500 hover:text-red-700 p-1.5 hover:bg-red-50 rounded transition-colors"
-                                    title="Delete All Comments"
-                                >
-                                    <i className="fas fa-trash text-sm"></i>
-                                </button>
-                            )}
-                            <button 
+                            <button  
                                 onClick={() => setShowProgressModal(false)} 
                                 className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors"
                             >

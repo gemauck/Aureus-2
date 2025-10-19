@@ -884,13 +884,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     >
                                                         <i className="fas fa-edit text-xs"></i>
                                                     </button>
-                                                    <button
-                                                        onClick={() => handleDeleteSection(section.id)}
-                                                        className="text-gray-600 hover:text-red-600 p-1"
-                                                        title="Delete Section"
-                                                    >
-                                                        <i className="fas fa-trash text-xs"></i>
-                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -926,13 +919,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 title="Edit"
                                                             >
                                                                 <i className="fas fa-edit text-xs"></i>
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteDocument(section.id, document.id)}
-                                                                className="text-gray-600 hover:text-red-600 p-1"
-                                                                title="Delete"
-                                                            >
-                                                                <i className="fas fa-trash text-xs"></i>
                                                             </button>
                                                         </div>
                                                     </td>

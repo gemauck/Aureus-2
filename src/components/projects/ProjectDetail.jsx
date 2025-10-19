@@ -296,17 +296,6 @@ const ProjectDetail = ({ project, onBack }) => {
                                             >
                                                 <i className="fas fa-download text-xs"></i>
                                             </button>
-                                            <button
-                                                onClick={() => {
-                                                    if (confirm('Delete this document?')) {
-                                                        setDocuments(documents.filter(d => d.id !== doc.id));
-                                                    }
-                                                }}
-                                                className="text-red-600 hover:text-red-800 p-1"
-                                                title="Delete"
-                                            >
-                                                <i className="fas fa-trash text-xs"></i>
-                                            </button>
                                         </div>
                                     </div>
                                 );
@@ -823,13 +812,6 @@ const ProjectDetail = ({ project, onBack }) => {
                                         >
                                             <i className="fas fa-edit text-xs"></i>
                                         </button>
-                                        <button
-                                            onClick={() => handleDeleteList(list.id)}
-                                            className="text-gray-400 hover:text-red-600 p-1.5 transition-colors"
-                                            title="Delete List"
-                                        >
-                                            <i className="fas fa-trash text-xs"></i>
-                                        </button>
                                     </div>
                                 </div>
                                 {list.description && (
@@ -974,16 +956,6 @@ const ProjectDetail = ({ project, onBack }) => {
                                                             >
                                                                 <i className="fas fa-plus text-[10px]"></i>
                                                             </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    handleDeleteTask(task.id);
-                                                                }}
-                                                                className="text-red-600 hover:text-red-800 transition-colors"
-                                                                title="Delete Task"
-                                                            >
-                                                                <i className="fas fa-trash text-[10px]"></i>
-                                                            </button>
                                                         </div>
                                                     </td>
                                                 </tr>
@@ -1101,16 +1073,6 @@ const ProjectDetail = ({ project, onBack }) => {
                                                                     title="View Details"
                                                                 >
                                                                     <i className="fas fa-eye text-[10px]"></i>
-                                                                </button>
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        handleDeleteSubtask(task.id, subtask.id);
-                                                                    }}
-                                                                    className="text-red-600 hover:text-red-800 transition-colors"
-                                                                    title="Delete Subtask"
-                                                                >
-                                                                    <i className="fas fa-trash text-[10px]"></i>
                                                                 </button>
                                                             </div>
                                                         </td>
