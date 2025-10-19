@@ -166,9 +166,11 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Save contact changes immediately - stay in edit mode
         onSave(updatedFormData, true);
         
-        // Switch to contacts tab to show the added contact
+        // Switch to contacts tab to show the added contact (use setTimeout to ensure it happens after re-render)
         console.log('🔄 Setting active tab to contacts');
-        setActiveTab('contacts');
+        setTimeout(() => {
+            setActiveTab('contacts');
+        }, 100);
         
         setNewContact({
             name: '',
@@ -215,7 +217,10 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             siteId: null
         });
         setShowContactForm(false);
-        setActiveTab('contacts'); // Stay in contacts tab
+        // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
+        setTimeout(() => {
+            setActiveTab('contacts');
+        }, 100);
         
         console.log('✅ Contact updated and saved:', newContact.name);
     };
@@ -230,7 +235,10 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             
             // Save contact deletion immediately - stay in edit mode
             onSave(updatedFormData, true);
-            setActiveTab('contacts'); // Stay in contacts tab
+            // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
+            setTimeout(() => {
+                setActiveTab('contacts');
+            }, 100);
             
             console.log('✅ Contact deleted and saved');
         }
@@ -365,9 +373,11 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Save site changes immediately - stay in edit mode
         onSave(updatedFormData, true);
         
-        // Switch to sites tab to show the added site
+        // Switch to sites tab to show the added site (use setTimeout to ensure it happens after re-render)
         console.log('🔄 Setting active tab to sites');
-        setActiveTab('sites');
+        setTimeout(() => {
+            setActiveTab('sites');
+        }, 100);
         
             setNewSite({
                 name: '',
@@ -416,7 +426,10 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                 gpsCoordinates: ''
             });
         setShowSiteForm(false);
-        setActiveTab('sites'); // Stay in sites tab
+        // Stay in sites tab (use setTimeout to ensure it happens after re-render)
+        setTimeout(() => {
+            setActiveTab('sites');
+        }, 100);
         
         console.log('✅ Site updated and saved:', newSite.name);
     };

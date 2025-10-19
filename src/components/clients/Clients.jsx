@@ -480,7 +480,8 @@ const Clients = () => {
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
                 storage.setClients(updated);
-                setSelectedClient(comprehensiveClient); // Update selectedClient immediately so modal shows updated data
+                // Don't update selectedClient to prevent tab state reset
+                // The modal already has the updated data from the onSave call
                 console.log('✅ Updated client in localStorage, new count:', updated.length);
         } else {
                 const newClients = [...clients, comprehensiveClient];
