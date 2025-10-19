@@ -760,7 +760,7 @@ const Clients = () => {
     const handleOpenLead = (lead) => {
         setSelectedLead(lead);
         setSelectedClient(null);
-        setViewMode('leads'); // Stay in leads list instead of opening detail view
+        setViewMode('lead-detail'); // Open in full detail view like clients
         setIsEditing(false);
     };
 

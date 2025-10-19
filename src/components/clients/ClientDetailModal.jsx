@@ -166,6 +166,9 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Save contact changes immediately - stay in edit mode
         onSave(updatedFormData, true);
         
+        // Switch to contacts tab to show the added contact
+        setActiveTab('contacts');
+        
         setNewContact({
             name: '',
             role: '',
@@ -359,6 +362,9 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Save site changes immediately - stay in edit mode
         onSave(updatedFormData, true);
         
+        // Switch to sites tab to show the added site
+        setActiveTab('sites');
+        
             setNewSite({
                 name: '',
                 address: '',
@@ -462,6 +468,9 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         
         // Save opportunity changes immediately - stay in edit mode
         onSave(updatedFormData, true);
+        
+        // Switch to opportunities tab to show the added opportunity
+        setActiveTab('opportunities');
         
         // Reset form
         setNewOpportunity({
