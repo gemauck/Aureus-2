@@ -325,7 +325,7 @@ const Clients = () => {
                         name: c.name,
                         status: c.status === 'active' ? 'Active' : 'Inactive',
                         industry: c.industry || 'Other',
-                        type: 'client',
+                        type: c.type || 'client', // Use the type from database
                         revenue: c.revenue || 0,
                         lastContact: new Date(c.updatedAt || c.createdAt).toISOString().split('T')[0],
                         address: c.address || '', 
@@ -349,15 +349,22 @@ const Clients = () => {
                         }
                     }));
                     
-                    console.log('✅ Processed clients:', processedClients.length);
+                    // Separate clients and leads based on type
+                    const clientsOnly = processedClients.filter(c => c.type === 'client');
+                    const leadsOnly = processedClients.filter(c => c.type === 'lead');
+                    
+                    console.log('✅ Processed clients:', clientsOnly.length);
+                    console.log('✅ Processed leads:', leadsOnly.length);
                     
                     // Always prioritize API data - only use localStorage if API completely fails
-                    setClients(processedClients);
-                    console.log('✅ Clients set from API');
+                    setClients(clientsOnly);
+                    setLeads(leadsOnly);
+                    console.log('✅ Clients and leads set from API');
                     
                     // Save processed data to localStorage for offline access
-                    safeStorage.setClients(processedClients);
-                    console.log('✅ Clients saved to localStorage');
+                    safeStorage.setClients(clientsOnly);
+                    safeStorage.setLeads(leadsOnly);
+                    console.log('✅ Clients and leads saved to localStorage');
                 } catch (apiError) {
                     console.error('❌ API error loading clients:', apiError);
                     if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
