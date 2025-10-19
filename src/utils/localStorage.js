@@ -324,6 +324,27 @@ const storage = {
     
     setQBEmployeeMapping: (mapping) => {
         localStorage.setItem('abcotronics_qb_employee_mapping', JSON.stringify(mapping));
+    },
+
+    // Recurring Invoices
+    getRecurringInvoices: () => {
+        try {
+            const invoices = localStorage.getItem('abcotronics_recurring_invoices');
+            if (!invoices || invoices === 'undefined' || invoices === 'null') return [];
+            return JSON.parse(invoices);
+        } catch (e) {
+            console.error('Error loading recurring invoices:', e);
+            return [];
+        }
+    },
+    
+    setRecurringInvoices: (invoices) => {
+        try {
+            localStorage.setItem('abcotronics_recurring_invoices', JSON.stringify(invoices));
+            console.log('✅ Recurring invoices saved to localStorage:', invoices.length);
+        } catch (e) {
+            console.error('Error saving recurring invoices:', e);
+        }
     }
 };
 
