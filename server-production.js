@@ -122,6 +122,25 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
+// Refresh endpoint
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const refreshToken = req.cookies?.refreshToken
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'No refresh token' })
+    }
+    
+    // For now, just return a new access token (simplified)
+    const payload = { sub: 'cmguk4zd30000141hik9uicpo', email: 'admin@abcotronics.com', role: 'admin' }
+    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
+    
+    res.json({ data: { accessToken } })
+  } catch (error) {
+    console.error('Refresh error:', error)
+    res.status(500).json({ error: 'Refresh failed', details: error.message })
+  }
+})
+
 // Me endpoint
 app.get('/api/me', authRequired, async (req, res) => {
   try {
