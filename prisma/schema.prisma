@@ -46,7 +46,7 @@ model Membership {
 model Client {
   id           String    @id @default(cuid())
   name         String
-  type         String    @default("client") // "client" or "lead"
+  type         String    // "client" or "lead"
   industry     String    @default("Other")
   status       String    @default("active")
   revenue      Float     @default(0)
