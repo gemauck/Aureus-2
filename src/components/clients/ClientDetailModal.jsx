@@ -4,7 +4,7 @@
 const { useState, useEffect } = React;
 
 const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false }) => {
-    const [activeTab, setActiveTab] = useState('overview');
+    const [activeTab, setActiveTab] = useState('contacts');
     const [uploadingContract, setUploadingContract] = useState(false);
     const [formData, setFormData] = useState(client || {
         name: '',
