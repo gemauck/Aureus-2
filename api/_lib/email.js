@@ -3,10 +3,12 @@ import nodemailer from 'nodemailer';
 
 // Create transporter with your email credentials
 const transporter = nodemailer.createTransporter({
-    service: 'gmail', // or your email provider
+    host: 'smtp.hostinger.com', // Your SMTP host
+    port: 465, // Your SMTP port (e.g., 465 for SSL, 587 for TLS)
+    secure: true, // Use SSL/TLS
     auth: {
-        user: 'garethm@abcotronics.co.za',
-        pass: 'GazMauck1989*'
+        user: 'garethm@abcotronics.co.za', // Your email address
+        pass: 'GazMauck1989*' // Your email password
     }
 });
 

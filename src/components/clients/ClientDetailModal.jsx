@@ -3,9 +3,22 @@
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 const { useState, useEffect } = React;
 
-const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false }) => {
-    const [activeTab, setActiveTab] = useState('overview');
+const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
+    const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
+    
+    // Update tab when initialTab prop changes
+    useEffect(() => {
+        setActiveTab(initialTab);
+    }, [initialTab]);
+    
+    // Handle tab change and notify parent
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        if (onTabChange) {
+            onTabChange(tab);
+        }
+    };
     const [formData, setFormData] = useState(client || {
         name: '',
         industry: '',
@@ -169,7 +182,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Switch to contacts tab to show the added contact (use setTimeout to ensure it happens after re-render)
         console.log('🔄 Setting active tab to contacts');
         setTimeout(() => {
-            setActiveTab('contacts');
+            handleTabChange('contacts');
         }, 100);
         
         setNewContact({
@@ -219,7 +232,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setShowContactForm(false);
         // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
         setTimeout(() => {
-            setActiveTab('contacts');
+            handleTabChange('contacts');
         }, 100);
         
         console.log('✅ Contact updated and saved:', newContact.name);
@@ -237,7 +250,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             onSave(updatedFormData, true);
             // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
             setTimeout(() => {
-                setActiveTab('contacts');
+                handleTabChange('contacts');
             }, 100);
             
             console.log('✅ Contact deleted and saved');
@@ -376,7 +389,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         // Switch to sites tab to show the added site (use setTimeout to ensure it happens after re-render)
         console.log('🔄 Setting active tab to sites');
         setTimeout(() => {
-            setActiveTab('sites');
+            handleTabChange('sites');
         }, 100);
         
             setNewSite({
@@ -428,7 +441,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         setShowSiteForm(false);
         // Stay in sites tab (use setTimeout to ensure it happens after re-render)
         setTimeout(() => {
-            setActiveTab('sites');
+            handleTabChange('sites');
         }, 100);
         
         console.log('✅ Site updated and saved:', newSite.name);
@@ -446,7 +459,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             
             // Save site deletion immediately - stay in edit mode
             onSave(updatedFormData, true);
-            setActiveTab('sites'); // Stay in sites tab
+            handleTabChange('sites'); // Stay in sites tab
             
             console.log('✅ Site deleted and saved:', site?.name);
         }
@@ -489,7 +502,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
         onSave(updatedFormData, true);
         
         // Switch to opportunities tab to show the added opportunity
-        setActiveTab('opportunities');
+        handleTabChange('opportunities');
         
         // Reset form
         setNewOpportunity({
@@ -620,7 +633,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                         {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'contracts', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
-                                onClick={() => setActiveTab(tab)}
+                                onClick={() => handleTabChange(tab)}
                                 className={`${isFullPage ? 'py-4 px-2' : 'py-3'} text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                                     activeTab === tab
                                         ? 'border-primary-600 text-primary-600'

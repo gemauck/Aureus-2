@@ -240,6 +240,7 @@ const Clients = () => {
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
+    const [currentTab, setCurrentTab] = useState('overview');
     // Removed isEditing state - always allow editing
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
@@ -480,8 +481,7 @@ const Clients = () => {
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
                 storage.setClients(updated);
-                // Don't update selectedClient to prevent tab state reset
-                // The modal already has the updated data from the onSave call
+                setSelectedClient(comprehensiveClient); // Update selectedClient to show new data immediately
                 console.log('✅ Updated client in localStorage, new count:', updated.length);
         } else {
                 const newClients = [...clients, comprehensiveClient];
@@ -1326,12 +1326,15 @@ const Clients = () => {
                     onClose={() => {
                         setViewMode('clients');
                         setSelectedClient(null);
+                        setCurrentTab('overview');
                     }}
                     allProjects={projects}
                     onNavigateToProject={handleNavigateToProject}
                     isFullPage={true}
                     isEditing={true}
                     hideSearchFilters={true}
+                    initialTab={currentTab}
+                    onTabChange={setCurrentTab}
                 />
             </div>
         </div>
