@@ -53,7 +53,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
                         </button>
                     </div>
                 <form onSubmit={handleSubmit} className="p-4 space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1.5`}>Entity Name</label>
                             <input 
@@ -87,7 +87,7 @@ const ClientModal = ({ client, onSave, onClose }) => {
                             </select>
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label className={`block text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-1.5`}>Website</label>
                             <input 

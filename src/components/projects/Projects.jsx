@@ -422,16 +422,6 @@ const Projects = () => {
                                 }`}>
                                     {project.status}
                                 </span>
-                                <button 
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteProject(project.id);
-                                    }}
-                                    className="text-red-600 hover:text-red-700 transition-colors text-[10px]"
-                                    title="Delete Project"
-                                >
-                                    <i className="fas fa-trash"></i>
-                                </button>
                             </div>
                         </div>
 

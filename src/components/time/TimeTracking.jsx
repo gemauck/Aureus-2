@@ -355,15 +355,9 @@ const TimeTracking = () => {
                                     <td className="px-3 py-2.5 whitespace-nowrap text-xs">
                                         <button 
                                             onClick={() => handleEditEntry(entry)}
-                                            className="text-primary-600 hover:text-primary-900 mr-2 p-1"
+                                            className="text-primary-600 hover:text-primary-900 p-1"
                                         >
                                             <i className="fas fa-edit"></i>
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDeleteEntry(entry.id)}
-                                            className="text-red-600 hover:text-red-900 p-1"
-                                        >
-                                            <i className="fas fa-trash"></i>
                                         </button>
                                     </td>
                                 </tr>

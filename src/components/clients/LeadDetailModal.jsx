@@ -345,7 +345,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
                                             Entity Name *
@@ -374,7 +374,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">First Contact Date</label>
                                         <input 
@@ -387,7 +387,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                                         <select 
@@ -439,7 +439,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Deal Value (ZAR)</label>
                                         <div className="relative">
@@ -489,7 +489,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                         <h4 className="font-medium text-gray-900 mb-3 text-sm">
                                             {editingContact ? 'Edit Contact' : 'New Contact'}
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
                                                 <input
@@ -664,7 +664,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                     <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
                                             <input

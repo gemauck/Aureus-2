@@ -729,7 +729,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                                         <select 
@@ -802,7 +802,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                         <h4 className="font-medium text-gray-900 mb-3 text-sm">
                                             {editingContact ? 'Edit Contact' : 'New Contact'}
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Name *</label>
                                                 <input
@@ -1035,7 +1035,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                         <h4 className="font-medium text-gray-900 mb-3 text-sm">
                                             {editingSite ? 'Edit Site' : 'New Site'}
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Site Name *</label>
                                                 <input
@@ -1391,7 +1391,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                         <h4 className="font-medium text-gray-900 mb-3 text-sm">
                                             {editingOpportunity ? 'Edit Opportunity' : 'New Opportunity'}
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div className="col-span-2">
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Opportunity Name *</label>
                                                 <input
@@ -1572,7 +1572,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                     <h4 className="font-medium text-gray-900 mb-3 text-sm">Schedule Follow-up</h4>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-medium text-gray-700 mb-1">Date *</label>
                                             <input
@@ -1801,7 +1801,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                 <div>
                                     <h3 className="text-lg font-semibold text-gray-900 mb-3">Billing Terms</h3>
                                     <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
-                                        <div className="grid grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Payment Terms</label>
                                                 <select
