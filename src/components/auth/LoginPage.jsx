@@ -15,7 +15,7 @@ const LoginPage = () => {
 
     useEffect(() => {
         // Load available users for quick selection
-        const users = storage.getUsers() || [];
+        const users = []; // No users list needed for login
         setAvailableUsers(users.filter(u => u.status === 'Active'));
     }, []);
 
