@@ -37,7 +37,7 @@ async function handler(req, res) {
 
       // Ensure type column exists in database
       try {
-        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client'`
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
         console.log('✅ Type column ensured in database')
       } catch (error) {
         console.log('Type column already exists or error adding it:', error.message)
