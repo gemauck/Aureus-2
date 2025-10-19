@@ -38,7 +38,12 @@ const api = {
   // Auth
   async login(email, password) {
     const res = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
-    if (res?.accessToken) window.storage.setToken(res.accessToken)
+    // Handle both response formats: production (accessToken) and local (data.accessToken)
+    if (res?.accessToken) {
+      window.storage.setToken(res.accessToken)
+    } else if (res?.data?.accessToken) {
+      window.storage.setToken(res.data.accessToken)
+    }
     return res
   },
   
@@ -65,12 +70,12 @@ const api = {
     return res
   },
 
-          async createClient(clientData) {
-            console.log('🚀 API createClient called with:', clientData);
-            const res = await request('/clients', { method: 'POST', body: JSON.stringify(clientData) })
-            console.log('📡 API createClient response:', res);
-            return res
-          },
+  async createClient(clientData) {
+    console.log('🚀 API createClient called with:', clientData);
+    const res = await request('/clients', { method: 'POST', body: JSON.stringify(clientData) })
+    console.log('📡 API createClient response:', res);
+    return res
+  },
 
   async updateClient(id, clientData) {
     const res = await request(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(clientData) })

@@ -608,11 +608,11 @@ const Pipeline = () => {
                 </div>
                 <div className="flex gap-3">
                     <button
-                        onClick={() => setRefreshKey(k => k + 1)}
+                        {/* Refresh button removed - data persists automatically */}
                         className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm font-medium"
                     >
                         <i className="fas fa-sync-alt mr-2"></i>
-                        Refresh
+                        {/* Refresh button removed - data persists automatically */}
                     </button>
                     <button
                         onClick={() => {

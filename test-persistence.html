@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Data Persistence</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Data Persistence Test</h1>
+    
+    <div class="test-section">
+        <h3>1. Test Login</h3>
+        <button onclick="testLogin()">Login as Admin</button>
+        <div id="loginResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. Test List Clients</h3>
+        <button onclick="testListClients()">List Clients</button>
+        <div id="listResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. Test Create Client</h3>
+        <button onclick="testCreateClient()">Create Test Client</button>
+        <div id="createResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>4. Test Refresh Page</h3>
+        <p>After creating a client, refresh this page and click "List Clients" again to verify data persistence.</p>
+        <button onclick="location.reload()">Refresh Page</button>
+    </div>
+
+    <script src="src/utils/localStorage.js"></script>
+    <script src="src/utils/api.js"></script>
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('loginResult');
+            try {
+                resultDiv.innerHTML = '<p>Logging in...</p>';
+                const result = await window.api.login('admin@abcotronics.com', 'admin123');
+                resultDiv.className = 'test-section success';
+                resultDiv.innerHTML = '<h4>✅ Login Successful!</h4><pre>' + JSON.stringify(result, null, 2) + '</pre>';
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = '<h4>❌ Login Failed</h4><p>' + error.message + '</p>';
+            }
+        }
+        
+        async function testListClients() {
+            const resultDiv = document.getElementById('listResult');
+            try {
+                resultDiv.innerHTML = '<p>Loading clients...</p>';
+                const result = await window.api.listClients();
+                resultDiv.className = 'test-section success';
+                resultDiv.innerHTML = '<h4>✅ Clients Loaded!</h4><p>Found ' + result.data.clients.length + ' clients</p><pre>' + JSON.stringify(result.data.clients, null, 2) + '</pre>';
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = '<h4>❌ Failed to Load Clients</h4><p>' + error.message + '</p>';
+            }
+        }
+        
+        async function testCreateClient() {
+            const resultDiv = document.getElementById('createResult');
+            try {
+                resultDiv.innerHTML = '<p>Creating client...</p>';
+                const testClient = {
+                    name: 'Test Client ' + new Date().toISOString(),
+                    industry: 'Technology',
+                    status: 'active',
+                    revenue: 75000,
+                    address: '123 Test Street',
+                    website: 'https://test.com',
+                    notes: 'This is a test client to verify data persistence',
+                    contacts: [{
+                        id: 'test_contact_' + Date.now(),
+                        name: 'Test Manager',
+                        role: 'Manager',
+                        email: 'test@example.com',
+                        phone: '+1234567890'
+                    }],
+                    sites: [{
+                        id: 'test_site_' + Date.now(),
+                        name: 'Test Office',
+                        email: 'test@example.com',
+                        notes: 'Test office location',
+                        phone: '+1234567890',
+                        address: '123 Test Street'
+                    }]
+                };
+                
+                const result = await window.api.createClient(testClient);
+                resultDiv.className = 'test-section success';
+                resultDiv.innerHTML = '<h4>✅ Client Created Successfully!</h4><pre>' + JSON.stringify(result.data.client, null, 2) + '</pre>';
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = '<h4>❌ Failed to Create Client</h4><p>' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>

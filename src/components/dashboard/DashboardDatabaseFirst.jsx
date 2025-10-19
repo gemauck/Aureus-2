@@ -155,7 +155,7 @@ const DashboardDatabaseFirst = () => {
                         </div>
                         <div className="mt-4">
                             <button
-                                onClick={handleRefresh}
+                                {/* Refresh button removed - data persists automatically */}
                                 className="bg-red-100 text-red-800 px-3 py-2 rounded-md text-sm font-medium hover:bg-red-200"
                             >
                                 Try Again
@@ -176,11 +176,11 @@ const DashboardDatabaseFirst = () => {
                     <p className="text-gray-600">Last updated: {lastUpdated.toLocaleTimeString()}</p>
                 </div>
                 <button
-                    onClick={handleRefresh}
+                    {/* Refresh button removed - data persists automatically */}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 >
                     <i className="fas fa-sync-alt mr-2"></i>
-                    Refresh
+                    {/* Refresh button removed - data persists automatically */}
                 </button>
             </div>
 
