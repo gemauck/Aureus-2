@@ -241,6 +241,7 @@ const Clients = () => {
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
     const [currentTab, setCurrentTab] = useState('overview');
+    const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     // Removed isEditing state - always allow editing
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
@@ -1376,12 +1377,15 @@ const Clients = () => {
                     onClose={() => {
                         setViewMode('leads');
                         setSelectedLead(null);
+                        setCurrentLeadTab('overview');
                     }}
                     onConvertToClient={convertLeadToClient}
                     allProjects={projects}
                     isFullPage={true}
                     isEditing={true}
                     hideSearchFilters={true}
+                    initialTab={currentLeadTab}
+                    onTabChange={setCurrentLeadTab}
                 />
             </div>
         </div>

@@ -1,8 +1,22 @@
 // Get React hooks from window
 const { useState, useEffect } = React;
 
-const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects, isFullPage = false, isEditing = false }) => {
-    const [activeTab, setActiveTab] = useState('overview');
+const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
+    const [activeTab, setActiveTab] = useState(initialTab);
+    
+    // Update tab when initialTab prop changes
+    useEffect(() => {
+        setActiveTab(initialTab);
+    }, [initialTab]);
+    
+    // Handle tab change and notify parent
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        if (onTabChange) {
+            onTabChange(tab);
+        }
+    };
+    
     const [formData, setFormData] = useState(lead || {
         name: '',
         industry: '',
@@ -60,8 +74,16 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
             id: Date.now()
         }];
         
-        setFormData({...formData, contacts: updatedContacts});
+        const updatedFormData = {...formData, contacts: updatedContacts};
+        setFormData(updatedFormData);
         logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
+        
+        // Save contact changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
+        
+        // Switch to contacts tab to show the added contact
+        handleTabChange('contacts');
+        
         setNewContact({
             name: '',
             role: '',
@@ -84,8 +106,16 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
         const updatedContacts = formData.contacts.map(c => 
             c.id === editingContact.id ? {...newContact, id: c.id} : c
         );
-        setFormData({...formData, contacts: updatedContacts});
+        const updatedFormData = {...formData, contacts: updatedContacts};
+        setFormData(updatedFormData);
         logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
+        
+        // Save contact changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
+        
+        // Stay in contacts tab
+        handleTabChange('contacts');
+        
         setEditingContact(null);
         setNewContact({
             name: '',
@@ -101,10 +131,17 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
 
     const handleDeleteContact = (contactId) => {
         if (confirm('Remove this contact?')) {
-            setFormData({
+            const updatedFormData = {
                 ...formData,
                 contacts: formData.contacts.filter(c => c.id !== contactId)
-            });
+            };
+            setFormData(updatedFormData);
+            
+            // Save contact deletion immediately - stay in edit mode
+            onSave(updatedFormData, true);
+            
+            // Stay in contacts tab
+            handleTabChange('contacts');
         }
     };
 
@@ -260,7 +297,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                         {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
-                                onClick={() => setActiveTab(tab)}
+                                onClick={() => handleTabChange(tab)}
                                 className={`py-3 text-sm font-medium border-b-2 transition-colors ${
                                     activeTab === tab
                                         ? 'border-primary-600 text-primary-600'
