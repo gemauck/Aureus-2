@@ -18,17 +18,25 @@ const prisma = new PrismaClient()
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 
-// Serve static files with proper MIME types
-app.use(express.static(__dirname, {
-  setHeaders: (res, path) => {
-    if (path.endsWith('.js') || path.endsWith('.jsx')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    }
-    if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    }
+// Serve static files with proper MIME types (only for non-API routes)
+app.use((req, res, next) => {
+  // Skip static file serving for API routes
+  if (req.path.startsWith('/api/')) {
+    return next();
   }
-}))
+  
+  // Serve static files for non-API routes
+  express.static(__dirname, {
+    setHeaders: (res, path) => {
+      if (path.endsWith('.js') || path.endsWith('.jsx')) {
+        res.setHeader('Content-Type', 'application/javascript');
+      }
+      if (path.endsWith('.css')) {
+        res.setHeader('Content-Type', 'text/css');
+      }
+    }
+  })(req, res, next);
+})
 
 // CORS headers
 app.use((req, res, next) => {

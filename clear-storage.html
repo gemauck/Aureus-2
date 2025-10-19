@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clear Local Storage</title>
+</head>
+<body>
+    <h1>Clearing Local Storage...</h1>
+    <div id="status"></div>
+    
+    <script>
+        const status = document.getElementById('status');
+        
+        try {
+            // Clear all localStorage data
+            localStorage.clear();
+            status.innerHTML = '✅ Local storage cleared successfully!';
+            
+            // Clear sessionStorage too
+            sessionStorage.clear();
+            status.innerHTML += '<br>✅ Session storage cleared successfully!';
+            
+            // Clear any cookies
+            document.cookie.split(";").forEach(function(c) { 
+                document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+            });
+            status.innerHTML += '<br>✅ Cookies cleared successfully!';
+            
+            status.innerHTML += '<br><br>🎉 All local data cleared! You can now start fresh.';
+            
+        } catch (error) {
+            status.innerHTML = '❌ Error clearing storage: ' + error.message;
+        }
+    </script>
+</body>
+</html>
