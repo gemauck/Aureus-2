@@ -489,6 +489,11 @@ const Clients = () => {
                 setClients(newClients);
                 storage.setClients(newClients);
                 console.log('✅ Added new client to localStorage, new count:', newClients.length);
+                
+                // For new clients, redirect to main clients view to show the newly added client
+                setViewMode('clients');
+                setSelectedClient(null);
+                setCurrentTab('overview');
             }
             
             if (!token) {
