@@ -255,6 +255,25 @@ const LoginPage = () => {
                                 >
                                     Sign In
                                 </button>
+                                
+                                {/* Divider */}
+                                <div className="relative my-4">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-gray-300"></div>
+                                    </div>
+                                    <div className="relative flex justify-center text-sm">
+                                        <span className="px-2 bg-white text-gray-500">or</span>
+                                    </div>
+                                </div>
+                                
+                                {/* Google OAuth */}
+                                <a 
+                                    href="/api/auth/google/start" 
+                                    className="w-full inline-flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2 text-sm rounded-lg hover:bg-gray-50 transition font-medium"
+                                >
+                                    <i className="fab fa-google text-red-500"></i>
+                                    Sign in with Google (Abcotronics)
+                                </a>
                             </form>
                         )}
 

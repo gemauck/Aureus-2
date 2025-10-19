@@ -3,6 +3,7 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { sendInvitationEmail } from '../_lib/email.js'
 import crypto from 'crypto'
 
 async function handler(req, res) {
@@ -38,26 +39,27 @@ async function handler(req, res) {
             }
         })
 
-        // Generate WhatsApp message
+        // Generate invitation link and send email
         const invitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitationToken}`
-        const whatsappMessage = `🎉 You've been invited to join Abcotronics ERP!
-
-👋 Hi ${name},
-
-You've been invited to join our ERP system with the role: ${role}
-
-📱 To accept your invitation, click this link:
-${invitationLink}
-
-🔐 This link will expire in 7 days.
-
-Need help? Contact us at admin@abcotronics.com
-
-Best regards,
-The Abcotronics Team`
+        
+        try {
+            // Send invitation email
+            await sendInvitationEmail({
+                email: invitation.email,
+                name: invitation.name,
+                role: invitation.role,
+                invitationLink: invitationLink
+            });
+            
+            console.log(`✅ Invitation email sent to ${email}`);
+        } catch (emailError) {
+            console.error('Failed to send invitation email:', emailError);
+            // Still return success but log the email error
+        }
 
         return ok(res, {
             success: true,
+            message: 'Invitation sent successfully via email',
             invitation: {
                 id: invitation.id,
                 email: invitation.email,
@@ -66,7 +68,6 @@ The Abcotronics Team`
                 status: invitation.status,
                 expiresAt: invitation.expiresAt
             },
-            whatsappMessage,
             invitationLink
         })
 

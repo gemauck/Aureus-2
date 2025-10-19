@@ -79,8 +79,8 @@ const UserManagement = () => {
                 setNewInvitation({ email: '', name: '', role: 'user' });
                 loadUsers(); // Refresh the list
                 
-                // Show success message with WhatsApp integration
-                showWhatsAppModal(data.whatsappMessage, data.invitationLink);
+                // Show success message with email confirmation
+                showEmailSentModal(data.invitation);
             } else {
                 alert(data.message || 'Failed to send invitation');
             }
@@ -90,15 +90,15 @@ const UserManagement = () => {
         }
     };
 
-    const showWhatsAppModal = (message, link) => {
+    const showEmailSentModal = (invitation) => {
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
         modal.innerHTML = `
             <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                        <i class="fab fa-whatsapp text-green-500 mr-2"></i>
-                        WhatsApp Invitation
+                        <i class="fas fa-envelope text-blue-500 mr-2"></i>
+                        Invitation Sent
                     </h3>
                     <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="this.closest('.fixed').remove()">
                         <i class="fas fa-times"></i>
@@ -106,33 +106,36 @@ const UserManagement = () => {
                 </div>
                 
                 <div class="mb-4">
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                        Copy this message and send it via WhatsApp to invite the user:
-                    </p>
-                    <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 mb-3">
-                        <textarea readonly class="w-full bg-transparent text-sm text-gray-800 dark:text-gray-200 resize-none" rows="8">${message}</textarea>
+                    <div class="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg p-4 mb-4">
+                        <div class="flex items-center">
+                            <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                            <p class="text-green-800 dark:text-green-200 text-sm font-medium">
+                                Invitation email sent successfully!
+                            </p>
+                        </div>
                     </div>
-                    <button onclick="navigator.clipboard.writeText(this.previousElementSibling.querySelector('textarea').value); this.innerHTML='<i class=\\'fas fa-check mr-1\\'></i>Copied!'; setTimeout(() => this.innerHTML='<i class=\\'fas fa-copy mr-1\\'></i>Copy Message', 2000)" class="bg-gray-600 text-white px-3 py-1 rounded text-sm hover:bg-gray-700 transition-colors">
-                        <i class="fas fa-copy mr-1"></i>Copy Message
-                    </button>
-                </div>
-                
-                <div class="mb-4">
-                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-2">Or share the direct link:</p>
-                    <div class="bg-gray-100 dark:bg-gray-700 rounded-lg p-3 mb-2">
-                        <input type="text" readonly value="${link}" class="w-full bg-transparent text-sm text-gray-800 dark:text-gray-200" />
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <h4 class="font-medium text-gray-900 dark:text-white mb-2">Invitation Details:</h4>
+                        <div class="space-y-1 text-sm">
+                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Name:</span> <span class="text-gray-900 dark:text-white">${invitation.name}</span></div>
+                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Email:</span> <span class="text-gray-900 dark:text-white">${invitation.email}</span></div>
+                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Role:</span> <span class="text-gray-900 dark:text-white capitalize">${invitation.role}</span></div>
+                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Expires:</span> <span class="text-gray-900 dark:text-white">${new Date(invitation.expiresAt).toLocaleDateString()}</span></div>
+                        </div>
                     </div>
-                    <button onclick="navigator.clipboard.writeText(this.previousElementSibling.querySelector('input').value); this.innerHTML='<i class=\\'fas fa-check mr-1\\'></i>Copied!'; setTimeout(() => this.innerHTML='<i class=\\'fas fa-copy mr-1\\'></i>Copy Link', 2000)" class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors">
-                        <i class="fas fa-copy mr-1"></i>Copy Link
-                    </button>
+                    
+                    <div class="mt-4 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
+                        <p class="text-blue-800 dark:text-blue-200 text-xs">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            The user will receive an email with instructions to accept the invitation and create their account.
+                        </p>
+                    </div>
                 </div>
                 
                 <div class="flex gap-3">
-                    <button onclick="window.open('https://web.whatsapp.com/', '_blank')" class="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center">
-                        <i class="fab fa-whatsapp mr-2"></i>Open WhatsApp Web
-                    </button>
-                    <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors">
-                        Close
+                    <button onclick="this.closest('.fixed').remove()" class="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center">
+                        <i class="fas fa-check mr-2"></i>Done
                     </button>
                 </div>
             </div>
@@ -429,8 +432,8 @@ const UserManagement = () => {
                                     type="submit"
                                     className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
                                 >
-                                    <i className="fab fa-whatsapp mr-2"></i>
-                                    Send WhatsApp Invitation
+                                    <i className="fas fa-envelope mr-2"></i>
+                                    Send Email Invitation
                                 </button>
                                 <button
                                     type="button"
