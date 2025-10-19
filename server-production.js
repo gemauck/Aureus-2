@@ -202,6 +202,7 @@ app.post('/api/clients', authRequired, async (req, res) => {
     
     const clientData = {
       name: req.body.name,
+      type: req.body.type || 'client', // Handle type field for leads vs clients
       industry: req.body.industry || 'Other',
       status: req.body.status || 'active',
       revenue: parseFloat(req.body.revenue) || 0,
