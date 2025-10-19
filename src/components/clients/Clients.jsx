@@ -279,6 +279,21 @@ const Clients = () => {
         loadClients();
     }, []);
 
+    // Add data sync functionality
+    const handleDataSynced = (syncedData) => {
+        console.log('🔄 Data synced, updating state...');
+        if (syncedData.clients) {
+            setClients(syncedData.clients);
+        }
+        if (syncedData.leads) {
+            setLeads(syncedData.leads);
+        }
+        if (syncedData.projects) {
+            setProjects(syncedData.projects);
+        }
+        setRefreshKey(k => k + 1);
+    };
+
     // Function to clear localStorage and reload fresh data
     const clearCacheAndReload = async () => {
         console.log('🧹 Clearing localStorage cache and reloading fresh data');
@@ -1441,6 +1456,25 @@ const Clients = () => {
                     </div>
                 </div>
                 <div className="flex gap-3">
+                    <button 
+                        onClick={async () => {
+                            try {
+                                const syncedData = await window.DataSync?.syncData?.();
+                                if (syncedData) {
+                                    handleDataSynced(syncedData);
+                                    alert('✅ Data synchronized across devices!');
+                                }
+                            } catch (error) {
+                                console.error('Sync failed:', error);
+                                alert('❌ Sync failed. Please try again.');
+                            }
+                        }}
+                        className={`flex items-center space-x-2 px-4 py-2 ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'} border rounded-lg text-sm font-medium transition-all duration-200`}
+                        title="Sync data across devices"
+                    >
+                        <i className="fas fa-sync text-xs"></i>
+                        <span>Sync</span>
+                    </button>
                     <button 
                         onClick={() => {
                             setSelectedClient(null);
