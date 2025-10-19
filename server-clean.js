@@ -48,6 +48,44 @@ app.get('/api/me', (req, res) => {
   })
 })
 
+// User management endpoints
+app.get('/api/users', (req, res) => {
+  res.json({
+    data: {
+      users: [],
+      invitations: []
+    }
+  })
+})
+
+app.post('/api/users/invite', (req, res) => {
+  try {
+    console.log('📧 Sending invitation:', req.body)
+    const { email, name, role } = req.body
+    
+    if (!email || !name) {
+      return res.status(400).json({ error: 'Email and name are required' })
+    }
+    
+    // Mock successful invitation
+    res.json({
+      data: {
+        invitation: {
+          id: Date.now().toString(),
+          email,
+          name,
+          role: role || 'user',
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        }
+      }
+    })
+  } catch (error) {
+    console.error('Error sending invitation:', error)
+    res.status(500).json({ error: 'Failed to send invitation', details: error.message })
+  }
+})
+
 // Clients endpoints
 app.get('/api/clients', (req, res) => {
   // For now, return empty clients array
