@@ -48,6 +48,29 @@ app.get('/api/health', (req, res) => {
   })
 })
 
+// Refresh token endpoint
+app.post('/api/auth/refresh', (req, res) => {
+  try {
+    console.log('🔄 Refresh token request received')
+    
+    // For now, just return a new token (in production, validate refresh token)
+    const newToken = 'refreshed-access-token-' + Date.now()
+    
+    res.json({
+      accessToken: newToken,
+      user: {
+        id: '1',
+        email: 'admin@abcotronics.com',
+        name: 'Admin User',
+        role: 'ADMIN'
+      }
+    })
+  } catch (error) {
+    console.error('Refresh error:', error)
+    res.status(500).json({ error: 'Token refresh failed' })
+  }
+})
+
 // Logout endpoint
 app.post('/api/auth/logout', (req, res) => {
   try {

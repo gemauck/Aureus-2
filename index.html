@@ -241,6 +241,7 @@
     <script type="text/babel" src="./src/components/auth/LoginPage.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/Dashboard.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardEnhanced.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
@@ -369,19 +370,22 @@
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
             
-            // Use database-first components (no localStorage dependency)
-            if (window.ClientsDatabaseFirst) {
-                window.Clients = window.ClientsDatabaseFirst;
-            }
-            if (window.ProjectsDatabaseFirst) {
-                window.Projects = window.ProjectsDatabaseFirst;
-            }
-            if (window.InvoicingDatabaseFirst) {
-                window.Invoicing = window.InvoicingDatabaseFirst;
-            }
-            if (window.TimeTrackingDatabaseFirst) {
-                window.TimeTracking = window.TimeTrackingDatabaseFirst;
-            }
+        // Use database-first components (no localStorage dependency)
+        if (window.ClientsDatabaseFirst) {
+            window.Clients = window.ClientsDatabaseFirst;
+        }
+        if (window.ProjectsDatabaseFirst) {
+            window.Projects = window.ProjectsDatabaseFirst;
+        }
+        if (window.InvoicingDatabaseFirst) {
+            window.Invoicing = window.InvoicingDatabaseFirst;
+        }
+        if (window.TimeTrackingDatabaseFirst) {
+            window.TimeTracking = window.TimeTrackingDatabaseFirst;
+        }
+        if (window.DashboardDatabaseFirst) {
+            window.Dashboard = window.DashboardDatabaseFirst;
+        }
             
             return React.createElement(window.MainLayout);
         };
