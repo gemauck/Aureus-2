@@ -480,6 +480,7 @@ const Clients = () => {
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
                 storage.setClients(updated);
+                setSelectedClient(comprehensiveClient); // Update selectedClient immediately so modal shows updated data
                 console.log('✅ Updated client in localStorage, new count:', updated.length);
         } else {
                 const newClients = [...clients, comprehensiveClient];

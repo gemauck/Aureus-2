@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Workflow Test - Abcotronics ERP</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .test-item {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .warning { background-color: #fff3cd; border-color: #ffeaa7; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        .console-output {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .step {
+            background: #e9ecef;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .current-tab {
+            background: #007bff;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🔍 Contact Workflow Test</h1>
+        <p>This test will verify the contact workflow behavior step by step.</p>
+        
+        <div class="test-item info">
+            <h3>Expected Workflow:</h3>
+            <div class="step">1. Open Client</div>
+            <div class="step">2. Select Contact Tab</div>
+            <div class="step">3. Select Add Contact</div>
+            <div class="step">4. Fill in details</div>
+            <div class="step">5. Press Add Contact</div>
+            <div class="step">6. Contact is saved and appears in contacts list</div>
+            <div class="step">7. UI stays in contacts page (NOT overview page)</div>
+        </div>
+
+        <div class="test-item">
+            <h3>Test Controls:</h3>
+            <button onclick="startTest()">Start Contact Workflow Test</button>
+            <button onclick="checkCurrentTab()">Check Current Tab</button>
+            <button onclick="simulateAddContact()">Simulate Add Contact</button>
+            <button onclick="clearResults()">Clear Results</button>
+        </div>
+
+        <div class="test-item">
+            <h3>Test Results:</h3>
+            <div id="test-results">
+                <p>Click "Start Contact Workflow Test" to begin...</p>
+            </div>
+        </div>
+
+        <div class="test-item">
+            <h3>Tab Tracking:</h3>
+            <div id="tab-tracking">
+                <p>Current tab: <span id="current-tab" class="current-tab">Unknown</span></p>
+                <p>Tab changes will be tracked here...</p>
+            </div>
+        </div>
+
+        <div class="test-item">
+            <h3>Console Output:</h3>
+            <div id="console-output" class="console-output">
+                Console output will appear here...
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = [];
+        let tabHistory = [];
+        
+        // Capture console output
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        function addToConsole(message, type = 'log') {
+            const consoleDiv = document.getElementById('console-output');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'warn' ? 'warning' : 'info';
+            consoleDiv.innerHTML += `<div class="${className}">[${timestamp}] ${message}</div>`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole(args.join(' '), 'error');
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole(args.join(' '), 'warn');
+        };
+
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('test-results');
+            const className = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+            results.innerHTML += `<div class="${className}">${message}</div>`;
+            testResults.push({ message, type, timestamp: new Date() });
+        }
+
+        function updateCurrentTab(tabName) {
+            const currentTabSpan = document.getElementById('current-tab');
+            currentTabSpan.textContent = tabName;
+            
+            const tabTracking = document.getElementById('tab-tracking');
+            tabHistory.push({ tab: tabName, timestamp: new Date() });
+            tabTracking.innerHTML = `
+                <p>Current tab: <span class="current-tab">${tabName}</span></p>
+                <p>Tab history:</p>
+                <div style="max-height: 200px; overflow-y: auto;">
+                    ${tabHistory.map(entry => 
+                        `<div class="step">${entry.timestamp.toLocaleTimeString()}: ${entry.tab}</div>`
+                    ).join('')}
+                </div>
+            `;
+        }
+
+        function startTest() {
+            clearResults();
+            addResult('🔍 Starting Contact Workflow Test...', 'info');
+            
+            // Check if we're on the right page
+            if (window.location.href.includes('index.html')) {
+                addResult('✅ On main application page', 'success');
+                
+                // Check for ClientDetailModal
+                if (window.ClientDetailModal) {
+                    addResult('✅ ClientDetailModal component found', 'success');
+                } else {
+                    addResult('❌ ClientDetailModal component not found', 'error');
+                }
+                
+                // Check for Clients component
+                if (window.Clients) {
+                    addResult('✅ Clients component found', 'success');
+                } else {
+                    addResult('❌ Clients component not found', 'error');
+                }
+                
+                // Check for active tab tracking
+                addResult('📋 Monitoring tab changes...', 'info');
+                monitorTabChanges();
+                
+            } else {
+                addResult('⚠️ Not on main application page - please navigate to index.html', 'warning');
+            }
+        }
+
+        function monitorTabChanges() {
+            // Try to hook into tab changes
+            const originalSetState = React.useState;
+            
+            // Monitor for tab-related state changes
+            let tabChangeCount = 0;
+            
+            // Check if we can detect tab changes
+            setTimeout(() => {
+                if (tabChangeCount === 0) {
+                    addResult('⚠️ No tab changes detected - may need manual testing', 'warning');
+                }
+            }, 5000);
+        }
+
+        function checkCurrentTab() {
+            // Try to detect current tab from the DOM
+            const tabElements = document.querySelectorAll('[data-tab], .tab, .nav-link');
+            let currentTab = 'Unknown';
+            
+            tabElements.forEach(element => {
+                if (element.classList.contains('active') || 
+                    element.classList.contains('selected') ||
+                    element.style.backgroundColor ||
+                    element.style.color === 'white') {
+                    currentTab = element.textContent || element.innerText || 'Active Tab';
+                }
+            });
+            
+            // Check for overview tab specifically
+            if (currentTab.includes('Overview') || currentTab.includes('overview')) {
+                addResult('❌ Currently on OVERVIEW tab - this is the problem!', 'error');
+            } else if (currentTab.includes('Contact') || currentTab.includes('contact')) {
+                addResult('✅ Currently on CONTACTS tab - this is correct!', 'success');
+            } else {
+                addResult(`ℹ️ Current tab: ${currentTab}`, 'info');
+            }
+            
+            updateCurrentTab(currentTab);
+        }
+
+        function simulateAddContact() {
+            addResult('🔄 Simulating add contact workflow...', 'info');
+            
+            // Check current tab before adding contact
+            checkCurrentTab();
+            
+            // Simulate the add contact process
+            setTimeout(() => {
+                addResult('📝 Contact form filled and submitted...', 'info');
+                
+                // Check tab after adding contact
+                setTimeout(() => {
+                    checkCurrentTab();
+                    
+                    // Check if we're still on contacts tab
+                    const currentTabSpan = document.getElementById('current-tab');
+                    const currentTab = currentTabSpan.textContent;
+                    
+                    if (currentTab.includes('Overview') || currentTab.includes('overview')) {
+                        addResult('❌ PROBLEM CONFIRMED: Went to overview after adding contact!', 'error');
+                        addResult('🔧 This confirms the workflow bug exists', 'error');
+                    } else if (currentTab.includes('Contact') || currentTab.includes('contact')) {
+                        addResult('✅ SUCCESS: Stayed on contacts tab after adding contact!', 'success');
+                    } else {
+                        addResult(`⚠️ Unexpected tab after adding contact: ${currentTab}`, 'warning');
+                    }
+                }, 1000);
+            }, 500);
+        }
+
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+            document.getElementById('console-output').innerHTML = '';
+            testResults = [];
+            tabHistory = [];
+            updateCurrentTab('Unknown');
+        }
+
+        // Auto-run basic test when page loads
+        window.addEventListener('load', () => {
+            console.log('Contact workflow test page loaded');
+            addResult('🚀 Test page ready - click "Start Contact Workflow Test" to begin', 'info');
+        });
+    </script>
+</body>
+</html>
