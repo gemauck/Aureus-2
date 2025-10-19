@@ -240,7 +240,7 @@ const Clients = () => {
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
-    const [isEditing, setIsEditing] = useState(false);
+    // Removed isEditing state - always allow editing
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
@@ -616,9 +616,6 @@ const Clients = () => {
             }
             
             // Silent save - no alert, just refresh and stay in view
-            if (!stayInEditMode) {
-                setIsEditing(false);
-            }
             
         } catch (error) {
             console.error('Failed to save client:', error);
@@ -626,7 +623,6 @@ const Clients = () => {
         }
         
         if (!stayInEditMode) {
-            setIsEditing(false);
             setRefreshKey(k => k + 1);
         }
     };
@@ -649,7 +645,6 @@ const Clients = () => {
             };
             setLeads([...leads, newLead]);
         }
-        setIsEditing(false);
     };
 
     const handleDeleteClient = async (clientId) => {
@@ -754,14 +749,12 @@ const Clients = () => {
         setSelectedClient(client);
         setSelectedLead(null);
         setViewMode('client-detail');
-        setIsEditing(false);
     };
 
     const handleOpenLead = (lead) => {
         setSelectedLead(lead);
         setSelectedClient(null);
         setViewMode('lead-detail'); // Open in full detail view like clients
-        setIsEditing(false);
     };
 
     const handleNavigateToProject = (projectId) => {
@@ -1306,7 +1299,6 @@ const Clients = () => {
                             onClick={() => {
                                 setViewMode('clients');
                                 setSelectedClient(null);
-                                setIsEditing(false);
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
@@ -1320,19 +1312,7 @@ const Clients = () => {
                             </h1>
                         </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={() => setIsEditing(!isEditing)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                isEditing 
-                                    ? (isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700') 
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`}
-                        >
-                            <i className={`fas fa-${isEditing ? 'eye' : 'edit'} mr-2`}></i>
-                            {isEditing ? 'View Mode' : 'Edit Mode'}
-                        </button>
-                    </div>
+                    {/* Edit mode removed - always allow editing */}
                 </div>
             </div>
 
@@ -1344,12 +1324,11 @@ const Clients = () => {
                     onClose={() => {
                         setViewMode('clients');
                         setSelectedClient(null);
-                        setIsEditing(false);
                     }}
                     allProjects={projects}
                     onNavigateToProject={handleNavigateToProject}
                     isFullPage={true}
-                    isEditing={isEditing}
+                    isEditing={true}
                     hideSearchFilters={true}
                 />
             </div>
@@ -1367,7 +1346,6 @@ const Clients = () => {
                             onClick={() => {
                                 setViewMode('leads');
                                 setSelectedLead(null);
-                                setIsEditing(false);
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
@@ -1381,19 +1359,7 @@ const Clients = () => {
                             </h1>
                         </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                        <button
-                            onClick={() => setIsEditing(!isEditing)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                                isEditing 
-                                    ? (isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-300 text-gray-700') 
-                                    : 'bg-blue-600 text-white hover:bg-blue-700'
-                            }`}
-                        >
-                            <i className={`fas fa-${isEditing ? 'eye' : 'edit'} mr-2`}></i>
-                            {isEditing ? 'View Mode' : 'Edit Mode'}
-                        </button>
-                    </div>
+                    {/* Edit mode removed - always allow editing */}
                 </div>
             </div>
 
@@ -1405,12 +1371,11 @@ const Clients = () => {
                     onClose={() => {
                         setViewMode('leads');
                         setSelectedLead(null);
-                        setIsEditing(false);
                     }}
                     onConvertToClient={convertLeadToClient}
                     allProjects={projects}
                     isFullPage={true}
-                    isEditing={isEditing}
+                    isEditing={true}
                     hideSearchFilters={true}
                 />
             </div>
@@ -1436,7 +1401,6 @@ const Clients = () => {
                             setSelectedClient(null);
                             setSelectedLead(null);
                             setViewMode('client-detail');
-                            setIsEditing(true);
                         }}
                         className={`flex items-center space-x-2 px-4 py-2 ${isDark ? 'bg-gray-800 border-gray-600 text-gray-200 hover:bg-gray-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'} border rounded-lg text-sm font-medium transition-all duration-200`}
                     >
@@ -1448,7 +1412,6 @@ const Clients = () => {
                             setSelectedLead(null);
                             setSelectedClient(null);
                             setViewMode('lead-detail');
-                            setIsEditing(true);
                         }}
                         className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-all duration-200"
                     >
