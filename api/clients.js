@@ -37,6 +37,7 @@ async function handler(req, res) {
 
       const clientData = {
         name: body.name,
+        type: body.type || 'client', // Handle type field for leads vs clients
         industry: body.industry || 'Other',
         status: body.status || 'active',
         revenue: parseFloat(body.revenue) || 0,
@@ -91,6 +92,7 @@ async function handler(req, res) {
         const body = await parseJsonBody(req)
         const updateData = {
           name: body.name,
+          type: body.type, // Handle type field for leads vs clients
           industry: body.industry,
           status: body.status,
           revenue: body.revenue,
