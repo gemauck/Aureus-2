@@ -254,7 +254,7 @@ const ClientsDatabaseFirst = () => {
                 await window.api.createLead(newLead);
                 console.log('✅ Lead created in database');
                 
-                const updatedLeads = [...leadsBuffer, newLead];
+                const updatedLeads = [...leads, newLead];
                 setLeads(updatedLeads);
                 
                 // Redirect to main view

@@ -129,7 +129,7 @@ const TimeTrackingDatabaseFirst = () => {
 
     // Delete time entry from database
     const handleDeleteTimeEntry = async (entryId) => {
-        if (!Donfirm('Are you sure you want to delete this time entry? This action cannot be undone.')) {
+        if (!confirm('Are you sure you want to delete this time entry? This action cannot be undone.')) {
             return;
         }
 

@@ -70,7 +70,7 @@ const DatabaseAPI = {
     async updateClient(id, clientData) {
         console.log(`📡 Updating client ${id} in database...`);
         const response = await this.makeRequest(`/api/clients/${id}`, {
-            method: 'PUT',
+            method: 'PATCH',
             body: JSON.stringify(clientData)
         });
         console.log('✅ Client updated in database');

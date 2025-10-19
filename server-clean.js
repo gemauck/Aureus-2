@@ -236,6 +236,242 @@ app.post('/api/auth/login', async (req, res) => {
   }
 })
 
+// Leads endpoints
+app.get('/api/leads', (req, res) => {
+  console.log('📋 Fetching leads')
+  res.json({
+    data: []
+  })
+})
+
+app.post('/api/leads', (req, res) => {
+  try {
+    console.log('📝 Creating lead:', req.body)
+    const newLead = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: newLead
+    })
+  } catch (error) {
+    console.error('Error creating lead:', error)
+    res.status(500).json({ error: 'Failed to create lead', details: error.message })
+  }
+})
+
+app.put('/api/leads/:id', (req, res) => {
+  try {
+    const leadId = req.params.id
+    console.log('📝 Updating lead:', leadId, req.body)
+    const updatedLead = {
+      id: leadId,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: updatedLead
+    })
+  } catch (error) {
+    console.error('Error updating lead:', error)
+    res.status(500).json({ error: 'Failed to update lead', details: error.message })
+  }
+})
+
+app.delete('/api/leads/:id', (req, res) => {
+  try {
+    const leadId = req.params.id
+    console.log('🗑️ Deleting lead:', leadId)
+    res.json({
+      data: {
+        message: 'Lead deleted successfully'
+      }
+    })
+  } catch (error) {
+    console.error('Error deleting lead:', error)
+    res.status(500).json({ error: 'Failed to delete lead', details: error.message })
+  }
+})
+
+// Projects endpoints
+app.get('/api/projects', (req, res) => {
+  console.log('📋 Fetching projects')
+  res.json({
+    data: []
+  })
+})
+
+app.post('/api/projects', (req, res) => {
+  try {
+    console.log('📝 Creating project:', req.body)
+    const newProject = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: newProject
+    })
+  } catch (error) {
+    console.error('Error creating project:', error)
+    res.status(500).json({ error: 'Failed to create project', details: error.message })
+  }
+})
+
+app.put('/api/projects/:id', (req, res) => {
+  try {
+    const projectId = req.params.id
+    console.log('📝 Updating project:', projectId, req.body)
+    const updatedProject = {
+      id: projectId,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: updatedProject
+    })
+  } catch (error) {
+    console.error('Error updating project:', error)
+    res.status(500).json({ error: 'Failed to update project', details: error.message })
+  }
+})
+
+app.delete('/api/projects/:id', (req, res) => {
+  try {
+    const projectId = req.params.id
+    console.log('🗑️ Deleting project:', projectId)
+    res.json({
+      data: {
+        message: 'Project deleted successfully'
+      }
+    })
+  } catch (error) {
+    console.error('Error deleting project:', error)
+    res.status(500).json({ error: 'Failed to delete project', details: error.message })
+  }
+})
+
+// Invoices endpoints
+app.get('/api/invoices', (req, res) => {
+  console.log('📋 Fetching invoices')
+  res.json({
+    data: []
+  })
+})
+
+app.post('/api/invoices', (req, res) => {
+  try {
+    console.log('📝 Creating invoice:', req.body)
+    const newInvoice = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: newInvoice
+    })
+  } catch (error) {
+    console.error('Error creating invoice:', error)
+    res.status(500).json({ error: 'Failed to create invoice', details: error.message })
+  }
+})
+
+app.put('/api/invoices/:id', (req, res) => {
+  try {
+    const invoiceId = req.params.id
+    console.log('📝 Updating invoice:', invoiceId, req.body)
+    const updatedInvoice = {
+      id: invoiceId,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: updatedInvoice
+    })
+  } catch (error) {
+    console.error('Error updating invoice:', error)
+    res.status(500).json({ error: 'Failed to update invoice', details: error.message })
+  }
+})
+
+app.delete('/api/invoices/:id', (req, res) => {
+  try {
+    const invoiceId = req.params.id
+    console.log('🗑️ Deleting invoice:', invoiceId)
+    res.json({
+      data: {
+        message: 'Invoice deleted successfully'
+      }
+    })
+  } catch (error) {
+    console.error('Error deleting invoice:', error)
+    res.status(500).json({ error: 'Failed to delete invoice', details: error.message })
+  }
+})
+
+// Time entries endpoints
+app.get('/api/time-entries', (req, res) => {
+  console.log('📋 Fetching time entries')
+  res.json({
+    data: []
+  })
+})
+
+app.post('/api/time-entries', (req, res) => {
+  try {
+    console.log('📝 Creating time entry:', req.body)
+    const newTimeEntry = {
+      id: Date.now().toString(),
+      ...req.body,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: newTimeEntry
+    })
+  } catch (error) {
+    console.error('Error creating time entry:', error)
+    res.status(500).json({ error: 'Failed to create time entry', details: error.message })
+  }
+})
+
+app.put('/api/time-entries/:id', (req, res) => {
+  try {
+    const timeEntryId = req.params.id
+    console.log('📝 Updating time entry:', timeEntryId, req.body)
+    const updatedTimeEntry = {
+      id: timeEntryId,
+      ...req.body,
+      updatedAt: new Date().toISOString()
+    }
+    res.json({
+      data: updatedTimeEntry
+    })
+  } catch (error) {
+    console.error('Error updating time entry:', error)
+    res.status(500).json({ error: 'Failed to update time entry', details: error.message })
+  }
+})
+
+app.delete('/api/time-entries/:id', (req, res) => {
+  try {
+    const timeEntryId = req.params.id
+    console.log('🗑️ Deleting time entry:', timeEntryId)
+    res.json({
+      data: {
+        message: 'Time entry deleted successfully'
+      }
+    })
+  } catch (error) {
+    console.error('Error deleting time entry:', error)
+    res.status(500).json({ error: 'Failed to delete time entry', details: error.message })
+  }
+})
+
 // Serve React app for all other routes
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'))
