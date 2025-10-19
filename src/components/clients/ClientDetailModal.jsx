@@ -179,8 +179,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             isPrimary: false,
             siteId: null
         });
-        // Keep form open for adding more contacts
-        // setShowContactForm(false);
+        // Close the form after adding contact
+        setShowContactForm(false);
         
         console.log('✅ Contact added and saved:', newContact.name);
     };
@@ -214,6 +214,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             siteId: null
         });
         setShowContactForm(false);
+        setActiveTab('contacts'); // Stay in contacts tab
         
         console.log('✅ Contact updated and saved:', newContact.name);
     };
@@ -228,6 +229,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             
             // Save contact deletion immediately - stay in edit mode
             onSave(updatedFormData, true);
+            setActiveTab('contacts'); // Stay in contacts tab
             
             console.log('✅ Contact deleted and saved');
         }
@@ -376,8 +378,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                 longitude: '',
                 gpsCoordinates: ''
             });
-        // Keep form open for adding more sites
-        // setShowSiteForm(false);
+        // Close the form after adding site
+        setShowSiteForm(false);
         
         console.log('✅ Site added and saved:', newSite.name);
     };
@@ -412,6 +414,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                 gpsCoordinates: ''
             });
         setShowSiteForm(false);
+        setActiveTab('sites'); // Stay in sites tab
         
         console.log('✅ Site updated and saved:', newSite.name);
     };
@@ -428,6 +431,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             
             // Save site deletion immediately - stay in edit mode
             onSave(updatedFormData, true);
+            setActiveTab('sites'); // Stay in sites tab
             
             console.log('✅ Site deleted and saved:', site?.name);
         }
@@ -480,8 +484,8 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
             relatedSiteId: null,
             notes: ''
         });
-        // Keep form open for adding more opportunities
-        // setShowOpportunityForm(false);
+        // Close the form after adding opportunity
+        setShowOpportunityForm(false);
         
         // Show success message
         // Silent save - no alert needed
