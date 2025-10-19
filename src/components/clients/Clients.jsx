@@ -651,8 +651,11 @@ const Clients = () => {
         
         if (selectedLead) {
             // Update existing lead
-            const updatedLeads = leads.map(l => l.id === selectedLead.id ? { ...selectedLead, ...leadFormData } : l);
+            const updatedLead = { ...selectedLead, ...leadFormData };
+            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
             setLeads(updatedLeads);
+            // Update selectedLead to reflect the changes immediately
+            setSelectedLead(updatedLead);
             // Save to localStorage for persistence
             window.storage?.setLeads?.(updatedLeads);
             console.log('✅ Lead updated and saved to localStorage');
