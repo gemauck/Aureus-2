@@ -239,7 +239,11 @@
     <script type="text/babel" src="./src/utils/auditLogger.js"></script>
     <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
     <script type="text/babel" src="./src/components/auth/LoginPage.jsx"></script>
-    <!-- Load database-first components FIRST -->
+    <!-- Load simple components FIRST for immediate loading -->
+    <script type="text/babel" src="./src/components/dashboard/DashboardSimple.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/ClientsSimple.jsx"></script>
+    
+    <!-- Load database-first components for later use -->
     <script type="text/babel" src="./src/components/common/LoadingState.jsx"></script>
     <script type="text/babel" src="./src/components/common/QuickFallback.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
@@ -375,41 +379,17 @@
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
             
-        // Set up component references for database-first architecture
-        console.log('🗄️ Setting up database-first components...');
+        // Set up components for immediate loading
+        console.log('⚡ Setting up components for immediate loading...');
         
-        // Use fallback components initially for fast loading
-        window.Dashboard = window.DashboardDatabaseFirst || window.QuickDashboard;
-        window.Clients = window.ClientsDatabaseFirst || window.QuickClients;
+        // Use simple components initially for instant loading
+        window.Dashboard = window.DashboardSimple;
+        window.Clients = window.ClientsSimple;
         window.Projects = window.ProjectsDatabaseFirst || window.QuickProjects;
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
         window.TimeTracking = window.TimeTrackingDatabaseFirst || window.QuickTimeTracking;
         
-        // Switch to database-first components when they're ready
-        setTimeout(() => {
-            if (window.DashboardDatabaseFirst) {
-                window.Dashboard = window.DashboardDatabaseFirst;
-                console.log('✅ Dashboard switched to database-first version');
-            }
-            if (window.ClientsDatabaseFirst) {
-                window.Clients = window.ClientsDatabaseFirst;
-                console.log('✅ Clients switched to database-first version');
-            }
-            if (window.ProjectsDatabaseFirst) {
-                window.Projects = window.ProjectsDatabaseFirst;
-                console.log('✅ Projects switched to database-first version');
-            }
-            if (window.InvoicingDatabaseFirst) {
-                window.Invoicing = window.InvoicingDatabaseFirst;
-                console.log('✅ Invoicing switched to database-first version');
-            }
-            if (window.TimeTrackingDatabaseFirst) {
-                window.TimeTracking = window.TimeTrackingDatabaseFirst;
-                console.log('✅ TimeTracking switched to database-first version');
-            }
-        }, 1000);
-        
-        console.log('✅ All components set up with fallbacks!');
+        console.log('✅ All components loaded instantly!');
             
             return React.createElement(window.MainLayout);
         };
