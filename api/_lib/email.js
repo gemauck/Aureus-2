@@ -2,12 +2,12 @@
 import nodemailer from 'nodemailer';
 
 // Create transporter with your email credentials
-// Try Gmail SMTP first (more reliable), fallback to Hostinger
+// Gmail requires App Password for SMTP authentication
 const transporter = nodemailer.createTransporter({
     service: 'gmail', // Use Gmail service for better reliability
     auth: {
-        user: 'garethm@abcotronics.co.za', // Your email address
-        pass: 'GazMauck1989*' // Your email password or app-specific password
+        user: 'garethm@abcotronics.co.za', // Your Gmail address
+        pass: 'YOUR_APP_PASSWORD_HERE' // Replace with your Gmail App Password (16 characters)
     }
 });
 
