@@ -107,12 +107,14 @@ app.post('/api/auth/login', async (req, res) => {
     const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
     
     res.json({ 
-      accessToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
+      data: {
+        accessToken,
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role
+        }
       }
     })
     
