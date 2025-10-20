@@ -4,7 +4,7 @@
 
 ### Main Navigation
 ```
-Sidebar → CRM & Sales → View Options:
+Sidebar → Clients and Leads → View Options:
 ├── Clients (main table)
 ├── Leads (prospect table)  
 └── Pipeline (AIDA kanban)

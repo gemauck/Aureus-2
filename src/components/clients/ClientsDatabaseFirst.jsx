@@ -394,7 +394,7 @@ const ClientsDatabaseFirst = () => {
                             <i className="fas fa-users text-white text-lg"></i>
                         </div>
                         <div>
-                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>CRM & Sales</h1>
+                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Clients and Leads</h1>
                             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Database-synchronized client and lead management</p>
                         </div>
                     </div>

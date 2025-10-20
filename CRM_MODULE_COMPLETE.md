@@ -404,7 +404,7 @@ Your system now includes features comparable to:
 ## 🚀 Getting Started
 
 ### For New Users
-1. Click "CRM & Sales" in sidebar
+1. Click "Clients and Leads" in sidebar
 2. Add your first lead: Click "New Lead"
 3. Add your first client: Click "New Client"
 4. Explore the Pipeline view

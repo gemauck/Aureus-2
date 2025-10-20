@@ -436,33 +436,7 @@ const DashboardLive = () => {
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                    {/* Live sync toggle */}
-                    <button
-                        onClick={toggleLiveSync}
-                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                            liveSyncStatus === 'connected' || liveSyncStatus === 'syncing'
-                                ? 'bg-green-100 text-green-800 hover:bg-green-200' 
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                    >
-                        <i className={`fas fa-${liveSyncStatus === 'connected' || liveSyncStatus === 'syncing' ? 'wifi' : 'wifi-slash'} mr-1`}></i>
-                        Live Sync
-                    </button>
-                    {/* Refresh button */}
-                    <button
-                        onClick={handleRefresh}
-                        disabled={isRefreshing}
-                        className={`px-2 py-1 text-xs rounded transition-colors ${
-                            isRefreshing 
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                        }`}
-                    >
-                        <i className={`fas fa-sync-alt ${isRefreshing ? 'fa-spin' : ''} mr-1`}></i>
-                        Refresh
-                    </button>
-                </div>
+                {/* Live controls removed: dashboard is always live */}
             </div>
 
             {/* Live Statistics Grid */}
