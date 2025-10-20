@@ -3,66 +3,10 @@ const { useState, useEffect } = React;
 const storage = window.storage;
 const TimeModal = window.TimeModal;
 
-const initialTimeEntries = [
-    { 
-        id: 1, 
-        date: '2024-03-10', 
-        project: 'Fleet Optimization Project', 
-        client: 'ABC Corporation', 
-        task: 'Data Analysis', 
-        hours: 6.5, 
-        billable: true, 
-        employee: 'Sarah Johnson',
-        description: 'Analyzed fuel consumption patterns and identified optimization opportunities'
-    },
-    { 
-        id: 2, 
-        date: '2024-03-10', 
-        project: 'Annual Fuel Audit', 
-        client: 'XYZ Industries', 
-        task: 'Site Inspection', 
-        hours: 4.0, 
-        billable: true, 
-        employee: 'Mike Chen',
-        description: 'Conducted on-site fuel storage inspection and compliance check'
-    },
-    { 
-        id: 3, 
-        date: '2024-03-09', 
-        project: 'Cost Analysis Study', 
-        client: 'Logistics Ltd', 
-        task: 'Report Writing', 
-        hours: 7.5, 
-        billable: true, 
-        employee: 'Emily Davis',
-        description: 'Prepared comprehensive cost analysis report with recommendations'
-    },
-    { 
-        id: 4, 
-        date: '2024-03-09', 
-        project: 'Fleet Optimization Project', 
-        client: 'ABC Corporation', 
-        task: 'Client Meeting', 
-        hours: 2.0, 
-        billable: true, 
-        employee: 'Sarah Johnson',
-        description: 'Weekly status update meeting with client stakeholders'
-    },
-    { 
-        id: 5, 
-        date: '2024-03-08', 
-        project: 'Annual Fuel Audit', 
-        client: 'XYZ Industries', 
-        task: 'Documentation Review', 
-        hours: 5.5, 
-        billable: true, 
-        employee: 'Mike Chen',
-        description: 'Reviewed fuel purchase records and reconciliation documents'
-    }
-];
+// No initial data - all data comes from database
 
 const TimeTracking = () => {
-    const [timeEntries, setTimeEntries] = useState(initialTimeEntries);
+    const [timeEntries, setTimeEntries] = useState([]);
     const [projects, setProjects] = useState([]);
     const [showModal, setShowModal] = useState(false);
     const [selectedEntry, setSelectedEntry] = useState(null);
