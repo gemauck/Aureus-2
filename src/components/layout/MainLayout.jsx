@@ -55,6 +55,7 @@ const MainLayout = () => {
 
     // Get components from window - prioritize live dashboard over others with fallback
     const Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
     const Projects = window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
@@ -98,7 +99,7 @@ const MainLayout = () => {
         switch(currentPage) {
             case 'dashboard': 
                 console.log('🔄 MainLayout: Rendering Dashboard component');
-                return <Dashboard />;
+                return <ErrorBoundary><Dashboard /></ErrorBoundary>;
             case 'clients': 
                 console.log('🔄 MainLayout: Rendering Clients component');
                 return <Clients />;
