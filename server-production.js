@@ -320,6 +320,95 @@ app.get('/api/clients/:id', authRequired, async (req, res) => {
   }
 })
 
+// Users management endpoint
+app.get('/api/users', authRequired, async (req, res) => {
+  try {
+    console.log('👥 Getting users for admin:', req.user.sub)
+    
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    // Get all users
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        status: true,
+        createdAt: true,
+        lastLoginAt: true,
+        invitedBy: true
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    // Get all invitations
+    const invitations = await prisma.invitation.findMany({
+      orderBy: { createdAt: 'desc' }
+    })
+
+    console.log('✅ Found users:', users.length)
+    res.json({
+      users,
+      invitations
+    })
+  } catch (error) {
+    console.error('Error getting users:', error)
+    res.status(500).json({ error: 'Failed to get users', details: error.message })
+  }
+})
+
+// Delete user endpoint
+app.delete('/api/users', authRequired, async (req, res) => {
+  try {
+    console.log('🗑️ Deleting user:', req.body)
+    
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' })
+    }
+
+    const { userId } = req.body || {}
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' })
+    }
+
+    // Prevent deleting own account
+    if (req.user.sub === userId) {
+      return res.status(400).json({ error: 'Cannot delete your own account' })
+    }
+
+    // Delete user
+    await prisma.user.delete({
+      where: { id: userId }
+    })
+
+    console.log('✅ User deleted:', userId)
+    res.json({ success: true, message: 'User deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting user:', error)
+    res.status(500).json({ error: 'Failed to delete user', details: error.message })
+  }
+})
+
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+  try {
+    // Clear refresh token cookie
+    res.setHeader('Set-Cookie', [
+      `refreshToken=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
+    ])
+    res.json({ message: 'Logged out successfully' })
+  } catch (error) {
+    console.error('Logout error:', error)
+    res.status(500).json({ error: 'Logout failed', details: error.message })
+  }
+})
+
 // Catch-all route for SPA
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'))

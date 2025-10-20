@@ -91,6 +91,62 @@ const api = {
     const res = await request(`/clients/${id}`)
     return res
   },
+
+  // Projects
+  async listProjects() {
+    const res = await request('/projects')
+    return res
+  },
+
+  async createProject(projectData) {
+    console.log('🚀 API createProject called with:', projectData);
+    const res = await request('/projects', { method: 'POST', body: JSON.stringify(projectData) })
+    console.log('📡 API createProject response:', res);
+    return res
+  },
+
+  async updateProject(id, projectData) {
+    const res = await request(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(projectData) })
+    return res
+  },
+
+  async deleteProject(id) {
+    const res = await request(`/projects/${id}`, { method: 'DELETE' })
+    return res
+  },
+
+  async getProject(id) {
+    const res = await request(`/projects/${id}`)
+    return res
+  },
+
+  // Time Entries
+  async listTimeEntries() {
+    const res = await request('/time-entries')
+    return res
+  },
+
+  async createTimeEntry(timeEntryData) {
+    console.log('🚀 API createTimeEntry called with:', timeEntryData);
+    const res = await request('/time-entries', { method: 'POST', body: JSON.stringify(timeEntryData) })
+    console.log('📡 API createTimeEntry response:', res);
+    return res
+  },
+
+  async updateTimeEntry(id, timeEntryData) {
+    const res = await request(`/time-entries/${id}`, { method: 'PUT', body: JSON.stringify(timeEntryData) })
+    return res
+  },
+
+  async deleteTimeEntry(id) {
+    const res = await request(`/time-entries/${id}`, { method: 'DELETE' })
+    return res
+  },
+
+  async getTimeEntry(id) {
+    const res = await request(`/time-entries/${id}`)
+    return res
+  },
 }
 
 // Expose globally for prototype

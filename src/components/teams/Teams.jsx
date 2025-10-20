@@ -103,38 +103,40 @@ const Teams = () => {
         }
     ];
 
-    // Load data from localStorage
+    // Load data from data service
     useEffect(() => {
-        console.log('🔄 Teams: Loading data from localStorage');
-        
-        if (!window.storage) {
-            console.error('❌ Teams: Storage not available!');
-            return;
-        }
-        
-        try {
-            const savedDocuments = storage.getTeamDocuments() || [];
-            const savedWorkflows = storage.getTeamWorkflows() || [];
-            const savedChecklists = storage.getTeamChecklists() || [];
-            const savedNotices = storage.getTeamNotices() || [];
-            const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
+        const loadData = async () => {
+            try {
+                console.log('🔄 Teams: Loading data from data service');
+                
+                const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
+                    window.dataService.getTeamDocuments(),
+                    window.dataService.getTeamWorkflows(),
+                    window.dataService.getTeamChecklists(),
+                    window.dataService.getTeamNotices()
+                ]);
+                
+                const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
 
-            console.log('✅ Teams: Data loaded successfully', {
-                documents: savedDocuments.length,
-                workflows: savedWorkflows.length,
-                checklists: savedChecklists.length,
-                notices: savedNotices.length,
-                executions: savedExecutions.length
-            });
+                console.log('✅ Teams: Data loaded successfully', {
+                    documents: savedDocuments.length,
+                    workflows: savedWorkflows.length,
+                    checklists: savedChecklists.length,
+                    notices: savedNotices.length,
+                    executions: savedExecutions.length
+                });
 
-            setDocuments(savedDocuments);
-            setWorkflows(savedWorkflows);
-            setChecklists(savedChecklists);
-            setNotices(savedNotices);
-            setWorkflowExecutions(savedExecutions);
-        } catch (error) {
-            console.error('❌ Teams: Error loading data:', error);
-        }
+                setDocuments(savedDocuments);
+                setWorkflows(savedWorkflows);
+                setChecklists(savedChecklists);
+                setNotices(savedNotices);
+                setWorkflowExecutions(savedExecutions);
+            } catch (error) {
+                console.error('❌ Teams: Error loading data:', error);
+            }
+        };
+
+        loadData();
     }, []);
 
     // Get counts for selected team
@@ -190,7 +192,7 @@ const Teams = () => {
         .slice(0, 10);
 
     // Save handlers
-    const handleSaveDocument = (documentData) => {
+    const handleSaveDocument = async (documentData) => {
         const existingIndex = documents.findIndex(d => d.id === documentData.id);
         let updatedDocuments;
         
@@ -202,11 +204,11 @@ const Teams = () => {
         }
         
         setDocuments(updatedDocuments);
-        storage.setTeamDocuments(updatedDocuments);
+        await window.dataService.setTeamDocuments(updatedDocuments);
         setEditingDocument(null);
     };
 
-    const handleSaveWorkflow = (workflowData) => {
+    const handleSaveWorkflow = async (workflowData) => {
         const existingIndex = workflows.findIndex(w => w.id === workflowData.id);
         let updatedWorkflows;
         
@@ -218,11 +220,11 @@ const Teams = () => {
         }
         
         setWorkflows(updatedWorkflows);
-        storage.setTeamWorkflows(updatedWorkflows);
+        await window.dataService.setTeamWorkflows(updatedWorkflows);
         setEditingWorkflow(null);
     };
 
-    const handleSaveChecklist = (checklistData) => {
+    const handleSaveChecklist = async (checklistData) => {
         const existingIndex = checklists.findIndex(c => c.id === checklistData.id);
         let updatedChecklists;
         
@@ -234,11 +236,11 @@ const Teams = () => {
         }
         
         setChecklists(updatedChecklists);
-        storage.setTeamChecklists(updatedChecklists);
+        await window.dataService.setTeamChecklists(updatedChecklists);
         setEditingChecklist(null);
     };
 
-    const handleSaveNotice = (noticeData) => {
+    const handleSaveNotice = async (noticeData) => {
         const existingIndex = notices.findIndex(n => n.id === noticeData.id);
         let updatedNotices;
         
@@ -250,7 +252,7 @@ const Teams = () => {
         }
         
         setNotices(updatedNotices);
-        storage.setTeamNotices(updatedNotices);
+        await window.dataService.setTeamNotices(updatedNotices);
         setEditingNotice(null);
     };
 
@@ -269,35 +271,35 @@ const Teams = () => {
     };
 
     // Delete handlers
-    const handleDeleteDocument = (id) => {
+    const handleDeleteDocument = async (id) => {
         if (confirm('Are you sure you want to delete this document?')) {
             const updatedDocuments = documents.filter(d => d.id !== id);
             setDocuments(updatedDocuments);
-            storage.setTeamDocuments(updatedDocuments);
+            await window.dataService.setTeamDocuments(updatedDocuments);
         }
     };
 
-    const handleDeleteWorkflow = (id) => {
+    const handleDeleteWorkflow = async (id) => {
         if (confirm('Are you sure you want to delete this workflow?')) {
             const updatedWorkflows = workflows.filter(w => w.id !== id);
             setWorkflows(updatedWorkflows);
-            storage.setTeamWorkflows(updatedWorkflows);
+            await window.dataService.setTeamWorkflows(updatedWorkflows);
         }
     };
 
-    const handleDeleteChecklist = (id) => {
+    const handleDeleteChecklist = async (id) => {
         if (confirm('Are you sure you want to delete this checklist?')) {
             const updatedChecklists = checklists.filter(c => c.id !== id);
             setChecklists(updatedChecklists);
-            storage.setTeamChecklists(updatedChecklists);
+            await window.dataService.setTeamChecklists(updatedChecklists);
         }
     };
 
-    const handleDeleteNotice = (id) => {
+    const handleDeleteNotice = async (id) => {
         if (confirm('Are you sure you want to delete this notice?')) {
             const updatedNotices = notices.filter(n => n.id !== id);
             setNotices(updatedNotices);
-            storage.setTeamNotices(updatedNotices);
+            await window.dataService.setTeamNotices(updatedNotices);
         }
     };
 

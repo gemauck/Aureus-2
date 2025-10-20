@@ -17,63 +17,83 @@ const EmployeeManagement = () => {
         loadEmployees();
     }, []);
 
-    const loadEmployees = () => {
-        const saved = storage.getEmployees() || [
-            {
-                id: 1,
-                employeeNumber: 'EMP001',
-                name: 'Gareth Mauck',
-                email: 'gareth@abcotronics.com',
-                phone: '+27 82 555 0001',
-                position: 'Director',
-                department: 'Management',
-                employmentDate: '2020-01-15',
-                idNumber: '8501015800081',
-                taxNumber: 'TAX123456',
-                bankName: 'FNB',
-                accountNumber: '62123456789',
-                branchCode: '250655',
-                salary: 85000,
-                status: 'Active',
-                address: '123 Main Road, Johannesburg, 2001',
-                emergencyContact: 'Jane Mauck - +27 82 555 0002'
-            },
-            {
-                id: 2,
-                employeeNumber: 'EMP002',
-                name: 'David Buttemer',
-                email: 'david@abcotronics.com',
-                phone: '+27 83 555 0003',
-                position: 'Technical Lead',
-                department: 'Operations',
-                employmentDate: '2021-03-01',
-                idNumber: '9201125800082',
-                taxNumber: 'TAX789012',
-                bankName: 'Standard Bank',
-                accountNumber: '02987654321',
-                branchCode: '051001',
-                salary: 65000,
-                status: 'Active',
-                address: '456 Oak Avenue, Pretoria, 0002',
-                emergencyContact: 'Sarah Buttemer - +27 83 555 0004'
+    const loadEmployees = async () => {
+        try {
+            const saved = await window.dataService.getEmployees();
+            if (saved.length === 0) {
+                // Use default data if no saved employees
+                const defaultEmployees = [
+                    {
+                        id: 1,
+                        employeeNumber: 'EMP001',
+                        name: 'Gareth Mauck',
+                        email: 'gareth@abcotronics.com',
+                        phone: '+27 82 555 0001',
+                        position: 'Director',
+                        department: 'Management',
+                        employmentDate: '2020-01-15',
+                        idNumber: '8501015800081',
+                        taxNumber: 'TAX123456',
+                        bankName: 'FNB',
+                        accountNumber: '62123456789',
+                        branchCode: '250655',
+                        salary: 85000,
+                        status: 'Active',
+                        address: '123 Main Road, Johannesburg, 2001',
+                        emergencyContact: 'Jane Mauck - +27 82 555 0002'
+                    },
+                    {
+                        id: 2,
+                        employeeNumber: 'EMP002',
+                        name: 'David Buttemer',
+                        email: 'david@abcotronics.com',
+                        phone: '+27 83 555 0003',
+                        position: 'Technical Lead',
+                        department: 'Operations',
+                        employmentDate: '2021-03-01',
+                        idNumber: '9201125800082',
+                        taxNumber: 'TAX789012',
+                        bankName: 'Standard Bank',
+                        accountNumber: '02987654321',
+                        branchCode: '051001',
+                        salary: 65000,
+                        status: 'Active',
+                        address: '456 Oak Avenue, Pretoria, 0002',
+                        emergencyContact: 'Sarah Buttemer - +27 83 555 0004'
+                    }
+                ];
+                setEmployees(defaultEmployees);
+                await window.dataService.setEmployees(defaultEmployees);
+            } else {
+                setEmployees(saved);
             }
-        ];
-        setEmployees(saved);
+        } catch (error) {
+            console.error('❌ EmployeeManagement: Error loading employees:', error);
+        }
     };
 
     useEffect(() => {
-        if (employees.length > 0) {
-            storage.setEmployees(employees);
-        }
+        const saveEmployees = async () => {
+            if (employees.length > 0) {
+                try {
+                    await window.dataService.setEmployees(employees);
+                    console.log('✅ EmployeeManagement: Saved to data service');
+                } catch (error) {
+                    console.error('❌ EmployeeManagement: Error saving employees:', error);
+                }
+            }
+        };
+        saveEmployees();
     }, [employees]);
 
-    const handleSaveEmployee = (employeeData) => {
-        const user = storage.getUser();
+    const handleSaveEmployee = async (employeeData) => {
+        const user = window.storage?.getUser();
         
         if (selectedEmployee) {
-            setEmployees(employees.map(emp =>
+            const updatedEmployees = employees.map(emp =>
                 emp.id === selectedEmployee.id ? { ...employeeData, id: selectedEmployee.id } : emp
-            ));
+            );
+            setEmployees(updatedEmployees);
             
             // Log update action
             if (window.AuditLogger) {
@@ -105,12 +125,13 @@ const EmployeeManagement = () => {
         setSelectedEmployee(null);
     };
 
-    const handleDeleteEmployee = (id) => {
+    const handleDeleteEmployee = async (id) => {
         if (confirm('Are you sure you want to delete this employee? This action cannot be undone.')) {
-            const user = storage.getUser();
+            const user = window.storage?.getUser();
             const employee = employees.find(e => e.id === id);
             
-            setEmployees(employees.filter(emp => emp.id !== id));
+            const updatedEmployees = employees.filter(emp => emp.id !== id);
+            setEmployees(updatedEmployees);
             
             // Log delete action
             if (window.AuditLogger && employee) {

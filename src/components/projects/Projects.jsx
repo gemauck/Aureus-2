@@ -86,57 +86,38 @@ const Projects = () => {
         }
     }, []);
     
-    // Load projects from localStorage on mount
+    // Load projects from data service on mount
     useEffect(() => {
-        const loadProjects = () => {
-            if (window.storage && typeof window.storage.getProjects === 'function') {
-                try {
-                    const savedProjects = window.storage.getProjects();
-                    if (savedProjects) {
-                        setProjects(savedProjects);
-                        
-                        // Sync existing projects with clients
-                        syncProjectsWithClients(savedProjects);
-                        
-                        // Check if there's a project to open immediately after loading
-                        const projectIdToOpen = sessionStorage.getItem('openProjectId');
-                        if (projectIdToOpen) {
-                            const project = savedProjects.find(p => p.id === parseInt(projectIdToOpen));
-                            if (project) {
-                                // Open the project immediately
-                                setViewingProject(project);
-                                // Clear the flag
-                                sessionStorage.removeItem('openProjectId');
-                            }
+        const loadProjects = async () => {
+            try {
+                console.log('🔄 Projects: Loading projects from data service');
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects && savedProjects.length > 0) {
+                    setProjects(savedProjects);
+                    
+                    // Sync existing projects with clients
+                    syncProjectsWithClients(savedProjects);
+                    
+                    // Check if there's a project to open immediately after loading
+                    const projectIdToOpen = sessionStorage.getItem('openProjectId');
+                    if (projectIdToOpen) {
+                        const project = savedProjects.find(p => p.id === parseInt(projectIdToOpen));
+                        if (project) {
+                            // Open the project immediately
+                            setViewingProject(project);
+                            // Clear the flag
+                            sessionStorage.removeItem('openProjectId');
                         }
                     }
-                } catch (error) {
-                    console.error('Error loading projects from storage:', error);
+                } else {
+                    console.log('📝 Projects: No saved projects found, using initial data');
                 }
-            } else {
-                console.warn('Storage not available or getProjects method not found, retrying...');
-                // Retry after a short delay
-                setTimeout(loadProjects, 100);
+            } catch (error) {
+                console.error('❌ Projects: Error loading projects:', error);
             }
         };
 
-        // Listen for storage ready event
-        const handleStorageReady = () => {
-            console.log('✅ Projects: Storage ready event received');
-            loadProjects();
-        };
-
-        // Check if storage is already ready
-        if (window.storage && typeof window.storage.getProjects === 'function') {
-            loadProjects();
-        } else {
-            // Wait for storage ready event
-            window.addEventListener('storageReady', handleStorageReady);
-        }
-
-        return () => {
-            window.removeEventListener('storageReady', handleStorageReady);
-        };
+        loadProjects();
     }, []);
 
     // Helper function to sync existing projects with clients
@@ -158,42 +139,21 @@ const Projects = () => {
         }
     };
     
-    // Save projects to localStorage whenever they change (sorted by client)
+    // Save projects to data service whenever they change
     useEffect(() => {
-        const sortedProjects = [...projects].sort((a, b) => a.client.localeCompare(b.client));
-        
-        // Wait for storage to be available
-        const saveProjects = () => {
-            if (window.storage && typeof window.storage.setProjects === 'function') {
-                try {
-                    window.storage.setProjects(sortedProjects);
-                } catch (error) {
-                    console.error('Error saving projects to storage:', error);
-                }
-            } else {
-                console.warn('Storage not available or setProjects method not found, retrying...');
-                // Retry after a short delay
-                setTimeout(saveProjects, 100);
+        const saveProjects = async () => {
+            try {
+                const sortedProjects = [...projects].sort((a, b) => a.client.localeCompare(b.client));
+                await window.dataService.setProjects(sortedProjects);
+                console.log('✅ Projects: Saved to data service');
+            } catch (error) {
+                console.error('❌ Projects: Error saving projects:', error);
             }
         };
 
-        // Listen for storage ready event
-        const handleStorageReady = () => {
-            console.log('✅ Projects: Storage ready for saving');
+        if (projects.length > 0) {
             saveProjects();
-        };
-
-        // Check if storage is already ready
-        if (window.storage && typeof window.storage.setProjects === 'function') {
-            saveProjects();
-        } else {
-            // Wait for storage ready event
-            window.addEventListener('storageReady', handleStorageReady);
         }
-
-        return () => {
-            window.removeEventListener('storageReady', handleStorageReady);
-        };
     }, [projects]);
 
     // Helper function to count all nested subtasks

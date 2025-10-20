@@ -70,38 +70,50 @@ const TimeTracking = () => {
     const [filterDate, setFilterDate] = useState('This Week');
     const [searchTerm, setSearchTerm] = useState('');
     
-    // Load time entries and projects from localStorage
+    // Load time entries and projects from data service
     useEffect(() => {
-        console.log('🔄 TimeTracking: Loading data from localStorage');
-        
-        if (!window.storage) {
-            console.error('❌ TimeTracking: Storage not available!');
-            return;
-        }
-        
-        try {
-            const savedEntries = storage.getTimeEntries();
-            const savedProjects = storage.getProjects();
-            
-            console.log('✅ TimeTracking: Data loaded successfully', {
-                entries: savedEntries ? savedEntries.length : 0,
-                projects: savedProjects ? savedProjects.length : 0
-            });
-            
-            if (savedEntries) {
-                setTimeEntries(savedEntries);
+        const loadData = async () => {
+            try {
+                console.log('🔄 TimeTracking: Loading data from data service');
+                
+                const [savedEntries, savedProjects] = await Promise.all([
+                    window.dataService.getTimeEntries(),
+                    window.dataService.getProjects()
+                ]);
+                
+                console.log('✅ TimeTracking: Data loaded successfully', {
+                    entries: savedEntries ? savedEntries.length : 0,
+                    projects: savedProjects ? savedProjects.length : 0
+                });
+                
+                if (savedEntries) {
+                    setTimeEntries(savedEntries);
+                }
+                if (savedProjects) {
+                    setProjects(savedProjects);
+                }
+            } catch (error) {
+                console.error('❌ TimeTracking: Error loading data:', error);
             }
-            if (savedProjects) {
-                setProjects(savedProjects);
-            }
-        } catch (error) {
-            console.error('❌ TimeTracking: Error loading data:', error);
-        }
+        };
+
+        loadData();
     }, []);
     
     // Save time entries whenever they change
     useEffect(() => {
-        storage.setTimeEntries(timeEntries);
+        const saveTimeEntries = async () => {
+            try {
+                await window.dataService.setTimeEntries(timeEntries);
+                console.log('✅ TimeTracking: Saved to data service');
+            } catch (error) {
+                console.error('❌ TimeTracking: Error saving time entries:', error);
+            }
+        };
+
+        if (timeEntries.length > 0) {
+            saveTimeEntries();
+        }
     }, [timeEntries]);
 
     const handleAddTimeEntry = () => {
