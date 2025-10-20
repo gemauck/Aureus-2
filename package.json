@@ -13,8 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "migrate:production": "node migrate-production.js",
     "seed": "node prisma/seed.js",
-    "start": "node server-production.js",
-    "railway-build": "prisma generate && prisma migrate deploy",
+    "start": "node start-production.js",
+    "railway-build": "prisma generate",
     "start:local": "node server/local.js",
     "start:railway": "node server/railway.js"
   },

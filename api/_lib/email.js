@@ -32,7 +32,12 @@ const transporter = createTransporterFromEnv();
 // Verify connection configuration
 transporter.verify((error, success) => {
     if (error) {
-        console.error('Email service error:', error);
+        console.error('❌ Email service configuration error:', error);
+        console.error('❌ Email service details:', {
+            message: error.message,
+            code: error.code,
+            command: error.command
+        });
     } else {
         console.log('✅ Email service ready to send messages');
     }
@@ -118,12 +123,24 @@ export const sendInvitationEmail = async (invitationData) => {
     };
 
     try {
+        console.log('📧 Sending email with options:', {
+            from: mailOptions.from,
+            to: mailOptions.to,
+            subject: mailOptions.subject
+        });
+        
         const result = await transporter.sendMail(mailOptions);
         console.log('✅ Invitation email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
         console.error('❌ Failed to send invitation email:', error);
-        throw new Error('Failed to send invitation email');
+        console.error('❌ Email sending error details:', {
+            message: error.message,
+            code: error.code,
+            command: error.command,
+            response: error.response
+        });
+        throw new Error(`Failed to send invitation email: ${error.message}`);
     }
 };
 
