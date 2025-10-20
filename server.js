@@ -93,6 +93,7 @@ app.use('/api', async (req, res) => {
   try {
     const handlerPath = toHandlerPath(req.url)
     console.log(`🔍 Railway API: ${req.method} ${req.url} -> ${path.relative(rootDir, handlerPath)}`)
+    console.log(`🔍 Railway API: Handler path exists: ${fs.existsSync(handlerPath)}`)
     
     const handler = await loadHandler(handlerPath)
     if (!handler) {

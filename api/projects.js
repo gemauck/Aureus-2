@@ -15,6 +15,11 @@ async function handler(req, res) {
       user: req.user
     })
     
+    // Add debugging for the specific issue
+    console.log('🔍 Projects API: Starting handler execution')
+    console.log('🔍 Projects API: Request method:', req.method)
+    console.log('🔍 Projects API: Request URL:', req.url)
+    
     // Parse the URL path (already has /api/ stripped by server)
     const pathSegments = req.url.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
