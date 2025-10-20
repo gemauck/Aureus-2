@@ -1026,13 +1026,17 @@ const Clients = () => {
                     ...opp,
                     clientName: client.name,
                     clientId: client.id,
-                    type: 'opportunity'
+                    type: 'opportunity',
+                    stage: opp.stage || 'Awareness',
+                    status: opp.status || 'Active'
                 })));
             }
             return acc;
         }, []);
 
-        const totalLeads = leads.length;
+        // Filter active leads and opportunities only
+        const activeLeads = leads.filter(lead => lead.status !== 'Inactive' && lead.status !== 'Closed Lost');
+        const activeOpportunities = clientOpportunities.filter(opp => opp.status !== 'Inactive' && opp.status !== 'Closed Lost');
 
         const handleDragStart = (item, type) => {
             setDraggedItem(item);
@@ -1084,78 +1088,30 @@ const Clients = () => {
 
         return (
             <div className="space-y-6">
-                {/* AIDA Framework Explanation */}
-                <div className={`${isDark ? 'bg-gradient-to-r from-gray-800 to-gray-700 border-gray-600' : 'bg-gradient-to-r from-primary-50 to-blue-50 border-primary-200'} rounded-xl border shadow-sm p-6`}>
-                    <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0">
-                            <div className={`w-12 h-12 ${isDark ? 'bg-gradient-to-r from-primary-500 to-primary-600' : 'bg-primary-600'} rounded-xl flex items-center justify-center shadow-lg`}>
-                                <i className="fas fa-lightbulb text-white text-xl"></i>
-                            </div>
-                        </div>
-                        <div className="flex-1">
-                            <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>AIDA Sales Framework</h3>
-                            <p className={`text-base ${isDark ? 'text-gray-200' : 'text-gray-600'}`}>
-                                Track sales opportunities through proven AIDA methodology. Drag cards between stages to update progress.
-                            </p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4 mt-6">
-                        <div className={`${isDark ? 'bg-gradient-to-br from-gray-700 to-gray-800 border-gray-600' : 'bg-white border-gray-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
-                            <div className={`flex items-center gap-3 mb-2`}>
-                                <div className="w-8 h-8 bg-gray-500 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-eye text-white text-sm"></i>
-                                </div>
-                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Awareness</h4>
-                            </div>
-                            <p className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Initial contact made</p>
-                        </div>
-                        <div className={`${isDark ? 'bg-gradient-to-br from-blue-700 to-blue-800 border-blue-600' : 'bg-white border-blue-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
-                            <div className={`flex items-center gap-3 mb-2`}>
-                                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-search text-white text-sm"></i>
-                                </div>
-                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Interest</h4>
-                            </div>
-                            <p className={`text-xs ${isDark ? 'text-blue-100' : 'text-gray-600'}`}>Actively exploring</p>
-                        </div>
-                        <div className={`${isDark ? 'bg-gradient-to-br from-yellow-700 to-yellow-800 border-yellow-600' : 'bg-white border-yellow-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
-                            <div className={`flex items-center gap-3 mb-2`}>
-                                <div className="w-8 h-8 bg-yellow-500 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-heart text-white text-sm"></i>
-                                </div>
-                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Desire</h4>
-                            </div>
-                            <p className={`text-xs ${isDark ? 'text-yellow-100' : 'text-gray-600'}`}>Wants solution</p>
-                        </div>
-                        <div className={`${isDark ? 'bg-gradient-to-br from-green-700 to-green-800 border-green-600' : 'bg-white border-green-200'} rounded-xl p-4 border shadow-sm hover:shadow-md transition-shadow`}>
-                            <div className={`flex items-center gap-3 mb-2`}>
-                                <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-rocket text-white text-sm"></i>
-                                </div>
-                                <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}>Action</h4>
-                            </div>
-                            <p className={`text-xs ${isDark ? 'text-green-100' : 'text-gray-600'}`}>Ready to close</p>
-                        </div>
-                    </div>
-                </div>
-
                 {/* Stats */}
                 <div className="grid grid-cols-4 gap-4">
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
-                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Total Leads</div>
-                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{leads.length}</div>
-                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Active opportunities</div>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{activeLeads.length}</div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>New prospects</div>
                     </div>
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
-                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Total Opportunities</div>
-                        <div className="text-2xl font-bold text-primary-600">{leads.length + clientOpportunities.length}</div>
-                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>{leads.length} leads + {clientOpportunities.length} expansions</div>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Opportunities</div>
+                        <div className="text-2xl font-bold text-primary-600">{activeOpportunities.length}</div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Client expansions</div>
+                    </div>
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Pipeline Value</div>
+                        <div className="text-2xl font-bold text-green-600">
+                            R {(activeLeads.reduce((sum, lead) => sum + (lead.value || 0), 0) + activeOpportunities.reduce((sum, opp) => sum + (opp.value || 0), 0)).toLocaleString('en-ZA')}
+                        </div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Total potential</div>
                     </div>
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4 flex items-center justify-between`}>
                         <div>
                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Conversion Rate</div>
                             <div className="text-2xl font-bold text-purple-600">
-                                {leads.length > 0 ? Math.round((leads.filter(l => l.stage === 'Action').length / leads.length) * 100) : 0}%
+                                {activeLeads.length > 0 ? Math.round((activeLeads.filter(l => l.stage === 'Action').length / activeLeads.length) * 100) : 0}%
                             </div>
                             <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>To action stage</div>
                         </div>
@@ -1165,8 +1121,8 @@ const Clients = () => {
                 {/* Enhanced Pipeline Board */}
                 <div className="flex gap-6 overflow-x-auto pb-6">
                     {pipelineStages.map(stage => {
-                        const stageLeads = leads.filter(lead => lead.stage === stage);
-                        const stageOpps = clientOpportunities.filter(opp => opp.stage === stage);
+                        const stageLeads = activeLeads.filter(lead => lead.stage === stage);
+                        const stageOpps = activeOpportunities.filter(opp => opp.stage === stage);
                         const stageCount = stageLeads.length + stageOpps.length;
                         const isDraggedOver = draggedItem && draggedItem.stage !== stage;
                         

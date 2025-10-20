@@ -399,7 +399,10 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                             <option>New</option>
                                             <option>Contacted</option>
                                             <option>Qualified</option>
-                                            <option>Disqualified</option>
+                                            <option>Active</option>
+                                            <option>Inactive</option>
+                                            <option>Closed Won</option>
+                                            <option>Closed Lost</option>
                                         </select>
                                     </div>
                                     <div>
@@ -1189,8 +1192,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                                 <option value="New">New</option>
                                                 <option value="Contacted">Contacted</option>
                                                 <option value="Qualified">Qualified</option>
-                                                <option value="Proposal">Proposal</option>
-                                                <option value="Negotiation">Negotiation</option>
+                                                <option value="Active">Active</option>
+                                                <option value="Inactive">Inactive</option>
                                                 <option value="Closed Won">Closed Won</option>
                                                 <option value="Closed Lost">Closed Lost</option>
                                             </select>
