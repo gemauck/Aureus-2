@@ -434,14 +434,32 @@ const DashboardLive = () => {
                         <div>
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Clients</p>
                             <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                {dashboardData.stats.totalClients}
+                                {Array.isArray(dashboardData.clients) ? dashboardData.clients.filter(c => c.status === 'active' || c.status === 'Active').length : 0}
                             </p>
                             <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                {Array.isArray(dashboardData.clients) ? dashboardData.clients.filter(c => c.status === 'active' || c.status === 'Active').length : 0} active
+                                {dashboardData.stats.totalClients} total
                             </p>
                         </div>
                         <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
                             <i className="fas fa-users text-white"></i>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Active Leads */}
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</p>
+                            <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {Array.isArray(dashboardData.leads) ? dashboardData.leads.filter(l => l.status === 'New' || l.status === 'Qualified' || l.status === 'Contacted').length : 0}
+                            </p>
+                            <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                {dashboardData.stats.totalLeads} total
+                            </p>
+                        </div>
+                        <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                            <i className="fas fa-user-plus text-white"></i>
                         </div>
                     </div>
                 </div>
@@ -458,7 +476,7 @@ const DashboardLive = () => {
                                 {dashboardData.stats.totalProjects} total
                             </p>
                         </div>
-                        <div className="w-10 h-10 bg-green-500 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
                             <i className="fas fa-project-diagram text-white"></i>
                         </div>
                     </div>
@@ -485,57 +503,17 @@ const DashboardLive = () => {
                                 }
                             </p>
                         </div>
-                        <div className="w-10 h-10 bg-purple-500 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-orange-500 rounded-lg flex items-center justify-center">
                             <i className="fas fa-clock text-white"></i>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Total Revenue */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Total Revenue</p>
-                            <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                R{dashboardData.stats.totalRevenue.toLocaleString()}
-                            </p>
-                            <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                {dashboardData.stats.totalInvoices} invoices
-                            </p>
-                        </div>
-                        <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-dollar-sign text-white"></i>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Pipeline & Alerts Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Sales Pipeline */}
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold">Sales Pipeline</h2>
-                        <i className="fas fa-funnel-dollar text-xl opacity-80"></i>
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs opacity-90">Active Leads</span>
-                            <span className="text-base font-bold">{dashboardData.stats.totalLeads}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs opacity-90">Pipeline Value</span>
-                            <span className="text-lg font-bold">R {dashboardData.stats.pipelineValue.toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2 border-t border-blue-400">
-                            <span className="text-xs font-medium">Weighted Value</span>
-                            <span className="text-xl font-bold">R {Math.round(dashboardData.stats.weightedPipeline).toLocaleString()}</span>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Overdue Invoices Alert */}
-                {dashboardData.stats.overdueInvoices > 0 && (
+            {/* Alerts Row */}
+            {dashboardData.stats.overdueInvoices > 0 && (
+                <div className="grid grid-cols-1 gap-3">
+                    {/* Overdue Invoices Alert */}
                     <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-4 text-white">
                         <div className="flex items-center justify-between mb-3">
                             <h2 className="text-sm font-semibold">Overdue Invoices</h2>
@@ -552,11 +530,11 @@ const DashboardLive = () => {
                             </div>
                         </div>
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
             {/* Recent Activity & Data Tables */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                 {/* Recent Clients */}
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                     <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
@@ -590,6 +568,47 @@ const DashboardLive = () => {
                         <div className="text-center py-8">
                             <i className="fas fa-users text-3xl text-gray-300 mb-2"></i>
                             <p className="text-xs text-gray-500">No clients found</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* Recent Leads */}
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
+                    <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
+                        Recent Leads ({Array.isArray(dashboardData.leads) ? dashboardData.leads.length : 0})
+                    </h2>
+                    {Array.isArray(dashboardData.leads) && dashboardData.leads.length > 0 ? (
+                        <div className="space-y-2">
+                            {dashboardData.leads.slice(0, 5).map(lead => (
+                                <div key={lead.id} className={`${isDark ? 'border-gray-700' : 'border-gray-200'} border-b pb-2 last:border-b-0 last:pb-0`}>
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} text-sm`}>
+                                                {lead.name}
+                                            </h3>
+                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                {lead.industry || 'No industry'}
+                                            </p>
+                                        </div>
+                                        <span className={`px-2 py-1 text-[10px] rounded font-medium ${
+                                            lead.status === 'New' 
+                                                ? 'bg-blue-100 text-blue-800' 
+                                                : lead.status === 'Qualified' 
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : lead.status === 'Contacted'
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : 'bg-gray-100 text-gray-800'
+                                        }`}>
+                                            {lead.status}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <i className="fas fa-user-plus text-3xl text-gray-300 mb-2"></i>
+                            <p className="text-xs text-gray-500">No leads found</p>
                         </div>
                     )}
                 </div>

@@ -105,17 +105,36 @@ const Teams = () => {
 
     // Load data from localStorage
     useEffect(() => {
-        const savedDocuments = storage.getTeamDocuments() || [];
-        const savedWorkflows = storage.getTeamWorkflows() || [];
-        const savedChecklists = storage.getTeamChecklists() || [];
-        const savedNotices = storage.getTeamNotices() || [];
-        const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
+        console.log('🔄 Teams: Loading data from localStorage');
+        
+        if (!window.storage) {
+            console.error('❌ Teams: Storage not available!');
+            return;
+        }
+        
+        try {
+            const savedDocuments = storage.getTeamDocuments() || [];
+            const savedWorkflows = storage.getTeamWorkflows() || [];
+            const savedChecklists = storage.getTeamChecklists() || [];
+            const savedNotices = storage.getTeamNotices() || [];
+            const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
 
-        setDocuments(savedDocuments);
-        setWorkflows(savedWorkflows);
-        setChecklists(savedChecklists);
-        setNotices(savedNotices);
-        setWorkflowExecutions(savedExecutions);
+            console.log('✅ Teams: Data loaded successfully', {
+                documents: savedDocuments.length,
+                workflows: savedWorkflows.length,
+                checklists: savedChecklists.length,
+                notices: savedNotices.length,
+                executions: savedExecutions.length
+            });
+
+            setDocuments(savedDocuments);
+            setWorkflows(savedWorkflows);
+            setChecklists(savedChecklists);
+            setNotices(savedNotices);
+            setWorkflowExecutions(savedExecutions);
+        } catch (error) {
+            console.error('❌ Teams: Error loading data:', error);
+        }
     }, []);
 
     // Get counts for selected team

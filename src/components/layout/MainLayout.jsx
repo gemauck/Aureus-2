@@ -96,43 +96,60 @@ const MainLayout = () => {
             Reports: !!Reports
         });
         
-        switch(currentPage) {
-            case 'dashboard': 
-                console.log('🔄 MainLayout: Rendering Dashboard component');
-                return <ErrorBoundary><Dashboard /></ErrorBoundary>;
-            case 'clients': 
-                console.log('🔄 MainLayout: Rendering Clients component');
-                return <Clients />;
-            case 'projects': 
-                console.log('🔄 MainLayout: Rendering Projects component');
-                return <Projects />;
-            case 'teams': 
-                console.log('🔄 MainLayout: Rendering Teams component');
-                return <Teams />;
-            case 'users': 
-                console.log('🔄 MainLayout: Rendering Users component');
-                return <Users />;
-            case 'time': 
-                console.log('🔄 MainLayout: Rendering TimeTracking component');
-                return <TimeTracking />;
-            case 'hr': 
-                console.log('🔄 MainLayout: Rendering HR component');
-                return <HR />;
-            case 'manufacturing': 
-                console.log('🔄 MainLayout: Rendering Manufacturing component');
-                return <Manufacturing />;
-            case 'tools': 
-                console.log('🔄 MainLayout: Rendering Tools component');
-                return <Tools />;
-            case 'reports': 
-                console.log('🔄 MainLayout: Rendering Reports component');
-                return <Reports />;
-            case 'documents': 
-                console.log('🔄 MainLayout: Rendering Documents placeholder');
-                return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
-            default: 
-                console.log('🔄 MainLayout: Rendering default Dashboard component');
-                return <Dashboard />;
+        try {
+            switch(currentPage) {
+                case 'dashboard': 
+                    console.log('🔄 MainLayout: Rendering Dashboard component');
+                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+                case 'clients': 
+                    console.log('🔄 MainLayout: Rendering Clients component');
+                    return <ErrorBoundary><Clients /></ErrorBoundary>;
+                case 'projects': 
+                    console.log('🔄 MainLayout: Rendering Projects component');
+                    return <ErrorBoundary><Projects /></ErrorBoundary>;
+                case 'teams': 
+                    console.log('🔄 MainLayout: Rendering Teams component');
+                    return <ErrorBoundary><Teams /></ErrorBoundary>;
+                case 'users': 
+                    console.log('🔄 MainLayout: Rendering Users component');
+                    return <ErrorBoundary><Users /></ErrorBoundary>;
+                case 'time': 
+                    console.log('🔄 MainLayout: Rendering TimeTracking component');
+                    return <ErrorBoundary><TimeTracking /></ErrorBoundary>;
+                case 'hr': 
+                    console.log('🔄 MainLayout: Rendering HR component');
+                    return <ErrorBoundary><HR /></ErrorBoundary>;
+                case 'manufacturing': 
+                    console.log('🔄 MainLayout: Rendering Manufacturing component');
+                    return <ErrorBoundary><Manufacturing /></ErrorBoundary>;
+                case 'tools': 
+                    console.log('🔄 MainLayout: Rendering Tools component');
+                    return <ErrorBoundary><Tools /></ErrorBoundary>;
+                case 'reports': 
+                    console.log('🔄 MainLayout: Rendering Reports component');
+                    return <ErrorBoundary><Reports /></ErrorBoundary>;
+                case 'documents': 
+                    console.log('🔄 MainLayout: Rendering Documents placeholder');
+                    return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
+                default: 
+                    console.log('🔄 MainLayout: Rendering default Dashboard component');
+                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+            }
+        } catch (error) {
+            console.error('❌ MainLayout: Error rendering page:', error);
+            return (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Page</h2>
+                    <p className="text-sm text-red-600 mb-3">There was an error loading the {currentPage} page.</p>
+                    <p className="text-xs text-red-500 mb-4">Error: {error.message}</p>
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            );
         }
     };
 
@@ -166,7 +183,7 @@ const MainLayout = () => {
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
+                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                     >
                         <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-base lg:text-sm`}></i>
                     </button>
@@ -185,7 +202,7 @@ const MainLayout = () => {
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 
                                     : isDark 
-                                        ? 'text-gray-100 hover:bg-gray-700 hover:text-white' 
+                                        ? 'text-gray-200 hover:bg-gray-700 hover:text-white' 
                                         : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
@@ -210,7 +227,7 @@ const MainLayout = () => {
                         {sidebarOpen && (
                             <button 
                                 onClick={logout}
-                                className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                                 title="Logout"
                             >
                                 <i className="fas fa-sign-out-alt text-sm lg:text-xs"></i>
@@ -227,7 +244,7 @@ const MainLayout = () => {
                     <div className="flex items-center">
                         <button 
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className={`lg:hidden ${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
+                            className={`lg:hidden ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
                         >
                             <i className="fas fa-bars text-base"></i>
                         </button>
@@ -308,11 +325,11 @@ const MainLayout = () => {
                                 </div>
                             )}
                         </div>
-                        <button className={`relative ${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                        <button className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
                             <i className="fas fa-bell text-base lg:text-sm"></i>
                             <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] lg:text-[8px] rounded-full w-4 h-4 lg:w-3.5 lg:h-3.5 flex items-center justify-center font-medium">3</span>
                         </button>
-                        <button className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                        <button className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
                             <i className="fas fa-cog text-base lg:text-sm"></i>
                         </button>
                     </div>

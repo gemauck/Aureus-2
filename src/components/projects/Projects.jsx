@@ -71,7 +71,18 @@ const Projects = () => {
     // Ensure storage is available
     useEffect(() => {
         if (!window.storage) {
-            console.error('Storage not available! Make sure localStorage.js is loaded before Projects component.');
+            console.error('❌ Projects: Storage not available! Make sure localStorage.js is loaded before Projects component.');
+            // Try to wait for storage to be available
+            const checkStorage = () => {
+                if (window.storage) {
+                    console.log('✅ Projects: Storage became available');
+                } else {
+                    setTimeout(checkStorage, 100);
+                }
+            };
+            checkStorage();
+        } else {
+            console.log('✅ Projects: Storage is available');
         }
     }, []);
     
@@ -108,8 +119,24 @@ const Projects = () => {
                 setTimeout(loadProjects, 100);
             }
         };
-        
-        loadProjects();
+
+        // Listen for storage ready event
+        const handleStorageReady = () => {
+            console.log('✅ Projects: Storage ready event received');
+            loadProjects();
+        };
+
+        // Check if storage is already ready
+        if (window.storage && typeof window.storage.getProjects === 'function') {
+            loadProjects();
+        } else {
+            // Wait for storage ready event
+            window.addEventListener('storageReady', handleStorageReady);
+        }
+
+        return () => {
+            window.removeEventListener('storageReady', handleStorageReady);
+        };
     }, []);
 
     // Helper function to sync existing projects with clients
@@ -149,8 +176,24 @@ const Projects = () => {
                 setTimeout(saveProjects, 100);
             }
         };
-        
-        saveProjects();
+
+        // Listen for storage ready event
+        const handleStorageReady = () => {
+            console.log('✅ Projects: Storage ready for saving');
+            saveProjects();
+        };
+
+        // Check if storage is already ready
+        if (window.storage && typeof window.storage.setProjects === 'function') {
+            saveProjects();
+        } else {
+            // Wait for storage ready event
+            window.addEventListener('storageReady', handleStorageReady);
+        }
+
+        return () => {
+            window.removeEventListener('storageReady', handleStorageReady);
+        };
     }, [projects]);
 
     // Helper function to count all nested subtasks

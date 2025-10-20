@@ -72,14 +72,30 @@ const TimeTracking = () => {
     
     // Load time entries and projects from localStorage
     useEffect(() => {
-        const savedEntries = storage.getTimeEntries();
-        const savedProjects = storage.getProjects();
+        console.log('🔄 TimeTracking: Loading data from localStorage');
         
-        if (savedEntries) {
-            setTimeEntries(savedEntries);
+        if (!window.storage) {
+            console.error('❌ TimeTracking: Storage not available!');
+            return;
         }
-        if (savedProjects) {
-            setProjects(savedProjects);
+        
+        try {
+            const savedEntries = storage.getTimeEntries();
+            const savedProjects = storage.getProjects();
+            
+            console.log('✅ TimeTracking: Data loaded successfully', {
+                entries: savedEntries ? savedEntries.length : 0,
+                projects: savedProjects ? savedProjects.length : 0
+            });
+            
+            if (savedEntries) {
+                setTimeEntries(savedEntries);
+            }
+            if (savedProjects) {
+                setProjects(savedProjects);
+            }
+        } catch (error) {
+            console.error('❌ TimeTracking: Error loading data:', error);
         }
     }, []);
     

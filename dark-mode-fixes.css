@@ -27,6 +27,14 @@
     background-color: #64748b !important;
 }
 
+.dark .bg-gray-800 {
+    background-color: #1e293b !important;
+}
+
+.dark .bg-gray-900 {
+    background-color: #0f172a !important;
+}
+
 /* Text colors */
 .dark .text-gray-900 {
     color: #f8fafc !important;
@@ -53,7 +61,15 @@
 }
 
 .dark .text-gray-300 {
-    color: #475569 !important;
+    color: #94a3b8 !important;
+}
+
+.dark .text-gray-200 {
+    color: #cbd5e1 !important;
+}
+
+.dark .text-gray-100 {
+    color: #e2e8f0 !important;
 }
 
 /* Border colors */
@@ -421,6 +437,48 @@
 
 .dark .fas:hover, .dark .far:hover, .dark .fab:hover {
     color: #f8fafc !important;
+}
+
+/* Sidebar specific improvements */
+.dark .sidebar {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+.dark .sidebar-item {
+    color: #cbd5e1 !important;
+}
+
+.dark .sidebar-item:hover {
+    background-color: #334155 !important;
+    color: #f8fafc !important;
+}
+
+.dark .sidebar-item.active {
+    background-color: #3b82f6 !important;
+    color: #ffffff !important;
+}
+
+/* Header improvements */
+.dark .header-mobile {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+}
+
+/* Search input improvements */
+.dark input[type="text"] {
+    background-color: #334155 !important;
+    border-color: #475569 !important;
+    color: #f8fafc !important;
+}
+
+.dark input[type="text"]::placeholder {
+    color: #94a3b8 !important;
+}
+
+.dark input[type="text"]:focus {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
 }
 
 /* Mobile specific dark mode fixes */

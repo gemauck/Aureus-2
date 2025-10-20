@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Fixes Test - Abcotronics ERP</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-6xl mx-auto">
+        <h1 class="text-3xl font-bold text-gray-900 mb-8">System Fixes Test</h1>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Test Results -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Test Results</h2>
+                <div id="test-results" class="space-y-3">
+                    <div class="animate-pulse">
+                        <div class="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                        <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Component Test Area -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">Component Test</h2>
+                <div id="component-test" class="space-y-4">
+                    <div class="flex gap-2">
+                        <button id="test-projects" class="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm">
+                            Test Projects
+                        </button>
+                        <button id="test-teams" class="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 text-sm">
+                            Test Teams
+                        </button>
+                        <button id="test-time" class="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm">
+                            Test Time Tracking
+                        </button>
+                        <button id="test-hr" class="px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm">
+                            Test HR
+                        </button>
+                    </div>
+                    <div id="component-output" class="border border-gray-200 rounded p-4 min-h-64">
+                        <p class="text-gray-500 text-sm">Click a button above to test a component</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Console Output -->
+        <div class="mt-6 bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold text-gray-800 mb-4">Console Output</h2>
+            <div id="console-output" class="bg-gray-900 text-green-400 p-4 rounded font-mono text-sm max-h-64 overflow-y-auto">
+                <div>Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load utilities first -->
+    <script type="text/babel" src="./src/utils/localStorage.js"></script>
+    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
+    <script type="text/babel" src="./src/components/theme/ThemeProvider.jsx"></script>
+
+    <!-- Load components -->
+    <script type="text/babel" src="./src/components/projects/Projects.jsx"></script>
+    <script type="text/babel" src="./src/components/teams/Teams.jsx"></script>
+    <script type="text/babel" src="./src/components/time/TimeTracking.jsx"></script>
+    <script type="text/babel" src="./src/components/hr/HR.jsx"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const TestApp = () => {
+            const [testResults, setTestResults] = useState([]);
+            const [consoleOutput, setConsoleOutput] = useState(['System starting...']);
+            const [loading, setLoading] = useState(true);
+
+            // Capture console output
+            useEffect(() => {
+                const originalLog = console.log;
+                const originalError = console.error;
+                const originalWarn = console.warn;
+
+                console.log = (...args) => {
+                    setConsoleOutput(prev => [...prev, `[LOG] ${args.join(' ')}`]);
+                    originalLog.apply(console, args);
+                };
+
+                console.error = (...args) => {
+                    setConsoleOutput(prev => [...prev, `[ERROR] ${args.join(' ')}`]);
+                    originalError.apply(console, args);
+                };
+
+                console.warn = (...args) => {
+                    setConsoleOutput(prev => [...prev, `[WARN] ${args.join(' ')}`]);
+                    originalWarn.apply(console, args);
+                };
+
+                return () => {
+                    console.log = originalLog;
+                    console.error = originalError;
+                    console.warn = originalWarn;
+                };
+            }, []);
+
+            useEffect(() => {
+                const runTests = async () => {
+                    const tests = [];
+
+                    // Test 1: Storage System
+                    tests.push({
+                        name: 'Storage System',
+                        status: typeof window.storage !== 'undefined' ? 'pass' : 'fail',
+                        details: typeof window.storage !== 'undefined' ? 'Storage utilities loaded' : 'Storage not available'
+                    });
+
+                    // Test 2: API System
+                    tests.push({
+                        name: 'API System',
+                        status: typeof window.api !== 'undefined' ? 'pass' : 'fail',
+                        details: typeof window.api !== 'undefined' ? 'API utilities loaded' : 'API not available'
+                    });
+
+                    // Test 3: Components
+                    const components = ['Projects', 'Teams', 'TimeTracking', 'HR'];
+                    components.forEach(comp => {
+                        tests.push({
+                            name: `${comp} Component`,
+                            status: typeof window[comp] !== 'undefined' ? 'pass' : 'fail',
+                            details: typeof window[comp] !== 'undefined' ? 'Component loaded' : 'Component not loaded'
+                        });
+                    });
+
+                    // Test 4: Auth System
+                    tests.push({
+                        name: 'Auth System',
+                        status: typeof window.AuthProvider !== 'undefined' ? 'pass' : 'fail',
+                        details: typeof window.AuthProvider !== 'undefined' ? 'AuthProvider loaded' : 'AuthProvider not loaded'
+                    });
+
+                    // Test 5: Theme System
+                    tests.push({
+                        name: 'Theme System',
+                        status: typeof window.ThemeProvider !== 'undefined' ? 'pass' : 'fail',
+                        details: typeof window.ThemeProvider !== 'undefined' ? 'ThemeProvider loaded' : 'ThemeProvider not loaded'
+                    });
+
+                    setTestResults(tests);
+                    setLoading(false);
+                };
+
+                runTests();
+            }, []);
+
+            const testComponent = (componentName) => {
+                const outputDiv = document.getElementById('component-output');
+                
+                try {
+                    if (!window[componentName]) {
+                        outputDiv.innerHTML = `
+                            <div class="bg-red-50 border border-red-200 rounded p-4">
+                                <h3 class="text-lg font-semibold text-red-800 mb-2">Component Not Available</h3>
+                                <p class="text-sm text-red-600">The ${componentName} component is not loaded.</p>
+                            </div>
+                        `;
+                        return;
+                    }
+
+                    // Try to render the component
+                    const Component = window[componentName];
+                    const element = React.createElement(Component);
+                    
+                    // Render to a temporary container
+                    const tempDiv = document.createElement('div');
+                    ReactDOM.render(element, tempDiv);
+                    
+                    outputDiv.innerHTML = `
+                        <div class="bg-green-50 border border-green-200 rounded p-4">
+                            <h3 class="text-lg font-semibold text-green-800 mb-2">Component Test Successful</h3>
+                            <p class="text-sm text-green-600 mb-2">The ${componentName} component rendered successfully.</p>
+                            <div class="text-xs text-green-500">
+                                Component type: ${Component.name || 'Anonymous'}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Clean up
+                    ReactDOM.unmountComponentAtNode(tempDiv);
+                    
+                } catch (error) {
+                    outputDiv.innerHTML = `
+                        <div class="bg-red-50 border border-red-200 rounded p-4">
+                            <h3 class="text-lg font-semibold text-red-800 mb-2">Component Test Failed</h3>
+                            <p class="text-sm text-red-600 mb-2">Error rendering ${componentName} component:</p>
+                            <p class="text-xs text-red-500 font-mono">${error.message}</p>
+                        </div>
+                    `;
+                }
+            };
+
+            useEffect(() => {
+                // Set up button event listeners
+                document.getElementById('test-projects')?.addEventListener('click', () => testComponent('Projects'));
+                document.getElementById('test-teams')?.addEventListener('click', () => testComponent('Teams'));
+                document.getElementById('test-time')?.addEventListener('click', () => testComponent('TimeTracking'));
+                document.getElementById('test-hr')?.addEventListener('click', () => testComponent('HR'));
+            }, []);
+
+            return (
+                <div>
+                    {/* Test Results */}
+                    <div className="space-y-3">
+                        {loading ? (
+                            <div className="animate-pulse">
+                                <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                            </div>
+                        ) : (
+                            testResults.map((test, index) => (
+                                <div key={index} className="flex items-center justify-between p-3 rounded-lg border">
+                                    <div className="flex items-center space-x-3">
+                                        <div className={`w-3 h-3 rounded-full ${
+                                            test.status === 'pass' ? 'bg-green-500' : 'bg-red-500'
+                                        }`}></div>
+                                        <span className="font-medium text-gray-700">{test.name}</span>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                        <span className={`text-sm px-2 py-1 rounded ${
+                                            test.status === 'pass' 
+                                                ? 'bg-green-100 text-green-800' 
+                                                : 'bg-red-100 text-red-800'
+                                        }`}>
+                                            {test.status}
+                                        </span>
+                                        <span className="text-xs text-gray-500">{test.details}</span>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<TestApp />, document.getElementById('test-results'));
+
+        // Update console output
+        const updateConsoleOutput = () => {
+            const outputDiv = document.getElementById('console-output');
+            if (outputDiv) {
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+            }
+        };
+
+        // Update console output every second
+        setInterval(updateConsoleOutput, 1000);
+    </script>
+</body>
+</html>

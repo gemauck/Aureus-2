@@ -358,14 +358,38 @@ if (typeof window !== 'undefined') {
     }
     
     // Dispatch event to notify components that storage is ready
-    window.dispatchEvent(new CustomEvent('storageReady'));
+    // Use setTimeout to ensure all components are loaded
+    setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('storageReady', {
+            detail: {
+                timestamp: Date.now(),
+                methods: Object.keys(storage)
+            }
+        }));
+        console.log('📡 Storage ready event dispatched');
+    }, 50);
     
     // Also set up a global check function
     window.checkStorage = () => {
         return {
             available: !!window.storage,
             methods: Object.keys(window.storage || {}),
-            hasSetProjects: typeof window.storage?.setProjects === 'function'
+            hasSetProjects: typeof window.storage?.setProjects === 'function',
+            hasGetProjects: typeof window.storage?.getProjects === 'function',
+            hasSetClients: typeof window.storage?.setClients === 'function',
+            hasGetClients: typeof window.storage?.getClients === 'function'
         };
+    };
+    
+    // Add a method to manually trigger storage ready event
+    window.triggerStorageReady = () => {
+        window.dispatchEvent(new CustomEvent('storageReady', {
+            detail: {
+                timestamp: Date.now(),
+                methods: Object.keys(storage),
+                manual: true
+            }
+        }));
+        console.log('📡 Storage ready event manually triggered');
     };
 }
