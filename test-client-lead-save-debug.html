@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client & Lead Save Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .form-container {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .form-container input, .form-container select, .form-container textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .item-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+        }
+        .item {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .item-info {
+            flex: 1;
+        }
+        .item-actions {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Client & Lead Save Debug Test</h1>
+    <p>This test helps debug why clients and leads are not saving.</p>
+
+    <div class="test-container">
+        <h2>Debug Results</h2>
+        <div id="debug-results"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>System Status</h2>
+        <div id="system-status"></div>
+        <button onclick="checkSystemStatus()">Check System Status</button>
+    </div>
+
+    <div class="test-container">
+        <h2>API Connection Test</h2>
+        <div id="api-status"></div>
+        <button onclick="testAPIConnection()">Test API Connection</button>
+    </div>
+
+    <div class="test-container">
+        <h2>Client Save Test</h2>
+        <div class="form-container">
+            <input type="text" id="client-name" placeholder="Client Name" value="Test Client">
+            <input type="text" id="client-industry" placeholder="Industry" value="Technology">
+            <select id="client-status">
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Prospect">Prospect</option>
+            </select>
+            <input type="email" id="client-email" placeholder="Email" value="test@example.com">
+            <textarea id="client-notes" placeholder="Notes">Test client for debugging save issues</textarea>
+            <button onclick="testClientSave()">Test Client Save</button>
+        </div>
+        <div id="client-save-status"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Lead Save Test</h2>
+        <div class="form-container">
+            <input type="text" id="lead-name" placeholder="Lead Name" value="Test Lead">
+            <input type="text" id="lead-industry" placeholder="Industry" value="Technology">
+            <select id="lead-status">
+                <option value="Potential">Potential</option>
+                <option value="Qualified">Qualified</option>
+                <option value="Proposal">Proposal</option>
+                <option value="Negotiation">Negotiation</option>
+            </select>
+            <input type="text" id="lead-source" placeholder="Source" value="Website">
+            <textarea id="lead-notes" placeholder="Notes">Test lead for debugging save issues</textarea>
+            <button onclick="testLeadSave()">Test Lead Save</button>
+        </div>
+        <div id="lead-save-status"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Current Data</h2>
+        <button onclick="loadAllData()">Load All Data</button>
+        <div id="data-display"></div>
+    </div>
+
+    <script>
+        // Load required scripts
+        const scripts = [
+            'src/utils/localStorage.js',
+            'src/utils/databaseAPI.js'
+        ];
+
+        let loadedScripts = 0;
+        scripts.forEach(src => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedScripts++;
+                if (loadedScripts === scripts.length) {
+                    initializeTest();
+                }
+            };
+            script.onerror = () => {
+                addResult('error', `Failed to load script: ${src}`);
+            };
+            document.head.appendChild(script);
+        });
+
+        function addResult(type, message) {
+            const resultsDiv = document.getElementById('debug-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function initializeTest() {
+            addResult('info', 'Test environment initialized');
+            checkSystemStatus();
+        }
+
+        function checkSystemStatus() {
+            const statusDiv = document.getElementById('system-status');
+            let statusHTML = '<div class="debug-info">';
+            
+            // Check authentication
+            const token = window.storage?.getToken?.();
+            statusHTML += `Authentication: ${token ? '✅ Present' : '❌ Missing'}\n`;
+            
+            // Check API availability
+            const hasDatabaseAPI = !!window.DatabaseAPI;
+            const hasApiClients = !!window.api?.createClient;
+            const hasApiLeads = !!window.api?.createLead;
+            statusHTML += `DatabaseAPI: ${hasDatabaseAPI ? '✅ Available' : '❌ Missing'}\n`;
+            statusHTML += `API Clients: ${hasApiClients ? '✅ Available' : '❌ Missing'}\n`;
+            statusHTML += `API Leads: ${hasApiLeads ? '✅ Available' : '❌ Missing'}\n`;
+            
+            // Check API base URL
+            const apiBase = window.DatabaseAPI?.API_BASE || 'Not set';
+            statusHTML += `API Base: ${apiBase}\n`;
+            
+            statusHTML += '</div>';
+            
+            if (token && hasDatabaseAPI && hasApiClients && hasApiLeads) {
+                statusDiv.innerHTML = '<div class="test-result success">✅ System Status: Ready</div>' + statusHTML;
+                addResult('success', 'System status check passed');
+            } else {
+                statusDiv.innerHTML = '<div class="test-result error">❌ System Status: Issues Found</div>' + statusHTML;
+                addResult('error', 'System status check failed');
+            }
+        }
+
+        async function testAPIConnection() {
+            const apiDiv = document.getElementById('api-status');
+            apiDiv.innerHTML = '<div class="test-result info">🔄 Testing API connection...</div>';
+            
+            try {
+                // Test health check
+                addResult('info', 'Testing health check...');
+                const healthResponse = await window.DatabaseAPI.healthCheck();
+                addResult('success', 'Health check successful');
+                
+                // Test clients endpoint
+                addResult('info', 'Testing clients endpoint...');
+                const clientsResponse = await window.DatabaseAPI.getClients();
+                addResult('success', `Clients endpoint working: ${clientsResponse?.data?.clients?.length || 0} clients`);
+                
+                // Test leads endpoint
+                addResult('info', 'Testing leads endpoint...');
+                const leadsResponse = await window.DatabaseAPI.getLeads();
+                addResult('success', `Leads endpoint working: ${leadsResponse?.data?.leads?.length || 0} leads`);
+                
+                apiDiv.innerHTML = '<div class="test-result success">✅ API Connection: Working</div>';
+                addResult('success', 'All API endpoints are working');
+                
+            } catch (error) {
+                apiDiv.innerHTML = `<div class="test-result error">❌ API Connection Failed: ${error.message}</div>`;
+                addResult('error', `API connection failed: ${error.message}`);
+            }
+        }
+
+        async function testClientSave() {
+            const statusDiv = document.getElementById('client-save-status');
+            statusDiv.innerHTML = '<div class="test-result info">🔄 Testing client save...</div>';
+            
+            try {
+                const clientData = {
+                    name: document.getElementById('client-name').value,
+                    industry: document.getElementById('client-industry').value,
+                    status: document.getElementById('client-status').value,
+                    type: 'client',
+                    revenue: 0,
+                    lastContact: new Date().toISOString().split('T')[0],
+                    address: '',
+                    website: '',
+                    notes: document.getElementById('client-notes').value,
+                    contacts: [],
+                    followUps: [],
+                    projectIds: [],
+                    comments: [],
+                    sites: [],
+                    opportunities: [],
+                    contracts: [],
+                    activityLog: [],
+                    billingTerms: {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }
+                };
+                
+                addResult('info', `Creating client: ${clientData.name}`);
+                console.log('Client data to save:', clientData);
+                
+                const response = await window.DatabaseAPI.createClient(clientData);
+                console.log('Client save response:', response);
+                
+                if (response?.data?.client || response?.client) {
+                    addResult('success', `Client created successfully: ${response.data?.client?.id || response.client?.id}`);
+                    statusDiv.innerHTML = '<div class="test-result success">✅ Client Save: Success</div>';
+                } else {
+                    addResult('warning', 'Client save response did not contain expected data structure');
+                    statusDiv.innerHTML = '<div class="test-result warning">⚠️ Client Save: Unexpected Response</div>';
+                }
+                
+                // Clear form
+                document.getElementById('client-name').value = '';
+                document.getElementById('client-industry').value = '';
+                document.getElementById('client-notes').value = '';
+                
+            } catch (error) {
+                addResult('error', `Client save failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="test-result error">❌ Client Save Failed: ${error.message}</div>`;
+                console.error('Client save error:', error);
+            }
+        }
+
+        async function testLeadSave() {
+            const statusDiv = document.getElementById('lead-save-status');
+            statusDiv.innerHTML = '<div class="test-result info">🔄 Testing lead save...</div>';
+            
+            try {
+                const leadData = {
+                    name: document.getElementById('lead-name').value,
+                    industry: document.getElementById('lead-industry').value,
+                    status: document.getElementById('lead-status').value,
+                    source: document.getElementById('lead-source').value,
+                    notes: document.getElementById('lead-notes').value,
+                    type: 'lead',
+                    lastContact: new Date().toISOString().split('T')[0],
+                    activityLog: [{
+                        id: Date.now(),
+                        type: 'Lead Created',
+                        description: `Lead created: ${document.getElementById('lead-name').value}`,
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User'
+                    }]
+                };
+                
+                addResult('info', `Creating lead: ${leadData.name}`);
+                console.log('Lead data to save:', leadData);
+                
+                const response = await window.DatabaseAPI.createLead(leadData);
+                console.log('Lead save response:', response);
+                
+                if (response?.data?.lead || response?.lead) {
+                    addResult('success', `Lead created successfully: ${response.data?.lead?.id || response.lead?.id}`);
+                    statusDiv.innerHTML = '<div class="test-result success">✅ Lead Save: Success</div>';
+                } else {
+                    addResult('warning', 'Lead save response did not contain expected data structure');
+                    statusDiv.innerHTML = '<div class="test-result warning">⚠️ Lead Save: Unexpected Response</div>';
+                }
+                
+                // Clear form
+                document.getElementById('lead-name').value = '';
+                document.getElementById('lead-industry').value = '';
+                document.getElementById('lead-source').value = '';
+                document.getElementById('lead-notes').value = '';
+                
+            } catch (error) {
+                addResult('error', `Lead save failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="test-result error">❌ Lead Save Failed: ${error.message}</div>`;
+                console.error('Lead save error:', error);
+            }
+        }
+
+        async function loadAllData() {
+            try {
+                addResult('info', 'Loading all data...');
+                
+                const [clientsResponse, leadsResponse] = await Promise.all([
+                    window.DatabaseAPI.getClients(),
+                    window.DatabaseAPI.getLeads()
+                ]);
+                
+                const clients = clientsResponse?.data?.clients || [];
+                const leads = leadsResponse?.data?.leads || [];
+                
+                const dataDiv = document.getElementById('data-display');
+                dataDiv.innerHTML = `
+                    <div class="item-list">
+                        <h3>Clients (${clients.length})</h3>
+                        ${clients.map(client => `
+                            <div class="item">
+                                <div class="item-info">
+                                    <strong>${client.name}</strong> (${client.industry}) - ${client.status}
+                                    <br><small>ID: ${client.id} | Type: ${client.type || 'unknown'}</small>
+                                </div>
+                            </div>
+                        `).join('')}
+                        
+                        <h3>Leads (${leads.length})</h3>
+                        ${leads.map(lead => `
+                            <div class="item">
+                                <div class="item-info">
+                                    <strong>${lead.name}</strong> (${lead.industry}) - ${lead.status}
+                                    <br><small>ID: ${lead.id} | Type: ${lead.type || 'unknown'}</small>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                addResult('success', `Loaded ${clients.length} clients and ${leads.length} leads`);
+                
+            } catch (error) {
+                addResult('error', `Failed to load data: ${error.message}`);
+            }
+        }
+
+        // Auto-check system status when page loads
+        setTimeout(() => {
+            if (window.storage?.getToken?.()) {
+                testAPIConnection();
+                loadAllData();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
