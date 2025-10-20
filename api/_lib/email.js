@@ -1,28 +1,33 @@
 // Email service using nodemailer
 import nodemailer from 'nodemailer';
 
-// Create transporter with your email credentials
-// Gmail requires App Password for SMTP authentication
-const transporter = nodemailer.createTransporter({
-    service: 'gmail', // Use Gmail service for better reliability
-    auth: {
-        user: 'garethm@abcotronics.co.za', // Your Gmail address
-        pass: 'zdra unfj uclq ifnv' // Your Gmail App Password
-    }
-});
+// Build transporter from environment variables
+// Supported envs:
+// - SMTP_URL (e.g. smtp://user:pass@smtp.gmail.com:587)
+// - or granular: SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
+// - or GMAIL_USER, GMAIL_APP_PASSWORD for Gmail App Password auth
 
-// Alternative Hostinger configuration (commented out)
-/*
-const transporter = nodemailer.createTransporter({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: 'garethm@abcotronics.co.za',
-        pass: 'GazMauck1989*'
+function createTransporterFromEnv() {
+    if (process.env.SMTP_URL) {
+        return nodemailer.createTransport(process.env.SMTP_URL);
     }
-});
-*/
+
+    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const port = Number(process.env.SMTP_PORT || 587);
+    const secure = String(process.env.SMTP_SECURE || 'false') === 'true' || port === 465;
+
+    const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+
+    return nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: user && pass ? { user, pass } : undefined
+    });
+}
+
+const transporter = createTransporterFromEnv();
 
 // Verify connection configuration
 transporter.verify((error, success) => {
@@ -38,7 +43,7 @@ export const sendInvitationEmail = async (invitationData) => {
     const { email, name, role, invitationLink } = invitationData;
     
     const mailOptions = {
-        from: 'garethm@abcotronics.co.za',
+        from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za',
         to: email,
         subject: 'Invitation to Join Abcotronics ERP System',
         html: `
@@ -75,7 +80,7 @@ export const sendInvitationEmail = async (invitationData) => {
                     <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
                         <p style="color: #666; margin: 0; font-size: 14px;">
                             <strong>Important:</strong> This invitation link will expire in 7 days. 
-                            If you need help, contact us at <a href="mailto:garethm@abcotronics.co.za">garethm@abcotronics.co.za</a>
+                            If you need help, contact us at <a href="mailto:support@abcotronics.co.za">support@abcotronics.co.za</a>
                         </p>
                     </div>
                     
@@ -105,7 +110,7 @@ export const sendInvitationEmail = async (invitationData) => {
             To accept your invitation, click this link: ${invitationLink}
             
             Important: This invitation link will expire in 7 days.
-            If you need help, contact us at garethm@abcotronics.co.za
+            If you need help, contact us at support@abcotronics.co.za
             
             Best regards,
             The Abcotronics Team

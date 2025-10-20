@@ -35,6 +35,7 @@ const Pipeline = () => {
     const [showDealModal, setShowDealModal] = useState(false);
     const [timeRange, setTimeRange] = useState('current'); // current, monthly, quarterly
     const [refreshKey, setRefreshKey] = useState(0);
+    const [isDragging, setIsDragging] = useState(false);
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -278,6 +279,7 @@ const Pipeline = () => {
     const handleDragStart = (item, type) => {
         setDraggedItem(item);
         setDraggedType(type);
+        setIsDragging(true);
     };
 
     const handleDragOver = (e) => {
@@ -290,6 +292,7 @@ const Pipeline = () => {
         if (!draggedItem || !draggedType || draggedItem.stage === targetStage) {
             setDraggedItem(null);
             setDraggedType(null);
+            setIsDragging(false);
             return;
         }
 
@@ -344,11 +347,13 @@ const Pipeline = () => {
         setDraggedItem(null);
         setDraggedType(null);
         setRefreshKey(k => k + 1);
+        setIsDragging(false);
     };
 
     const handleDragEnd = () => {
         setDraggedItem(null);
         setDraggedType(null);
+        setIsDragging(false);
     };
 
     // Get deal age in days
@@ -382,7 +387,7 @@ const Pipeline = () => {
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-lg p-3 border border-gray-200 shadow-sm hover:shadow-md cursor-move transition ${
+                className={`bg-white rounded-lg p-3 border border-gray-200 shadow-sm cursor-move ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
             >
@@ -450,7 +455,7 @@ const Pipeline = () => {
                 return (
                     <div 
                         key={stage.id} 
-                        className={`flex-1 min-w-[300px] bg-gray-50 rounded-lg p-4 transition-all ${
+                        className={`flex-1 min-w-[300px] bg-gray-50 rounded-lg p-4 ${!isDragging ? 'transition-all' : ''} ${
                             isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50' : ''
                         }`}
                         onDragOver={handleDragOver}
@@ -487,7 +492,7 @@ const Pipeline = () => {
                         {/* Cards */}
                         <div className="space-y-2">
                             {stageItems.length === 0 ? (
-                                <div className={`text-center py-8 rounded-lg border-2 border-dashed transition ${
+                                <div className={`text-center py-8 rounded-lg border-2 border-dashed ${!isDragging ? 'transition' : ''} ${
                                     isDraggedOver ? 'border-primary-400 bg-primary-50' : 'border-gray-300'
                                 }`}>
                                     <i className="fas fa-inbox text-2xl text-gray-300 mb-2"></i>
