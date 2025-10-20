@@ -312,12 +312,14 @@ const DashboardLive = () => {
         });
         const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
 
-        const pipelineValue = (data.leads || []).reduce((sum, lead) => sum + (lead.value || 0), 0);
-        const weightedPipeline = (data.leads || []).reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
+        // Ensure leads is an array
+        const leadsArray = Array.isArray(data.leads) ? data.leads : [];
+        const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
+        const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
 
         return {
             totalClients: (data.clients || []).length,
-            totalLeads: (data.leads || []).length,
+            totalLeads: leadsArray.length,
             totalProjects: (data.projects || []).length,
             totalInvoices: (data.invoices || []).length,
             totalRevenue: (data.invoices || []).reduce((sum, invoice) => sum + (invoice.total || 0), 0),
