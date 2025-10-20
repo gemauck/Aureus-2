@@ -70,7 +70,7 @@ const Projects = () => {
     
     // Load projects from localStorage on mount
     useEffect(() => {
-        const savedProjects = storage.getProjects();
+        const savedProjects = window.storage?.getProjects?.();
         if (savedProjects) {
             setProjects(savedProjects);
             
@@ -93,7 +93,7 @@ const Projects = () => {
 
     // Helper function to sync existing projects with clients
     const syncProjectsWithClients = (projectsList) => {
-        const clients = storage.getClients() || [];
+        const clients = window.storage?.getClients() || [];
         const updatedClients = clients.map(client => {
             const clientProjects = projectsList.filter(p => p.client === client.name);
             const projectIds = clientProjects.map(p => p.id);
@@ -102,7 +102,7 @@ const Projects = () => {
                 projectIds: projectIds
             };
         });
-        storage.setClients(updatedClients);
+        window.storage?.setClients(updatedClients);
         
         // Dispatch event to notify other components
         window.dispatchEvent(new CustomEvent('clientsUpdated'));
@@ -111,7 +111,7 @@ const Projects = () => {
     // Save projects to localStorage whenever they change (sorted by client)
     useEffect(() => {
         const sortedProjects = [...projects].sort((a, b) => a.client.localeCompare(b.client));
-        storage.setProjects(sortedProjects);
+        window.storage?.setProjects(sortedProjects);
     }, [projects]);
 
     // Helper function to count all nested subtasks
@@ -187,7 +187,7 @@ const Projects = () => {
 
     // Helper function to update client's projectIds
     const updateClientProjectIds = (oldClientName, newClientName, projectId) => {
-        const clients = storage.getClients() || [];
+        const clients = window.storage?.getClients() || [];
         const updatedClients = clients.map(client => {
             if (oldClientName && client.name === oldClientName) {
                 // Remove project from old client
@@ -208,7 +208,7 @@ const Projects = () => {
             }
             return client;
         });
-        storage.setClients(updatedClients);
+        window.storage?.setClients(updatedClients);
         
         // Dispatch event to notify other components
         window.dispatchEvent(new CustomEvent('clientsUpdated'));
