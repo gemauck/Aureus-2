@@ -23,13 +23,10 @@ async function handler(req, res) {
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'leads') {
       try {
         const leads = await prisma.client.findMany({ 
-          where: { 
-            type: 'lead',
-            ownerId: req.user?.sub || null
-          },
+          where: { type: 'lead' },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Leads retrieved successfully:', leads.length, 'for user:', req.user?.sub)
+        console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
         return ok(res, { leads })
       } catch (dbError) {
         console.error('❌ Database error listing leads:', dbError)
