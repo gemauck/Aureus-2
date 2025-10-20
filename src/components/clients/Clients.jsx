@@ -395,11 +395,13 @@ const Clients = () => {
                 console.log('No auth token, loading clients from localStorage only');
                 const savedClients = safeStorage.getClients();
                 console.log('📁 Saved clients from localStorage:', savedClients ? savedClients.length : 'none');
-        if (savedClients) {
+        if (savedClients && savedClients.length > 0) {
                     console.log('✅ Setting clients from localStorage');
                     setClients(savedClients);
                 } else {
-                    console.log('⚠️ No saved clients, keeping empty state');
+                    console.log('📁 No saved clients, loading initial clients data');
+                    setClients(initialClients);
+                    safeStorage.setClients(initialClients);
                 }
             } else {
                 try {
@@ -480,12 +482,14 @@ const Clients = () => {
                     // Always fall back to localStorage on any API error
                     const savedClients = safeStorage.getClients();
                     console.log('📁 API error occurred, checking localStorage:', savedClients ? savedClients.length : 'no clients');
-                    if (savedClients) {
+                    if (savedClients && savedClients.length > 0) {
                         console.log('✅ Falling back to localStorage clients:', savedClients.length);
                         setClients(savedClients);
                         console.log('✅ Clients set from localStorage fallback');
                     } else {
-                        console.log('❌ No clients found in localStorage fallback');
+                        console.log('📁 No clients in localStorage fallback, loading initial clients data');
+                        setClients(initialClients);
+                        safeStorage.setClients(initialClients);
                     }
                 }
             }
@@ -493,16 +497,26 @@ const Clients = () => {
             console.error('❌ Failed to load clients:', e);
             const savedClients = safeStorage.getClients();
             console.log('📁 Final fallback - saved clients:', savedClients ? savedClients.length : 'none');
-            if (savedClients) {
+            if (savedClients && savedClients.length > 0) {
                 console.log('✅ Final fallback - setting clients from localStorage');
                 setClients(savedClients);
             } else {
-                console.log('⚠️ Final fallback - no saved clients, keeping initial state');
+                // Fallback to initial clients data if localStorage is empty
+                console.log('📁 No saved clients, loading initial clients data');
+                setClients(initialClients);
+                safeStorage.setClients(initialClients);
             }
         }
         const savedLeads = safeStorage.getLeads();
         const savedProjects = safeStorage.getProjects();
-        if (savedLeads) setLeads(savedLeads);
+        if (savedLeads && savedLeads.length > 0) {
+            setLeads(savedLeads);
+        } else {
+            // Fallback to initial leads data if localStorage is empty
+            console.log('📁 No saved leads, loading initial leads data');
+            setLeads(initialLeads);
+            safeStorage.setLeads(initialLeads);
+        }
         if (savedProjects) setProjects(savedProjects);
     };
 
