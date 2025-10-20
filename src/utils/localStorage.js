@@ -68,6 +68,10 @@ const storage = {
         localStorage.setItem('abcotronics_leads', JSON.stringify(leads));
     },
     
+    removeLeads: () => {
+        localStorage.removeItem('abcotronics_leads');
+    },
+    
     // Projects
     getProjects: () => {
         try {

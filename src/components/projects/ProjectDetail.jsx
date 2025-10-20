@@ -100,7 +100,7 @@ const ProjectDetail = ({ project, onBack }) => {
         const totalTasks = tasks.length;
         const completedTasks = tasks.filter(t => t.status === 'Done').length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const users = storage.getUsers() || [];
+        const users = (storage && typeof storage.getUsers === 'function') ? storage.getUsers() || [] : [];
         const activeUsers = users.filter(u => u.status === 'Active');
 
         // Calculate days until due
@@ -1513,7 +1513,7 @@ const ProjectDetail = ({ project, onBack }) => {
                         setShowDocumentModal(false);
                         setEditingDocument(null);
                     }}
-                    users={storage.getUsers() || []}
+                    users={(storage && typeof storage.getUsers === 'function') ? storage.getUsers() || [] : []}
                 />
             )}
         </div>
