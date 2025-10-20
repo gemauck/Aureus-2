@@ -127,6 +127,17 @@ const authRequired = (req, res, next) => {
 }
 
 // Dynamic API routing middleware - handles all API endpoints
+// Explicit mapping for critical endpoints to avoid resolution edge-cases
+app.all('/api/users/invite', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'invite.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 app.use('/api', async (req, res) => {
   try {
     const handlerPath = toHandlerPath(req.url)

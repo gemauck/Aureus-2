@@ -88,6 +88,17 @@ app.use(express.static(rootDir, {
   redirect: false // Disable automatic redirects for trailing slashes
 }))
 
+// Explicit mapping for critical endpoints (ensure invite works even if resolution changes)
+app.all('/api/users/invite', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'invite.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
   try {

@@ -28,10 +28,16 @@ async function handler(req, res) {
                 orderBy: { createdAt: 'desc' }
             })
 
-            // Get all invitations
-            const invitations = await prisma.invitation.findMany({
-                orderBy: { createdAt: 'desc' }
-            })
+            // Get all invitations (graceful if table missing)
+            let invitations = []
+            try {
+                invitations = await prisma.invitation.findMany({
+                    orderBy: { createdAt: 'desc' }
+                })
+            } catch (e) {
+                // If Invitation model/table isn't available yet, return empty list
+                invitations = []
+            }
 
             return ok(res, {
                 users,

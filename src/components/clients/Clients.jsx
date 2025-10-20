@@ -1284,7 +1284,7 @@ const Clients = () => {
                                     
                                     {stageLeads.map(lead => (
                                         <div 
-                                            key={`lead-${lead.id}`}
+                                            key={`lead-${lead.id}-${stage}-${lead.name}`}
                                             draggable
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
@@ -1492,7 +1492,7 @@ const Clients = () => {
                         ) : (
                             filteredLeads.map(lead => (
                                 <tr 
-                                    key={lead.id} 
+                                    key={`lead-${lead.id}-${lead.name}`}
                                     onClick={() => handleOpenLead(lead)}
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >

@@ -339,6 +339,8 @@ const MainLayout = () => {
                 <main className="p-4 lg:p-2 sm:p-4 overflow-x-auto">
                     {renderPage()}
                 </main>
+                {/* Global Feedback Widget */}
+                {window.FeedbackWidget ? <window.FeedbackWidget /> : null}
             </div>
         </div>
     );
