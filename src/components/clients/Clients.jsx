@@ -325,9 +325,10 @@ const Clients = () => {
         console.log('💾 localStorage clients:', savedClients ? savedClients.length : 'none');
     }, [refreshKey]);
     
-    // Load clients from API immediately on mount
+    // Load clients and leads from API immediately on mount
     useEffect(() => {
         loadClients();
+        loadLeads();
     }, []);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
@@ -543,17 +544,54 @@ const Clients = () => {
                 safeStorage.setClients(initialClients);
             }
         }
-        const savedLeads = safeStorage.getLeads();
         const savedProjects = safeStorage.getProjects();
-        if (savedLeads && savedLeads.length > 0) {
-            setLeads(savedLeads);
-        } else {
-            // Fallback to initial leads data if localStorage is empty
-            console.log('📁 No saved leads, loading initial leads data');
-            setLeads(initialLeads);
-            safeStorage.setLeads(initialLeads);
-        }
         if (savedProjects) setProjects(savedProjects);
+    };
+
+    // Load leads from API and localStorage
+    const loadLeads = async () => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.getLeads) {
+                try {
+                    console.log('🔄 Loading leads from API...');
+                    const apiResponse = await window.api.getLeads();
+                    const apiLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+                    console.log('📡 API returned leads:', apiLeads.length);
+                    
+                    if (apiLeads && apiLeads.length > 0) {
+                        setLeads(apiLeads);
+                        safeStorage.setLeads(apiLeads);
+                        console.log('✅ Leads loaded from API');
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Failed to load leads from API:', error);
+                }
+            }
+            
+            // Fallback to localStorage or initial data
+            const savedLeads = safeStorage.getLeads();
+            if (savedLeads && savedLeads.length > 0) {
+                setLeads(savedLeads);
+                console.log('✅ Leads loaded from localStorage');
+            } else {
+                // Fallback to initial leads data if localStorage is empty
+                console.log('📁 No saved leads, loading initial leads data');
+                setLeads(initialLeads);
+                safeStorage.setLeads(initialLeads);
+            }
+        } catch (error) {
+            console.error('❌ Error loading leads:', error);
+            // Fallback to localStorage
+            const savedLeads = safeStorage.getLeads();
+            if (savedLeads && savedLeads.length > 0) {
+                setLeads(savedLeads);
+            } else {
+                setLeads(initialLeads);
+                safeStorage.setLeads(initialLeads);
+            }
+        }
     };
 
     // Listen for storage changes to refresh clients (DISABLED - was causing infinite loop)
@@ -575,16 +613,8 @@ const Clients = () => {
     // Refresh data when switching to pipeline view
     useEffect(() => {
         if (viewMode === 'pipeline') {
-            const savedClients = safeStorage.getClients();
-            const savedLeads = safeStorage.getLeads();
-            if (savedClients) {
-                const clientsWithOpportunities = savedClients.map(client => ({
-                    ...client,
-                    opportunities: client.opportunities || []
-                }));
-                setClients(clientsWithOpportunities);
-            }
-            if (savedLeads) setLeads(savedLeads);
+            loadClients();
+            loadLeads();
         }
     }, [viewMode, refreshKey]);
     
@@ -816,22 +846,41 @@ const Clients = () => {
                 
                 // Try to save to database first
                 const token = window.storage?.getToken?.();
-                if (token && window.api?.updateClient) {
+                if (token && window.api?.updateLead) {
                     try {
                         console.log('🌐 Calling API to update lead:', updatedLead.id);
-                        await window.api.updateClient(updatedLead.id, updatedLead);
+                        const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                        const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                         console.log('✅ Lead updated in database');
+                        
+                        // Use the updated lead from API if available
+                        if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
+                            setLeads(updatedLeads);
+                            setSelectedLead(updatedLeadFromAPI);
+                            window.storage?.setLeads?.(updatedLeads);
+                        } else {
+                            // Fallback to local update
+                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                            setLeads(updatedLeads);
+                            setSelectedLead(updatedLead);
+                            window.storage?.setLeads?.(updatedLeads);
+                        }
                     } catch (error) {
                         console.warn('⚠️ Failed to update lead in database, saving to localStorage:', error);
+                        // Fallback to localStorage
+                        const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                        setLeads(updatedLeads);
+                        setSelectedLead(updatedLead);
+                        window.storage?.setLeads?.(updatedLeads);
                     }
+                } else {
+                    // No API, save to localStorage only
+                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                    setLeads(updatedLeads);
+                    setSelectedLead(updatedLead);
+                    window.storage?.setLeads?.(updatedLeads);
                 }
-                
-                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                setLeads(updatedLeads);
-                // Update selectedLead to reflect the changes immediately
-                setSelectedLead(updatedLead);
-                // Save to localStorage for persistence
-                window.storage?.setLeads?.(updatedLeads);
                 console.log('✅ Lead updated and saved to localStorage');
             } else {
                 // Create new lead
@@ -851,10 +900,11 @@ const Clients = () => {
                 
                 // Try to save to database first
                 const token = window.storage?.getToken?.();
-                if (token && window.api?.createClient) {
+                if (token && window.api?.createLead) {
                     try {
                         console.log('🌐 Calling API to create lead:', newLead);
-                        const savedLead = await window.api.createClient(newLead);
+                        const apiResponse = await window.api.createLead(newLead);
+                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                         console.log('✅ Lead created in database:', savedLead);
                         
                         // Use the saved lead from database (with proper ID)
@@ -940,9 +990,9 @@ const Clients = () => {
         try {
             // Try to delete from database first
             const token = window.storage?.getToken?.();
-            if (token && window.api?.deleteClient) {
+            if (token && window.api?.deleteLead) {
                 try {
-                    await window.api.deleteClient(leadId);
+                    await window.api.deleteLead(leadId);
                     console.log('✅ Lead deleted from database');
                 } catch (error) {
                     console.warn('⚠️ Failed to delete lead from database:', error);

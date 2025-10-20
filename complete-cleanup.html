@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete Project Cleanup</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f5f5f5;
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 30px; 
+            border-radius: 10px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .section { 
+            margin: 20px 0; 
+            padding: 15px; 
+            border-radius: 5px; 
+            border-left: 4px solid #007bff;
+        }
+        .success { background-color: #d4edda; border-left-color: #28a745; }
+        .error { background-color: #f8d7da; border-left-color: #dc3545; }
+        .info { background-color: #d1ecf1; border-left-color: #17a2b8; }
+        .warning { background-color: #fff3cd; border-left-color: #ffc107; }
+        button { 
+            padding: 12px 20px; 
+            margin: 5px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-weight: bold;
+        }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        pre { 
+            background-color: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 5px; 
+            overflow-x: auto; 
+            border: 1px solid #e9ecef;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 Complete Project Cleanup</h1>
+        <p>This will clear ALL projects from both localStorage and Railway database.</p>
+        
+        <div class="section info">
+            <h3>Current Status</h3>
+            <div id="currentStatus">Loading...</div>
+        </div>
+        
+        <div class="section">
+            <h3>Cleanup Actions</h3>
+            <button class="btn-primary" onclick="checkStatus()">Refresh Status</button>
+            <button class="btn-warning" onclick="clearLocalStorage()">Clear localStorage Only</button>
+            <button class="btn-danger" onclick="clearDatabase()">Clear Database Only</button>
+            <button class="btn-danger" onclick="clearEverything()">Clear Everything</button>
+        </div>
+        
+        <div class="section" id="results">
+            <h3>Results</h3>
+            <div id="resultContent">Click a button above to see results...</div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://abco-erp-2-production.up.railway.app';
+        
+        async function checkStatus() {
+            const statusEl = document.getElementById('currentStatus');
+            const resultEl = document.getElementById('resultContent');
+            
+            statusEl.innerHTML = '<div class="spinner"></div>Checking status...';
+            
+            try {
+                // Check localStorage
+                const localProjects = localStorage.getItem('abcotronics_projects');
+                const localCount = localProjects ? JSON.parse(localProjects).length : 0;
+                
+                // Check database
+                const token = localStorage.getItem('abcotronics_auth_token');
+                let dbCount = 'Unknown';
+                let dbError = '';
+                
+                if (token) {
+                    try {
+                        const response = await fetch(`${API_BASE}/api/projects`, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            const data = await response.json();
+                            dbCount = data?.data?.length || 0;
+                        } else {
+                            dbError = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                    } catch (e) {
+                        dbError = e.message;
+                    }
+                } else {
+                    dbError = 'No auth token';
+                }
+                
+                statusEl.innerHTML = `
+                    <strong>localStorage:</strong> ${localCount} projects<br>
+                    <strong>Database:</strong> ${dbCount} projects ${dbError ? `(${dbError})` : ''}
+                `;
+                
+                resultEl.innerHTML = '<div class="info">✅ Status check complete</div>';
+                
+            } catch (error) {
+                statusEl.innerHTML = 'Error checking status';
+                resultEl.innerHTML = `<div class="error">❌ Error: ${error.message}</div>`;
+            }
+        }
+        
+        async function clearLocalStorage() {
+            const resultEl = document.getElementById('resultContent');
+            resultEl.innerHTML = '<div class="info">🔄 Clearing localStorage...</div>';
+            
+            try {
+                // Clear all project-related localStorage
+                localStorage.removeItem('abcotronics_projects');
+                localStorage.removeItem('abcotronics_projects_backup');
+                localStorage.removeItem('projects_cache');
+                localStorage.removeItem('cached_projects');
+                
+                resultEl.innerHTML = '<div class="success">✅ localStorage cleared successfully!</div>';
+                checkStatus();
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error">❌ Error clearing localStorage: ${error.message}</div>`;
+            }
+        }
+        
+        async function clearDatabase() {
+            const resultEl = document.getElementById('resultContent');
+            resultEl.innerHTML = '<div class="info">🔄 Clearing database...</div>';
+            
+            try {
+                const token = localStorage.getItem('abcotronics_auth_token');
+                if (!token) {
+                    resultEl.innerHTML = '<div class="error">❌ No auth token found. Please log in first.</div>';
+                    return;
+                }
+                
+                // First, get all projects
+                const response = await fetch(`${API_BASE}/api/projects`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    resultEl.innerHTML = `<div class="error">❌ Failed to fetch projects: ${response.status} ${response.statusText}</div>`;
+                    return;
+                }
+                
+                const data = await response.json();
+                const projects = data?.data || [];
+                
+                if (projects.length === 0) {
+                    resultEl.innerHTML = '<div class="info">ℹ️ No projects found in database</div>';
+                    return;
+                }
+                
+                // Delete each project
+                let deletedCount = 0;
+                let errorCount = 0;
+                
+                for (const project of projects) {
+                    try {
+                        const deleteResponse = await fetch(`${API_BASE}/api/projects/${project.id}`, {
+                            method: 'DELETE',
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (deleteResponse.ok) {
+                            deletedCount++;
+                        } else {
+                            errorCount++;
+                            console.error(`Failed to delete project ${project.id}:`, deleteResponse.status);
+                        }
+                    } catch (e) {
+                        errorCount++;
+                        console.error(`Error deleting project ${project.id}:`, e);
+                    }
+                }
+                
+                resultEl.innerHTML = `
+                    <div class="success">✅ Database cleanup complete!</div>
+                    <pre>Deleted: ${deletedCount} projects
+Errors: ${errorCount} projects</pre>
+                `;
+                
+                checkStatus();
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error">❌ Error clearing database: ${error.message}</div>`;
+            }
+        }
+        
+        async function clearEverything() {
+            const resultEl = document.getElementById('resultContent');
+            resultEl.innerHTML = '<div class="warning">⚠️ Clearing everything...</div>';
+            
+            try {
+                // Clear localStorage first
+                await clearLocalStorage();
+                
+                // Wait a moment
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Clear database
+                await clearDatabase();
+                
+                resultEl.innerHTML = '<div class="success">✅ Complete cleanup finished!</div>';
+                
+            } catch (error) {
+                resultEl.innerHTML = `<div class="error">❌ Error during complete cleanup: ${error.message}</div>`;
+            }
+        }
+        
+        // Check status on page load
+        checkStatus();
+    </script>
+</body>
+</html>
