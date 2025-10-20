@@ -595,7 +595,7 @@ const Teams = () => {
 					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                         {activeTab === 'documents' && (
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Documents Library</h3>
+									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Documents Library</h3>
                                 {displayDocuments.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {displayDocuments.map(doc => (
@@ -665,7 +665,7 @@ const Teams = () => {
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Workflows & Processes</h3>
                                 {displayWorkflows.length > 0 ? (
-                                    <div className="space-y-3">
+									<div className="space-y-3">
                                         {displayWorkflows.map(workflow => (
                                             <div key={workflow.id} className="border border-gray-200 rounded-lg p-3">
                                                 <div className="flex items-start justify-between mb-2">
@@ -674,8 +674,8 @@ const Teams = () => {
 											<i className="fas fa-project-diagram text-purple-600 dark:text-purple-300"></i>
                                                         </div>
                                                         <div className="flex-1">
-                                                            <h4 className="font-semibold text-gray-900 text-sm">{workflow.title}</h4>
-                                                            <p className="text-xs text-gray-600">{workflow.description}</p>
+												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{workflow.title}</h4>
+												<p className="text-xs text-gray-600 dark:text-slate-400">{workflow.description}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1">
@@ -752,7 +752,7 @@ const Teams = () => {
 
                         {activeTab === 'checklists' && (
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Checklists & Forms</h3>
+									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Checklists & Forms</h3>
                                 {displayChecklists.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {displayChecklists.map(checklist => (
@@ -763,8 +763,8 @@ const Teams = () => {
 											<i className="fas fa-tasks text-green-600 dark:text-green-300"></i>
                                                         </div>
                                                         <div>
-                                                            <h4 className="font-semibold text-gray-900 text-sm">{checklist.title}</h4>
-                                                            <p className="text-xs text-gray-600">{checklist.items?.length || 0} items</p>
+												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{checklist.title}</h4>
+												<p className="text-xs text-gray-600 dark:text-slate-400">{checklist.items?.length || 0} items</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1">
@@ -820,7 +820,7 @@ const Teams = () => {
 
                         {activeTab === 'notices' && (
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Notice Board</h3>
+									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Notice Board</h3>
                                 {displayNotices.length > 0 ? (
                                     <div className="space-y-3">
                                         {displayNotices.map(notice => (
@@ -836,7 +836,7 @@ const Teams = () => {
                                                             notice.priority === 'Medium' ? 'text-yellow-600' :
                                                             'text-blue-600'
                                                         }`}></i>
-                                                        <h4 className="font-semibold text-gray-900 text-sm">{notice.title}</h4>
+												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{notice.title}</h4>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <span className={`px-2 py-1 text-xs rounded font-medium ${
@@ -865,8 +865,8 @@ const Teams = () => {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <p className="text-sm text-gray-700 mb-2">{notice.content}</p>
-                                                <div className="flex items-center justify-between text-xs text-gray-600">
+												<p className="text-sm text-gray-700 mb-2 dark:text-slate-300">{notice.content}</p>
+												<div className="flex items-center justify-between text-xs text-gray-600 dark:text-slate-400">
                                                     <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
                                                     <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 </div>

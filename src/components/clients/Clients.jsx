@@ -1619,7 +1619,7 @@ const Clients = () => {
                         <i className="fas fa-users text-white text-lg"></i>
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">CRM & Sales</h1>
+                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clients and Leads</h1>
                         <p className="text-gray-600 dark:text-gray-400">Manage clients and leads</p>
                     </div>
                 </div>
