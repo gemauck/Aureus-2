@@ -15,62 +15,10 @@ const DepositModal = window.DepositModal;
 const ReminderSettings = window.ReminderSettings;
 const NotesTemplateModal = window.NotesTemplateModal;
 
-const initialInvoices = [
-    { 
-        id: 1,
-        invoiceNumber: 'INV-001', 
-        client: 'ABC Corporation', 
-        project: 'Fleet Optimization Project', 
-        date: '2024-03-01', 
-        dueDate: '2024-03-31', 
-        subtotal: 195652.17,
-        vat: 29347.83,
-        total: 225000, 
-        status: 'Paid',
-        lineItems: [
-            { description: 'Fleet Analysis & Optimization Services', quantity: 120, rate: 1500, amount: 180000 },
-            { description: 'Data Analysis & Reporting', quantity: 10, rate: 1565.217, amount: 15652.17 }
-        ],
-        notes: 'Thank you for your business!'
-    },
-    { 
-        id: 2,
-        invoiceNumber: 'INV-002', 
-        client: 'XYZ Industries', 
-        project: 'Annual Fuel Audit', 
-        date: '2024-03-05', 
-        dueDate: '2024-04-05', 
-        subtotal: 136956.52,
-        vat: 20543.48,
-        total: 157500, 
-        status: 'Sent',
-        lineItems: [
-            { description: 'Site Inspection & Compliance Review', quantity: 80, rate: 1500, amount: 120000 },
-            { description: 'Documentation & Reporting', quantity: 11, rate: 1541.502, amount: 16956.52 }
-        ],
-        notes: 'Payment terms: Net 30 days'
-    },
-    { 
-        id: 3,
-        invoiceNumber: 'INV-003', 
-        client: 'Logistics Ltd', 
-        project: 'Cost Analysis Study', 
-        date: '2024-03-10', 
-        dueDate: '2024-04-10', 
-        subtotal: 97043.48,
-        vat: 14556.52,
-        total: 111600, 
-        status: 'Overdue',
-        lineItems: [
-            { description: 'Cost Analysis Research', quantity: 60, rate: 1500, amount: 90000 },
-            { description: 'Report Preparation', quantity: 4.695653, rate: 1500, amount: 7043.48 }
-        ],
-        notes: 'Overdue - Please remit payment'
-    }
-];
+// No initial data - all data comes from database
 
 const Invoicing = () => {
-    const [invoices, setInvoices] = useState(initialInvoices);
+    const [invoices, setInvoices] = useState([]);
     const [clients, setClients] = useState([]);
     const [projects, setProjects] = useState([]);
     const [timeEntries, setTimeEntries] = useState([]);
