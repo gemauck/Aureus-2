@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Data Consistency Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .test-section {
+            margin-bottom: 32px;
+            padding: 20px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .test-section h3 {
+            margin-top: 0;
+            color: #1f2937;
+            border-bottom: 2px solid #3b82f6;
+            padding-bottom: 8px;
+        }
+        .result {
+            padding: 12px;
+            border-radius: 6px;
+            margin: 8px 0;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .success { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+        .info { background: #dbeafe; color: #1e40af; border: 1px solid #3b82f6; }
+        .warning { background: #fef3c7; color: #92400e; border: 1px solid #f59e0b; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 8px 8px 8px 0;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .client-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .client-card {
+            padding: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            background: #f9fafb;
+        }
+        .client-name { font-weight: 600; color: #1f2937; }
+        .client-owner { font-size: 12px; color: #6b7280; margin-top: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Client Data Consistency Test</h1>
+        <p>This test verifies that all users see the same client data, regardless of ownership.</p>
+
+        <!-- Test Controls -->
+        <div class="test-section">
+            <h3>🔧 Test Controls</h3>
+            <button onclick="runAllTests()">Run All Tests</button>
+            <button onclick="testAPI()">Test API</button>
+            <button onclick="testCache()">Test Cache</button>
+            <button onclick="testForceRefresh()">Test Force Refresh</button>
+            <button onclick="clearAllData()">Clear All Data</button>
+        </div>
+
+        <!-- Test Results -->
+        <div class="test-section">
+            <h3>📊 Test Results</h3>
+            <div id="testResults"></div>
+        </div>
+
+        <!-- Client Data Display -->
+        <div class="test-section">
+            <h3>👥 Current Client Data</h3>
+            <div id="clientData"></div>
+        </div>
+
+        <!-- Debug Information -->
+        <div class="test-section">
+            <h3>🔍 Debug Information</h3>
+            <div id="debugInfo"></div>
+        </div>
+    </div>
+
+    <script>
+        // Test results container
+        const testResults = document.getElementById('testResults');
+        const clientData = document.getElementById('clientData');
+        const debugInfo = document.getElementById('debugInfo');
+
+        // Add result to test results
+        function addResult(testName, success, message, details = null) {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `result ${success ? 'success' : 'error'}`;
+            
+            let content = `<strong>${testName}:</strong> ${message}`;
+            if (details) {
+                content += `<br><small>${details}</small>`;
+            }
+            
+            resultDiv.innerHTML = content;
+            testResults.appendChild(resultDiv);
+        }
+
+        // Add info message
+        function addInfo(message) {
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'result info';
+            infoDiv.innerHTML = message;
+            testResults.appendChild(infoDiv);
+        }
+
+        // Test API endpoint
+        async function testAPI() {
+            addInfo('Testing API endpoint...');
+            
+            try {
+                const response = await fetch('/api/clients', {
+                    headers: {
+                        'Authorization': 'Bearer ' + (localStorage.getItem('abcotronics_token') || 'test-token')
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const clients = data.clients || [];
+                    
+                    addResult('API Test', true, `API returned ${clients.length} clients`, 
+                        `Clients: ${clients.map(c => c.name).join(', ')}`);
+                    
+                    displayClients(clients);
+                    return clients;
+                } else {
+                    addResult('API Test', false, `API returned ${response.status}: ${response.statusText}`);
+                    return null;
+                }
+            } catch (error) {
+                addResult('API Test', false, `API request failed: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Test cache functionality
+        async function testCache() {
+            addInfo('Testing cache functionality...');
+            
+            try {
+                // Test localStorage
+                const localStorageClients = JSON.parse(localStorage.getItem('abcotronics_clients') || '[]');
+                addResult('LocalStorage Cache', true, `Found ${localStorageClients.length} cached clients`);
+                
+                // Test ClientCache if available
+                if (window.ClientCache) {
+                    const cachedClients = window.ClientCache.getClients();
+                    const cacheStatus = window.ClientCache.getCacheStatus();
+                    
+                    addResult('ClientCache', true, `Cache status: ${cachedClients ? 'Valid' : 'Invalid'}`, 
+                        `Clients: ${cachedClients ? cachedClients.length : 0}`);
+                    
+                    addInfo(`Cache Details: ${JSON.stringify(cacheStatus.clients, null, 2)}`);
+                } else {
+                    addResult('ClientCache', false, 'ClientCache not available');
+                }
+                
+                return localStorageClients;
+            } catch (error) {
+                addResult('Cache Test', false, `Cache test failed: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Test force refresh
+        async function testForceRefresh() {
+            addInfo('Testing force refresh functionality...');
+            
+            try {
+                if (window.forceRefreshClients) {
+                    const clients = await window.forceRefreshClients();
+                    addResult('Force Refresh', true, `Force refresh returned ${clients.length} clients`);
+                    displayClients(clients);
+                    return clients;
+                } else {
+                    addResult('Force Refresh', false, 'forceRefreshClients function not available');
+                    return null;
+                }
+            } catch (error) {
+                addResult('Force Refresh', false, `Force refresh failed: ${error.message}`);
+                return null;
+            }
+        }
+
+        // Display clients
+        function displayClients(clients) {
+            clientData.innerHTML = '';
+            
+            if (clients.length === 0) {
+                clientData.innerHTML = '<div class="result warning">No clients found</div>';
+                return;
+            }
+            
+            const clientList = document.createElement('div');
+            clientList.className = 'client-list';
+            
+            clients.forEach(client => {
+                const clientCard = document.createElement('div');
+                clientCard.className = 'client-card';
+                clientCard.innerHTML = `
+                    <div class="client-name">${client.name}</div>
+                    <div class="client-owner">Owner ID: ${client.ownerId || 'None'}</div>
+                    <div class="client-owner">Status: ${client.status || 'Unknown'}</div>
+                    <div class="client-owner">Industry: ${client.industry || 'Unknown'}</div>
+                `;
+                clientList.appendChild(clientCard);
+            });
+            
+            clientData.appendChild(clientList);
+        }
+
+        // Clear all data
+        function clearAllData() {
+            addInfo('Clearing all client data...');
+            
+            try {
+                // Clear localStorage
+                localStorage.removeItem('abcotronics_clients');
+                
+                // Clear cache if available
+                if (window.clearClientCache) {
+                    window.clearClientCache();
+                }
+                
+                // Clear ClientCache if available
+                if (window.ClientCache) {
+                    window.ClientCache.clearCache();
+                }
+                
+                addResult('Clear Data', true, 'All client data cleared');
+                clientData.innerHTML = '<div class="result info">Client data cleared</div>';
+                
+            } catch (error) {
+                addResult('Clear Data', false, `Clear data failed: ${error.message}`);
+            }
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            testResults.innerHTML = '';
+            addInfo('🧪 Starting comprehensive client data consistency tests...');
+            
+            // Test 1: API
+            const apiClients = await testAPI();
+            
+            // Test 2: Cache
+            const cachedClients = await testCache();
+            
+            // Test 3: Force Refresh
+            const refreshedClients = await testForceRefresh();
+            
+            // Test 4: Consistency Check
+            addInfo('Checking data consistency...');
+            
+            if (apiClients && cachedClients && refreshedClients) {
+                const apiCount = apiClients.length;
+                const cacheCount = cachedClients.length;
+                const refreshCount = refreshedClients.length;
+                
+                if (apiCount === cacheCount && cacheCount === refreshCount) {
+                    addResult('Data Consistency', true, 
+                        `All data sources consistent: ${apiCount} clients`);
+                } else {
+                    addResult('Data Consistency', false, 
+                        `Data inconsistency detected: API(${apiCount}), Cache(${cacheCount}), Refresh(${refreshCount})`);
+                }
+            }
+            
+            // Test 5: Debug Information
+            updateDebugInfo();
+            
+            addInfo('✅ All tests completed!');
+        }
+
+        // Update debug information
+        function updateDebugInfo() {
+            debugInfo.innerHTML = '';
+            
+            const debugDiv = document.createElement('div');
+            debugDiv.className = 'result info';
+            
+            const info = {
+                timestamp: new Date().toISOString(),
+                userAgent: navigator.userAgent,
+                localStorage: {
+                    hasToken: !!localStorage.getItem('abcotronics_token'),
+                    hasClients: !!localStorage.getItem('abcotronics_clients'),
+                    clientCount: JSON.parse(localStorage.getItem('abcotronics_clients') || '[]').length
+                },
+                windowObjects: {
+                    hasClientCache: !!window.ClientCache,
+                    hasForceRefresh: !!window.forceRefreshClients,
+                    hasClearCache: !!window.clearClientCache,
+                    hasDebugClientData: !!window.debugClientData
+                }
+            };
+            
+            debugDiv.innerHTML = `<pre>${JSON.stringify(info, null, 2)}</pre>`;
+            debugInfo.appendChild(debugDiv);
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            addInfo('🚀 Client Data Consistency Test initialized');
+            updateDebugInfo();
+        });
+    </script>
+</body>
+</html>

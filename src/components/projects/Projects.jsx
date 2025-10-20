@@ -7,8 +7,9 @@ const ProjectDetail = window.ProjectDetail;
 const initialProjects = [
     { 
         id: 1, 
-        name: 'Fleet Optimization Project', 
-        client: 'ABC Corporation', 
+        name: 'Exxaro Mining Fleet Optimization', 
+        client: 'Exxaro', 
+        clientType: 'client',
         type: 'Monthly Review', 
         status: 'Active', 
         startDate: '2024-01-15', 
@@ -25,8 +26,27 @@ const initialProjects = [
     },
     { 
         id: 2, 
+        name: 'RGN Lead Assessment Project', 
+        client: 'RGN', 
+        clientType: 'lead',
+        type: 'Assessment', 
+        status: 'Planning', 
+        startDate: '2024-02-01', 
+        dueDate: '2024-02-28', 
+        progress: 20, 
+        assignedTo: 'David Buttemer',
+        tasks: [],
+        taskLists: [
+            { id: 1, name: 'Initial Assessment', color: 'blue' },
+            { id: 2, name: 'Lead Qualification', color: 'yellow' }
+        ],
+        customFieldDefinitions: []
+    },
+    { 
+        id: 3, 
         name: 'Annual Fuel Audit', 
         client: 'XYZ Industries', 
+        clientType: 'client',
         type: 'Audit', 
         status: 'Active', 
         startDate: '2024-02-01', 
@@ -40,9 +60,10 @@ const initialProjects = [
         customFieldDefinitions: []
     },
     { 
-        id: 3, 
+        id: 4, 
         name: 'Cost Analysis Study', 
         client: 'Logistics Ltd', 
+        clientType: 'client',
         type: 'Monthly Review', 
         status: 'Active', 
         startDate: '2024-03-01', 

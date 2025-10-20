@@ -47,6 +47,35 @@ const initialClients = [
     },
     { 
         id: 2, 
+        name: 'Exxaro', 
+        industry: 'Mining', 
+        status: 'Active',
+        type: 'client',
+        revenue: 1575000,
+        lastContact: '2024-03-05',
+        address: '456 Industry Ave, Chicago, IL',
+        website: 'https://exxaro.com',
+        notes: 'Key mining client - regular fuel audits and optimization services',
+        contacts: [
+            {
+                id: 2,
+                name: 'Sarah Johnson',
+                role: 'Finance Manager',
+                department: 'Finance',
+                email: 'sarah@exxaro.com',
+                phone: '555-0102',
+                isPrimary: true
+            }
+        ],
+        followUps: [],
+        projectIds: [],
+        comments: [],
+        sites: [],
+        opportunities: [],
+        activityLog: []
+    },
+    { 
+        id: 3, 
         name: 'XYZ Industries', 
         industry: 'Agriculture', 
         status: 'Active',
@@ -58,7 +87,7 @@ const initialClients = [
         notes: 'Regular audits quarterly',
         contacts: [
             {
-                id: 2,
+                id: 3,
                 name: 'Sarah Johnson',
                 role: 'Finance Manager',
                 department: 'Finance',
@@ -79,6 +108,31 @@ const initialClients = [
 const initialLeads = [
     {
         id: 101,
+        name: 'RGN',
+        industry: 'Mining',
+        status: 'New',
+        source: 'Website',
+        stage: 'Awareness',
+        notes: 'Potential lead for fuel management services in mining operations',
+        contacts: [
+            {
+                id: 101,
+                name: 'RGN Contact',
+                role: 'Operations Manager',
+                department: 'Operations',
+                email: 'contact@rgn.co.za',
+                phone: '011-555-0201',
+                isPrimary: true
+            }
+        ],
+        followUps: [],
+        projectIds: [],
+        comments: [],
+        activityLog: [],
+        firstContactDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 5 days ago
+    },
+    {
+        id: 102,
         name: 'Green Fleet Solutions',
         industry: 'Forestry',
         status: 'New',
@@ -87,12 +141,12 @@ const initialLeads = [
         notes: 'Inquiry about fuel monitoring systems for 50 vehicle fleet',
         contacts: [
             {
-                id: 101,
+                id: 102,
                 name: 'Michael Chen',
                 role: 'Fleet Operations Manager',
                 department: 'Operations',
                 email: 'michael@greenfleet.co.za',
-                phone: '011-555-0201',
+                phone: '011-555-0202',
                 isPrimary: true
             }
         ],
