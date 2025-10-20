@@ -1,4 +1,5 @@
 // Railway ERP Server Entry Point
+import 'dotenv/config'
 import express from 'express'
 import path from 'path'
 import fs from 'fs'
@@ -83,7 +84,8 @@ app.use(express.static(rootDir, {
   dotfiles: 'ignore',
   etag: true,
   lastModified: true,
-  maxAge: '1d'
+  maxAge: '1d',
+  redirect: false // Disable automatic redirects for trailing slashes
 }))
 
 // API routes - must come before catch-all route
