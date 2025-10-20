@@ -53,7 +53,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return p;
             });
-            storage.setProjects(updatedProjects);
+            if (storage && typeof storage.setProjects === 'function') {
+                storage.setProjects(updatedProjects);
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
             console.log(`Saved ${sections.length} sections for project ${project.id}`);
         }
     }, [sections, project.id]);

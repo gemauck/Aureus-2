@@ -68,50 +68,89 @@ const Projects = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
     
+    // Ensure storage is available
+    useEffect(() => {
+        if (!window.storage) {
+            console.error('Storage not available! Make sure localStorage.js is loaded before Projects component.');
+        }
+    }, []);
+    
     // Load projects from localStorage on mount
     useEffect(() => {
-        const savedProjects = window.storage?.getProjects?.();
-        if (savedProjects) {
-            setProjects(savedProjects);
-            
-            // Sync existing projects with clients
-            syncProjectsWithClients(savedProjects);
-            
-            // Check if there's a project to open immediately after loading
-            const projectIdToOpen = sessionStorage.getItem('openProjectId');
-            if (projectIdToOpen) {
-                const project = savedProjects.find(p => p.id === parseInt(projectIdToOpen));
-                if (project) {
-                    // Open the project immediately
-                    setViewingProject(project);
-                    // Clear the flag
-                    sessionStorage.removeItem('openProjectId');
+        const loadProjects = () => {
+            if (window.storage && typeof window.storage.getProjects === 'function') {
+                try {
+                    const savedProjects = window.storage.getProjects();
+                    if (savedProjects) {
+                        setProjects(savedProjects);
+                        
+                        // Sync existing projects with clients
+                        syncProjectsWithClients(savedProjects);
+                        
+                        // Check if there's a project to open immediately after loading
+                        const projectIdToOpen = sessionStorage.getItem('openProjectId');
+                        if (projectIdToOpen) {
+                            const project = savedProjects.find(p => p.id === parseInt(projectIdToOpen));
+                            if (project) {
+                                // Open the project immediately
+                                setViewingProject(project);
+                                // Clear the flag
+                                sessionStorage.removeItem('openProjectId');
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error loading projects from storage:', error);
                 }
+            } else {
+                console.warn('Storage not available or getProjects method not found, retrying...');
+                // Retry after a short delay
+                setTimeout(loadProjects, 100);
             }
-        }
+        };
+        
+        loadProjects();
     }, []);
 
     // Helper function to sync existing projects with clients
     const syncProjectsWithClients = (projectsList) => {
-        const clients = window.storage?.getClients() || [];
-        const updatedClients = clients.map(client => {
-            const clientProjects = projectsList.filter(p => p.client === client.name);
-            const projectIds = clientProjects.map(p => p.id);
-            return {
-                ...client,
-                projectIds: projectIds
-            };
-        });
-        window.storage?.setClients(updatedClients);
-        
-        // Dispatch event to notify other components
-        window.dispatchEvent(new CustomEvent('clientsUpdated'));
+        if (window.storage && typeof window.storage.getClients === 'function' && typeof window.storage.setClients === 'function') {
+            const clients = window.storage.getClients() || [];
+            const updatedClients = clients.map(client => {
+                const clientProjects = projectsList.filter(p => p.client === client.name);
+                const projectIds = clientProjects.map(p => p.id);
+                return {
+                    ...client,
+                    projectIds: projectIds
+                };
+            });
+            window.storage.setClients(updatedClients);
+            
+            // Dispatch event to notify other components
+            window.dispatchEvent(new CustomEvent('clientsUpdated'));
+        }
     };
     
     // Save projects to localStorage whenever they change (sorted by client)
     useEffect(() => {
         const sortedProjects = [...projects].sort((a, b) => a.client.localeCompare(b.client));
-        window.storage?.setProjects(sortedProjects);
+        
+        // Wait for storage to be available
+        const saveProjects = () => {
+            if (window.storage && typeof window.storage.setProjects === 'function') {
+                try {
+                    window.storage.setProjects(sortedProjects);
+                } catch (error) {
+                    console.error('Error saving projects to storage:', error);
+                }
+            } else {
+                console.warn('Storage not available or setProjects method not found, retrying...');
+                // Retry after a short delay
+                setTimeout(saveProjects, 100);
+            }
+        };
+        
+        saveProjects();
     }, [projects]);
 
     // Helper function to count all nested subtasks
@@ -187,31 +226,39 @@ const Projects = () => {
 
     // Helper function to update client's projectIds
     const updateClientProjectIds = (oldClientName, newClientName, projectId) => {
-        const clients = window.storage?.getClients() || [];
-        const updatedClients = clients.map(client => {
-            if (oldClientName && client.name === oldClientName) {
-                // Remove project from old client
-                return {
-                    ...client,
-                    projectIds: (client.projectIds || []).filter(id => id !== projectId)
-                };
+        try {
+            if (window.storage && typeof window.storage.getClients === 'function' && typeof window.storage.setClients === 'function') {
+                const clients = window.storage.getClients() || [];
+                const updatedClients = clients.map(client => {
+                    if (oldClientName && client.name === oldClientName) {
+                        // Remove project from old client
+                        return {
+                            ...client,
+                            projectIds: (client.projectIds || []).filter(id => id !== projectId)
+                        };
+                    }
+                    if (newClientName && client.name === newClientName) {
+                        // Add project to new client
+                        const projectIds = client.projectIds || [];
+                        if (!projectIds.includes(projectId)) {
+                            return {
+                                ...client,
+                                projectIds: [...projectIds, projectId]
+                            };
+                        }
+                    }
+                    return client;
+                });
+                window.storage.setClients(updatedClients);
+                
+                // Dispatch event to notify other components
+                window.dispatchEvent(new CustomEvent('clientsUpdated'));
+            } else {
+                console.warn('Storage not available for updating client project IDs');
             }
-            if (newClientName && client.name === newClientName) {
-                // Add project to new client
-                const projectIds = client.projectIds || [];
-                if (!projectIds.includes(projectId)) {
-                    return {
-                        ...client,
-                        projectIds: [...projectIds, projectId]
-                    };
-                }
-            }
-            return client;
-        });
-        window.storage?.setClients(updatedClients);
-        
-        // Dispatch event to notify other components
-        window.dispatchEvent(new CustomEvent('clientsUpdated'));
+        } catch (error) {
+            console.error('Error updating client project IDs:', error);
+        }
     };
 
     const handleDeleteProject = (projectId) => {

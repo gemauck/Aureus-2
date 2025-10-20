@@ -75,7 +75,11 @@ const ProjectDetail = ({ project, onBack }) => {
                     documentSections: p.documentSections || project.documentSections || []
                 } : p
             );
-            storage.setProjects(updatedProjects);
+            if (storage && typeof storage.setProjects === 'function') {
+                storage.setProjects(updatedProjects);
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
         }
     }, [tasks, taskLists, customFieldDefinitions, documents, project.id, hasDocumentCollectionProcess]);
 
@@ -1456,7 +1460,11 @@ const ProjectDetail = ({ project, onBack }) => {
                             const updatedProjects = savedProjects.map(p => 
                                 p.id === project.id ? { ...p, ...projectData } : p
                             );
-                            storage.setProjects(updatedProjects);
+                            if (storage && typeof storage.setProjects === 'function') {
+                storage.setProjects(updatedProjects);
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
                         }
                         setShowProjectModal(false);
                     }}
@@ -1464,7 +1472,11 @@ const ProjectDetail = ({ project, onBack }) => {
                         const savedProjects = storage.getProjects();
                         if (savedProjects) {
                             const updatedProjects = savedProjects.filter(p => p.id !== projectId);
-                            storage.setProjects(updatedProjects);
+                            if (storage && typeof storage.setProjects === 'function') {
+                storage.setProjects(updatedProjects);
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
                         }
                         setShowProjectModal(false);
                         onBack();

@@ -11,7 +11,7 @@ const safeStorage = {
     getLeads: () => storage.getLeads ? safeStorage.getLeads() : null,
     setLeads: (data) => storage.setLeads ? safeStorage.setLeads(data) : null,
     getProjects: () => storage.getProjects ? safeStorage.getProjects() : null,
-    setProjects: (data) => storage.setProjects ? storage.setProjects(data) : null,
+    setProjects: (data) => storage.setProjects ? safeStorage.setProjects(data) : null,
 };
 
 // Initial data with opportunities

@@ -140,7 +140,11 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
-        storage.setProjects(updatedProjects);
+        if (storage && typeof storage.setProjects === 'function') {
+            storage.setProjects(updatedProjects);
+        } else {
+            console.warn('Storage not available or setProjects method not found');
+        }
         setShowProgressModal(false);
         setSelectedProject(null);
         setSelectedMonth(null);
@@ -173,7 +177,11 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
-        storage.setProjects(updatedProjects);
+        if (storage && typeof storage.setProjects === 'function') {
+            storage.setProjects(updatedProjects);
+        } else {
+            console.warn('Storage not available or setProjects method not found');
+        }
     };
 
     const handleQuickComment = (project, month) => {
@@ -209,7 +217,11 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
-        storage.setProjects(updatedProjects);
+        if (storage && typeof storage.setProjects === 'function') {
+            storage.setProjects(updatedProjects);
+        } else {
+            console.warn('Storage not available or setProjects method not found');
+        }
         setQuickComment('');
     };
 
@@ -221,7 +233,11 @@ const ProjectProgressTracker = ({ onBack }) => {
         newProjects.splice(toIndex, 0, movedProject);
 
         setProjects(newProjects);
-        storage.setProjects(newProjects);
+        if (storage && typeof storage.setProjects === 'function') {
+            storage.setProjects(newProjects);
+        } else {
+            console.warn('Storage not available or setProjects method not found');
+        }
     };
 
     const handleDragStart = (e, project, index) => {

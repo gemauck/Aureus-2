@@ -356,4 +356,16 @@ if (typeof window !== 'undefined') {
     if (!window.storage) {
         window.storage = storage;
     }
+    
+    // Dispatch event to notify components that storage is ready
+    window.dispatchEvent(new CustomEvent('storageReady'));
+    
+    // Also set up a global check function
+    window.checkStorage = () => {
+        return {
+            available: !!window.storage,
+            methods: Object.keys(window.storage || {}),
+            hasSetProjects: typeof window.storage?.setProjects === 'function'
+        };
+    };
 }
