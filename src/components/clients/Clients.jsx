@@ -1064,6 +1064,7 @@ const Clients = () => {
 
     // Pipeline View Component
     const PipelineView = () => {
+        console.log('🔍 Pipeline View rendered - leads count:', leads.length);
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
 
@@ -1083,12 +1084,18 @@ const Clients = () => {
 
         // Filter active leads and opportunities only
         console.log('🔍 Pipeline Debug - All leads:', leads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
-        const activeLeads = leads.filter(lead => 
-            lead.status !== 'Inactive' && 
-            lead.status !== 'Closed Lost' && 
-            lead.status !== 'Closed Won'
-        );
-        console.log('🔍 Pipeline Debug - Active leads:', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
+        
+        // TEMPORARY: Show all leads in pipeline for debugging (remove status filtering)
+        const activeLeads = leads.filter(lead => {
+            // Ensure lead has a stage
+            if (!lead.stage) {
+                console.log('⚠️ Lead missing stage:', lead.name);
+                return false;
+            }
+            return true;
+        });
+        
+        console.log('🔍 Pipeline Debug - Active leads (after stage filter):', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
         const activeOpportunities = clientOpportunities.filter(opp => 
             opp.status !== 'Inactive' && 
             opp.status !== 'Closed Lost' && 
