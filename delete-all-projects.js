@@ -3,6 +3,11 @@
 /**
  * Script to delete all projects from the database
  * This will also clean up related data: tasks, invoices, time entries
+ * 
+ * Usage:
+ *   DATABASE_URL="postgresql://user:password@host:port/database" node delete-all-projects.js
+ *   or
+ *   Create a .env file with DATABASE_URL and run: node delete-all-projects.js
  */
 
 import { PrismaClient } from '@prisma/client'
@@ -10,6 +15,19 @@ import dotenv from 'dotenv'
 
 // Load environment variables
 dotenv.config()
+
+// Check if DATABASE_URL is provided
+if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL environment variable is required!')
+    console.error('')
+    console.error('Please provide the database URL in one of these ways:')
+    console.error('1. Set environment variable: DATABASE_URL="postgresql://..." node delete-all-projects.js')
+    console.error('2. Create a .env file with: DATABASE_URL="postgresql://..."')
+    console.error('')
+    console.error('Example DATABASE_URL format:')
+    console.error('   postgresql://username:password@hostname:port/database')
+    process.exit(1)
+}
 
 const prisma = new PrismaClient()
 

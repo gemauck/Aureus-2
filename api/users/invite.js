@@ -117,41 +117,67 @@ async function handler(req, res) {
         const invitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitationToken}`
         console.log('🔗 Generated invitation link:', invitationLink)
         
-        // Try to send email (non-blocking)
+        // Try to send email (non-blocking with timeout)
         let emailSent = false
         let emailError = null
-        try {
-            console.log('📧 Attempting to send invitation email...')
-            console.log('📧 Email config check:', {
-                SMTP_HOST: process.env.SMTP_HOST,
-                SMTP_PORT: process.env.SMTP_PORT,
-                SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
-                SMTP_PASS: process.env.SMTP_PASS ? '***' : 'NOT_SET',
-                EMAIL_FROM: process.env.EMAIL_FROM
-            })
-            
-            await sendInvitationEmail({
-                email: invitation.email,
-                name: invitation.name,
-                role: invitation.role,
-                invitationLink: invitationLink
-            });
-            emailSent = true
-            console.log(`✅ Invitation email sent successfully to ${email}`);
-        } catch (emailError) {
-            console.error('❌ Failed to send invitation email:', emailError);
-            console.error('❌ Email error details:', {
-                message: emailError.message,
-                code: emailError.code,
-                command: emailError.command
-            });
-            // Continue without failing the whole request
+        
+        // Check if email configuration is available
+        const hasEmailConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS
+        
+        if (hasEmailConfig) {
+            try {
+                console.log('📧 Attempting to send invitation email...')
+                console.log('📧 Email config check:', {
+                    SMTP_HOST: process.env.SMTP_HOST,
+                    SMTP_PORT: process.env.SMTP_PORT,
+                    SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
+                    SMTP_PASS: process.env.SMTP_PASS ? '***' : 'NOT_SET',
+                    EMAIL_FROM: process.env.EMAIL_FROM
+                })
+                
+                // Add timeout to prevent hanging
+                const emailPromise = sendInvitationEmail({
+                    email: invitation.email,
+                    name: invitation.name,
+                    role: invitation.role,
+                    invitationLink: invitationLink
+                });
+                
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Email sending timeout')), 10000)
+                );
+                
+                await Promise.race([emailPromise, timeoutPromise]);
+                emailSent = true
+                console.log(`✅ Invitation email sent successfully to ${email}`);
+            } catch (emailError) {
+                console.error('❌ Failed to send invitation email:', emailError);
+                console.error('❌ Email error details:', {
+                    message: emailError.message,
+                    code: emailError.code,
+                    command: emailError.command
+                });
+                // Continue without failing the whole request
+            }
+        } else {
+            console.log('⚠️ Email configuration not available, skipping email sending');
+            emailError = new Error('Email configuration not available');
         }
 
         console.log('🎉 Invitation process completed successfully')
+        
+        let message = 'Invitation created successfully'
+        if (emailSent) {
+            message = 'Invitation sent successfully via email'
+        } else if (emailError) {
+            message = `Invitation created successfully. Email sending failed: ${emailError.message}. You can manually share the invitation link.`
+        } else {
+            message = 'Invitation created successfully. Email configuration not available.'
+        }
+        
         return ok(res, {
             success: true,
-            message: emailSent ? 'Invitation sent successfully via email' : 'Invitation created (email sending failed)',
+            message,
             invitation: {
                 id: invitation.id,
                 email: invitation.email,
@@ -164,6 +190,7 @@ async function handler(req, res) {
             debug: {
                 emailSent,
                 emailError: emailError ? emailError.message : null,
+                hasEmailConfig,
                 timestamp: new Date().toISOString()
             }
         })
