@@ -3,7 +3,7 @@ const { useState } = React;
 
 // Member Modal
 const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
-    const [formData, setFormData] = useState(member || {
+    const [memberFormData, setMemberFormData] = useState(member || {
         name: '',
         email: '',
         role: 'Member'
@@ -13,11 +13,11 @@ const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!formData.name || !formData.email) {
+        if (!memberFormData.name || !memberFormData.email) {
             alert('Please fill in all required fields');
             return;
         }
-        onSave(formData);
+        onSave(memberFormData);
     };
 
     const bgClass = isDark ? 'bg-gray-800' : 'bg-white';
@@ -41,8 +41,8 @@ const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Name *</label>
                         <input
                             type="text"
-                            value={formData.name}
-                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            value={memberFormData.name}
+                            onChange={(e) => setMemberFormData({ ...memberFormData, name: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             required
                         />
@@ -52,8 +52,8 @@ const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Email *</label>
                         <input
                             type="email"
-                            value={formData.email}
-                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                            value={memberFormData.email}
+                            onChange={(e) => setMemberFormData({ ...memberFormData, email: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             required
                         />
@@ -62,8 +62,8 @@ const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
                     <div>
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Role</label>
                         <select
-                            value={formData.role}
-                            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                            value={memberFormData.role}
+                            onChange={(e) => setMemberFormData({ ...memberFormData, role: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                         >
                             <option>Member</option>
@@ -96,7 +96,7 @@ const MemberModal = ({ isOpen, onClose, member, onSave, isDark }) => {
 
 // Event Modal
 const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
-    const [formData, setFormData] = useState(event || {
+    const [eventFormData, setEventFormData] = useState(event || {
         title: '',
         description: '',
         date: '',
@@ -109,11 +109,11 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!formData.title || !formData.date || !formData.time) {
+        if (!eventFormData.title || !eventFormData.date || !eventFormData.time) {
             alert('Please fill in all required fields');
             return;
         }
-        onSave(formData);
+        onSave(eventFormData);
     };
 
     const bgClass = isDark ? 'bg-gray-800' : 'bg-white';
@@ -137,8 +137,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Event Title *</label>
                         <input
                             type="text"
-                            value={formData.title}
-                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            value={eventFormData.title}
+                            onChange={(e) => setEventFormData({ ...eventFormData, title: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             required
                         />
@@ -147,8 +147,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                     <div>
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Description</label>
                         <textarea
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            value={eventFormData.description}
+                            onChange={(e) => setEventFormData({ ...eventFormData, description: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             rows="3"
                         />
@@ -159,8 +159,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                             <label className={`block text-xs font-medium ${textClass} mb-1`}>Date *</label>
                             <input
                                 type="date"
-                                value={formData.date}
-                                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                                value={eventFormData.date}
+                                onChange={(e) => setEventFormData({ ...eventFormData, date: e.target.value })}
                                 className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                                 required
                             />
@@ -170,8 +170,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                             <label className={`block text-xs font-medium ${textClass} mb-1`}>Time *</label>
                             <input
                                 type="time"
-                                value={formData.time}
-                                onChange={(e) => setFormData({ ...formData, time: e.target.value })}
+                                value={eventFormData.time}
+                                onChange={(e) => setEventFormData({ ...eventFormData, time: e.target.value })}
                                 className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                                 required
                             />
@@ -182,8 +182,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Location</label>
                         <input
                             type="text"
-                            value={formData.location}
-                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                            value={eventFormData.location}
+                            onChange={(e) => setEventFormData({ ...eventFormData, location: e.target.value })}
                             placeholder="Office, Zoom, Teams, etc."
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                         />
@@ -192,8 +192,8 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
                     <div>
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Event Type</label>
                         <select
-                            value={formData.type}
-                            onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                            value={eventFormData.type}
+                            onChange={(e) => setEventFormData({ ...eventFormData, type: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                         >
                             <option>Meeting</option>
@@ -228,7 +228,7 @@ const EventModal = ({ isOpen, onClose, event, onSave, isDark }) => {
 
 // Task Modal
 const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
-    const [formData, setFormData] = useState(task || {
+    const [taskFormData, setTaskFormData] = useState(task || {
         title: '',
         description: '',
         assignedTo: '',
@@ -241,11 +241,11 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!formData.title) {
+        if (!taskFormData.title) {
             alert('Please enter a task title');
             return;
         }
-        onSave(formData);
+        onSave(taskFormData);
     };
 
     const bgClass = isDark ? 'bg-gray-800' : 'bg-white';
@@ -269,8 +269,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Task Title *</label>
                         <input
                             type="text"
-                            value={formData.title}
-                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            value={taskFormData.title}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             required
                         />
@@ -279,8 +279,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                     <div>
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Description</label>
                         <textarea
-                            value={formData.description}
-                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            value={taskFormData.description}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             rows="3"
                         />
@@ -289,8 +289,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                     <div>
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Assign To</label>
                         <select
-                            value={formData.assignedTo}
-                            onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+                            value={taskFormData.assignedTo}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, assignedTo: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                         >
                             <option value="">Unassigned</option>
@@ -304,8 +304,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                         <div>
                             <label className={`block text-xs font-medium ${textClass} mb-1`}>Priority</label>
                             <select
-                                value={formData.priority}
-                                onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                            value={taskFormData.priority}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, priority: e.target.value })}
                                 className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             >
                                 <option>Low</option>
@@ -318,8 +318,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                         <div>
                             <label className={`block text-xs font-medium ${textClass} mb-1`}>Status</label>
                             <select
-                                value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                            value={taskFormData.status}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, status: e.target.value })}
                                 className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                             >
                                 <option>To Do</option>
@@ -333,8 +333,8 @@ const TaskModal = ({ isOpen, onClose, task, members, onSave, isDark }) => {
                         <label className={`block text-xs font-medium ${textClass} mb-1`}>Due Date</label>
                         <input
                             type="date"
-                            value={formData.dueDate}
-                            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                            value={taskFormData.dueDate}
+                            onChange={(e) => setTaskFormData({ ...taskFormData, dueDate: e.target.value })}
                             className={`w-full px-3 py-2 text-sm border ${borderClass} rounded-lg ${isDark ? 'bg-gray-700 text-gray-100' : ''}`}
                         />
                     </div>

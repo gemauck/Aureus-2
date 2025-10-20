@@ -97,9 +97,19 @@ const DatabaseAPI = {
     // LEAD OPERATIONS
     async getLeads() {
         console.log('📡 Fetching leads from database...');
-        const response = await this.makeRequest('/api/leads');
-        console.log('✅ Leads fetched from database:', response.data?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/api/leads');
+        // Normalize payload to { data: { leads: [...] } } for downstream consumers
+        const normalized = {
+            data: {
+                leads: Array.isArray(raw?.data?.leads)
+                    ? raw.data.leads
+                    : Array.isArray(raw?.data)
+                        ? raw.data
+                        : []
+            }
+        };
+        console.log('✅ Leads fetched from database:', normalized.data.leads.length);
+        return normalized;
     },
 
     async getLead(id) {

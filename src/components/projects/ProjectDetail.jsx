@@ -1512,6 +1512,16 @@ const ProjectDetail = ({ project, onBack }) => {
                                     const updatedProjects = savedProjects.filter(p => p.id !== projectId);
                                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
                                         await window.dataService.setProjects(updatedProjects);
+                                        // Update clients' projectIds to remove this project
+                                        if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
+                                            const clients = await window.dataService.getClients() || [];
+                                            const clientsUpdated = clients.map(c => ({
+                                                ...c,
+                                                projectIds: (c.projectIds || []).filter(id => id !== projectId)
+                                            }));
+                                            await window.dataService.setClients(clientsUpdated);
+                                            window.dispatchEvent(new CustomEvent('clientsUpdated'));
+                                        }
                                     } else {
                                         console.warn('DataService not available or setProjects method not found');
                                     }

@@ -3,7 +3,7 @@
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 const { useState, useEffect } = React;
 
-const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
+const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
     
@@ -1404,7 +1404,7 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Stage (AIDA)</label>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Stage</label>
                                                 <select
                                                     value={newOpportunity.stage}
                                                     onChange={(e) => setNewOpportunity({...newOpportunity, stage: e.target.value})}
@@ -2154,21 +2154,40 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
                         )}
 
                         {/* Footer Actions */}
-                        <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                            <button 
-                                type="button" 
-                                onClick={onClose} 
-                                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="submit" 
-                                className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
-                            >
-                                <i className="fas fa-save mr-1.5"></i>
-                                {client ? 'Update Client' : 'Add Client'}
-                            </button>
+                        <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                            <div>
+                                {client && onDelete && (
+                                    <button 
+                                        type="button" 
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
+                                                onDelete(client.id);
+                                                onClose();
+                                            }
+                                        }}
+                                        className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
+                                    >
+                                        <i className="fas fa-trash mr-1.5"></i>
+                                        Delete Client
+                                    </button>
+                                )}
+                            </div>
+                            <div className="flex gap-3">
+                                <button 
+                                    type="button" 
+                                    onClick={onClose} 
+                                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                                >
+                                    <i className="fas fa-save mr-1.5"></i>
+                                    {client ? 'Update Client' : 'Add Client'}
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

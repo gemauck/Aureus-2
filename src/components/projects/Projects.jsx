@@ -526,14 +526,31 @@ const Projects = () => {
 
             {/* Add/Edit Modal */}
             {showModal && (
-                <ProjectModal
-                    project={selectedProject}
-                    onSave={handleSaveProject}
-                    onClose={() => {
-                        setShowModal(false);
-                        setSelectedProject(null);
-                    }}
-                />
+                ProjectModal ? (
+                    <ProjectModal
+                        project={selectedProject}
+                        onSave={handleSaveProject}
+                        onClose={() => {
+                            setShowModal(false);
+                            setSelectedProject(null);
+                        }}
+                    />
+                ) : (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-lg p-4 w-full max-w-md">
+                            <h2 className="text-lg font-semibold text-gray-900 mb-2">Something went wrong</h2>
+                            <p className="text-sm text-gray-600 mb-3">Project editor failed to load. Please wait a moment and try again.</p>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={() => setShowModal(false)}
+                                    className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
             )}
         </div>
     );

@@ -1,7 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect } = React;
 
-const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
+const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     
     // Update tab when initialTab prop changes
@@ -423,10 +423,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                            AIDA Stage
-                                            <span className="ml-1.5 text-gray-500 cursor-help" title="AIDA Framework: Awareness → Interest → Desire → Action">
-                                                <i className="fas fa-info-circle text-xs"></i>
-                                            </span>
+                                            Stage
                                         </label>
                                         <select 
                                             value={formData.stage}
@@ -1054,6 +1051,21 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                         {/* Footer Actions */}
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                             <div className="flex gap-2">
+                                {lead && onDelete && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            if (confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+                                                onDelete(lead.id);
+                                                onClose();
+                                            }
+                                        }}
+                                        className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
+                                    >
+                                        <i className="fas fa-trash mr-2"></i>
+                                        Delete Lead
+                                    </button>
+                                )}
                                 {lead && (
                                     <button 
                                         type="button"
@@ -1211,9 +1223,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                AIDA Stage
-                                            </label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Stage</label>
                                             <select
                                                 value={formData.stage}
                                                 onChange={(e) => setFormData({...formData, stage: e.target.value})}

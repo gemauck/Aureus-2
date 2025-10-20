@@ -67,9 +67,26 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                     <h2 className="text-lg font-semibold text-gray-900">
                         {project ? 'Edit Project' : 'Create New Project'}
                     </h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors">
-                        <i className="fas fa-times text-sm"></i>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {project && typeof onDelete === 'function' && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    if (confirm('Delete this project? This cannot be undone.')) {
+                                        onDelete(project.id);
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs text-white bg-red-600 hover:bg-red-700 rounded transition-colors font-medium"
+                                title="Delete Project"
+                            >
+                                <i className="fas fa-trash mr-1 text-[10px]"></i>
+                                Delete
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors">
+                            <i className="fas fa-times text-sm"></i>
+                        </button>
+                    </div>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-3">
                     <div>

@@ -864,15 +864,48 @@ const Clients = () => {
     };
 
     const handleDeleteClient = async (clientId) => {
-        if (confirm('Delete this client?')) {
-            try { await window.api.deleteClient(clientId); } catch {}
-            setClients(clients.filter(c => c.id !== clientId));
+        try {
+            // Try to delete from database first
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.deleteClient) {
+                try {
+                    await window.api.deleteClient(clientId);
+                    console.log('✅ Client deleted from database');
+                } catch (error) {
+                    console.warn('⚠️ Failed to delete client from database:', error);
+                }
+            }
+            
+            // Update local state and localStorage
+            const updatedClients = clients.filter(c => c.id !== clientId);
+            setClients(updatedClients);
+            safeStorage.setClients(updatedClients);
+            console.log('✅ Client deleted from localStorage');
+        } catch (error) {
+            console.error('❌ Error deleting client:', error);
         }
     };
 
-    const handleDeleteLead = (leadId) => {
-        if (confirm('Delete this lead?')) {
-            setLeads(leads.filter(l => l.id !== leadId));
+    const handleDeleteLead = async (leadId) => {
+        try {
+            // Try to delete from database first
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.deleteClient) {
+                try {
+                    await window.api.deleteClient(leadId);
+                    console.log('✅ Lead deleted from database');
+                } catch (error) {
+                    console.warn('⚠️ Failed to delete lead from database:', error);
+                }
+            }
+            
+            // Update local state and localStorage
+            const updatedLeads = leads.filter(l => l.id !== leadId);
+            setLeads(updatedLeads);
+            safeStorage.setLeads(updatedLeads);
+            console.log('✅ Lead deleted from localStorage');
+        } catch (error) {
+            console.error('❌ Error deleting lead:', error);
         }
     };
 
@@ -1015,7 +1048,7 @@ const Clients = () => {
         alert('Lead converted to client!');
     };
 
-    // Pipeline View Component with AIDA explanation
+    // Pipeline View Component
     const PipelineView = () => {
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
@@ -1358,6 +1391,12 @@ const Clients = () => {
     );
 
     // Leads List View
+    const handleLeadStatusChange = (leadId, newStatus) => {
+        const updatedLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
+        setLeads(updatedLeads);
+        window.storage?.setLeads?.(updatedLeads);
+    };
+
     const LeadsListView = () => (
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
             <div className="overflow-x-auto">
@@ -1409,13 +1448,19 @@ const Clients = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-3 py-1 text-xs font-medium rounded-full ${
-                                            lead.status === 'New' ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800') :
-                                            lead.status === 'Contacted' ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800') :
-                                            (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                        }`}>
-                                            {lead.status}
-                                        </span>
+                                        <select
+                                            value={lead.status}
+                                            onChange={(e) => handleLeadStatusChange(lead.id, e.target.value)}
+                                            className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border`}
+                                        >
+                                            <option>New</option>
+                                            <option>Contacted</option>
+                                            <option>Qualified</option>
+                                            <option>Active</option>
+                                            <option>Inactive</option>
+                                            <option>Closed Won</option>
+                                            <option>Closed Lost</option>
+                                        </select>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
@@ -1474,6 +1519,7 @@ const Clients = () => {
                         setSelectedClient(null);
                         setCurrentTab('overview');
                     }}
+                    onDelete={handleDeleteClient}
                     allProjects={projects}
                     onNavigateToProject={handleNavigateToProject}
                     isFullPage={true}
@@ -1524,6 +1570,7 @@ const Clients = () => {
                         setSelectedLead(null);
                         setCurrentLeadTab('overview');
                     }}
+                    onDelete={handleDeleteLead}
                     onConvertToClient={convertLeadToClient}
                     allProjects={projects}
                     isFullPage={true}

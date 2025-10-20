@@ -438,18 +438,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     // Modals
     const SectionModal = () => {
-        const [formData, setFormData] = useState({
+        const [sectionFormData, setSectionFormData] = useState({
             name: editingSection?.name || '',
             description: editingSection?.description || ''
         });
 
         const handleSubmit = (e) => {
             e.preventDefault();
-            if (!formData.name.trim()) {
+            if (!sectionFormData.name.trim()) {
                 alert('Please enter a section name');
                 return;
             }
-            handleSaveSection(formData);
+            handleSaveSection(sectionFormData);
         };
 
         return (
@@ -474,8 +474,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </label>
                             <input
                                 type="text"
-                                value={formData.name}
-                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                value={sectionFormData.name}
+                                onChange={(e) => setSectionFormData({...sectionFormData, name: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 placeholder="e.g., Financial Documents, Client Data, etc."
                                 required
@@ -487,8 +487,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 Description (Optional)
                             </label>
                             <textarea
-                                value={formData.description}
-                                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                value={sectionFormData.description}
+                                onChange={(e) => setSectionFormData({...sectionFormData, description: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 rows="2"
                                 placeholder="Brief description of this section..."
@@ -517,18 +517,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const DocumentModal = () => {
-        const [formData, setFormData] = useState({
+        const [documentFormData, setDocumentFormData] = useState({
             name: editingDocument?.name || '',
             description: editingDocument?.description || ''
         });
 
         const handleSubmit = (e) => {
             e.preventDefault();
-            if (!formData.name.trim()) {
+            if (!documentFormData.name.trim()) {
                 alert('Please enter a document/data name');
                 return;
             }
-            handleSaveDocument(formData);
+            handleSaveDocument(documentFormData);
         };
 
         return (
@@ -553,8 +553,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </label>
                             <input
                                 type="text"
-                                value={formData.name}
-                                onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                value={documentFormData.name}
+                                onChange={(e) => setDocumentFormData({...documentFormData, name: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 placeholder="e.g., Bank Statements, Sales Report, etc."
                                 required
@@ -566,8 +566,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 Description (Optional)
                             </label>
                             <textarea
-                                value={formData.description}
-                                onChange={(e) => setFormData({...formData, description: e.target.value})}
+                                value={documentFormData.description}
+                                onChange={(e) => setDocumentFormData({...documentFormData, description: e.target.value})}
                                 className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 rows="2"
                                 placeholder="Additional details..."
