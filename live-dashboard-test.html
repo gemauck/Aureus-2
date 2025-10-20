@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Dashboard Test - Abcotronics ERP</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#e0f2fe',
+                            100: '#bae6fd',
+                            200: '#7dd3fc',
+                            300: '#38bdf8',
+                            400: '#0ea5e9',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Live Dashboard Test</h1>
+                        <p class="text-sm text-gray-600">Testing real-time dashboard connections</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div id="connection-status" class="flex items-center space-x-2">
+                            <div class="w-3 h-3 bg-gray-400 rounded-full" id="status-indicator"></div>
+                            <span class="text-sm text-gray-600" id="status-text">Disconnected</span>
+                        </div>
+                        <button id="test-login" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                            Test Login
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Test Controls -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Test Controls</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button id="start-sync" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                        Start Live Sync
+                    </button>
+                    <button id="stop-sync" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700">
+                        Stop Live Sync
+                    </button>
+                    <button id="force-sync" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                        Force Sync
+                    </button>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Sync Interval (seconds)</label>
+                    <input type="number" id="sync-interval" value="30" min="5" max="300" 
+                           class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+
+            <!-- Live Dashboard -->
+            <div id="dashboard-container" class="bg-white rounded-lg shadow p-6">
+                <div class="text-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p class="text-gray-600">Loading Live Dashboard...</p>
+                </div>
+            </div>
+
+            <!-- Debug Information -->
+            <div class="bg-white rounded-lg shadow p-6 mt-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Debug Information</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">API Status</h3>
+                        <div id="api-status" class="text-sm text-gray-600">
+                            <div>DatabaseAPI: <span id="db-api-status">Checking...</span></div>
+                            <div>LiveDataSync: <span id="live-sync-status">Checking...</span></div>
+                            <div>Auth Token: <span id="auth-token-status">Checking...</span></div>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-medium text-gray-700 mb-2">Sync Status</h3>
+                        <div id="sync-status" class="text-sm text-gray-600">
+                            <div>Is Running: <span id="sync-running">No</span></div>
+                            <div>Last Sync: <span id="last-sync">Never</span></div>
+                            <div>Error Count: <span id="error-count">0</span></div>
+                            <div>Subscribers: <span id="subscriber-count">0</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Data -->
+            <div class="bg-white rounded-lg shadow p-6 mt-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Test Data Creation</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <button id="create-test-client" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                        Create Test Client
+                    </button>
+                    <button id="create-test-lead" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                        Create Test Lead
+                    </button>
+                    <button id="create-test-project" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                        Create Test Project
+                    </button>
+                    <button id="create-test-invoice" class="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700">
+                        Create Test Invoice
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load utilities -->
+    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/localStorage.js"></script>
+    <script type="text/babel" src="./src/utils/authStorage.js"></script>
+    <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
+    <script type="text/babel" src="./src/utils/liveDataSync.js"></script>
+
+    <!-- Load components -->
+    <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardLive.jsx"></script>
+
+    <!-- Test Script -->
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const TestApp = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [dashboardLoaded, setDashboardLoaded] = useState(false);
+
+            useEffect(() => {
+                // Check authentication status
+                const token = window.storage?.getToken?.();
+                setIsAuthenticated(!!token);
+
+                // Update status indicators
+                updateStatusIndicators();
+
+                // Set up periodic status updates
+                const statusInterval = setInterval(updateStatusIndicators, 2000);
+
+                return () => clearInterval(statusInterval);
+            }, []);
+
+            const updateStatusIndicators = () => {
+                // API Status
+                const dbApiStatus = window.DatabaseAPI ? 'Available' : 'Not Available';
+                const liveSyncStatus = window.LiveDataSync ? 'Available' : 'Not Available';
+                const authTokenStatus = window.storage?.getToken?.() ? 'Present' : 'Missing';
+
+                document.getElementById('db-api-status').textContent = dbApiStatus;
+                document.getElementById('live-sync-status').textContent = liveSyncStatus;
+                document.getElementById('auth-token-status').textContent = authTokenStatus;
+
+                // Sync Status
+                if (window.LiveDataSync) {
+                    const status = window.LiveDataSync.getStatus();
+                    document.getElementById('sync-running').textContent = status.isRunning ? 'Yes' : 'No';
+                    document.getElementById('last-sync').textContent = status.lastSync ? status.lastSync.toLocaleTimeString() : 'Never';
+                    document.getElementById('error-count').textContent = status.errorCount;
+                    document.getElementById('subscriber-count').textContent = status.subscriberCount;
+
+                    // Connection status indicator
+                    const indicator = document.getElementById('status-indicator');
+                    const statusText = document.getElementById('status-text');
+                    
+                    switch (status.connectionStatus) {
+                        case 'connected':
+                            indicator.className = 'w-3 h-3 bg-green-500 rounded-full';
+                            statusText.textContent = 'Connected';
+                            break;
+                        case 'syncing':
+                            indicator.className = 'w-3 h-3 bg-yellow-500 rounded-full animate-pulse';
+                            statusText.textContent = 'Syncing';
+                            break;
+                        case 'error':
+                            indicator.className = 'w-3 h-3 bg-red-500 rounded-full';
+                            statusText.textContent = 'Error';
+                            break;
+                        default:
+                            indicator.className = 'w-3 h-3 bg-gray-400 rounded-full';
+                            statusText.textContent = 'Disconnected';
+                    }
+                }
+            };
+
+            const handleTestLogin = async () => {
+                try {
+                    // Create a test user token (for testing purposes)
+                    const testToken = 'test-token-' + Date.now();
+                    window.storage.setToken(testToken);
+                    window.storage.setUser({
+                        name: 'Test User',
+                        email: 'test@example.com',
+                        role: 'Admin'
+                    });
+                    
+                    setIsAuthenticated(true);
+                    console.log('✅ Test login successful');
+                } catch (error) {
+                    console.error('❌ Test login failed:', error);
+                }
+            };
+
+            const handleStartSync = () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.start();
+                    console.log('🔄 Live sync started');
+                }
+            };
+
+            const handleStopSync = () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.stop();
+                    console.log('⏹️ Live sync stopped');
+                }
+            };
+
+            const handleForceSync = () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.forceSync();
+                    console.log('🔄 Force sync triggered');
+                }
+            };
+
+            const handleCreateTestData = async (type) => {
+                if (!window.DatabaseAPI) {
+                    console.error('DatabaseAPI not available');
+                    return;
+                }
+
+                try {
+                    const timestamp = Date.now();
+                    let data;
+
+                    switch (type) {
+                        case 'client':
+                            data = {
+                                name: `Test Client ${timestamp}`,
+                                industry: 'Technology',
+                                status: 'active',
+                                revenue: 100000,
+                                notes: 'Test client created by live dashboard test'
+                            };
+                            await window.DatabaseAPI.createClient(data);
+                            break;
+                        case 'lead':
+                            data = {
+                                name: `Test Lead ${timestamp}`,
+                                industry: 'Manufacturing',
+                                status: 'New',
+                                value: 50000,
+                                probability: 75,
+                                notes: 'Test lead created by live dashboard test'
+                            };
+                            await window.DatabaseAPI.createLead(data);
+                            break;
+                        case 'project':
+                            data = {
+                                name: `Test Project ${timestamp}`,
+                                description: 'Test project for live dashboard',
+                                client: `Test Client ${timestamp}`,
+                                status: 'Planning',
+                                budget: 25000,
+                                priority: 'High'
+                            };
+                            await window.DatabaseAPI.createProject(data);
+                            break;
+                        case 'invoice':
+                            data = {
+                                invoiceNumber: `INV-${timestamp}`,
+                                client: `Test Client ${timestamp}`,
+                                status: 'Draft',
+                                subtotal: 1000,
+                                tax: 150,
+                                total: 1150,
+                                balance: 1150,
+                                items: [{
+                                    description: 'Test service',
+                                    quantity: 1,
+                                    rate: 1000,
+                                    amount: 1000
+                                }]
+                            };
+                            await window.DatabaseAPI.createInvoice(data);
+                            break;
+                    }
+                    
+                    console.log(`✅ Test ${type} created successfully`);
+                } catch (error) {
+                    console.error(`❌ Failed to create test ${type}:`, error);
+                }
+            };
+
+            return (
+                <div>
+                    {!isAuthenticated ? (
+                        <div className="text-center py-12">
+                            <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                            <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
+                            <p className="text-gray-600 mb-4">Please log in to test the live dashboard</p>
+                            <button
+                                onClick={handleTestLogin}
+                                className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+                            >
+                                Test Login
+                            </button>
+                        </div>
+                    ) : (
+                        <div>
+                            <div className="mb-6">
+                                <h2 className="text-lg font-semibold text-gray-900 mb-2">Live Dashboard</h2>
+                                <p className="text-sm text-gray-600">Real-time data synchronization in action</p>
+                            </div>
+                            <div id="live-dashboard">
+                                <DashboardLive />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        // Event listeners for test controls
+        document.addEventListener('DOMContentLoaded', () => {
+            // Test login button
+            document.getElementById('test-login').addEventListener('click', async () => {
+                try {
+                    const testToken = 'test-token-' + Date.now();
+                    window.storage.setToken(testToken);
+                    window.storage.setUser({
+                        name: 'Test User',
+                        email: 'test@example.com',
+                        role: 'Admin'
+                    });
+                    console.log('✅ Test login successful');
+                    location.reload();
+                } catch (error) {
+                    console.error('❌ Test login failed:', error);
+                }
+            });
+
+            // Sync controls
+            document.getElementById('start-sync').addEventListener('click', () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.start();
+                    console.log('🔄 Live sync started');
+                }
+            });
+
+            document.getElementById('stop-sync').addEventListener('click', () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.stop();
+                    console.log('⏹️ Live sync stopped');
+                }
+            });
+
+            document.getElementById('force-sync').addEventListener('click', () => {
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.forceSync();
+                    console.log('🔄 Force sync triggered');
+                }
+            });
+
+            // Sync interval change
+            document.getElementById('sync-interval').addEventListener('change', (e) => {
+                const interval = parseInt(e.target.value) * 1000; // Convert to milliseconds
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.setRefreshInterval(interval);
+                    console.log(`🔄 Sync interval set to ${e.target.value} seconds`);
+                }
+            });
+
+            // Test data creation
+            document.getElementById('create-test-client').addEventListener('click', () => {
+                handleCreateTestData('client');
+            });
+
+            document.getElementById('create-test-lead').addEventListener('click', () => {
+                handleCreateTestData('lead');
+            });
+
+            document.getElementById('create-test-project').addEventListener('click', () => {
+                handleCreateTestData('project');
+            });
+
+            document.getElementById('create-test-invoice').addEventListener('click', () => {
+                handleCreateTestData('invoice');
+            });
+
+            // Helper function for test data creation
+            window.handleCreateTestData = async (type) => {
+                if (!window.DatabaseAPI) {
+                    console.error('DatabaseAPI not available');
+                    return;
+                }
+
+                try {
+                    const timestamp = Date.now();
+                    let data;
+
+                    switch (type) {
+                        case 'client':
+                            data = {
+                                name: `Test Client ${timestamp}`,
+                                industry: 'Technology',
+                                status: 'active',
+                                revenue: 100000,
+                                notes: 'Test client created by live dashboard test'
+                            };
+                            await window.DatabaseAPI.createClient(data);
+                            break;
+                        case 'lead':
+                            data = {
+                                name: `Test Lead ${timestamp}`,
+                                industry: 'Manufacturing',
+                                status: 'New',
+                                value: 50000,
+                                probability: 75,
+                                notes: 'Test lead created by live dashboard test'
+                            };
+                            await window.DatabaseAPI.createLead(data);
+                            break;
+                        case 'project':
+                            data = {
+                                name: `Test Project ${timestamp}`,
+                                description: 'Test project for live dashboard',
+                                client: `Test Client ${timestamp}`,
+                                status: 'Planning',
+                                budget: 25000,
+                                priority: 'High'
+                            };
+                            await window.DatabaseAPI.createProject(data);
+                            break;
+                        case 'invoice':
+                            data = {
+                                invoiceNumber: `INV-${timestamp}`,
+                                client: `Test Client ${timestamp}`,
+                                status: 'Draft',
+                                subtotal: 1000,
+                                tax: 150,
+                                total: 1150,
+                                balance: 1150,
+                                items: [{
+                                    description: 'Test service',
+                                    quantity: 1,
+                                    rate: 1000,
+                                    amount: 1000
+                                }]
+                            };
+                            await window.DatabaseAPI.createInvoice(data);
+                            break;
+                    }
+                    
+                    console.log(`✅ Test ${type} created successfully`);
+                } catch (error) {
+                    console.error(`❌ Failed to create test ${type}:`, error);
+                }
+            };
+        });
+
+        // Render the app
+        ReactDOM.render(<TestApp />, document.getElementById('dashboard-container'));
+    </script>
+</body>
+</html>

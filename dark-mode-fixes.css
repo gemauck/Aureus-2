@@ -7,83 +7,83 @@
 
 /* Background colors */
 .dark body {
-    background-color: #111827;
-    color: #f9fafb;
+    background-color: #0f172a;
+    color: #f8fafc;
 }
 
 .dark .bg-white {
-    background-color: #1f2937 !important;
+    background-color: #1e293b !important;
 }
 
 .dark .bg-gray-50 {
-    background-color: #374151 !important;
+    background-color: #334155 !important;
 }
 
 .dark .bg-gray-100 {
-    background-color: #4b5563 !important;
+    background-color: #475569 !important;
 }
 
 .dark .bg-gray-200 {
-    background-color: #6b7280 !important;
+    background-color: #64748b !important;
 }
 
 /* Text colors */
 .dark .text-gray-900 {
-    color: #f9fafb !important;
+    color: #f8fafc !important;
 }
 
 .dark .text-gray-800 {
-    color: #f3f4f6 !important;
+    color: #f1f5f9 !important;
 }
 
 .dark .text-gray-700 {
-    color: #e5e7eb !important;
+    color: #e2e8f0 !important;
 }
 
 .dark .text-gray-600 {
-    color: #d1d5db !important;
+    color: #cbd5e1 !important;
 }
 
 .dark .text-gray-500 {
-    color: #9ca3af !important;
+    color: #94a3b8 !important;
 }
 
 .dark .text-gray-400 {
-    color: #6b7280 !important;
+    color: #64748b !important;
 }
 
 .dark .text-gray-300 {
-    color: #4b5563 !important;
+    color: #475569 !important;
 }
 
 /* Border colors */
 .dark .border-gray-200 {
-    border-color: #374151 !important;
+    border-color: #334155 !important;
 }
 
 .dark .border-gray-300 {
-    border-color: #4b5563 !important;
+    border-color: #475569 !important;
 }
 
 .dark .border-gray-400 {
-    border-color: #6b7280 !important;
+    border-color: #64748b !important;
 }
 
 .dark .border-gray-500 {
-    border-color: #9ca3af !important;
+    border-color: #94a3b8 !important;
 }
 
 /* Card and component backgrounds */
 .dark .bg-white {
-    background-color: #1f2937 !important;
+    background-color: #1e293b !important;
 }
 
 .dark .bg-gray-50 {
-    background-color: #374151 !important;
+    background-color: #334155 !important;
 }
 
 .dark .bg-gray-100 {
-    background-color: #4b5563 !important;
+    background-color: #475569 !important;
 }
 
 /* Pipeline board dark mode */
@@ -133,9 +133,9 @@
 
 /* Form elements */
 .dark input {
-    background-color: #374151 !important;
-    border-color: #4b5563 !important;
-    color: #f9fafb !important;
+    background-color: #334155 !important;
+    border-color: #475569 !important;
+    color: #f8fafc !important;
 }
 
 .dark input:focus {
@@ -144,19 +144,19 @@
 }
 
 .dark input::placeholder {
-    color: #9ca3af !important;
+    color: #94a3b8 !important;
 }
 
 .dark textarea {
-    background-color: #374151 !important;
-    border-color: #4b5563 !important;
-    color: #f9fafb !important;
+    background-color: #334155 !important;
+    border-color: #475569 !important;
+    color: #f8fafc !important;
 }
 
 .dark select {
-    background-color: #374151 !important;
-    border-color: #4b5563 !important;
-    color: #f9fafb !important;
+    background-color: #334155 !important;
+    border-color: #475569 !important;
+    color: #f8fafc !important;
 }
 
 /* Buttons */
@@ -202,17 +202,17 @@
 
 /* Sidebar */
 .dark .sidebar {
-    background-color: #1f2937 !important;
-    border-color: #374151 !important;
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
 }
 
 .dark .sidebar-item {
-    color: #d1d5db !important;
+    color: #cbd5e1 !important;
 }
 
 .dark .sidebar-item:hover {
-    background-color: #374151 !important;
-    color: #f9fafb !important;
+    background-color: #334155 !important;
+    color: #f8fafc !important;
 }
 
 .dark .sidebar-item.active {
@@ -387,16 +387,40 @@
 
 /* Specific component fixes */
 .dark .dashboard-card {
-    background-color: #1f2937 !important;
-    border-color: #374151 !important;
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
 }
 
 .dark .dashboard-metric {
-    color: #f9fafb !important;
+    color: #f8fafc !important;
 }
 
 .dark .dashboard-label {
-    color: #9ca3af !important;
+    color: #94a3b8 !important;
+}
+
+/* Enhanced menu item visibility */
+.dark .menu-item {
+    color: #cbd5e1 !important;
+}
+
+.dark .menu-item:hover {
+    color: #f8fafc !important;
+    background-color: #334155 !important;
+}
+
+.dark .menu-item.active {
+    color: #ffffff !important;
+    background-color: #3b82f6 !important;
+}
+
+/* Better contrast for icons */
+.dark .fas, .dark .far, .dark .fab {
+    color: #cbd5e1 !important;
+}
+
+.dark .fas:hover, .dark .far:hover, .dark .fab:hover {
+    color: #f8fafc !important;
 }
 
 /* Mobile specific dark mode fixes */

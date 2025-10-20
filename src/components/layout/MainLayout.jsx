@@ -53,8 +53,8 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window - prioritize original components over simple ones
-    const Dashboard = window.DashboardSimple || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    // Get components from window - prioritize live dashboard over others
+    const Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
     const Projects = window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
@@ -139,7 +139,7 @@ const MainLayout = () => {
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
+                        className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                     >
                         <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-base lg:text-sm`}></i>
                     </button>
@@ -155,7 +155,7 @@ const MainLayout = () => {
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 
                                     : isDark 
-                                        ? 'text-gray-300 hover:bg-gray-700' 
+                                        ? 'text-gray-100 hover:bg-gray-700 hover:text-white' 
                                         : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
@@ -180,7 +180,7 @@ const MainLayout = () => {
                         {sidebarOpen && (
                             <button 
                                 onClick={logout}
-                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
+                                className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
                                 title="Logout"
                             >
                                 <i className="fas fa-sign-out-alt text-sm lg:text-xs"></i>
@@ -197,7 +197,7 @@ const MainLayout = () => {
                     <div className="flex items-center">
                         <button 
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className={`lg:hidden ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
+                            className={`lg:hidden ${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
                         >
                             <i className="fas fa-bars text-base"></i>
                         </button>
@@ -278,11 +278,11 @@ const MainLayout = () => {
                                 </div>
                             )}
                         </div>
-                        <button className={`relative ${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                        <button className={`relative ${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
                             <i className="fas fa-bell text-base lg:text-sm"></i>
                             <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] lg:text-[8px] rounded-full w-4 h-4 lg:w-3.5 lg:h-3.5 flex items-center justify-center font-medium">3</span>
                         </button>
-                        <button className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
+                        <button className={`${isDark ? 'text-gray-200 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
                             <i className="fas fa-cog text-base lg:text-sm"></i>
                         </button>
                     </div>
