@@ -72,12 +72,60 @@ const Pipeline = () => {
         }
     ];
 
-    // Load data from localStorage
+    // Load data from API and localStorage
     useEffect(() => {
         loadData();
     }, [refreshKey]);
 
-    const loadData = () => {
+    const loadData = async () => {
+        try {
+            // Try to load from API first if authenticated
+            const token = storage.getToken();
+            if (token && window.DatabaseAPI) {
+                console.log('🔄 Pipeline: Loading data from API...');
+                
+                // Load clients and leads from API
+                const [clientsResponse, leadsResponse] = await Promise.allSettled([
+                    window.DatabaseAPI.getClients(),
+                    window.DatabaseAPI.getLeads()
+                ]);
+                
+                // Process clients
+                let apiClients = [];
+                if (clientsResponse.status === 'fulfilled' && clientsResponse.value?.data?.clients) {
+                    apiClients = clientsResponse.value.data.clients;
+                    console.log('✅ Pipeline: Loaded clients from API:', apiClients.length);
+                }
+                
+                // Process leads
+                let apiLeads = [];
+                if (leadsResponse.status === 'fulfilled' && leadsResponse.value?.data?.leads) {
+                    apiLeads = leadsResponse.value.data.leads;
+                    console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
+                }
+                
+                // Ensure all clients have opportunities array
+                const clientsWithOpportunities = apiClients.map(client => ({
+                    ...client,
+                    opportunities: client.opportunities || []
+                }));
+                
+                setClients(clientsWithOpportunities);
+                setLeads(apiLeads);
+                
+                // Update localStorage for offline access
+                storage.setClients(clientsWithOpportunities);
+                storage.setLeads(apiLeads);
+                
+                console.log('✅ Pipeline: API data loaded and cached');
+                return;
+            }
+        } catch (error) {
+            console.warn('⚠️ Pipeline: API loading failed, falling back to localStorage:', error);
+        }
+        
+        // Fallback to localStorage
+        console.log('💾 Pipeline: Loading data from localStorage...');
         const savedClients = storage.getClients() || [];
         const savedLeads = storage.getLeads() || [];
         
@@ -89,6 +137,8 @@ const Pipeline = () => {
         
         setClients(clientsWithOpportunities);
         setLeads(savedLeads);
+        
+        console.log('✅ Pipeline: localStorage data loaded - Clients:', clientsWithOpportunities.length, 'Leads:', savedLeads.length);
     };
 
     // Get all pipeline items (leads + client opportunities)
@@ -250,6 +300,17 @@ const Pipeline = () => {
             );
             setLeads(updatedLeads);
             storage.setLeads(updatedLeads);
+            
+            // Update lead in API if authenticated
+            const token = storage.getToken();
+            if (token && window.DatabaseAPI) {
+                try {
+                    await window.DatabaseAPI.updateLead(draggedItem.id, { stage: targetStage });
+                    console.log('✅ Pipeline: Lead stage updated in API');
+                } catch (error) {
+                    console.warn('⚠️ Pipeline: Failed to update lead stage in API:', error);
+                }
+            }
         } else if (draggedType === 'opportunity') {
             const updatedClients = clients.map(client => {
                 if (client.id === draggedItem.clientId) {
@@ -262,6 +323,22 @@ const Pipeline = () => {
             });
             setClients(updatedClients);
             storage.setClients(updatedClients);
+            
+            // Update client in API if authenticated
+            const token = storage.getToken();
+            if (token && window.DatabaseAPI) {
+                try {
+                    const clientToUpdate = updatedClients.find(c => c.id === draggedItem.clientId);
+                    if (clientToUpdate) {
+                        await window.DatabaseAPI.updateClient(draggedItem.clientId, { 
+                            opportunities: clientToUpdate.opportunities 
+                        });
+                        console.log('✅ Pipeline: Client opportunities updated in API');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Pipeline: Failed to update client opportunities in API:', error);
+                }
+            }
         }
 
         setDraggedItem(null);
@@ -607,7 +684,16 @@ const Pipeline = () => {
                     <p className="text-sm text-gray-600 mt-1">Track deals through AIDA framework</p>
                 </div>
                 <div className="flex gap-3">
-                {/* Refresh button removed - data persists automatically */}
+                    <button
+                        onClick={() => {
+                            console.log('🔄 Pipeline: Manual refresh triggered');
+                            setRefreshKey(k => k + 1);
+                        }}
+                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition text-sm font-medium"
+                    >
+                        <i className="fas fa-sync-alt mr-2"></i>
+                        Refresh
+                    </button>
                     <button
                         onClick={() => {
                             // Navigate to CRM to add new lead

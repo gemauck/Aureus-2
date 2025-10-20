@@ -49,6 +49,10 @@ const storage = {
         localStorage.setItem('abcotronics_clients', JSON.stringify(clients));
     },
     
+    removeClients: () => {
+        localStorage.removeItem('abcotronics_clients');
+    },
+    
     // Leads
     getLeads: () => {
         try {
