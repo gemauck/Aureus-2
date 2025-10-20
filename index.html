@@ -19,8 +19,8 @@
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS - Production Build -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.0/dist/tailwind.min.css" rel="stylesheet">
     
     <!-- Mobile Optimizations CSS -->
     <link rel="stylesheet" href="mobile-optimizations.css">
@@ -31,29 +31,26 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Tailwind Config -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#e0f2fe',
-                            100: '#bae6fd',
-                            200: '#7dd3fc',
-                            300: '#38bdf8',
-                            400: '#0ea5e9',
-                            500: '#0284c7',
-                            600: '#0369a1',
-                            700: '#075985',
-                            800: '#0c4a6e',
-                            900: '#082f49',
-                        }
-                    }
-                }
-            }
+    <!-- Custom Primary Colors -->
+    <style>
+        :root {
+            --primary-50: #e0f2fe;
+            --primary-100: #bae6fd;
+            --primary-200: #7dd3fc;
+            --primary-300: #38bdf8;
+            --primary-400: #0ea5e9;
+            --primary-500: #0284c7;
+            --primary-600: #0369a1;
+            --primary-700: #075985;
+            --primary-800: #0c4a6e;
+            --primary-900: #082f49;
         }
-    </script>
+        .bg-primary-500 { background-color: var(--primary-500); }
+        .text-primary-500 { color: var(--primary-500); }
+        .border-primary-500 { border-color: var(--primary-500); }
+        .hover\:bg-primary-600:hover { background-color: var(--primary-600); }
+        .hover\:bg-primary-700:hover { background-color: var(--primary-700); }
+    </style>
     
     <style>
         body {
@@ -435,7 +432,7 @@
         
         // Use original components with full functionality
         window.Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback;
-        window.Clients = window.Clients || window.ClientsSimple;
+        window.Clients = window.ClientsDatabaseFirst || window.Clients || window.ClientsSimple;
         window.Projects = window.Projects || window.ProjectsSimple;
         window.Teams = window.TeamsEnhanced || window.Teams;
         window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
