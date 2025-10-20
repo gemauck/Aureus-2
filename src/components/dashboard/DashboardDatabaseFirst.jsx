@@ -67,10 +67,6 @@ const DashboardDatabaseFirst = () => {
                     console.warn('Failed to load clients:', err);
                     return [];
                 }),
-                window.DatabaseAPI.getLeads().catch(err => {
-                    console.warn('Failed to load leads:', err);
-                    return [];
-                }),
                 window.DatabaseAPI.getProjects().catch(err => {
                     console.warn('Failed to load projects:', err);
                     return [];
@@ -85,7 +81,11 @@ const DashboardDatabaseFirst = () => {
                 })
             ]);
 
-            const [clients, leads, projects, invoices, timeEntries] = await Promise.race([dataPromise, timeoutPromise]);
+            const [allClientsData, projects, invoices, timeEntries] = await Promise.race([dataPromise, timeoutPromise]);
+            
+            // Separate clients and leads based on type field
+            const clients = allClientsData.filter(c => c.type === 'client' || !c.type); // Default to client if no type
+            const leads = allClientsData.filter(c => c.type === 'lead');
 
             // Calculate statistics
             const stats = {

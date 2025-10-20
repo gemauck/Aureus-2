@@ -51,8 +51,12 @@ const DashboardLive = () => {
         try {
             // IMMEDIATE: Load from localStorage first for instant display
             console.log('⚡ DashboardLive: Loading cached data immediately...');
-            const cachedClients = window.storage?.getClients?.() || [];
-            const cachedLeads = window.storage?.getLeads?.() || [];
+            const allClients = window.storage?.getClients?.() || [];
+            
+            // Separate clients and leads based on type field
+            const cachedClients = allClients.filter(c => c.type === 'client' || !c.type); // Default to client if no type
+            const cachedLeads = allClients.filter(c => c.type === 'lead');
+            
             const cachedProjects = window.storage?.getProjects?.() || [];
             const cachedInvoices = window.storage?.getInvoices?.() || [];
             const cachedTimeEntries = window.storage?.getTimeEntries?.() || [];
@@ -136,10 +140,6 @@ const DashboardLive = () => {
                     console.warn('Client sync failed:', err);
                     return { data: { clients: [] } };
                 }),
-                window.DatabaseAPI.getLeads().catch(err => {
-                    console.warn('Lead sync failed:', err);
-                    return { data: [] };
-                }),
                 window.DatabaseAPI.getProjects().catch(err => {
                     console.warn('Project sync failed:', err);
                     return { data: [] };
@@ -160,10 +160,14 @@ const DashboardLive = () => {
 
             // Update with fresh API data when available
             Promise.allSettled(syncPromises).then((results) => {
-                const [clientsRes, leadsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+                const [clientsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
 
-                const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients : cachedClients;
-                const leads = Array.isArray(leadsRes.data) ? leadsRes.data : cachedLeads;
+                const allClientsFromAPI = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients : cachedClients.concat(cachedLeads);
+                
+                // Separate clients and leads from API data
+                const clients = allClientsFromAPI.filter(c => c.type === 'client' || !c.type); // Default to client if no type
+                const leads = allClientsFromAPI.filter(c => c.type === 'lead');
+                
                 const projects = Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
                 const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : cachedInvoices;
                 const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
