@@ -1,12 +1,10 @@
-Pipeline Clients Module Fixes - Deployment Trigger
-Date: $(date)
-Commit: d3ddcd1
-
+Client Creation API Fix Deployment Trigger
+Timestamp: $(date)
 Changes:
-- Removed AIDA Framework box from pipeline view
-- Fixed leads and opportunities separation in stats
-- Fixed board display to show active items only
-- Added Active/Inactive status controls for leads
-- Improved drag-and-drop functionality
+- Fixed 400 Bad Request error in client creation API
+- Added missing value and probability fields to client data structure
+- Updated raw SQL query to include value and probability columns
+- Updated PATCH method to handle value and probability fields
+- Ensures database seeding script works properly
 
-This file triggers automatic deployment via Railway.
+This should resolve the client creation errors during database seeding.

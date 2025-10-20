@@ -204,17 +204,16 @@ const ClientCache = {
             };
         }
 
-        // FALLBACK: Load from localStorage
+        // FALLBACK: Load from localStorage (leads are database-only)
         console.log('💾 ClientCache: Loading from localStorage...');
         const localStorageClients = window.storage?.getClients?.() || [];
-        const localStorageLeads = window.storage?.getLeads?.() || [];
         const localStorageProjects = window.storage?.getProjects?.() || [];
         const localStorageInvoices = window.storage?.getInvoices?.() || [];
         const localStorageTimeEntries = window.storage?.getTimeEntries?.() || [];
 
-        // Update cache with localStorage data
+        // Update cache with localStorage data (leads are database-only)
         this.setClients(localStorageClients);
-        this.setLeads(localStorageLeads);
+        this.setLeads([]); // Leads are database-only
         this.setProjects(localStorageProjects);
         this.setInvoices(localStorageInvoices);
         this.setTimeEntries(localStorageTimeEntries);
@@ -266,9 +265,7 @@ const ClientCache = {
                             const leads = response.data || [];
                             if (leads.length > 0) {
                                 this.setLeads(leads);
-                                if (window.storage?.setLeads) {
-                                    window.storage.setLeads(leads);
-                                }
+                                // Leads are database-only, no localStorage sync
                             }
                         })
                         .catch(err => console.warn('Lead sync failed:', err))

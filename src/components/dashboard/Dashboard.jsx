@@ -19,40 +19,38 @@ const Dashboard = () => {
                     console.log('⚡ Using ClientCache for ultra-fast loading...');
                     const cachedData = await window.ClientCache.loadDataWithCache();
                     
-                    // Set data immediately (from cache or localStorage)
+                    // Set data immediately (from cache or localStorage) - leads are database-only
                     setClients(cachedData.clients);
-                    setLeads(cachedData.leads);
+                    setLeads([]); // Leads are database-only, no localStorage fallback
                     setProjects(cachedData.projects);
                     setTimeEntries(cachedData.timeEntries);
                     setInvoices(cachedData.invoices);
                     
                     console.log(`✅ Dashboard loaded instantly from ${cachedData.fromCache ? 'cache' : 'localStorage'}`);
                 } else {
-                    // Fallback to direct localStorage loading
+                    // Fallback to direct localStorage loading (leads are database-only)
                     console.log('⚡ Loading from localStorage directly...');
                     const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
-                    const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
                     const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                     const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
                     const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
-                    setLeads(savedLeads);
+                    setLeads([]); // Leads are database-only
                     setProjects(savedProjects);
                     setTimeEntries(savedTimeEntries);
                     setInvoices(savedInvoices);
                 }
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
-                // Ensure we have at least localStorage data
+                // Ensure we have at least localStorage data (leads are database-only)
                 const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
-                const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
                 const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                 const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
                 const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                 setClients(savedClients);
-                setLeads(savedLeads);
+                setLeads([]); // Leads are database-only
                 setProjects(savedProjects);
                 setTimeEntries(savedTimeEntries);
                 setInvoices(savedInvoices);
