@@ -1,4 +1,4 @@
-// Hybrid Data Service - Uses API in production, localStorage as fallback
+// API-Only Data Service - Always uses database API, no localStorage fallback
 const { isProduction, isLocalhost } = (() => {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
@@ -8,6 +8,7 @@ const { isProduction, isLocalhost } = (() => {
 })();
 
 console.log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
+console.log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
 
 // Helpers to normalize API/local responses to arrays and safely access storage methods
 function normalizeArrayResponse(response, preferredKeys = []) {
@@ -30,78 +31,32 @@ function safeStorageCall(obj, methodName, fallback = []) {
 }
 
 const dataService = {
-    // Projects
+    // Projects - API Only
     async getProjects() {
-        if (isProduction && window.api?.listProjects) {
-            try {
-                console.log('🌐 Using API for projects');
-                const response = await window.api.listProjects();
-                return normalizeArrayResponse(response, ['projects']);
-            } catch (error) {
-                console.warn('⚠️ API failed, falling back to localStorage:', error.message);
-                return safeStorageCall(window.storage, 'getProjects', []);
-            }
-        } else {
-            console.log('💾 Using localStorage for projects');
-            return safeStorageCall(window.storage, 'getProjects', []);
+        try {
+            console.log('🌐 Using API for projects (API-only mode)');
+            const response = await window.api.getProjects();
+            return normalizeArrayResponse(response, ['projects']);
+        } catch (error) {
+            console.error('❌ API failed for projects:', error.message);
+            throw new Error(`Failed to fetch projects from API: ${error.message}`);
         }
     },
 
     async setProjects(projects) {
-        if (isProduction && window.api?.createProject) {
-            try {
-                console.log('🌐 Syncing projects to API');
-                // For now, just store locally in production
-                // TODO: Implement proper API sync
-                if (window.storage?.setProjects) {
-                    window.storage.setProjects(projects);
-                }
-            } catch (error) {
-                console.warn('⚠️ API sync failed, using localStorage:', error.message);
-                if (window.storage?.setProjects) {
-                    window.storage.setProjects(projects);
-                }
-            }
-        } else {
-            console.log('💾 Using localStorage for projects');
-            if (typeof window.storage?.setProjects === 'function') {
-                window.storage.setProjects(projects);
-            }
-        }
+        console.log('📡 Projects should be saved individually via API (no bulk operations)');
+        console.log('💡 Use window.api.createProject() or window.api.updateProject() for individual projects');
+        return projects;
     },
 
     async createProject(projectData) {
-        if (isProduction && window.api?.createProject) {
-            try {
-                console.log('🌐 Creating project via API');
-                const response = await window.api.createProject(projectData);
-                return response.project || response;
-            } catch (error) {
-                console.warn('⚠️ API create failed, using localStorage:', error.message);
-                // Fallback to localStorage
-                const projects = await this.getProjects();
-                const newProject = {
-                    id: Math.max(0, ...projects.map(p => p.id)) + 1,
-                    ...projectData,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                };
-                projects.push(newProject);
-                await this.setProjects(projects);
-                return newProject;
-            }
-        } else {
-            console.log('💾 Creating project in localStorage');
-            const projects = await this.getProjects();
-            const newProject = {
-                id: Math.max(0, ...projects.map(p => p.id)) + 1,
-                ...projectData,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-            projects.push(newProject);
-            await this.setProjects(projects);
-            return newProject;
+        try {
+            console.log('🌐 Creating project via API (API-only mode)');
+            const response = await window.api.createProject(projectData);
+            return response.project || response;
+        } catch (error) {
+            console.error('❌ API create failed:', error.message);
+            throw new Error(`Failed to create project via API: ${error.message}`);
         }
     },
 

@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "prisma generate",
-    "vercel-build": "prisma generate && prisma migrate deploy",
+    "build": "prisma generate && npm run build:css",
+    "build:css": "tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
+    "watch:css": "tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --watch",
+    "vercel-build": "prisma generate && prisma migrate deploy && npm run build:css",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -14,13 +16,12 @@
     "migrate:production": "node migrate-production.js",
     "seed": "node prisma/seed.js",
     "start": "node start-production.js",
-    "railway-build": "prisma generate",
+    "railway-build": "prisma generate && npm run build:css",
     "start:local": "node server/local.js",
     "start:railway": "node server/railway.js"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
-    "autoprefixer": "^10.4.21",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
@@ -30,11 +31,12 @@
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.9.8",
     "pino": "^9.3.2",
-    "postcss": "^8.5.6",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
     "prisma": "^5.18.0",
-    "tailwindcss": "^4.1.14"
+    "tailwindcss": "^4.1.15"
   }
 }

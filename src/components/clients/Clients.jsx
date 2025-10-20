@@ -544,8 +544,8 @@ const Clients = () => {
                 safeStorage.setClients(initialClients);
             }
         }
-        const savedProjects = safeStorage.getProjects();
-        if (savedProjects) setProjects(savedProjects);
+        // Projects are now handled by ProjectsDatabaseFirst component only
+        // No localStorage persistence for projects
     };
 
     // Load leads from API and localStorage
@@ -559,38 +559,39 @@ const Clients = () => {
                     const apiLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
                     console.log('📡 API returned leads:', apiLeads.length);
                     
-                    if (apiLeads && apiLeads.length > 0) {
-                        setLeads(apiLeads);
-                        safeStorage.setLeads(apiLeads);
-                        console.log('✅ Leads loaded from API');
-                        return;
-                    }
+                    // Always use API data, even if empty (this ensures deletions persist)
+                    setLeads(apiLeads);
+                    safeStorage.setLeads(apiLeads);
+                    console.log('✅ Leads loaded from API (including empty result)');
+                    return;
                 } catch (error) {
                     console.warn('⚠️ Failed to load leads from API:', error);
+                    // Only fall back to localStorage if API completely fails
+                    const savedLeads = safeStorage.getLeads();
+                    if (savedLeads && savedLeads.length > 0) {
+                        setLeads(savedLeads);
+                        console.log('✅ Leads loaded from localStorage (API fallback)');
+                    } else {
+                        setLeads([]);
+                        console.log('✅ No leads found (empty state)');
+                    }
+                    return;
                 }
             }
             
-            // Fallback to localStorage or initial data
+            // No token or API available - use localStorage only
             const savedLeads = safeStorage.getLeads();
             if (savedLeads && savedLeads.length > 0) {
                 setLeads(savedLeads);
-                console.log('✅ Leads loaded from localStorage');
+                console.log('✅ Leads loaded from localStorage (no API)');
             } else {
-                // Fallback to initial leads data if localStorage is empty
-                console.log('📁 No saved leads, loading initial leads data');
-                setLeads(initialLeads);
-                safeStorage.setLeads(initialLeads);
+                setLeads([]);
+                console.log('✅ No leads found (empty state)');
             }
         } catch (error) {
             console.error('❌ Error loading leads:', error);
-            // Fallback to localStorage
-            const savedLeads = safeStorage.getLeads();
-            if (savedLeads && savedLeads.length > 0) {
-                setLeads(savedLeads);
-            } else {
-                setLeads(initialLeads);
-                safeStorage.setLeads(initialLeads);
-            }
+            // Fallback to empty state to avoid loading stale data
+            setLeads([]);
         }
     };
 
@@ -932,6 +933,12 @@ const Clients = () => {
                 setViewMode('leads');
                 setSelectedLead(null);
                 setCurrentLeadTab('overview');
+                
+                // Force a refresh to ensure API data is loaded
+                setTimeout(() => {
+                    console.log('🔄 Refreshing leads after creation...');
+                    loadLeads();
+                }, 100);
             }
         } catch (error) {
             console.error('❌ Error saving lead:', error);
@@ -988,6 +995,9 @@ const Clients = () => {
 
     const handleDeleteLead = async (leadId) => {
         try {
+            console.log('🗑️ Deleting lead:', leadId);
+            console.log('Current leads before deletion:', leads.length);
+            
             // Try to delete from database first
             const token = window.storage?.getToken?.();
             if (token && window.api?.deleteLead) {
@@ -1003,7 +1013,14 @@ const Clients = () => {
             const updatedLeads = leads.filter(l => l.id !== leadId);
             setLeads(updatedLeads);
             safeStorage.setLeads(updatedLeads);
-            console.log('✅ Lead deleted from localStorage');
+            console.log('✅ Lead deleted from localStorage, new count:', updatedLeads.length);
+            
+            // Force a refresh to ensure API data is loaded
+            setTimeout(() => {
+                console.log('🔄 Refreshing leads after deletion...');
+                loadLeads();
+            }, 100);
+            
         } catch (error) {
             console.error('❌ Error deleting lead:', error);
         }
