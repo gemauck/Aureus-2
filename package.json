@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "build": "echo 'Frontend builds via static index.html; API is serverless'",
+    "build": "prisma generate",
     "vercel-build": "prisma generate && prisma migrate deploy",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
@@ -14,6 +14,7 @@
     "migrate:production": "node migrate-production.js",
     "seed": "node prisma/seed.js",
     "start": "node server-production.js",
+    "railway-build": "prisma generate && prisma migrate deploy",
     "start:local": "node server/local.js",
     "start:railway": "node server/railway.js"
   },
