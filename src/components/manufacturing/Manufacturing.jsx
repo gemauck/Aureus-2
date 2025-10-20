@@ -101,21 +101,6 @@ const Manufacturing = () => {
     return { totalValue, lowStockItems, totalItems, categories };
   };
 
-  const handleClearAllData = () => {
-    if (confirm('⚠️ WARNING: This will delete ALL manufacturing data including inventory, BOMs, production orders, and movements. This cannot be undone. Are you absolutely sure?')) {
-      if (confirm('Last chance - are you REALLY sure you want to delete everything?')) {
-        localStorage.removeItem('manufacturing_inventory');
-        localStorage.removeItem('manufacturing_boms');
-        localStorage.removeItem('production_orders');
-        localStorage.removeItem('stock_movements');
-        setInventory([]);
-        setBoms([]);
-        setProductionOrders([]);
-        setMovements([]);
-        alert('All manufacturing data has been cleared.');
-      }
-    }
-  };
 
   const getProductionStats = () => {
     const activeOrders = productionOrders.filter(o => o.status === 'in_progress').length;
@@ -1876,16 +1861,6 @@ const Manufacturing = () => {
           <div>
             <h2 className="text-lg font-bold text-gray-900">Manufacturing & Inventory Management</h2>
             <p className="text-sm text-gray-500 mt-1">Comprehensive stock control and production management system</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button 
-              onClick={handleClearAllData}
-              className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
-              title="Clear all manufacturing data"
-            >
-              <i className="fas fa-trash-alt text-xs"></i>
-              Clear All Data
-            </button>
           </div>
         </div>
       </div>

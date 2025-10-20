@@ -100,36 +100,6 @@ const LoginPage = () => {
                     <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex flex-col justify-center">
                         <div className="mb-8">
                             <h1 className="text-3xl font-bold mb-2">Abcotronics ERP</h1>
-                            <p className="text-blue-100 text-sm">Fuel Management Services</p>
-                        </div>
-                        <div className="space-y-4">
-                            <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <i className="fas fa-chart-line text-sm"></i>
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold mb-1">Comprehensive ERP</h3>
-                                    <p className="text-xs text-blue-100">Manage all aspects of your business in one place</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <i className="fas fa-shield-alt text-sm"></i>
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold mb-1">Role-Based Access</h3>
-                                    <p className="text-xs text-blue-100">Secure permissions for every team member</p>
-                                </div>
-                            </div>
-                            <div className="flex items-start gap-3">
-                                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
-                                    <i className="fas fa-bolt text-sm"></i>
-                                </div>
-                                <div>
-                                    <h3 className="font-semibold mb-1">Real-Time Updates</h3>
-                                    <p className="text-xs text-blue-100">Stay synchronized across all modules</p>
-                                </div>
-                            </div>
                         </div>
                     </div>
 
