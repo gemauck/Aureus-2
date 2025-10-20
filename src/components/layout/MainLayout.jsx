@@ -58,7 +58,7 @@ const MainLayout = () => {
     const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
-    const Projects = window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
+    const Projects = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
     const Teams = window.TeamsEnhanced || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>);
     const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
@@ -175,11 +175,11 @@ const MainLayout = () => {
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen ? (
                         <div className="flex-1">
-                            <h1 className="text-lg lg:text-sm font-bold text-primary-600">Abcotronics</h1>
+                            <h1 className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
                             <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ERP</p>
                         </div>
                     ) : (
-                        <div className="text-lg lg:text-sm font-bold text-primary-600">A</div>
+                        <div className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}

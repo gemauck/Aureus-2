@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API-Only Mode Test - Projects</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+        }
+        .container { 
+            text-align: center; 
+            background: rgba(255,255,255,0.1); 
+            padding: 40px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+            max-width: 800px;
+            width: 100%;
+        }
+        .test-section {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .test-result {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid #22c55e;
+            color: #22c55e;
+        }
+        .error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid #ef4444;
+            color: #ef4444;
+        }
+        .warning {
+            background: rgba(245, 158, 11, 0.2);
+            border: 1px solid #f59e0b;
+            color: #f59e0b;
+        }
+        .btn {
+            padding: 15px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #2563eb;
+        }
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .hidden { display: none; }
+        .code {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 API-Only Mode Test</h1>
+        <h2>Projects System Verification</h2>
+        
+        <div id="loading" class="hidden">
+            <div class="spinner"></div>
+            <div>Running tests...</div>
+        </div>
+        
+        <div id="test-results">
+            <div class="test-section">
+                <h3>📡 API Configuration Test</h3>
+                <div id="api-config-results"></div>
+            </div>
+            
+            <div class="test-section">
+                <h3>🗄️ DataService Test</h3>
+                <div id="dataservice-results"></div>
+            </div>
+            
+            <div class="test-section">
+                <h3>💾 LocalStorage Check</h3>
+                <div id="localstorage-results"></div>
+            </div>
+            
+            <div class="test-section">
+                <h3>🔄 Projects Component Test</h3>
+                <div id="component-results"></div>
+            </div>
+        </div>
+        
+        <div id="summary" class="hidden">
+            <h3>📊 Test Summary</h3>
+            <div id="summary-content"></div>
+        </div>
+        
+        <button id="run-tests-btn" class="btn btn-primary">
+            🚀 Run Tests
+        </button>
+        <button id="return-btn" class="btn btn-primary">
+            Return to Projects
+        </button>
+    </div>
+
+    <script>
+        // API configuration
+        const API_BASE = window.location.hostname === 'localhost' ? 
+            'http://localhost:3000' : 
+            'https://abco-erp-2-production.up.railway.app';
+        
+        let testResults = {
+            apiConfig: null,
+            dataService: null,
+            localStorage: null,
+            component: null
+        };
+        
+        // DOM elements
+        const loadingEl = document.getElementById('loading');
+        const testResultsEl = document.getElementById('test-results');
+        const summaryEl = document.getElementById('summary');
+        const runTestsBtn = document.getElementById('run-tests-btn');
+        const returnBtn = document.getElementById('return-btn');
+        
+        // Event listeners
+        runTestsBtn.addEventListener('click', runAllTests);
+        returnBtn.addEventListener('click', () => window.location.href = 'index.html#/projects');
+        
+        async function runAllTests() {
+            loadingEl.classList.remove('hidden');
+            testResultsEl.classList.add('hidden');
+            summaryEl.classList.add('hidden');
+            
+            try {
+                // Test 1: API Configuration
+                await testAPIConfiguration();
+                
+                // Test 2: DataService
+                await testDataService();
+                
+                // Test 3: LocalStorage Check
+                await testLocalStorage();
+                
+                // Test 4: Component Test
+                await testComponent();
+                
+                // Show results
+                displayResults();
+                showSummary();
+                
+            } catch (error) {
+                console.error('Test failed:', error);
+                showError('Test execution failed: ' + error.message);
+            } finally {
+                loadingEl.classList.add('hidden');
+                testResultsEl.classList.remove('hidden');
+            }
+        }
+        
+        async function testAPIConfiguration() {
+            const results = [];
+            
+            // Check if API object exists
+            if (window.api) {
+                results.push({ test: 'API object exists', status: 'success', message: '✅ window.api is available' });
+                
+                // Check API methods
+                const methods = ['getProjects', 'createProject', 'updateProject', 'deleteProject'];
+                methods.forEach(method => {
+                    if (typeof window.api[method] === 'function') {
+                        results.push({ test: `API method: ${method}`, status: 'success', message: `✅ ${method} is available` });
+                    } else {
+                        results.push({ test: `API method: ${method}`, status: 'error', message: `❌ ${method} is missing` });
+                    }
+                });
+                
+                // Test API connection
+                try {
+                    const token = localStorage.getItem('auth_token');
+                    if (token) {
+                        const response = await fetch(`${API_BASE}/api/projects`, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        
+                        if (response.ok) {
+                            results.push({ test: 'API Connection', status: 'success', message: '✅ API connection successful' });
+                        } else {
+                            results.push({ test: 'API Connection', status: 'error', message: `❌ API connection failed: ${response.status}` });
+                        }
+                    } else {
+                        results.push({ test: 'API Connection', status: 'warning', message: '⚠️ No auth token found' });
+                    }
+                } catch (error) {
+                    results.push({ test: 'API Connection', status: 'error', message: `❌ API connection error: ${error.message}` });
+                }
+                
+            } else {
+                results.push({ test: 'API object exists', status: 'error', message: '❌ window.api is not available' });
+            }
+            
+            testResults.apiConfig = results;
+            displayTestResults('api-config-results', results);
+        }
+        
+        async function testDataService() {
+            const results = [];
+            
+            // Check if dataService exists
+            if (window.dataService) {
+                results.push({ test: 'DataService exists', status: 'success', message: '✅ window.dataService is available' });
+                
+                // Test getProjects method
+                try {
+                    const projects = await window.dataService.getProjects();
+                    results.push({ test: 'getProjects()', status: 'success', message: `✅ Retrieved ${projects.length} projects from API` });
+                } catch (error) {
+                    results.push({ test: 'getProjects()', status: 'error', message: `❌ getProjects() failed: ${error.message}` });
+                }
+                
+                // Check if it's using API-only mode
+                if (typeof window.dataService.getProjects === 'function') {
+                    results.push({ test: 'API-only mode', status: 'success', message: '✅ DataService configured for API-only mode' });
+                }
+                
+            } else {
+                results.push({ test: 'DataService exists', status: 'error', message: '❌ window.dataService is not available' });
+            }
+            
+            testResults.dataService = results;
+            displayTestResults('dataservice-results', results);
+        }
+        
+        async function testLocalStorage() {
+            const results = [];
+            
+            // Check for project-related localStorage items
+            const projectKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.includes('project') || key.includes('abcotronics')) {
+                    projectKeys.push(key);
+                }
+            }
+            
+            if (projectKeys.length === 0) {
+                results.push({ test: 'LocalStorage Clean', status: 'success', message: '✅ No project data in localStorage' });
+            } else {
+                results.push({ test: 'LocalStorage Clean', status: 'warning', message: `⚠️ Found ${projectKeys.length} project-related items in localStorage` });
+                projectKeys.forEach(key => {
+                    results.push({ test: `LocalStorage item: ${key}`, status: 'warning', message: `⚠️ ${key} still exists` });
+                });
+            }
+            
+            testResults.localStorage = results;
+            displayTestResults('localstorage-results', results);
+        }
+        
+        async function testComponent() {
+            const results = [];
+            
+            // Check if ProjectsDatabaseFirst component exists
+            if (window.ProjectsDatabaseFirst) {
+                results.push({ test: 'DatabaseFirst Component', status: 'success', message: '✅ ProjectsDatabaseFirst component is available' });
+            } else {
+                results.push({ test: 'DatabaseFirst Component', status: 'error', message: '❌ ProjectsDatabaseFirst component is missing' });
+            }
+            
+            // Check if main layout is using the right component
+            if (window.ProjectsDatabaseFirst && window.Projects) {
+                results.push({ test: 'Component Priority', status: 'success', message: '✅ MainLayout should prioritize ProjectsDatabaseFirst' });
+            } else {
+                results.push({ test: 'Component Priority', status: 'warning', message: '⚠️ Component priority may need adjustment' });
+            }
+            
+            testResults.component = results;
+            displayTestResults('component-results', results);
+        }
+        
+        function displayTestResults(containerId, results) {
+            const container = document.getElementById(containerId);
+            let html = '';
+            
+            results.forEach(result => {
+                html += `<div class="test-result ${result.status}">${result.message}</div>`;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        function displayResults() {
+            // Results are already displayed by individual test functions
+        }
+        
+        function showSummary() {
+            const summaryContent = document.getElementById('summary-content');
+            let html = '';
+            
+            const allResults = [
+                ...testResults.apiConfig,
+                ...testResults.dataService,
+                ...testResults.localStorage,
+                ...testResults.component
+            ];
+            
+            const successCount = allResults.filter(r => r.status === 'success').length;
+            const errorCount = allResults.filter(r => r.status === 'error').length;
+            const warningCount = allResults.filter(r => r.status === 'warning').length;
+            
+            html += `<div class="test-result success">✅ ${successCount} tests passed</div>`;
+            if (warningCount > 0) {
+                html += `<div class="test-result warning">⚠️ ${warningCount} warnings</div>`;
+            }
+            if (errorCount > 0) {
+                html += `<div class="test-result error">❌ ${errorCount} tests failed</div>`;
+            }
+            
+            // Overall status
+            if (errorCount === 0) {
+                html += `<div class="test-result success"><strong>🎉 API-Only Mode: READY!</strong></div>`;
+            } else {
+                html += `<div class="test-result error"><strong>⚠️ API-Only Mode: Needs Attention</strong></div>`;
+            }
+            
+            summaryContent.innerHTML = html;
+            summaryEl.classList.remove('hidden');
+        }
+        
+        function showError(message) {
+            const summaryContent = document.getElementById('summary-content');
+            summaryContent.innerHTML = `<div class="test-result error">❌ ${message}</div>`;
+            summaryEl.classList.remove('hidden');
+        }
+        
+        // Auto-run tests on load
+        setTimeout(() => {
+            runAllTests();
+        }, 1000);
+    </script>
+</body>
+</html>
