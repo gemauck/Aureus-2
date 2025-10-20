@@ -551,4 +551,5 @@ export const InvoiceModal = ({ invoice, clients, projects, timeEntries, onSave, 
     );
 };
 
-export default InvoiceModal;
+// Expose globally for browser usage
+window.InvoiceModal = InvoiceModal;

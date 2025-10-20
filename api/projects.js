@@ -120,11 +120,17 @@ async function handler(req, res) {
       }
       if (req.method === 'DELETE') {
         try {
-          await prisma.project.delete({ where: { id } })
-          console.log('✅ Project deleted successfully:', id)
+          // Ensure referential integrity by removing dependents first, then the project
+          await prisma.$transaction(async (tx) => {
+            await tx.task.deleteMany({ where: { projectId: id } })
+            await tx.invoice.deleteMany({ where: { projectId: id } })
+            await tx.timeEntry.deleteMany({ where: { projectId: id } })
+            await tx.project.delete({ where: { id } })
+          })
+          console.log('✅ Project and related records deleted successfully:', id)
           return ok(res, { deleted: true })
         } catch (dbError) {
-          console.error('❌ Database error deleting project:', dbError)
+          console.error('❌ Database error deleting project (with cascade):', dbError)
           return serverError(res, 'Failed to delete project', dbError.message)
         }
       }

@@ -189,3 +189,17 @@ model Invitation {
   updatedAt DateTime @updatedAt
 }
 
+// User feedback on pages/sections for product/dev
+model Feedback {
+  id         String   @id @default(cuid())
+  userId     String?
+  pageUrl    String
+  section    String    @default("")
+  message    String
+  type       String    @default("feedback") // feedback | bug | idea
+  severity   String    @default("medium")   // low | medium | high
+  meta       Json?
+  user       User?     @relation(fields: [userId], references: [id])
+  createdAt  DateTime  @default(now())
+}
+
