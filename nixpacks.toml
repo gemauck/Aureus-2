@@ -2,10 +2,16 @@
 nixPkgs = ["nodejs", "openssl", "openssl.dev"]
 
 [phases.install]
-cmds = ["npm ci --include=dev"]
+cmds = [
+  "npm ci --include=dev",
+  "npx prisma generate --no-engine"
+]
 
 [phases.build]
-cmds = ["npm run railway-build"]
+cmds = [
+  "npm run railway-build",
+  "npx prisma generate"
+]
 
 [start]
 cmd = "npm start"
