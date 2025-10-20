@@ -324,3 +324,19 @@ const storage = {
 
 // Make available globally
 window.storage = storage;
+
+// Debug function to check if storage is loaded
+window.debugStorage = () => {
+    console.log('🔍 Storage Debug:', {
+        hasGetProjects: typeof window.storage?.getProjects === 'function',
+        hasGetClients: typeof window.storage?.getClients === 'function',
+        hasGetLeads: typeof window.storage?.getLeads === 'function',
+        storageMethods: Object.keys(window.storage || {})
+    });
+};
+
+// Ensure storage is available immediately
+if (typeof window !== 'undefined') {
+    window.storage = storage;
+    console.log('✅ Storage utilities loaded');
+}

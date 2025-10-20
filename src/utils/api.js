@@ -1,4 +1,4 @@
-const API_BASE = 'https://abco-erp-2-production.up.railway.app/api'
+const API_BASE = window.location.origin + '/api'
 
 async function request(path, options = {}) {
   const token = window.storage?.getToken?.()
