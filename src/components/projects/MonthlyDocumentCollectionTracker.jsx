@@ -44,21 +44,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     useEffect(() => {
         // Save sections to project whenever they change
-        const savedProjects = storage.getProjects();
-        if (savedProjects) {
-            const updatedProjects = savedProjects.map(p => {
-                if (p.id === project.id) {
-                    // Preserve all existing project data and only update documentSections
-                    return { ...p, documentSections: sections };
+        if (storage && typeof storage.getProjects === 'function') {
+            const savedProjects = storage.getProjects();
+            if (savedProjects) {
+                const updatedProjects = savedProjects.map(p => {
+                    if (p.id === project.id) {
+                        // Preserve all existing project data and only update documentSections
+                        return { ...p, documentSections: sections };
+                    }
+                    return p;
+                });
+                if (storage && typeof storage.setProjects === 'function') {
+                    storage.setProjects(updatedProjects);
+                } else {
+                    console.warn('Storage not available or setProjects method not found');
                 }
-                return p;
-            });
-            if (storage && typeof storage.setProjects === 'function') {
-                storage.setProjects(updatedProjects);
-            } else {
-                console.warn('Storage not available or setProjects method not found');
+                console.log(`Saved ${sections.length} sections for project ${project.id}`);
             }
-            console.log(`Saved ${sections.length} sections for project ${project.id}`);
+        } else {
+            console.warn('Storage not available or getProjects method not found');
         }
     }, [sections, project.id]);
 

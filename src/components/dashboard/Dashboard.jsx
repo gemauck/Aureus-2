@@ -30,11 +30,11 @@ const Dashboard = () => {
                 } else {
                     // Fallback to direct localStorage loading
                     console.log('⚡ Loading from localStorage directly...');
-                    const savedClients = storage.getClients() || [];
-                    const savedLeads = storage.getLeads() || [];
-                    const savedProjects = storage.getProjects() || [];
-                    const savedTimeEntries = storage.getTimeEntries() || [];
-                    const savedInvoices = storage.getInvoices() || [];
+                    const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
+                    const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
+                    const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
+                    const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
+                    const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
                     setLeads(savedLeads);
@@ -45,11 +45,11 @@ const Dashboard = () => {
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
                 // Ensure we have at least localStorage data
-                const savedClients = storage.getClients() || [];
-                const savedLeads = storage.getLeads() || [];
-                const savedProjects = storage.getProjects() || [];
-                const savedTimeEntries = storage.getTimeEntries() || [];
-                const savedInvoices = storage.getInvoices() || [];
+                const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
+                const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
+                const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
+                const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
+                const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                 setClients(savedClients);
                 setLeads(savedLeads);

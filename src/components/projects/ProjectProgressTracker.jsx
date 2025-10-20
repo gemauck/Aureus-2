@@ -105,7 +105,7 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const loadProjects = () => {
-        const savedProjects = storage.getProjects() || [];
+        const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
         // Initialize progress tracking structure for each project if not exists
         const projectsWithProgress = savedProjects.map(project => ({
             ...project,

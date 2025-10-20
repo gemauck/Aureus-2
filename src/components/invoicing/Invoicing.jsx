@@ -110,9 +110,9 @@ const Invoicing = () => {
     // Load data from localStorage
     useEffect(() => {
         const savedInvoices = localStorage.getItem('abcotronics_invoices');
-        const savedClients = storage.getClients();
-        const savedProjects = storage.getProjects();
-        const savedTimeEntries = storage.getTimeEntries();
+        const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() : [];
+        const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() : [];
+        const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() : [];
         const savedRecurring = localStorage.getItem('abcotronics_recurring_invoices');
         const savedExpenses = localStorage.getItem('abcotronics_expenses');
         const savedCreditNotes = localStorage.getItem('abcotronics_credit_notes');

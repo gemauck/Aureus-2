@@ -110,10 +110,10 @@ const Teams = () => {
                 console.log('🔄 Teams: Loading data from data service');
                 
                 const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
-                    window.dataService.getTeamDocuments(),
-                    window.dataService.getTeamWorkflows(),
-                    window.dataService.getTeamChecklists(),
-                    window.dataService.getTeamNotices()
+                    window.dataService?.getTeamDocuments?.() || [],
+                    window.dataService?.getTeamWorkflows?.() || [],
+                    window.dataService?.getTeamChecklists?.() || [],
+                    window.dataService?.getTeamNotices?.() || []
                 ]);
                 
                 const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');

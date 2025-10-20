@@ -61,25 +61,29 @@ const ProjectDetail = ({ project, onBack }) => {
     
     // Save back to project whenever they change
     useEffect(() => {
-        const savedProjects = storage.getProjects();
-        if (savedProjects) {
-            const updatedProjects = savedProjects.map(p => 
-                p.id === project.id ? { 
-                    ...p, 
-                    tasks, 
-                    taskLists, 
-                    customFieldDefinitions, 
-                    documents, 
-                    hasDocumentCollectionProcess,
-                    // Preserve documentSections from the project to avoid data loss
-                    documentSections: p.documentSections || project.documentSections || []
-                } : p
-            );
-            if (storage && typeof storage.setProjects === 'function') {
-                storage.setProjects(updatedProjects);
-            } else {
-                console.warn('Storage not available or setProjects method not found');
+        if (storage && typeof storage.getProjects === 'function') {
+            const savedProjects = storage.getProjects();
+            if (savedProjects) {
+                const updatedProjects = savedProjects.map(p => 
+                    p.id === project.id ? { 
+                        ...p, 
+                        tasks, 
+                        taskLists, 
+                        customFieldDefinitions, 
+                        documents, 
+                        hasDocumentCollectionProcess,
+                        // Preserve documentSections from the project to avoid data loss
+                        documentSections: p.documentSections || project.documentSections || []
+                    } : p
+                );
+                if (storage && typeof storage.setProjects === 'function') {
+                    storage.setProjects(updatedProjects);
+                } else {
+                    console.warn('Storage not available or setProjects method not found');
+                }
             }
+        } else {
+            console.warn('Storage not available or getProjects method not found');
         }
     }, [tasks, taskLists, customFieldDefinitions, documents, project.id, hasDocumentCollectionProcess]);
 
@@ -1455,28 +1459,36 @@ const ProjectDetail = ({ project, onBack }) => {
                 <ProjectModal
                     project={project}
                     onSave={(projectData) => {
-                        const savedProjects = storage.getProjects();
-                        if (savedProjects) {
-                            const updatedProjects = savedProjects.map(p => 
-                                p.id === project.id ? { ...p, ...projectData } : p
-                            );
-                            if (storage && typeof storage.setProjects === 'function') {
-                storage.setProjects(updatedProjects);
-            } else {
-                console.warn('Storage not available or setProjects method not found');
-            }
+                        if (storage && typeof storage.getProjects === 'function') {
+                            const savedProjects = storage.getProjects();
+                            if (savedProjects) {
+                                const updatedProjects = savedProjects.map(p => 
+                                    p.id === project.id ? { ...p, ...projectData } : p
+                                );
+                                if (storage && typeof storage.setProjects === 'function') {
+                                    storage.setProjects(updatedProjects);
+                                } else {
+                                    console.warn('Storage not available or setProjects method not found');
+                                }
+                            }
+                        } else {
+                            console.warn('Storage not available or getProjects method not found');
                         }
                         setShowProjectModal(false);
                     }}
                     onDelete={(projectId) => {
-                        const savedProjects = storage.getProjects();
-                        if (savedProjects) {
-                            const updatedProjects = savedProjects.filter(p => p.id !== projectId);
-                            if (storage && typeof storage.setProjects === 'function') {
-                storage.setProjects(updatedProjects);
-            } else {
-                console.warn('Storage not available or setProjects method not found');
-            }
+                        if (storage && typeof storage.getProjects === 'function') {
+                            const savedProjects = storage.getProjects();
+                            if (savedProjects) {
+                                const updatedProjects = savedProjects.filter(p => p.id !== projectId);
+                                if (storage && typeof storage.setProjects === 'function') {
+                                    storage.setProjects(updatedProjects);
+                                } else {
+                                    console.warn('Storage not available or setProjects method not found');
+                                }
+                            }
+                        } else {
+                            console.warn('Storage not available or getProjects method not found');
                         }
                         setShowProjectModal(false);
                         onBack();

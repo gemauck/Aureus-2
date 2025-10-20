@@ -22,11 +22,11 @@ const DashboardEnhanced = () => {
                 const token = window.storage?.getToken?.();
                 if (!token) {
                     // Load from localStorage only
-                    const savedClients = storage.getClients() || [];
-                    const savedLeads = storage.getLeads() || [];
-                    const savedProjects = storage.getProjects() || [];
-                    const savedTimeEntries = storage.getTimeEntries() || [];
-                    const savedInvoices = storage.getInvoices() || [];
+                    const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
+                    const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
+                    const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
+                    const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
+                    const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
                     setLeads(savedLeads);
@@ -44,19 +44,19 @@ const DashboardEnhanced = () => {
                             window.api.getInvoices?.() || Promise.resolve({ data: [] })
                         ]);
 
-                        setClients(clientsResponse.status === 'fulfilled' ? clientsResponse.value : storage.getClients() || []);
-                        setLeads(leadsResponse.status === 'fulfilled' ? leadsResponse.value.data || [] : storage.getLeads() || []);
-                        setProjects(projectsResponse.status === 'fulfilled' ? projectsResponse.value.data || [] : storage.getProjects() || []);
-                        setTimeEntries(timeResponse.status === 'fulfilled' ? timeResponse.value.data || [] : storage.getTimeEntries() || []);
-                        setInvoices(invoicesResponse.status === 'fulfilled' ? invoicesResponse.value.data || [] : storage.getInvoices() || []);
+                        setClients(clientsResponse.status === 'fulfilled' ? clientsResponse.value : ((storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : []));
+                        setLeads(leadsResponse.status === 'fulfilled' ? leadsResponse.value.data || [] : ((storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : []));
+                        setProjects(projectsResponse.status === 'fulfilled' ? projectsResponse.value.data || [] : ((storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : []));
+                        setTimeEntries(timeResponse.status === 'fulfilled' ? timeResponse.value.data || [] : ((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []));
+                        setInvoices(invoicesResponse.status === 'fulfilled' ? invoicesResponse.value.data || [] : ((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []));
                     } catch (error) {
                         console.error('Error loading data:', error);
                         // Fallback to localStorage
-                        setClients(storage.getClients() || []);
-                        setLeads(storage.getLeads() || []);
-                        setProjects(storage.getProjects() || []);
-                        setTimeEntries(storage.getTimeEntries() || []);
-                        setInvoices(storage.getInvoices() || []);
+                        setClients((storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : []);
+                        setLeads((storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : []);
+                        setProjects((storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : []);
+                        setTimeEntries((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []);
+                        setInvoices((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []);
                     }
                 }
 

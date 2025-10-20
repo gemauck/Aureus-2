@@ -160,10 +160,30 @@ const seedClientsAndLeads = async () => {
         console.log('  - Total clients/leads:', finalClients.length);
 
         // Clear localStorage cache to force fresh data load
-        if (window.storage) {
-            window.storage.removeClients();
-            window.storage.removeLeads();
-            console.log('🗑️ Cleared localStorage cache to force fresh data load');
+        try {
+            if (window.storage && typeof window.storage.removeClients === 'function') {
+                window.storage.removeClients();
+                if (typeof window.storage.removeLeads === 'function') {
+                    window.storage.removeLeads();
+                }
+                console.log('🗑️ Cleared localStorage cache to force fresh data load');
+            } else {
+                console.warn('⚠️ Storage methods not available for cache clearing');
+                // Fallback: clear localStorage directly
+                localStorage.removeItem('abcotronics_clients');
+                localStorage.removeItem('abcotronics_leads');
+                console.log('🗑️ Cleared localStorage cache directly');
+            }
+        } catch (error) {
+            console.warn('⚠️ Error clearing cache:', error);
+            // Fallback: clear localStorage directly
+            try {
+                localStorage.removeItem('abcotronics_clients');
+                localStorage.removeItem('abcotronics_leads');
+                console.log('🗑️ Cleared localStorage cache directly (fallback)');
+            } catch (fallbackError) {
+                console.warn('⚠️ Fallback cache clearing also failed:', fallbackError);
+            }
         }
 
         console.log('✅ Database seeding completed successfully!');
@@ -187,24 +207,47 @@ const seedClientsAndLeads = async () => {
 window.seedClientsAndLeads = seedClientsAndLeads;
 
 // Auto-run seeding when the script loads (if user is authenticated)
-if (window.storage?.getToken?.()) {
-    console.log('🔑 User is authenticated, running auto-seeding...');
-    seedClientsAndLeads().then(result => {
-        if (result.success) {
-            console.log('🎉 Auto-seeding completed successfully!');
-            // Trigger a refresh of the clients data
-            if (window.location.hash.includes('clients') || window.location.hash.includes('dashboard')) {
-                console.log('🔄 Refreshing page to show updated data...');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1000);
+const runAutoSeeding = () => {
+    if (window.storage?.getToken?.()) {
+        console.log('🔑 User is authenticated, running auto-seeding...');
+        seedClientsAndLeads().then(result => {
+            if (result.success) {
+                console.log('🎉 Auto-seeding completed successfully!');
+                // Trigger a refresh of the clients data
+                if (window.location.hash.includes('clients') || window.location.hash.includes('dashboard')) {
+                    console.log('🔄 Refreshing page to show updated data...');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1000);
+                }
+            } else {
+                console.error('❌ Auto-seeding failed:', result.error);
             }
-        } else {
-            console.error('❌ Auto-seeding failed:', result.error);
-        }
-    });
+        });
+    } else {
+        console.log('⚠️ User not authenticated, skipping auto-seeding');
+    }
+};
+
+// Wait for storage to be available before running auto-seeding
+if (window.storage && typeof window.storage.getToken === 'function') {
+    // Storage is already available
+    runAutoSeeding();
 } else {
-    console.log('⚠️ User not authenticated, skipping auto-seeding');
+    // Wait for storage to be available
+    console.log('⏳ Waiting for storage to be available...');
+    const checkStorage = () => {
+        if (window.storage && typeof window.storage.getToken === 'function') {
+            console.log('✅ Storage is now available, running auto-seeding...');
+            runAutoSeeding();
+        } else {
+            // Check again in 100ms
+            setTimeout(checkStorage, 100);
+        }
+    };
+    
+    // Start checking after a short delay
+    setTimeout(checkStorage, 50);
 }
 
 console.log('🌱 Database seeding script loaded successfully');
