@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purge Leads from Local Storage</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .status {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .error {
+            border-left-color: #f44336;
+            background: rgba(244, 67, 54, 0.1);
+        }
+        .warning {
+            border-left-color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+        }
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            margin: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .button-group {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .count {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗑️ Purge Leads from Local Storage</h1>
+        
+        <div class="info-box">
+            <h3>Current Status</h3>
+            <div id="currentStatus">
+                <p>Checking local storage...</p>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button onclick="checkLeads()">🔍 Check Current Leads</button>
+            <button onclick="purgeLeads()" style="background: linear-gradient(45deg, #e74c3c, #c0392b);">🗑️ Purge All Leads</button>
+            <button onclick="clearAllStorage()" style="background: linear-gradient(45deg, #8e44ad, #9b59b6);">🧹 Clear All Storage</button>
+        </div>
+
+        <div id="logContainer" class="log" style="display: none;">
+            <h4>Operation Log:</h4>
+            <div id="logContent"></div>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('logContainer');
+            const logContent = document.getElementById('logContent');
+            
+            logContainer.style.display = 'block';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span style="color: #888;">[${timestamp}]</span> ${message}`;
+            
+            if (type === 'error') {
+                logEntry.style.color = '#ff6b6b';
+            } else if (type === 'success') {
+                logEntry.style.color = '#4CAF50';
+            } else if (type === 'warning') {
+                logEntry.style.color = '#ffa726';
+            }
+            
+            logContent.appendChild(logEntry);
+            logContent.scrollTop = logContent.scrollHeight;
+            
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function checkLeads() {
+            log('🔍 Checking current leads in local storage...');
+            
+            try {
+                const leadsData = localStorage.getItem('abcotronics_leads');
+                
+                if (!leadsData) {
+                    log('✅ No leads found in local storage', 'success');
+                    updateStatus('No leads found in local storage', 'success');
+                    return;
+                }
+                
+                const leads = JSON.parse(leadsData);
+                const leadCount = Array.isArray(leads) ? leads.length : 0;
+                
+                if (leadCount === 0) {
+                    log('✅ Leads array is empty', 'success');
+                    updateStatus('Leads array is empty', 'success');
+                } else {
+                    log(`📊 Found ${leadCount} leads in local storage`, 'warning');
+                    updateStatus(`Found ${leadCount} leads in local storage`, 'warning');
+                    
+                    // Show sample of leads
+                    if (leads.length > 0) {
+                        log('📋 Sample leads:');
+                        leads.slice(0, 3).forEach((lead, index) => {
+                            log(`  ${index + 1}. ${lead.name || 'Unnamed Lead'} (ID: ${lead.id})`);
+                        });
+                        if (leads.length > 3) {
+                            log(`  ... and ${leads.length - 3} more leads`);
+                        }
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Error checking leads: ${error.message}`, 'error');
+                updateStatus(`Error checking leads: ${error.message}`, 'error');
+            }
+        }
+
+        function purgeLeads() {
+            log('🗑️ Starting leads purge operation...');
+            
+            try {
+                // Check if leads exist first
+                const leadsData = localStorage.getItem('abcotronics_leads');
+                
+                if (!leadsData) {
+                    log('ℹ️ No leads found to purge', 'info');
+                    updateStatus('No leads found to purge', 'info');
+                    return;
+                }
+                
+                const leads = JSON.parse(leadsData);
+                const leadCount = Array.isArray(leads) ? leads.length : 0;
+                
+                if (leadCount === 0) {
+                    log('ℹ️ Leads array is already empty', 'info');
+                    updateStatus('Leads array is already empty', 'info');
+                    return;
+                }
+                
+                // Remove leads from localStorage
+                localStorage.removeItem('abcotronics_leads');
+                
+                log(`✅ Successfully purged ${leadCount} leads from local storage`, 'success');
+                updateStatus(`Successfully purged ${leadCount} leads`, 'success');
+                
+                // Verify removal
+                const verifyData = localStorage.getItem('abcotronics_leads');
+                if (verifyData === null) {
+                    log('✅ Verification: Leads successfully removed', 'success');
+                } else {
+                    log('⚠️ Warning: Leads may not have been completely removed', 'warning');
+                }
+                
+            } catch (error) {
+                log(`❌ Error purging leads: ${error.message}`, 'error');
+                updateStatus(`Error purging leads: ${error.message}`, 'error');
+            }
+        }
+
+        function clearAllStorage() {
+            log('🧹 Starting complete local storage cleanup...');
+            
+            try {
+                // Get all keys first
+                const allKeys = Object.keys(localStorage);
+                const abcotronicsKeys = allKeys.filter(key => key.startsWith('abcotronics_'));
+                
+                log(`📊 Found ${allKeys.length} total keys, ${abcotronicsKeys.length} Abcotronics keys`);
+                
+                if (abcotronicsKeys.length === 0) {
+                    log('ℹ️ No Abcotronics data found in local storage', 'info');
+                    updateStatus('No Abcotronics data found', 'info');
+                    return;
+                }
+                
+                // Show what will be cleared
+                log('🗑️ Keys to be cleared:');
+                abcotronicsKeys.forEach(key => {
+                    log(`  - ${key}`);
+                });
+                
+                // Clear all Abcotronics keys
+                abcotronicsKeys.forEach(key => {
+                    localStorage.removeItem(key);
+                    log(`✅ Removed: ${key}`, 'success');
+                });
+                
+                log(`🎉 Successfully cleared ${abcotronicsKeys.length} Abcotronics keys from local storage`, 'success');
+                updateStatus(`Cleared ${abcotronicsKeys.length} keys from storage`, 'success');
+                
+            } catch (error) {
+                log(`❌ Error clearing storage: ${error.message}`, 'error');
+                updateStatus(`Error clearing storage: ${error.message}`, 'error');
+            }
+        }
+
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('currentStatus');
+            statusDiv.innerHTML = `<p class="${type}">${message}</p>`;
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', function() {
+            log('🚀 Leads Purge Tool initialized');
+            checkLeads();
+        });
+    </script>
+</body>
+</html>
