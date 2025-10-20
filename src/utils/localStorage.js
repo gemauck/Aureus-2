@@ -325,6 +325,15 @@ const storage = {
 // Make available globally
 window.storage = storage;
 
+// Also create a global 'storage' variable for backward compatibility
+if (typeof window !== 'undefined') {
+    window.storage = storage;
+    // Create a global storage variable for components that use 'storage' directly
+    if (typeof globalThis !== 'undefined') {
+        globalThis.storage = storage;
+    }
+}
+
 // Debug function to check if storage is loaded
 window.debugStorage = () => {
     console.log('🔍 Storage Debug:', {
@@ -339,4 +348,12 @@ window.debugStorage = () => {
 if (typeof window !== 'undefined') {
     window.storage = storage;
     console.log('✅ Storage utilities loaded');
+    
+    // Also create a global 'storage' variable for backward compatibility
+    window.storage = storage;
+    
+    // Add a fallback for components that might not have access to window.storage
+    if (!window.storage) {
+        window.storage = storage;
+    }
 }
