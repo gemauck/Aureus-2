@@ -15,12 +15,12 @@ async function handler(req, res) {
       user: req.user
     })
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
+    // Parse the URL path (already has /api/ stripped by server)
+    const pathSegments = req.url.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Invoices (GET /api/invoices)
-    if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'invoices') {
+    if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'invoices') {
       try {
         const invoices = await prisma.invoice.findMany({ 
           orderBy: { createdAt: 'desc' } 
@@ -34,7 +34,7 @@ async function handler(req, res) {
     }
 
     // Create Invoice (POST /api/invoices)
-    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[1] === 'invoices') {
+    if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'invoices') {
       const body = await parseJsonBody(req)
       if (!body.invoiceNumber) return badRequest(res, 'invoiceNumber required')
 
@@ -67,7 +67,7 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Invoice (GET, PUT, DELETE /api/invoices/[id])
-    if (pathSegments.length === 3 && pathSegments[1] === 'invoices' && id) {
+    if (pathSegments.length === 2 && pathSegments[0] === 'invoices' && id) {
       if (req.method === 'GET') {
         try {
           const invoice = await prisma.invoice.findUnique({ where: { id } })

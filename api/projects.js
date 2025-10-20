@@ -15,12 +15,12 @@ async function handler(req, res) {
       user: req.user
     })
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
+    // Parse the URL path (already has /api/ stripped by server)
+    const pathSegments = req.url.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Projects (GET /api/projects)
-    if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'projects') {
+    if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
         const projects = await prisma.project.findMany({ 
           orderBy: { createdAt: 'desc' } 
@@ -34,7 +34,7 @@ async function handler(req, res) {
     }
 
     // Create Project (POST /api/projects)
-    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[1] === 'projects') {
+    if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       const body = await parseJsonBody(req)
       if (!body.name) return badRequest(res, 'name required')
 
@@ -67,7 +67,7 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Project (GET, PUT, DELETE /api/projects/[id])
-    if (pathSegments.length === 3 && pathSegments[1] === 'projects' && id) {
+    if (pathSegments.length === 2 && pathSegments[0] === 'projects' && id) {
       if (req.method === 'GET') {
         try {
           const project = await prisma.project.findUnique({ where: { id } })

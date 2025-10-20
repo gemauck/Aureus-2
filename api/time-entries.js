@@ -15,12 +15,12 @@ async function handler(req, res) {
       user: req.user
     })
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
+    // Parse the URL path (already has /api/ stripped by server)
+    const pathSegments = req.url.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Time Entries (GET /api/time-entries)
-    if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'time-entries') {
+    if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {
       try {
         const timeEntries = await prisma.timeEntry.findMany({ 
           orderBy: { createdAt: 'desc' } 
@@ -34,7 +34,7 @@ async function handler(req, res) {
     }
 
     // Create Time Entry (POST /api/time-entries)
-    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[1] === 'time-entries') {
+    if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'time-entries') {
       const body = await parseJsonBody(req)
       if (!body.date) return badRequest(res, 'date required')
       if (!body.hours) return badRequest(res, 'hours required')
@@ -65,7 +65,7 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Time Entry (GET, PUT, DELETE /api/time-entries/[id])
-    if (pathSegments.length === 3 && pathSegments[1] === 'time-entries' && id) {
+    if (pathSegments.length === 2 && pathSegments[0] === 'time-entries' && id) {
       if (req.method === 'GET') {
         try {
           const timeEntry = await prisma.timeEntry.findUnique({ where: { id } })

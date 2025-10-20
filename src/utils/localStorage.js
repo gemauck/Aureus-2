@@ -322,16 +322,16 @@ const storage = {
     }
 };
 
-// Make available globally
-window.storage = storage;
-
-// Also create a global 'storage' variable for backward compatibility
+// Make available globally with immediate assignment
 if (typeof window !== 'undefined') {
     window.storage = storage;
     // Create a global storage variable for components that use 'storage' directly
     if (typeof globalThis !== 'undefined') {
         globalThis.storage = storage;
     }
+    
+    // Also create a global 'storage' variable for backward compatibility
+    window.storage = storage;
 }
 
 // Debug function to check if storage is loaded
@@ -344,18 +344,18 @@ window.debugStorage = () => {
     });
 };
 
-// Ensure storage is available immediately
+// Ensure storage is available immediately and robustly
 if (typeof window !== 'undefined') {
+    // Multiple assignment strategies to ensure availability
     window.storage = storage;
-    console.log('✅ Storage utilities loaded');
+    globalThis.storage = storage;
     
-    // Also create a global 'storage' variable for backward compatibility
-    window.storage = storage;
-    
-    // Add a fallback for components that might not have access to window.storage
-    if (!window.storage) {
-        window.storage = storage;
+    // Create a global storage variable for components that use 'storage' directly
+    if (typeof globalThis !== 'undefined') {
+        globalThis.storage = storage;
     }
+    
+    console.log('✅ Storage utilities loaded');
     
     // Dispatch event to notify components that storage is ready
     // Use setTimeout to ensure all components are loaded
@@ -377,7 +377,10 @@ if (typeof window !== 'undefined') {
             hasSetProjects: typeof window.storage?.setProjects === 'function',
             hasGetProjects: typeof window.storage?.getProjects === 'function',
             hasSetClients: typeof window.storage?.setClients === 'function',
-            hasGetClients: typeof window.storage?.getClients === 'function'
+            hasGetClients: typeof window.storage?.getClients === 'function',
+            hasGetUsers: typeof window.storage?.getUsers === 'function',
+            hasGetTeamDocuments: typeof window.storage?.getTeamDocuments === 'function',
+            hasGetEmployees: typeof window.storage?.getEmployees === 'function'
         };
     };
     
@@ -392,4 +395,18 @@ if (typeof window !== 'undefined') {
         }));
         console.log('📡 Storage ready event manually triggered');
     };
+    
+    // Add a safety check that runs periodically to ensure storage is available
+    let storageCheckInterval = setInterval(() => {
+        if (!window.storage) {
+            console.warn('⚠️ Storage became unavailable, re-assigning...');
+            window.storage = storage;
+            globalThis.storage = storage;
+        }
+    }, 1000);
+    
+    // Clear the interval after 10 seconds
+    setTimeout(() => {
+        clearInterval(storageCheckInterval);
+    }, 10000);
 }

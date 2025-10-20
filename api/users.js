@@ -8,10 +8,13 @@ import { withLogging } from './_lib/logger.js'
 async function handler(req, res) {
     if (req.method === 'GET') {
         try {
-            // Check if user is admin (req.user is set by authRequired)
-            if (!req.user || req.user.role !== 'admin') {
-                return unauthorized(res, 'Admin access required')
+            // Check if user is authenticated (req.user is set by authRequired)
+            if (!req.user) {
+                return unauthorized(res, 'Authentication required')
             }
+            
+            // For now, allow all authenticated users to see basic user info
+            // TODO: Implement proper role-based access control
 
             // Get all users
             const users = await prisma.user.findMany({

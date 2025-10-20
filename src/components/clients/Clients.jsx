@@ -284,6 +284,51 @@ const Clients = () => {
         await loadClients();
     };
 
+    // Function to force refresh clients from API (bypasses all cache)
+    const forceRefreshClients = async () => {
+        console.log('🔄 Force refreshing clients from API...');
+        try {
+            if (window.ClientCache?.forceRefreshClients) {
+                const clients = await window.ClientCache.forceRefreshClients();
+                setClients(clients);
+                console.log('✅ Clients force refreshed:', clients.length);
+            } else {
+                console.log('⚠️ ClientCache not available, falling back to normal load');
+                await loadClients();
+            }
+        } catch (error) {
+            console.error('❌ Force refresh failed:', error);
+            await loadClients();
+        }
+    };
+
+    // Debug function to check client data consistency
+    const debugClientData = () => {
+        console.log('🔍 Client Data Debug Report:');
+        console.log('Current clients state:', clients.length, 'clients');
+        console.log('Clients:', clients.map(c => ({ id: c.id, name: c.name, ownerId: c.ownerId })));
+        
+        const localStorageClients = safeStorage.getClients();
+        console.log('localStorage clients:', localStorageClients ? localStorageClients.length : 'none');
+        if (localStorageClients) {
+            console.log('localStorage clients:', localStorageClients.map(c => ({ id: c.id, name: c.name, ownerId: c.ownerId })));
+        }
+        
+        const cachedClients = window.ClientCache?.getClients();
+        console.log('Cached clients:', cachedClients ? cachedClients.length : 'none');
+        if (cachedClients) {
+            console.log('Cached clients:', cachedClients.map(c => ({ id: c.id, name: c.name, ownerId: c.ownerId })));
+        }
+        
+        const currentUser = window.storage?.getUser?.();
+        console.log('Current user:', currentUser);
+        
+        console.log('Cache status:', window.ClientCache?.getCacheStatus?.());
+    };
+
+    // Make debug function available globally
+    window.debugClientData = debugClientData;
+
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
         console.log('🔄 loadClients called');
@@ -1491,6 +1536,16 @@ const Clients = () => {
                 
                 {/* Modern Action Buttons */}
                 <div className="flex items-center gap-3">
+                    <button 
+                        onClick={forceRefreshClients}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
+                        title="Force refresh clients from server"
+                    >
+                        <div className="w-5 h-5 bg-green-100 rounded-md flex items-center justify-center">
+                            <i className="fas fa-sync-alt text-green-600 text-xs"></i>
+                        </div>
+                        <span>Refresh</span>
+                    </button>
                     <button 
                         onClick={() => {
                             setSelectedClient(null);

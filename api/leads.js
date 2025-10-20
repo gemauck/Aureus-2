@@ -15,12 +15,12 @@ async function handler(req, res) {
       user: req.user
     })
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
+    // Parse the URL path (already has /api/ stripped by server)
+    const pathSegments = req.url.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Leads (GET /api/leads)
-    if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'leads') {
+    if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
       try {
         const leads = await prisma.client.findMany({ 
           where: { type: 'lead' },
@@ -35,7 +35,7 @@ async function handler(req, res) {
     }
 
     // Create Lead (POST /api/leads)
-    if (req.method === 'POST' && pathSegments.length === 2 && pathSegments[1] === 'leads') {
+    if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
       const body = await parseJsonBody(req)
       if (!body.name) return badRequest(res, 'name required')
 
@@ -85,7 +85,7 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Lead (GET, PUT, DELETE /api/leads/[id])
-    if (pathSegments.length === 3 && pathSegments[1] === 'leads' && id) {
+    if (pathSegments.length === 2 && pathSegments[0] === 'leads' && id) {
       if (req.method === 'GET') {
         try {
           const lead = await prisma.client.findUnique({ 

@@ -21,10 +21,11 @@ async function handler(req, res) {
     // List Clients (GET /api/clients)
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'clients') {
       try {
+        // Return ALL clients for all users - this is an ERP system where all users should see all clients
         const clients = await prisma.client.findMany({ 
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Clients retrieved successfully:', clients.length, 'for all users')
+        console.log('✅ Clients retrieved successfully:', clients.length, 'for user:', req.user?.sub, '(all clients visible)')
         return ok(res, { clients })
       } catch (dbError) {
         console.error('❌ Database error listing clients:', dbError)

@@ -10,15 +10,26 @@ const Dashboard = () => {
     const [invoices, setInvoices] = useState([]);
     const { isDark } = window.useTheme();
 
-    // Load all data from API and localStorage
+    // Ultra-optimized data loading with ClientCache
     useEffect(() => {
         const loadData = async () => {
             try {
-                // Check if user is logged in first
-                const token = window.storage?.getToken?.();
-                if (!token) {
-                    console.log('No auth token, loading from localStorage only');
-                    // Load from localStorage only
+                // Use ClientCache for optimized loading
+                if (window.ClientCache) {
+                    console.log('⚡ Using ClientCache for ultra-fast loading...');
+                    const cachedData = await window.ClientCache.loadDataWithCache();
+                    
+                    // Set data immediately (from cache or localStorage)
+                    setClients(cachedData.clients);
+                    setLeads(cachedData.leads);
+                    setProjects(cachedData.projects);
+                    setTimeEntries(cachedData.timeEntries);
+                    setInvoices(cachedData.invoices);
+                    
+                    console.log(`✅ Dashboard loaded instantly from ${cachedData.fromCache ? 'cache' : 'localStorage'}`);
+                } else {
+                    // Fallback to direct localStorage loading
+                    console.log('⚡ Loading from localStorage directly...');
                     const savedClients = storage.getClients() || [];
                     const savedLeads = storage.getLeads() || [];
                     const savedProjects = storage.getProjects() || [];
@@ -30,39 +41,10 @@ const Dashboard = () => {
                     setProjects(savedProjects);
                     setTimeEntries(savedTimeEntries);
                     setInvoices(savedInvoices);
-                    return;
                 }
-
-                // Try to load from API, but if it fails with 401, clear the token
-                try {
-                    const clientsResponse = await window.api.listClients();
-                    setClients(clientsResponse.data.clients || []);
-                } catch (apiError) {
-                    if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
-                        console.log('Token expired, clearing and using localStorage');
-                        window.storage.removeToken();
-                        window.storage.removeUser();
-                        // Load from localStorage instead
-                        const savedClients = storage.getClients() || [];
-                        setClients(savedClients);
-                    } else {
-                        throw apiError;
-                    }
-                }
-                
-                // Still load some data from localStorage for now
-                const savedLeads = storage.getLeads() || [];
-                const savedProjects = storage.getProjects() || [];
-                const savedTimeEntries = storage.getTimeEntries() || [];
-                const savedInvoices = storage.getInvoices() || [];
-
-                setLeads(savedLeads);
-                setProjects(savedProjects);
-                setTimeEntries(savedTimeEntries);
-                setInvoices(savedInvoices);
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
-                // Fallback to localStorage
+                // Ensure we have at least localStorage data
                 const savedClients = storage.getClients() || [];
                 const savedLeads = storage.getLeads() || [];
                 const savedProjects = storage.getProjects() || [];

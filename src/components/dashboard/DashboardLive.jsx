@@ -36,9 +36,9 @@ const DashboardLive = () => {
     const [liveSyncStatus, setLiveSyncStatus] = useState('disconnected');
     const { isDark } = window.useTheme();
 
-    // Real-time data loading with error handling
+    // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
-        console.log('🔄 DashboardLive: Starting data load...');
+        console.log('🔄 DashboardLive: Starting optimized data load...');
         
         if (showLoading) {
             setIsLoading(true);
@@ -49,97 +49,25 @@ const DashboardLive = () => {
         setConnectionStatus('connecting');
 
         try {
-            // Check authentication
-            const token = window.storage?.getToken?.();
-            console.log('🔑 DashboardLive: Auth token check:', !!token);
-            
-            if (!token) {
-                console.log('⚠️ DashboardLive: No auth token, showing empty dashboard');
-                setDashboardData({
-                    clients: [],
-                    leads: [],
-                    projects: [],
-                    invoices: [],
-                    timeEntries: [],
-                    users: [],
-                    stats: {
-                        totalClients: 0,
-                        totalLeads: 0,
-                        totalProjects: 0,
-                        totalInvoices: 0,
-                        totalRevenue: 0,
-                        activeProjects: 0,
-                        pendingInvoices: 0,
-                        overdueInvoices: 0,
-                        overdueAmount: 0,
-                        hoursThisMonth: 0,
-                        hoursLastMonth: 0,
-                        pipelineValue: 0,
-                        weightedPipeline: 0
-                    }
-                });
-                setIsLoading(false);
-                setIsRefreshing(false);
-                setConnectionStatus('disconnected');
-                return;
-            }
+            // IMMEDIATE: Load from localStorage first for instant display
+            console.log('⚡ DashboardLive: Loading cached data immediately...');
+            const cachedClients = window.storage?.getClients?.() || [];
+            const cachedLeads = window.storage?.getLeads?.() || [];
+            const cachedProjects = window.storage?.getProjects?.() || [];
+            const cachedInvoices = window.storage?.getInvoices?.() || [];
+            const cachedTimeEntries = window.storage?.getTimeEntries?.() || [];
+            const cachedUsers = window.storage?.getUsers?.() || [];
 
-            // Check if DatabaseAPI is available
-            if (!window.DatabaseAPI) {
-                console.error('❌ DashboardLive: DatabaseAPI not available');
-                throw new Error('Database API not available. Please refresh the page.');
-            }
-
-            console.log('🔄 DashboardLive: Loading live dashboard data...');
-
-            // Load all data in parallel with individual error handling
-            const dataPromises = [
-                window.DatabaseAPI.getClients().catch(err => {
-                    console.warn('Failed to load clients:', err);
-                    return { data: { clients: [] } };
-                }),
-                window.DatabaseAPI.getLeads().catch(err => {
-                    console.warn('Failed to load leads:', err);
-                    return { data: [] };
-                }),
-                window.DatabaseAPI.getProjects().catch(err => {
-                    console.warn('Failed to load projects:', err);
-                    return { data: [] };
-                }),
-                window.DatabaseAPI.getInvoices().catch(err => {
-                    console.warn('Failed to load invoices:', err);
-                    return { data: [] };
-                }),
-                window.DatabaseAPI.getTimeEntries().catch(err => {
-                    console.warn('Failed to load time entries:', err);
-                    return { data: [] };
-                }),
-                window.DatabaseAPI.getUsers().catch(err => {
-                    console.warn('Failed to load users:', err);
-                    return { data: [] };
-                })
-            ];
-
-            const [clientsRes, leadsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = await Promise.all(dataPromises);
-
-            const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients : [];
-            const leads = Array.isArray(leadsRes.data) ? leadsRes.data : [];
-            const projects = Array.isArray(projectsRes.data) ? projectsRes.data : [];
-            const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : [];
-            const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : [];
-            const users = Array.isArray(usersRes.data) ? usersRes.data : [];
-
-            // Calculate comprehensive statistics
+            // Calculate stats from cached data immediately
             const now = new Date();
             const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
             const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-            // Time tracking calculations
-            const thisMonthEntries = timeEntries.filter(entry => {
+            const thisMonthEntries = cachedTimeEntries.filter(entry => {
                 const entryDate = new Date(entry.date);
                 return entryDate >= thisMonth;
             });
-            const lastMonthEntries = timeEntries.filter(entry => {
+            const lastMonthEntries = cachedTimeEntries.filter(entry => {
                 const entryDate = new Date(entry.date);
                 return entryDate >= lastMonth && entryDate < thisMonth;
             });
@@ -147,25 +75,23 @@ const DashboardLive = () => {
             const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
             const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
-            // Invoice calculations
-            const overdueInvoices = invoices.filter(inv => {
+            const overdueInvoices = cachedInvoices.filter(inv => {
                 const dueDate = new Date(inv.dueDate);
                 return inv.status === 'Unpaid' && dueDate < now;
             });
             const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
 
-            // Pipeline calculations
-            const pipelineValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-            const weightedPipeline = leads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
+            const pipelineValue = cachedLeads.reduce((sum, lead) => sum + (lead.value || 0), 0);
+            const weightedPipeline = cachedLeads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
 
-            const stats = {
-                totalClients: clients.length,
-                totalLeads: leads.length,
-                totalProjects: projects.length,
-                totalInvoices: invoices.length,
-                totalRevenue: invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
-                activeProjects: projects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                pendingInvoices: invoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
+            const cachedStats = {
+                totalClients: cachedClients.length,
+                totalLeads: cachedLeads.length,
+                totalProjects: cachedProjects.length,
+                totalInvoices: cachedInvoices.length,
+                totalRevenue: cachedInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
+                activeProjects: cachedProjects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
+                pendingInvoices: cachedInvoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
                 overdueInvoices: overdueInvoices.length,
                 overdueAmount: overdueAmount,
                 hoursThisMonth: hoursThisMonth,
@@ -174,25 +100,132 @@ const DashboardLive = () => {
                 weightedPipeline: weightedPipeline
             };
 
+            // Set cached data immediately for instant display
             setDashboardData({
-                clients,
-                leads,
-                projects,
-                invoices,
-                timeEntries,
-                users,
-                stats
+                clients: cachedClients,
+                leads: cachedLeads,
+                projects: cachedProjects,
+                invoices: cachedInvoices,
+                timeEntries: cachedTimeEntries,
+                users: cachedUsers,
+                stats: cachedStats
             });
 
-            setLastUpdated(new Date());
+            setIsLoading(false);
+            setIsRefreshing(false);
             setConnectionStatus('connected');
-            console.log('✅ Live dashboard data loaded successfully');
+            console.log('✅ DashboardLive: Cached data displayed instantly');
+
+            // Check authentication for API sync
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ DashboardLive: No auth token, using cached data only');
+                return;
+            }
+
+            // Check if DatabaseAPI is available
+            if (!window.DatabaseAPI) {
+                console.warn('⚠️ DashboardLive: DatabaseAPI not available, using cached data');
+                return;
+            }
+
+            // BACKGROUND: Sync with API in parallel (non-blocking)
+            console.log('🔄 DashboardLive: Syncing with API in background...');
+            const syncPromises = [
+                window.DatabaseAPI.getClients().catch(err => {
+                    console.warn('Client sync failed:', err);
+                    return { data: { clients: [] } };
+                }),
+                window.DatabaseAPI.getLeads().catch(err => {
+                    console.warn('Lead sync failed:', err);
+                    return { data: [] };
+                }),
+                window.DatabaseAPI.getProjects().catch(err => {
+                    console.warn('Project sync failed:', err);
+                    return { data: [] };
+                }),
+                window.DatabaseAPI.getInvoices().catch(err => {
+                    console.warn('Invoice sync failed:', err);
+                    return { data: [] };
+                }),
+                window.DatabaseAPI.getTimeEntries().catch(err => {
+                    console.warn('Time entry sync failed:', err);
+                    return { data: [] };
+                }),
+                window.DatabaseAPI.getUsers().catch(err => {
+                    console.warn('User sync failed:', err);
+                    return { data: [] };
+                })
+            ];
+
+            // Update with fresh API data when available
+            Promise.allSettled(syncPromises).then((results) => {
+                const [clientsRes, leadsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+
+                const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients : cachedClients;
+                const leads = Array.isArray(leadsRes.data) ? leadsRes.data : cachedLeads;
+                const projects = Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
+                const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : cachedInvoices;
+                const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
+                const users = Array.isArray(usersRes.data) ? usersRes.data : cachedUsers;
+
+                // Recalculate stats with fresh data
+                const freshThisMonthEntries = timeEntries.filter(entry => {
+                    const entryDate = new Date(entry.date);
+                    return entryDate >= thisMonth;
+                });
+                const freshLastMonthEntries = timeEntries.filter(entry => {
+                    const entryDate = new Date(entry.date);
+                    return entryDate >= lastMonth && entryDate < thisMonth;
+                });
+
+                const freshHoursThisMonth = freshThisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+                const freshHoursLastMonth = freshLastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+
+                const freshOverdueInvoices = invoices.filter(inv => {
+                    const dueDate = new Date(inv.dueDate);
+                    return inv.status === 'Unpaid' && dueDate < now;
+                });
+                const freshOverdueAmount = freshOverdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
+
+                const freshPipelineValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
+                const freshWeightedPipeline = leads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
+
+                const freshStats = {
+                    totalClients: clients.length,
+                    totalLeads: leads.length,
+                    totalProjects: projects.length,
+                    totalInvoices: invoices.length,
+                    totalRevenue: invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
+                    activeProjects: projects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
+                    pendingInvoices: invoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
+                    overdueInvoices: freshOverdueInvoices.length,
+                    overdueAmount: freshOverdueAmount,
+                    hoursThisMonth: freshHoursThisMonth,
+                    hoursLastMonth: freshHoursLastMonth,
+                    pipelineValue: freshPipelineValue,
+                    weightedPipeline: freshWeightedPipeline
+                };
+
+                // Update with fresh data
+                setDashboardData({
+                    clients,
+                    leads,
+                    projects,
+                    invoices,
+                    timeEntries,
+                    users,
+                    stats: freshStats
+                });
+
+                setLastUpdated(new Date());
+                console.log('✅ DashboardLive: Fresh API data synced');
+            });
 
         } catch (error) {
-            console.error('❌ Failed to load live dashboard data:', error);
+            console.error('❌ Failed to load dashboard data:', error);
             setError(error.message);
             setConnectionStatus('error');
-        } finally {
             setIsLoading(false);
             setIsRefreshing(false);
         }
