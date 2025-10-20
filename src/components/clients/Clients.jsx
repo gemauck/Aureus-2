@@ -461,9 +461,15 @@ const Clients = () => {
                     console.log('✅ Clients and leads set from API');
                     
                     // Save processed data to localStorage for offline access
+                    // This ensures all users have the same data cached
                     safeStorage.setClients(clientsOnly);
                     safeStorage.setLeads(leadsOnly);
-                    console.log('✅ Clients and leads saved to localStorage');
+                    console.log('✅ Clients and leads saved to localStorage for consistency');
+                    
+                    // Log the separation for debugging
+                    console.log('📊 Data separation summary:');
+                    console.log('  - Clients (type: client):', clientsOnly.length, clientsOnly.map(c => c.name));
+                    console.log('  - Leads (type: lead):', leadsOnly.length, leadsOnly.map(l => l.name));
                 } catch (apiError) {
                     console.error('❌ API error loading clients:', apiError);
                     if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
