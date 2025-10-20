@@ -330,31 +330,67 @@ const Clients = () => {
         loadClients();
     }, []);
 
-
-    // Function to clear localStorage and reload fresh data
-    const clearCacheAndReload = async () => {
-        console.log('🧹 Clearing localStorage cache and reloading fresh data');
-        safeStorage.setClients([]);
-        await loadClients();
-    };
-
-    // Function to force refresh clients from API (bypasses all cache)
-    const forceRefreshClients = async () => {
-        console.log('🔄 Force refreshing clients from API...');
-        try {
-            if (window.ClientCache?.forceRefreshClients) {
-                const clients = await window.ClientCache.forceRefreshClients();
-                setClients(clients);
-                console.log('✅ Clients force refreshed:', clients.length);
-            } else {
-                console.log('⚠️ ClientCache not available, falling back to normal load');
-                await loadClients();
+    // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
+    useEffect(() => {
+        const mapDbClient = (c) => ({
+            id: c.id,
+            name: c.name,
+            status: c.status === 'active' ? 'Active' : (c.status || 'Inactive'),
+            industry: c.industry || 'Other',
+            type: c.type || 'client',
+            revenue: c.revenue || 0,
+            lastContact: new Date(c.updatedAt || c.createdAt || Date.now()).toISOString().split('T')[0],
+            address: c.address || '',
+            website: c.website || '',
+            notes: c.notes || '',
+            contacts: Array.isArray(c.contacts) ? c.contacts : [],
+            followUps: Array.isArray(c.followUps) ? c.followUps : [],
+            projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
+            comments: Array.isArray(c.comments) ? c.comments : [],
+            sites: Array.isArray(c.sites) ? c.sites : [],
+            opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
+            contracts: Array.isArray(c.contracts) ? c.contracts : [],
+            activityLog: Array.isArray(c.activityLog) ? c.activityLog : [],
+            billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
             }
-        } catch (error) {
-            console.error('❌ Force refresh failed:', error);
-            await loadClients();
-        }
-    };
+        });
+
+        const subscriberId = 'clients-screen-live-sync';
+        const handler = (message) => {
+            if (message?.type === 'data' && Array.isArray(message.data)) {
+                if (message.dataType === 'clients') {
+                    const processed = message.data.map(mapDbClient).filter(c => (c.type || 'client') === 'client');
+                    setClients(processed);
+                    safeStorage.setClients(processed);
+                }
+                if (message.dataType === 'leads') {
+                    const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
+                    setLeads(processedLeads);
+                    safeStorage.setLeads(processedLeads);
+                }
+            }
+        };
+
+        try {
+            if (window.storage?.getToken?.()) {
+                window.LiveDataSync?.start?.();
+            }
+        } catch (_e) {}
+
+        window.LiveDataSync?.subscribe?.(subscriberId, handler);
+        return () => {
+            window.LiveDataSync?.unsubscribe?.(subscriberId);
+        };
+    }, []);
+
+
+    // Manual refresh/clear removed to ensure always-live data
 
     // Debug function to check client data consistency
     const debugClientData = () => {
@@ -1626,16 +1662,6 @@ const Clients = () => {
                 
                 {/* Modern Action Buttons */}
                 <div className="flex items-center gap-3">
-                    <button 
-                        onClick={forceRefreshClients}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
-                        title="Force refresh clients from server"
-                    >
-                        <div className="w-5 h-5 bg-green-100 rounded-md flex items-center justify-center">
-                            <i className="fas fa-sync-alt text-green-600 text-xs"></i>
-                        </div>
-                        <span>Refresh</span>
-                    </button>
                     <button 
                         onClick={() => {
                             setSelectedClient(null);

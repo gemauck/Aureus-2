@@ -44,7 +44,8 @@ const TaskDetailModal = ({
     const [tags, setTags] = useState(task?.tags || []);
 
     const handleSave = () => {
-        if (!editedTask.title.trim()) {
+        const title = (editedTask && typeof editedTask.title === 'string') ? editedTask.title : '';
+        if (!title.trim()) {
             alert('Please enter a task title');
             return;
         }

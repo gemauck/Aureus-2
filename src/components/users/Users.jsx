@@ -73,34 +73,11 @@ const Users = () => {
     const loadUsers = () => {
         let savedUsers = storage.getUsers() || [];
         
-        // Initialize with default users if none exist
-        if (savedUsers.length === 0) {
-            savedUsers = [
-                {
-                    id: '1',
-                    name: 'Gareth Mauck',
-                    email: 'gareth.mauck@abcotronics.com',
-                    phone: '+27 11 123 4567',
-                    role: 'admin',
-                    department: 'Management',
-                    status: 'Active',
-                    customPermissions: [],
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    id: '2',
-                    name: 'David Buttemer',
-                    email: 'david.buttemer@abcotronics.com',
-                    phone: '+27 11 123 4568',
-                    role: 'manager',
-                    department: 'Technical',
-                    status: 'Active',
-                    customPermissions: [],
-                    createdAt: new Date().toISOString()
-                }
-            ];
-            storage.setUsers(savedUsers);
-        }
+		// Do not seed default users; keep empty until created via UI/API
+		if (savedUsers.length === 0) {
+			savedUsers = [];
+			storage.setUsers(savedUsers);
+		}
         
         setUsers(savedUsers);
     };
