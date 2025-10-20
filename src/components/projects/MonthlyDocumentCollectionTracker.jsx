@@ -44,26 +44,34 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     useEffect(() => {
         // Save sections to project whenever they change
-        if (storage && typeof storage.getProjects === 'function') {
-            const savedProjects = storage.getProjects();
-            if (savedProjects) {
-                const updatedProjects = savedProjects.map(p => {
-                    if (p.id === project.id) {
-                        // Preserve all existing project data and only update documentSections
-                        return { ...p, documentSections: sections };
+        const saveProjectData = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                    const savedProjects = await window.dataService.getProjects();
+                    if (savedProjects) {
+                        const updatedProjects = savedProjects.map(p => {
+                            if (p.id === project.id) {
+                                // Preserve all existing project data and only update documentSections
+                                return { ...p, documentSections: sections };
+                            }
+                            return p;
+                        });
+                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                            await window.dataService.setProjects(updatedProjects);
+                        } else {
+                            console.warn('DataService not available or setProjects method not found');
+                        }
+                        console.log(`Saved ${sections.length} sections for project ${project.id}`);
                     }
-                    return p;
-                });
-                if (storage && typeof storage.setProjects === 'function') {
-                    storage.setProjects(updatedProjects);
                 } else {
-                    console.warn('Storage not available or setProjects method not found');
+                    console.warn('DataService not available or getProjects method not found');
                 }
-                console.log(`Saved ${sections.length} sections for project ${project.id}`);
+            } catch (error) {
+                console.error('Error saving project data:', error);
             }
-        } else {
-            console.warn('Storage not available or getProjects method not found');
-        }
+        };
+        
+        saveProjectData();
     }, [sections, project.id]);
 
     // Close comment popup on click outside

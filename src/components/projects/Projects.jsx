@@ -142,21 +142,25 @@ const Projects = () => {
     }, []);
 
     // Helper function to sync existing projects with clients
-    const syncProjectsWithClients = (projectsList) => {
-        if (window.storage && typeof window.storage.getClients === 'function' && typeof window.storage.setClients === 'function') {
-            const clients = window.storage.getClients() || [];
-            const updatedClients = clients.map(client => {
-                const clientProjects = projectsList.filter(p => p.client === client.name);
-                const projectIds = clientProjects.map(p => p.id);
-                return {
-                    ...client,
-                    projectIds: projectIds
-                };
-            });
-            window.storage.setClients(updatedClients);
-            
-            // Dispatch event to notify other components
-            window.dispatchEvent(new CustomEvent('clientsUpdated'));
+    const syncProjectsWithClients = async (projectsList) => {
+        try {
+            if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
+                const clients = await window.dataService.getClients() || [];
+                const updatedClients = clients.map(client => {
+                    const clientProjects = projectsList.filter(p => p.client === client.name);
+                    const projectIds = clientProjects.map(p => p.id);
+                    return {
+                        ...client,
+                        projectIds: projectIds
+                    };
+                });
+                await window.dataService.setClients(updatedClients);
+                
+                // Dispatch event to notify other components
+                window.dispatchEvent(new CustomEvent('clientsUpdated'));
+            }
+        } catch (error) {
+            console.warn('Error syncing projects with clients:', error);
         }
     };
     
@@ -249,10 +253,10 @@ const Projects = () => {
     };
 
     // Helper function to update client's projectIds
-    const updateClientProjectIds = (oldClientName, newClientName, projectId) => {
+    const updateClientProjectIds = async (oldClientName, newClientName, projectId) => {
         try {
-            if (window.storage && typeof window.storage.getClients === 'function' && typeof window.storage.setClients === 'function') {
-                const clients = window.storage.getClients() || [];
+            if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
+                const clients = await window.dataService.getClients() || [];
                 const updatedClients = clients.map(client => {
                     if (oldClientName && client.name === oldClientName) {
                         // Remove project from old client
@@ -273,12 +277,12 @@ const Projects = () => {
                     }
                     return client;
                 });
-                window.storage.setClients(updatedClients);
+                await window.dataService.setClients(updatedClients);
                 
                 // Dispatch event to notify other components
                 window.dispatchEvent(new CustomEvent('clientsUpdated'));
             } else {
-                console.warn('Storage not available for updating client project IDs');
+                console.warn('DataService not available for updating client project IDs');
             }
         } catch (error) {
             console.error('Error updating client project IDs:', error);

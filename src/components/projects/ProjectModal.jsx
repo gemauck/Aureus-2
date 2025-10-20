@@ -20,9 +20,22 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
     const [newClientName, setNewClientName] = useState('');
 
     useEffect(() => {
-        // Load clients from localStorage
-        const savedClients = storage.getClients() || [];
-        setClients(savedClients);
+        // Load clients from dataService
+        const loadClients = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getClients === 'function') {
+                    const savedClients = await window.dataService.getClients() || [];
+                    setClients(savedClients);
+                } else {
+                    console.warn('DataService not available for loading clients');
+                    setClients([]);
+                }
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                setClients([]);
+            }
+        };
+        loadClients();
     }, []);
 
     const handleSubmit = (e) => {

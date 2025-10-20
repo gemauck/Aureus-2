@@ -61,30 +61,38 @@ const ProjectDetail = ({ project, onBack }) => {
     
     // Save back to project whenever they change
     useEffect(() => {
-        if (storage && typeof storage.getProjects === 'function') {
-            const savedProjects = storage.getProjects();
-            if (savedProjects) {
-                const updatedProjects = savedProjects.map(p => 
-                    p.id === project.id ? { 
-                        ...p, 
-                        tasks, 
-                        taskLists, 
-                        customFieldDefinitions, 
-                        documents, 
-                        hasDocumentCollectionProcess,
-                        // Preserve documentSections from the project to avoid data loss
-                        documentSections: p.documentSections || project.documentSections || []
-                    } : p
-                );
-                if (storage && typeof storage.setProjects === 'function') {
-                    storage.setProjects(updatedProjects);
+        const saveProjectData = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                    const savedProjects = await window.dataService.getProjects();
+                    if (savedProjects) {
+                        const updatedProjects = savedProjects.map(p => 
+                            p.id === project.id ? { 
+                                ...p, 
+                                tasks, 
+                                taskLists, 
+                                customFieldDefinitions, 
+                                documents, 
+                                hasDocumentCollectionProcess,
+                                // Preserve documentSections from the project to avoid data loss
+                                documentSections: p.documentSections || project.documentSections || []
+                            } : p
+                        );
+                        if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                            await window.dataService.setProjects(updatedProjects);
+                        } else {
+                            console.warn('DataService not available or setProjects method not found');
+                        }
+                    }
                 } else {
-                    console.warn('Storage not available or setProjects method not found');
+                    console.warn('DataService not available or getProjects method not found');
                 }
+            } catch (error) {
+                console.error('Error saving project data:', error);
             }
-        } else {
-            console.warn('Storage not available or getProjects method not found');
-        }
+        };
+        
+        saveProjectData();
     }, [tasks, taskLists, customFieldDefinitions, documents, project.id, hasDocumentCollectionProcess]);
 
     // Get document status color
@@ -104,8 +112,24 @@ const ProjectDetail = ({ project, onBack }) => {
         const totalTasks = tasks.length;
         const completedTasks = tasks.filter(t => t.status === 'Done').length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const users = (storage && typeof storage.getUsers === 'function') ? storage.getUsers() || [] : [];
+        const [users, setUsers] = useState([]);
         const activeUsers = users.filter(u => u.status === 'Active');
+
+        // Load users on component mount
+        useEffect(() => {
+            const loadUsers = async () => {
+                try {
+                    if (window.dataService && typeof window.dataService.getUsers === 'function') {
+                        const userData = await window.dataService.getUsers() || [];
+                        setUsers(userData);
+                    }
+                } catch (error) {
+                    console.warn('Error loading users:', error);
+                    setUsers([]);
+                }
+            };
+            loadUsers();
+        }, []);
 
         // Calculate days until due
         const today = new Date();
@@ -1458,37 +1482,45 @@ const ProjectDetail = ({ project, onBack }) => {
             {showProjectModal && (
                 <ProjectModal
                     project={project}
-                    onSave={(projectData) => {
-                        if (storage && typeof storage.getProjects === 'function') {
-                            const savedProjects = storage.getProjects();
-                            if (savedProjects) {
-                                const updatedProjects = savedProjects.map(p => 
-                                    p.id === project.id ? { ...p, ...projectData } : p
-                                );
-                                if (storage && typeof storage.setProjects === 'function') {
-                                    storage.setProjects(updatedProjects);
-                                } else {
-                                    console.warn('Storage not available or setProjects method not found');
+                    onSave={async (projectData) => {
+                        try {
+                            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                                const savedProjects = await window.dataService.getProjects();
+                                if (savedProjects) {
+                                    const updatedProjects = savedProjects.map(p => 
+                                        p.id === project.id ? { ...p, ...projectData } : p
+                                    );
+                                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                                        await window.dataService.setProjects(updatedProjects);
+                                    } else {
+                                        console.warn('DataService not available or setProjects method not found');
+                                    }
                                 }
+                            } else {
+                                console.warn('DataService not available or getProjects method not found');
                             }
-                        } else {
-                            console.warn('Storage not available or getProjects method not found');
+                        } catch (error) {
+                            console.error('Error saving project:', error);
                         }
                         setShowProjectModal(false);
                     }}
-                    onDelete={(projectId) => {
-                        if (storage && typeof storage.getProjects === 'function') {
-                            const savedProjects = storage.getProjects();
-                            if (savedProjects) {
-                                const updatedProjects = savedProjects.filter(p => p.id !== projectId);
-                                if (storage && typeof storage.setProjects === 'function') {
-                                    storage.setProjects(updatedProjects);
-                                } else {
-                                    console.warn('Storage not available or setProjects method not found');
+                    onDelete={async (projectId) => {
+                        try {
+                            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                                const savedProjects = await window.dataService.getProjects();
+                                if (savedProjects) {
+                                    const updatedProjects = savedProjects.filter(p => p.id !== projectId);
+                                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                                        await window.dataService.setProjects(updatedProjects);
+                                    } else {
+                                        console.warn('DataService not available or setProjects method not found');
+                                    }
                                 }
+                            } else {
+                                console.warn('DataService not available or getProjects method not found');
                             }
-                        } else {
-                            console.warn('Storage not available or getProjects method not found');
+                        } catch (error) {
+                            console.error('Error deleting project:', error);
                         }
                         setShowProjectModal(false);
                         onBack();
@@ -1525,7 +1557,7 @@ const ProjectDetail = ({ project, onBack }) => {
                         setShowDocumentModal(false);
                         setEditingDocument(null);
                     }}
-                    users={(storage && typeof storage.getUsers === 'function') ? storage.getUsers() || [] : []}
+                    users={users}
                 />
             )}
         </div>

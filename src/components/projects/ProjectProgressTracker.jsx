@@ -104,14 +104,21 @@ const ProjectProgressTracker = ({ onBack }) => {
         }
     };
 
-    const loadProjects = () => {
-        const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
-        // Initialize progress tracking structure for each project if not exists
-        const projectsWithProgress = savedProjects.map(project => ({
-            ...project,
-            monthlyProgress: project.monthlyProgress || {}
-        }));
-        setProjects(projectsWithProgress);
+    const loadProjects = async () => {
+        try {
+            const savedProjects = (window.dataService && typeof window.dataService.getProjects === 'function') 
+                ? await window.dataService.getProjects() || [] 
+                : [];
+            // Initialize progress tracking structure for each project if not exists
+            const projectsWithProgress = savedProjects.map(project => ({
+                ...project,
+                monthlyProgress: project.monthlyProgress || {}
+            }));
+            setProjects(projectsWithProgress);
+        } catch (error) {
+            console.error('Error loading projects:', error);
+            setProjects([]);
+        }
     };
 
     const handleAddProgress = (project, month, field) => {
