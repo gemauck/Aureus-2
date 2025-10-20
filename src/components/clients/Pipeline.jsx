@@ -284,7 +284,7 @@ const Pipeline = () => {
         e.preventDefault();
     };
 
-    const handleDrop = (e, targetStage) => {
+    const handleDrop = async (e, targetStage) => {
         e.preventDefault();
         
         if (!draggedItem || !draggedType || draggedItem.stage === targetStage) {
