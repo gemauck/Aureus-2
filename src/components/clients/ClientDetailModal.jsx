@@ -329,12 +329,91 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         }
     };
 
+    // Google Calendar event handlers
+    const handleGoogleEventCreated = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleEventUpdated = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleEventDeleted = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleCalendarError = (error) => {
+        console.error('Google Calendar error:', error);
+        // You could show a toast notification here
+        alert(`Google Calendar Error: ${error}`);
+    };
+
+    // Notes helpers: tags, attachments, simple markdown toggle
+    const [newNoteTagsInput, setNewNoteTagsInput] = useState('');
+    const [newNoteTags, setNewNoteTags] = useState([]);
+    const [newNoteAttachments, setNewNoteAttachments] = useState([]);
+    const [notesTagFilter, setNotesTagFilter] = useState(null);
+
+    const handleAddTagFromInput = () => {
+        const raw = (newNoteTagsInput || '').trim();
+        if (!raw) return;
+        const parts = raw.split(',').map(t => t.trim()).filter(Boolean);
+        const next = Array.from(new Set([...(newNoteTags || []), ...parts]));
+        setNewNoteTags(next);
+        setNewNoteTagsInput('');
+    };
+
+    const handleRemoveNewTag = (tag) => {
+        setNewNoteTags((newNoteTags || []).filter(t => t !== tag));
+    };
+
+    const handleAttachmentFiles = async (files) => {
+        if (!files || files.length === 0) return;
+        const fileArray = Array.from(files);
+        const reads = await Promise.all(fileArray.map(file => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
+                id: `${Date.now()}-${file.name}`,
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                dataUrl: reader.result
+            });
+            reader.readAsDataURL(file);
+        })));
+        setNewNoteAttachments([...(newNoteAttachments || []), ...reads]);
+    };
+
+    const handleRemoveNewAttachment = (id) => {
+        setNewNoteAttachments((newNoteAttachments || []).filter(a => a.id !== id));
+    };
+
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
         const updatedComments = [...(formData.comments || []), {
             id: Date.now(),
             text: newComment,
+            tags: Array.isArray(newNoteTags) ? newNoteTags : [],
+            attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
             createdAt: new Date().toISOString(),
             createdBy: 'Current User' // In real app, get from auth
         }];
@@ -347,6 +426,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         onSave(updatedFormData, true);
         
         setNewComment('');
+        setNewNoteTags([]);
+        setNewNoteTagsInput('');
+        setNewNoteAttachments([]);
         
         // AUTO-SAVE: Immediately save to parent
         // Don't auto-save - just update internal state
@@ -1661,6 +1743,21 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                                 </span>
                                                             </div>
                                                             <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                            
+                                                            {/* Google Calendar Sync Component */}
+                                                            <div className="mt-2">
+                                                                {window.GoogleCalendarSync && (
+                                                                    <GoogleCalendarSync
+                                                                        followUp={followUp}
+                                                                        clientName={formData.name}
+                                                                        clientId={formData.id}
+                                                                        onEventCreated={(updatedFollowUp) => handleGoogleEventCreated(followUp.id, updatedFollowUp)}
+                                                                        onEventUpdated={(updatedFollowUp) => handleGoogleEventUpdated(followUp.id, updatedFollowUp)}
+                                                                        onEventDeleted={(updatedFollowUp) => handleGoogleEventDeleted(followUp.id, updatedFollowUp)}
+                                                                        onError={(error) => handleGoogleCalendarError(error)}
+                                                                    />
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <button
@@ -1895,26 +1992,54 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                             <input
                                                 type="file"
                                                 accept=".pdf,.doc,.docx"
-                                                onChange={(e) => {
+                                                onChange={async (e) => {
                                                     const file = e.target.files[0];
                                                     if (file) {
-                                                        const reader = new FileReader();
-                                                        reader.onload = (event) => {
-                                                            const newContract = {
-                                                                id: Date.now(),
-                                                                name: file.name,
-                                                                size: file.size,
-                                                                type: file.type,
-                                                                uploadDate: new Date().toISOString(),
-                                                                data: event.target.result
+                                                        try {
+                                                            const reader = new FileReader();
+                                                            reader.onload = async (event) => {
+                                                                try {
+                                                                    const dataUrl = event.target.result;
+                                                                    // Upload to server
+                                                                    const token = window.storage?.getToken?.();
+                                                                    const res = await fetch('/api/files', {
+                                                                        method: 'POST',
+                                                                        headers: {
+                                                                            'Content-Type': 'application/json',
+                                                                            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                                                                        },
+                                                                        body: JSON.stringify({
+                                                                            folder: 'contracts',
+                                                                            name: file.name,
+                                                                            dataUrl
+                                                                        })
+                                                                    });
+                                                                    if (!res.ok) {
+                                                                        throw new Error(`Upload failed (${res.status})`);
+                                                                    }
+                                                                    const json = await res.json();
+                                                                    const newContract = {
+                                                                        id: Date.now(),
+                                                                        name: file.name,
+                                                                        size: file.size,
+                                                                        type: file.type,
+                                                                        uploadDate: new Date().toISOString(),
+                                                                        url: json.url
+                                                                    };
+                                                                    setFormData({
+                                                                        ...formData,
+                                                                        contracts: [...(formData.contracts || []), newContract]
+                                                                    });
+                                                                    logActivity('Contract Uploaded', `Uploaded to server: ${file.name}`);
+                                                                } catch (err) {
+                                                                    console.error('Contract upload error:', err);
+                                                                    alert('Failed to upload contract to server.');
+                                                                }
                                                             };
-                                                            setFormData({
-                                                                ...formData,
-                                                                contracts: [...(formData.contracts || []), newContract]
-                                                            });
-                                                            logActivity('Contract Uploaded', `Uploaded: ${file.name}`);
-                                                        };
-                                                        reader.readAsDataURL(file);
+                                                            reader.readAsDataURL(file);
+                                                        } catch (readErr) {
+                                                            console.error('File read error:', readErr);
+                                                        }
                                                     }
                                                     e.target.value = '';
                                                 }}
@@ -2101,6 +2226,59 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                         rows="3"
                                         placeholder="Add a comment or note..."
                                     ></textarea>
+                                    {/* Tags input */}
+                                    <div className="mb-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
+                                        <div className="flex gap-2 items-center">
+                                            <input
+                                                type="text"
+                                                value={newNoteTagsInput}
+                                                onChange={(e) => setNewNoteTagsInput(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagFromInput(); } }}
+                                                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                placeholder="Type a tag and press Enter or comma"
+                                            />
+                                            <button type="button" onClick={handleAddTagFromInput} className="px-2.5 py-1.5 text-xs bg-gray-200 rounded hover:bg-gray-300">Add</button>
+                                        </div>
+                                        {(newNoteTags || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {newNoteTags.map(tag => (
+                                                    <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">
+                                                        <i className="fas fa-tag mr-1"></i>{tag}
+                                                        <button type="button" className="ml-1 text-primary-700" onClick={() => handleRemoveNewTag(tag)}><i className="fas fa-times"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Attachments */}
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Attachments</label>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            onChange={(e) => handleAttachmentFiles(e.target.files)}
+                                            className="block w-full text-xs text-gray-600"
+                                        />
+                                        {(newNoteAttachments || []).length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {newNoteAttachments.map(att => (
+                                                    <div key={att.id} className="flex items-center justify-between text-xs bg-white border border-gray-200 rounded px-2 py-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className="fas fa-paperclip text-gray-500"></i>
+                                                            <span className="text-gray-700">{att.name}</span>
+                                                            <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
+                                                            <button type="button" className="text-red-600" onClick={() => handleRemoveNewAttachment(att.id)} title="Remove"><i className="fas fa-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="flex justify-end">
                                         <button
                                             type="button"
@@ -2113,6 +2291,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     </div>
                                 </div>
 
+                                {/* Tag filter */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Filter by tag:</span>
+                                    <button type="button" className={`text-xs px-2 py-0.5 rounded ${!notesTagFilter ? 'bg-gray-200' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(null)}>All</button>
+                                    {Array.from(new Set((formData.comments || []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
+                                        <button key={tag} type="button" className={`text-xs px-2 py-0.5 rounded ${notesTagFilter === tag ? 'bg-primary-200 text-primary-800' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(tag)}>
+                                            <i className="fas fa-tag mr-1"></i>{tag}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <div className="space-y-2">
                                     {(!formData.comments || formData.comments.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
@@ -2120,7 +2309,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                             <p>No comments yet</p>
                                         </div>
                                     ) : (
-                                        formData.comments.map(comment => (
+                                        (formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter)))).map(comment => (
                                             <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex items-center gap-2">
@@ -2145,7 +2334,30 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
                                                 </div>
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.text}</p>
+                                                {Array.isArray(comment.tags) && comment.tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        {comment.tags.map(tag => (
+                                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] bg-gray-100 text-gray-700 rounded">
+                                                                <i className="fas fa-tag mr-1"></i>{tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{comment.text}</p>
+                                                {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                    <div className="mt-2 space-y-1">
+                                                        {comment.attachments.map(att => (
+                                                            <div key={att.id || att.name} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <i className="fas fa-paperclip text-gray-500"></i>
+                                                                    <span className="text-gray-700">{att.name}</span>
+                                                                    {att.size && <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>}
+                                                                </div>
+                                                                {att.dataUrl && <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))
                                     )}

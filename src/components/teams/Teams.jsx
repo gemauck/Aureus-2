@@ -318,13 +318,13 @@ const Teams = () => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-lg font-semibold text-gray-900">Teams & Knowledge Hub</h1>
-                    <p className="text-xs text-gray-600">Centralized documentation, workflows, and team collaboration</p>
+					<h1 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Teams & Knowledge Hub</h1>
+					<p className="text-xs text-gray-600 dark:text-slate-400">Centralized documentation, workflows, and team collaboration</p>
                 </div>
                 {selectedTeam && (
                     <button
                         onClick={() => setSelectedTeam(null)}
-                        className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+						className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                     >
                         <i className="fas fa-arrow-left mr-1.5"></i>
                         Back to All Teams
@@ -334,7 +334,7 @@ const Teams = () => {
 
             {/* Search and Filter Bar */}
             {selectedTeam && (
-                <div className="bg-white rounded-lg border border-gray-200 p-3">
+				<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                     <div className="flex items-center gap-3">
                         <div className="flex-1 relative">
                             <input
@@ -342,9 +342,9 @@ const Teams = () => {
                                 placeholder="Search documents, workflows, checklists..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-                                className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+								className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-400"
                             />
-                            <i className="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs"></i>
+							<i className="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs dark:text-slate-400"></i>
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -352,7 +352,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'documents'
                                         ? 'bg-primary-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                                 }`}
                             >
                                 <i className="fas fa-file-alt mr-1"></i>
@@ -363,7 +363,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'workflows'
                                         ? 'bg-primary-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                                 }`}
                             >
                                 <i className="fas fa-project-diagram mr-1"></i>
@@ -374,7 +374,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'checklists'
                                         ? 'bg-primary-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                                 }`}
                             >
                                 <i className="fas fa-tasks mr-1"></i>
@@ -385,7 +385,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'notices'
                                         ? 'bg-primary-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                                 }`}
                             >
                                 <i className="fas fa-bullhorn mr-1"></i>
@@ -400,56 +400,56 @@ const Teams = () => {
             {!selectedTeam && (
                 <div className="space-y-3">
                     {/* Quick Stats */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+						<div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-600 mb-0.5">Total Documents</p>
-                                    <p className="text-xl font-bold text-gray-900">{documents.length}</p>
+									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Total Documents</p>
+									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{documents.length}</p>
                                 </div>
-                                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-file-alt text-blue-600"></i>
+								<div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900">
+									<i className="fas fa-file-alt text-blue-600 dark:text-blue-300"></i>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-600 mb-0.5">Active Workflows</p>
-                                    <p className="text-xl font-bold text-gray-900">{workflows.filter(w => w.status === 'Active').length}</p>
+									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Active Workflows</p>
+									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{workflows.filter(w => w.status === 'Active').length}</p>
                                 </div>
-                                <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-project-diagram text-purple-600"></i>
+								<div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center dark:bg-purple-900">
+									<i className="fas fa-project-diagram text-purple-600 dark:text-purple-300"></i>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-600 mb-0.5">Checklists</p>
-                                    <p className="text-xl font-bold text-gray-900">{checklists.length}</p>
+									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Checklists</p>
+									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{checklists.length}</p>
                                 </div>
-                                <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-tasks text-green-600"></i>
+								<div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center dark:bg-green-900">
+									<i className="fas fa-tasks text-green-600 dark:text-green-300"></i>
                                 </div>
                             </div>
                         </div>
-                        <div className="bg-white rounded-lg border border-gray-200 p-3">
+						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs text-gray-600 mb-0.5">Executions</p>
-                                    <p className="text-xl font-bold text-gray-900">{workflowExecutions.length}</p>
+									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Executions</p>
+									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{workflowExecutions.length}</p>
                                 </div>
-                                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                                    <i className="fas fa-play-circle text-orange-600"></i>
+								<div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center dark:bg-orange-900">
+									<i className="fas fa-play-circle text-orange-600 dark:text-orange-300"></i>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Teams Grid */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Department Teams</h2>
+					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Department Teams</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                             {teams.map(team => {
                                 const counts = getTeamCounts(team.id);
@@ -457,17 +457,17 @@ const Teams = () => {
                                     <button
                                         key={team.id}
                                         onClick={() => setSelectedTeam(team)}
-                                        className="text-left border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group"
+										className="text-left border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group dark:border-slate-700"
                                     >
                                         <div className="flex items-center justify-between mb-2">
-                                            <div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition`}>
-                                                <i className={`fas ${team.icon} text-${team.color}-600 text-lg`}></i>
+											<div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition dark:bg-slate-700 dark:group-hover:bg-slate-600`}>
+												<i className={`fas ${team.icon} text-${team.color}-600 text-lg dark:text-white`}></i>
                                             </div>
                                             <i className="fas fa-arrow-right text-gray-400 text-xs group-hover:text-primary-600 transition"></i>
                                         </div>
-                                        <h3 className="font-semibold text-gray-900 text-sm mb-1">{team.name}</h3>
-                                        <p className="text-xs text-gray-600 mb-2 line-clamp-2">{team.description}</p>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+										<h3 className="font-semibold text-gray-900 text-sm mb-1 dark:text-slate-100">{team.name}</h3>
+										<p className="text-xs text-gray-600 mb-2 line-clamp-2 dark:text-slate-400">{team.description}</p>
+										<div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
                                             <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
                                             <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>
                                             <span><i className="fas fa-tasks mr-1"></i>{counts.checklists}</span>
@@ -479,24 +479,24 @@ const Teams = () => {
                     </div>
 
                     {/* Recent Activity */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
-                        <h2 className="text-sm font-semibold text-gray-900 mb-3">Recent Activity</h2>
+					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Recent Activity</h2>
                         {recentActivity.length > 0 ? (
                             <div className="space-y-2">
                                 {recentActivity.map((item, idx) => {
                                     const team = teams.find(t => t.id === item.team);
                                     return (
-                                        <div key={idx} className="flex items-center gap-3 py-2 border-b last:border-b-0">
-                                            <div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0`}>
-                                                <i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs`}></i>
+										<div key={idx} className="flex items-center gap-3 py-2 border-b last:border-b-0 dark:border-slate-700">
+											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 dark:bg-slate-700`}>
+												<i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs dark:text-white`}></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-medium text-gray-900 truncate">{item.title}</p>
-                                                <p className="text-xs text-gray-500">
+												<p className="text-xs font-medium text-gray-900 truncate dark:text-slate-100">{item.title}</p>
+												<p className="text-xs text-gray-500 dark:text-slate-400">
                                                     {team?.name} • {item.type}
                                                 </p>
                                             </div>
-                                            <span className="text-xs text-gray-400 whitespace-nowrap">
+											<span className="text-xs text-gray-400 whitespace-nowrap dark:text-slate-400">
                                                 {new Date(item.createdAt || item.updatedAt || item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                                             </span>
                                         </div>
@@ -505,8 +505,8 @@ const Teams = () => {
                             </div>
                         ) : (
                             <div className="text-center py-8">
-                                <i className="fas fa-history text-3xl text-gray-300 mb-2"></i>
-                                <p className="text-xs text-gray-500">No activity yet</p>
+								<i className="fas fa-history text-3xl text-gray-300 mb-2 dark:text-slate-500"></i>
+								<p className="text-xs text-gray-500 dark:text-slate-400">No activity yet</p>
                             </div>
                         )}
                     </div>
@@ -592,7 +592,7 @@ const Teams = () => {
                     </div>
 
                     {/* Content Display Based on Active Tab */}
-                    <div className="bg-white rounded-lg border border-gray-200 p-3">
+					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
                         {activeTab === 'documents' && (
                             <div>
                                 <h3 className="text-sm font-semibold text-gray-900 mb-3">Documents Library</h3>
@@ -601,8 +601,8 @@ const Teams = () => {
                                         {displayDocuments.map(doc => (
                                             <div key={doc.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition">
                                                 <div className="flex items-start justify-between mb-2">
-                                                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                                                        <i className="fas fa-file-alt text-blue-600"></i>
+										<div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900">
+											<i className="fas fa-file-alt text-blue-600 dark:text-blue-300"></i>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <button
@@ -631,12 +631,12 @@ const Teams = () => {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block">
+										<span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block dark:bg-slate-700 dark:text-slate-200">
                                                     {doc.category}
                                                 </span>
-                                                <h4 className="font-semibold text-gray-900 text-sm mb-1">{doc.title}</h4>
-                                                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{doc.description}</p>
-                                                <div className="flex items-center justify-between text-xs text-gray-500">
+										<h4 className="font-semibold text-gray-900 text-sm mb-1 dark:text-slate-100">{doc.title}</h4>
+										<p className="text-xs text-gray-600 mb-2 line-clamp-2 dark:text-slate-400">{doc.description}</p>
+										<div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
                                                     <span>v{doc.version}</span>
                                                     <span>{new Date(doc.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
                                                 </div>
@@ -670,8 +670,8 @@ const Teams = () => {
                                             <div key={workflow.id} className="border border-gray-200 rounded-lg p-3">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-                                                        <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                                                            <i className="fas fa-project-diagram text-purple-600"></i>
+										<div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center dark:bg-purple-900">
+											<i className="fas fa-project-diagram text-purple-600 dark:text-purple-300"></i>
                                                         </div>
                                                         <div className="flex-1">
                                                             <h4 className="font-semibold text-gray-900 text-sm">{workflow.title}</h4>
@@ -707,22 +707,22 @@ const Teams = () => {
                                                     </div>
                                                 </div>
                                                 
-                                                <div className="flex items-center gap-2 mb-2">
+										<div className="flex items-center gap-2 mb-2">
                                                     <span className={`px-2 py-1 text-xs rounded ${
-                                                        workflow.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                                        workflow.status === 'Draft' ? 'bg-gray-100 text-gray-700' :
-                                                        'bg-yellow-100 text-yellow-700'
+												workflow.status === 'Active' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+												workflow.status === 'Draft' ? 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200' :
+												'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
                                                     }`}>
                                                         {workflow.status}
                                                     </span>
-                                                    {workflow.tags && workflow.tags.map(tag => (
-                                                        <span key={tag} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded">
+											{workflow.tags && workflow.tags.map(tag => (
+												<span key={tag} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded dark:bg-purple-900/40 dark:text-purple-300">
                                                             {tag}
                                                         </span>
                                                     ))}
                                                 </div>
                                                 
-                                                <div className="flex items-center gap-4 text-xs text-gray-500">
+										<div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
                                                     <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
                                                     <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
                                                     <span><i className="fas fa-play-circle mr-1"></i>
@@ -759,8 +759,8 @@ const Teams = () => {
                                             <div key={checklist.id} className="border border-gray-200 rounded-lg p-3">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-                                                        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                                                            <i className="fas fa-tasks text-green-600"></i>
+										<div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center dark:bg-green-900">
+											<i className="fas fa-tasks text-green-600 dark:text-green-300"></i>
                                                         </div>
                                                         <div>
                                                             <h4 className="font-semibold text-gray-900 text-sm">{checklist.title}</h4>
@@ -787,11 +787,11 @@ const Teams = () => {
                                                         </button>
                                                     </div>
                                                 </div>
-                                                <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block">
+										<span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block dark:bg-slate-700 dark:text-slate-200">
                                                     {checklist.category}
                                                 </span>
-                                                <p className="text-xs text-gray-600 mb-2">{checklist.description}</p>
-                                                <div className="flex items-center justify-between text-xs text-gray-500">
+										<p className="text-xs text-gray-600 mb-2 dark:text-slate-400">{checklist.description}</p>
+										<div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
                                                     <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
                                                     <button className="text-primary-600 hover:text-primary-700 font-medium">
                                                         Use Template →

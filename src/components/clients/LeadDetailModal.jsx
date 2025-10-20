@@ -20,7 +20,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const [formData, setFormData] = useState(lead || {
         name: '',
         industry: '',
-        status: 'New',
+        status: 'Potential',
         source: 'Website',
         stage: 'Awareness',
         value: 0,
@@ -54,6 +54,45 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     });
     
     const [newComment, setNewComment] = useState('');
+    // Notes helpers for tags and attachments
+    const [newNoteTagsInput, setNewNoteTagsInput] = useState('');
+    const [newNoteTags, setNewNoteTags] = useState([]);
+    const [newNoteAttachments, setNewNoteAttachments] = useState([]);
+    const [notesTagFilter, setNotesTagFilter] = useState(null);
+
+    const handleAddTagFromInput = () => {
+        const raw = (newNoteTagsInput || '').trim();
+        if (!raw) return;
+        const parts = raw.split(',').map(t => t.trim()).filter(Boolean);
+        const next = Array.from(new Set([...(newNoteTags || []), ...parts]));
+        setNewNoteTags(next);
+        setNewNoteTagsInput('');
+    };
+
+    const handleRemoveNewTag = (tag) => {
+        setNewNoteTags((newNoteTags || []).filter(t => t !== tag));
+    };
+
+    const handleAttachmentFiles = async (files) => {
+        if (!files || files.length === 0) return;
+        const fileArray = Array.from(files);
+        const reads = await Promise.all(fileArray.map(file => new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
+                id: `${Date.now()}-${file.name}`,
+                name: file.name,
+                size: file.size,
+                type: file.type,
+                dataUrl: reader.result
+            });
+            reader.readAsDataURL(file);
+        })));
+        setNewNoteAttachments([...(newNoteAttachments || []), ...reads]);
+    };
+
+    const handleRemoveNewAttachment = (id) => {
+        setNewNoteAttachments((newNoteAttachments || []).filter(a => a.id !== id));
+    };
     const [selectedProjectIds, setSelectedProjectIds] = useState(formData.projectIds || []);
 
     useEffect(() => {
@@ -188,12 +227,51 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
     };
 
+    // Google Calendar event handlers
+    const handleGoogleEventCreated = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleEventUpdated = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleEventDeleted = (followUpId, updatedFollowUp) => {
+        const updatedFollowUps = formData.followUps.map(f => 
+            f.id === followUpId ? { ...f, ...updatedFollowUp } : f
+        );
+        setFormData({
+            ...formData,
+            followUps: updatedFollowUps
+        });
+    };
+
+    const handleGoogleCalendarError = (error) => {
+        console.error('Google Calendar error:', error);
+        // You could show a toast notification here
+        alert(`Google Calendar Error: ${error}`);
+    };
+
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
         const updatedComments = [...(formData.comments || []), {
             id: Date.now(),
             text: newComment,
+            tags: Array.isArray(newNoteTags) ? newNoteTags : [],
+            attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
             createdAt: new Date().toISOString(),
             createdBy: 'Current User' // In real app, get from auth
         }];
@@ -206,6 +284,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         onSave(updatedFormData, true);
         
         setNewComment('');
+        setNewNoteTags([]);
+        setNewNoteTagsInput('');
+        setNewNoteAttachments([]);
     };
 
     const logActivity = (type, description, relatedId = null) => {
@@ -396,13 +477,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             onChange={(e) => setFormData({...formData, status: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
-                                            <option>New</option>
-                                            <option>Contacted</option>
-                                            <option>Qualified</option>
+                                            <option>Potential</option>
                                             <option>Active</option>
-                                            <option>Inactive</option>
-                                            <option>Closed Won</option>
-                                            <option>Closed Lost</option>
+                                            <option>Disinterested</option>
                                         </select>
                                     </div>
                                     <div>
@@ -416,14 +493,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             <option>Referral</option>
                                             <option>LinkedIn</option>
                                             <option>Cold Outreach</option>
-                                            <option>Trade Show</option>
                                             <option>Advertisement</option>
                                             <option>Other</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                            Stage
+                                            AIDIA Stage
                                         </label>
                                         <select 
                                             value={formData.stage}
@@ -440,22 +516,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Deal Value (ZAR)</label>
-                                        <div className="relative">
-                                            <span className="absolute left-3 top-2 text-sm text-gray-500">R</span>
-                                            <input 
-                                                type="number" 
-                                                value={formData.value}
-                                                onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
-                                                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
-                                                min="0"
-                                                step="1000"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
+                                
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
@@ -756,6 +817,21 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                                 </span>
                                                             </div>
                                                             <p className="text-sm text-gray-600">{followUp.description}</p>
+                                                            
+                                                            {/* Google Calendar Sync Component */}
+                                                            <div className="mt-2">
+                                                                {window.GoogleCalendarSync && (
+                                                                    <GoogleCalendarSync
+                                                                        followUp={followUp}
+                                                                        clientName={formData.name}
+                                                                        clientId={formData.id}
+                                                                        onEventCreated={(updatedFollowUp) => handleGoogleEventCreated(followUp.id, updatedFollowUp)}
+                                                                        onEventUpdated={(updatedFollowUp) => handleGoogleEventUpdated(followUp.id, updatedFollowUp)}
+                                                                        onEventDeleted={(updatedFollowUp) => handleGoogleEventDeleted(followUp.id, updatedFollowUp)}
+                                                                        onError={(error) => handleGoogleCalendarError(error)}
+                                                                    />
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
                                                     <button
@@ -996,6 +1072,59 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                         rows="3"
                                         placeholder="Add a comment or note..."
                                     ></textarea>
+                                    {/* Tags input */}
+                                    <div className="mb-2">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Tags</label>
+                                        <div className="flex gap-2 items-center">
+                                            <input
+                                                type="text"
+                                                value={newNoteTagsInput}
+                                                onChange={(e) => setNewNoteTagsInput(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTagFromInput(); } }}
+                                                className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                                placeholder="Type a tag and press Enter or comma"
+                                            />
+                                            <button type="button" onClick={handleAddTagFromInput} className="px-2.5 py-1.5 text-xs bg-gray-200 rounded hover:bg-gray-300">Add</button>
+                                        </div>
+                                        {(newNoteTags || []).length > 0 && (
+                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                {newNoteTags.map(tag => (
+                                                    <span key={tag} className="inline-flex items-center px-2 py-0.5 text-xs bg-primary-100 text-primary-700 rounded">
+                                                        <i className="fas fa-tag mr-1"></i>{tag}
+                                                        <button type="button" className="ml-1 text-primary-700" onClick={() => handleRemoveNewTag(tag)}><i className="fas fa-times"></i></button>
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Attachments */}
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-medium text-gray-700 mb-1">Attachments</label>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            onChange={(e) => handleAttachmentFiles(e.target.files)}
+                                            className="block w-full text-xs text-gray-600"
+                                        />
+                                        {(newNoteAttachments || []).length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {newNoteAttachments.map(att => (
+                                                    <div key={att.id} className="flex items-center justify-between text-xs bg-white border border-gray-200 rounded px-2 py-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <i className="fas fa-paperclip text-gray-500"></i>
+                                                            <span className="text-gray-700">{att.name}</span>
+                                                            <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>
+                                                            <button type="button" className="text-red-600" onClick={() => handleRemoveNewAttachment(att.id)} title="Remove"><i className="fas fa-trash"></i></button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                     <div className="flex justify-end">
                                         <button
                                             type="button"
@@ -1008,6 +1137,17 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     </div>
                                 </div>
 
+                                {/* Tag filter */}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-600">Filter by tag:</span>
+                                    <button type="button" className={`text-xs px-2 py-0.5 rounded ${!notesTagFilter ? 'bg-gray-200' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(null)}>All</button>
+                                    {Array.from(new Set((formData.comments || []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
+                                        <button key={tag} type="button" className={`text-xs px-2 py-0.5 rounded ${notesTagFilter === tag ? 'bg-primary-200 text-primary-800' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(tag)}>
+                                            <i className="fas fa-tag mr-1"></i>{tag}
+                                        </button>
+                                    ))}
+                                </div>
+
                                 <div className="space-y-2">
                                     {(!formData.comments || formData.comments.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
@@ -1015,7 +1155,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             <p>No comments yet</p>
                                         </div>
                                     ) : (
-                                        formData.comments.map(comment => (
+                                        (formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter)))).map(comment => (
                                             <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex items-center gap-2">
@@ -1040,7 +1180,30 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
                                                 </div>
-                                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.text}</p>
+                                                {Array.isArray(comment.tags) && comment.tags.length > 0 && (
+                                                    <div className="flex flex-wrap gap-1.5 mt-1">
+                                                        {comment.tags.map(tag => (
+                                                            <span key={tag} className="inline-flex items-center px-2 py-0.5 text-[10px] bg-gray-100 text-gray-700 rounded">
+                                                                <i className="fas fa-tag mr-1"></i>{tag}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <p className="text-sm text-gray-700 whitespace-pre-wrap mt-2">{comment.text}</p>
+                                                {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                    <div className="mt-2 space-y-1">
+                                                        {comment.attachments.map(att => (
+                                                            <div key={att.id || att.name} className="flex items-center justify-between text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <i className="fas fa-paperclip text-gray-500"></i>
+                                                                    <span className="text-gray-700">{att.name}</span>
+                                                                    {att.size && <span className="text-gray-400">({Math.round(att.size/1024)} KB)</span>}
+                                                                </div>
+                                                                {att.dataUrl && <a href={att.dataUrl} download={att.name} className="text-primary-600 hover:underline">Download</a>}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         ))
                                     )}
@@ -1201,13 +1364,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                 onChange={(e) => setFormData({...formData, status: e.target.value})}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                             >
-                                                <option value="New">New</option>
-                                                <option value="Contacted">Contacted</option>
-                                                <option value="Qualified">Qualified</option>
+                                                <option value="Potential">Potential</option>
                                                 <option value="Active">Active</option>
-                                                <option value="Inactive">Inactive</option>
-                                                <option value="Closed Won">Closed Won</option>
-                                                <option value="Closed Lost">Closed Lost</option>
+                                                <option value="Disinterested">Disinterested</option>
                                             </select>
                                         </div>
                                         <div>
@@ -1223,7 +1382,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">Stage</label>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">AIDIA Stage</label>
                                             <select
                                                 value={formData.stage}
                                                 onChange={(e) => setFormData({...formData, stage: e.target.value})}
@@ -1235,18 +1394,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                 <option value="Action">Action - Lead is ready to buy</option>
                                             </select>
                                         </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Deal Value (ZAR)
-                                            </label>
-                                            <input
-                                                type="number"
-                                                value={formData.value}
-                                                onChange={(e) => setFormData({...formData, value: parseFloat(e.target.value) || 0})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                                placeholder="0"
-                                            />
-                                        </div>
+                                        
                                         <div className="md:col-span-2">
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                                 Notes

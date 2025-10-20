@@ -110,7 +110,7 @@ const initialLeads = [
         id: 101,
         name: 'RGN',
         industry: 'Mining',
-        status: 'New',
+        status: 'Potential',
         source: 'Website',
         stage: 'Awareness',
         notes: 'Potential lead for fuel management services in mining operations',
@@ -135,7 +135,7 @@ const initialLeads = [
         id: 102,
         name: 'Green Fleet Solutions',
         industry: 'Forestry',
-        status: 'New',
+        status: 'Potential',
         source: 'Website',
         stage: 'Awareness',
         notes: 'Inquiry about fuel monitoring systems for 50 vehicle fleet',
@@ -160,7 +160,7 @@ const initialLeads = [
         id: 102,
         name: 'TransLogix SA',
         industry: 'Agriculture',
-        status: 'Contacted',
+        status: 'Active',
         source: 'Referral',
         stage: 'Interest',
         notes: 'Interested in GPS tracking and fuel telemetry for their logistics division',
@@ -195,7 +195,7 @@ const initialLeads = [
         id: 103,
         name: 'Coastal Mining Corp',
         industry: 'Mining',
-        status: 'Qualified',
+        status: 'Active',
         source: 'Trade Show',
         stage: 'Desire',
         notes: 'Ready to move forward with implementation. Requires 100+ units',
@@ -236,7 +236,7 @@ const initialLeads = [
         id: 104,
         name: 'Express Couriers Ltd',
         industry: 'Other',
-        status: 'Qualified',
+        status: 'Active',
         source: 'LinkedIn',
         stage: 'Action',
         notes: 'Contract negotiations in final stage. Ready to sign this week',
@@ -1484,13 +1484,9 @@ const Clients = () => {
                                             onChange={(e) => handleLeadStatusChange(lead.id, e.target.value)}
                                             className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border`}
                                         >
-                                            <option>New</option>
-                                            <option>Contacted</option>
-                                            <option>Qualified</option>
+                                            <option>Potential</option>
                                             <option>Active</option>
-                                            <option>Inactive</option>
-                                            <option>Closed Won</option>
-                                            <option>Closed Lost</option>
+                                            <option>Disinterested</option>
                                         </select>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
@@ -1751,11 +1747,9 @@ const Clients = () => {
                                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
                             >
                                 <option value="All Status">All Status</option>
+                                <option value="Potential">Potential</option>
                                 <option value="Active">Active</option>
-                                <option value="Inactive">Inactive</option>
-                                <option value="New">New</option>
-                                <option value="Contacted">Contacted</option>
-                                <option value="Qualified">Qualified</option>
+                                <option value="Disinterested">Disinterested</option>
                             </select>
                         </div>
                     </div>
