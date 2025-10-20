@@ -52,6 +52,8 @@ async function handler(req, res) {
         industry: body.industry || 'Other',
         status: body.status || 'active',
         revenue: parseFloat(body.revenue) || 0,
+        value: parseFloat(body.value) || 0, // Add value field
+        probability: parseInt(body.probability) || 0, // Add probability field
         lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
         address: body.address || '',
         website: body.website || '',
@@ -81,13 +83,13 @@ async function handler(req, res) {
         // Use raw SQL to ensure type field is properly handled
         const result = await prisma.$queryRaw`
           INSERT INTO "Client" (
-            "id", "name", "type", "industry", "status", "revenue", "lastContact",
+            "id", "name", "type", "industry", "status", "revenue", "value", "probability", "lastContact",
             "address", "website", "notes", "contacts", "followUps", "projectIds",
             "comments", "sites", "contracts", "activityLog", "billingTerms", "ownerId",
             "createdAt", "updatedAt"
           ) VALUES (
             gen_random_uuid()::text, ${clientData.name}, ${clientData.type}, ${clientData.industry},
-            ${clientData.status}, ${clientData.revenue}, ${clientData.lastContact},
+            ${clientData.status}, ${clientData.revenue}, ${clientData.value}, ${clientData.probability}, ${clientData.lastContact},
             ${clientData.address}, ${clientData.website}, ${clientData.notes},
             ${JSON.stringify(clientData.contacts)}, ${JSON.stringify(clientData.followUps)},
             ${JSON.stringify(clientData.projectIds)}, ${JSON.stringify(clientData.comments)},
@@ -127,6 +129,8 @@ async function handler(req, res) {
           industry: body.industry,
           status: body.status,
           revenue: body.revenue,
+          value: body.value, // Add value field
+          probability: body.probability, // Add probability field
           lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
           address: body.address,
           website: body.website,
