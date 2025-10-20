@@ -9,6 +9,26 @@ const { isProduction, isLocalhost } = (() => {
 
 console.log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
 
+// Helpers to normalize API/local responses to arrays and safely access storage methods
+function normalizeArrayResponse(response, preferredKeys = []) {
+    // Try preferred keys first (e.g., ['projects'] or ['clients'])
+    for (const key of preferredKeys) {
+        const value = response?.[key];
+        if (Array.isArray(value)) return value;
+    }
+    // Common data wrapper { data: [...] }
+    if (Array.isArray(response?.data)) return response.data;
+    // Direct array
+    if (Array.isArray(response)) return response;
+    // Unknown shape -> empty array
+    return [];
+}
+
+function safeStorageCall(obj, methodName, fallback = []) {
+    const fn = obj && obj[methodName];
+    return typeof fn === 'function' ? fn.call(obj) : fallback;
+}
+
 const dataService = {
     // Projects
     async getProjects() {
@@ -16,14 +36,14 @@ const dataService = {
             try {
                 console.log('🌐 Using API for projects');
                 const response = await window.api.listProjects();
-                return response.projects || response || [];
+                return normalizeArrayResponse(response, ['projects']);
             } catch (error) {
                 console.warn('⚠️ API failed, falling back to localStorage:', error.message);
-                return window.storage?.getProjects() || [];
+                return safeStorageCall(window.storage, 'getProjects', []);
             }
         } else {
             console.log('💾 Using localStorage for projects');
-            return window.storage?.getProjects() || [];
+            return safeStorageCall(window.storage, 'getProjects', []);
         }
     },
 
@@ -44,7 +64,7 @@ const dataService = {
             }
         } else {
             console.log('💾 Using localStorage for projects');
-            if (window.storage?.setProjects) {
+            if (typeof window.storage?.setProjects === 'function') {
                 window.storage.setProjects(projects);
             }
         }
@@ -91,14 +111,14 @@ const dataService = {
             try {
                 console.log('🌐 Using API for time entries');
                 const response = await window.api.listTimeEntries();
-                return response.timeEntries || response || [];
+                return normalizeArrayResponse(response, ['timeEntries']);
             } catch (error) {
                 console.warn('⚠️ API failed, falling back to localStorage:', error.message);
-                return window.storage?.getTimeEntries() || [];
+                return safeStorageCall(window.storage, 'getTimeEntries', []);
             }
         } else {
             console.log('💾 Using localStorage for time entries');
-            return window.storage?.getTimeEntries() || [];
+            return safeStorageCall(window.storage, 'getTimeEntries', []);
         }
     },
 
@@ -119,7 +139,7 @@ const dataService = {
             }
         } else {
             console.log('💾 Using localStorage for time entries');
-            if (window.storage?.setTimeEntries) {
+            if (typeof window.storage?.setTimeEntries === 'function') {
                 window.storage.setTimeEntries(timeEntries);
             }
         }
@@ -166,14 +186,14 @@ const dataService = {
             try {
                 console.log('🌐 Using API for clients');
                 const response = await window.api.listClients();
-                return response.clients || response || [];
+                return normalizeArrayResponse(response, ['clients']);
             } catch (error) {
                 console.warn('⚠️ API failed, falling back to localStorage:', error.message);
-                return window.storage?.getClients() || [];
+                return safeStorageCall(window.storage, 'getClients', []);
             }
         } else {
             console.log('💾 Using localStorage for clients');
-            return window.storage?.getClients() || [];
+            return safeStorageCall(window.storage, 'getClients', []);
         }
     },
 
@@ -194,7 +214,7 @@ const dataService = {
             }
         } else {
             console.log('💾 Using localStorage for clients');
-            if (window.storage?.setClients) {
+            if (typeof window.storage?.setClients === 'function') {
                 window.storage.setClients(clients);
             }
         }
@@ -237,92 +257,92 @@ const dataService = {
 
     // Teams (localStorage only for now)
     async getTeamDocuments() {
-        return window.storage?.getTeamDocuments() || [];
+        return safeStorageCall(window.storage, 'getTeamDocuments', []);
     },
 
     async setTeamDocuments(documents) {
-        if (window.storage?.setTeamDocuments) {
+        if (typeof window.storage?.setTeamDocuments === 'function') {
             window.storage.setTeamDocuments(documents);
         }
     },
 
     async getTeamWorkflows() {
-        return window.storage?.getTeamWorkflows() || [];
+        return safeStorageCall(window.storage, 'getTeamWorkflows', []);
     },
 
     async setTeamWorkflows(workflows) {
-        if (window.storage?.setTeamWorkflows) {
+        if (typeof window.storage?.setTeamWorkflows === 'function') {
             window.storage.setTeamWorkflows(workflows);
         }
     },
 
     async getTeamChecklists() {
-        return window.storage?.getTeamChecklists() || [];
+        return safeStorageCall(window.storage, 'getTeamChecklists', []);
     },
 
     async setTeamChecklists(checklists) {
-        if (window.storage?.setTeamChecklists) {
+        if (typeof window.storage?.setTeamChecklists === 'function') {
             window.storage.setTeamChecklists(checklists);
         }
     },
 
     async getTeamNotices() {
-        return window.storage?.getTeamNotices() || [];
+        return safeStorageCall(window.storage, 'getTeamNotices', []);
     },
 
     async setTeamNotices(notices) {
-        if (window.storage?.setTeamNotices) {
+        if (typeof window.storage?.setTeamNotices === 'function') {
             window.storage.setTeamNotices(notices);
         }
     },
 
     // HR (localStorage only for now)
     async getEmployees() {
-        return window.storage?.getEmployees() || [];
+        return safeStorageCall(window.storage, 'getEmployees', []);
     },
 
     async setEmployees(employees) {
-        if (window.storage?.setEmployees) {
+        if (typeof window.storage?.setEmployees === 'function') {
             window.storage.setEmployees(employees);
         }
     },
 
     async getLeaveApplications() {
-        return window.storage?.getLeaveApplications() || [];
+        return safeStorageCall(window.storage, 'getLeaveApplications', []);
     },
 
     async setLeaveApplications(applications) {
-        if (window.storage?.setLeaveApplications) {
+        if (typeof window.storage?.setLeaveApplications === 'function') {
             window.storage.setLeaveApplications(applications);
         }
     },
 
     async getLeaveBalances() {
-        return window.storage?.getLeaveBalances() || [];
+        return safeStorageCall(window.storage, 'getLeaveBalances', []);
     },
 
     async setLeaveBalances(balances) {
-        if (window.storage?.setLeaveBalances) {
+        if (typeof window.storage?.setLeaveBalances === 'function') {
             window.storage.setLeaveBalances(balances);
         }
     },
 
     async getAttendanceRecords() {
-        return window.storage?.getAttendanceRecords() || [];
+        return safeStorageCall(window.storage, 'getAttendanceRecords', []);
     },
 
     async setAttendanceRecords(records) {
-        if (window.storage?.setAttendanceRecords) {
+        if (typeof window.storage?.setAttendanceRecords === 'function') {
             window.storage.setAttendanceRecords(records);
         }
     },
 
     async getPayrollRecords() {
-        return window.storage?.getPayrollRecords() || [];
+        return safeStorageCall(window.storage, 'getPayrollRecords', []);
     },
 
     async setPayrollRecords(records) {
-        if (window.storage?.setPayrollRecords) {
+        if (typeof window.storage?.setPayrollRecords === 'function') {
             window.storage.setPayrollRecords(records);
         }
     }

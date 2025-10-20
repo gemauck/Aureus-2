@@ -19,7 +19,7 @@ const ClientsSimple = () => {
     const [newLead, setNewLead] = useState({
         name: '',
         industry: '',
-        status: 'New',
+        status: 'Potential',
         value: '',
         source: '',
         email: '',
@@ -63,7 +63,7 @@ const ClientsSimple = () => {
             setNewLead({
                 name: '',
                 industry: '',
-                status: 'New',
+                status: 'Potential',
                 value: '',
                 source: '',
                 email: '',
@@ -260,10 +260,9 @@ const ClientsSimple = () => {
                                             onChange={(e) => setNewLead({...newLead, status: e.target.value})}
                                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                                         >
-                                            <option value="New">New</option>
-                                            <option value="Qualified">Qualified</option>
-                                            <option value="Proposal">Proposal</option>
-                                            <option value="Negotiation">Negotiation</option>
+                                            <option value="Potential">Potential</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Disinterested">Disinterested</option>
                                         </select>
                                     </div>
                                     <div>
@@ -343,10 +342,9 @@ const ClientsSimple = () => {
                                                         {lead.email && <p className="text-sm text-gray-600">Email: {lead.email}</p>}
                                                     </div>
                                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                                        lead.status === 'New' ? 'bg-blue-100 text-blue-800' :
-                                                        lead.status === 'Qualified' ? 'bg-green-100 text-green-800' :
-                                                        lead.status === 'Proposal' ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-purple-100 text-purple-800'
+                                                        lead.status === 'Potential' ? 'bg-blue-100 text-blue-800' :
+                                                        lead.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                                        'bg-gray-100 text-gray-800'
                                                     }`}>
                                                         {lead.status}
                                                     </span>

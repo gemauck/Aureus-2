@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Calendar Integration Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-900 mb-6">
+                <i class="fas fa-calendar-alt text-blue-600 mr-2"></i>
+                Google Calendar Integration Test
+            </h1>
+
+            <div id="test-container"></div>
+        </div>
+    </div>
+
+    <!-- Load Google Calendar Service -->
+    <script type="text/babel" src="./src/services/GoogleCalendarService.js"></script>
+    <script type="text/babel" src="./src/components/calendar/GoogleCalendarSync.jsx"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const GoogleCalendarTest = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [testFollowUp, setTestFollowUp] = useState({
+                id: 'test-1',
+                type: 'Meeting',
+                date: new Date().toISOString().split('T')[0],
+                time: '14:00',
+                description: 'Test meeting for Google Calendar integration',
+                clientName: 'Test Client',
+                clientId: 'test-client-1'
+            });
+            const [events, setEvents] = useState([]);
+            const [loading, setLoading] = useState(false);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                checkAuthentication();
+            }, []);
+
+            const checkAuthentication = async () => {
+                try {
+                    if (window.GoogleCalendarService) {
+                        const authenticated = await window.GoogleCalendarService.checkAuthentication();
+                        setIsAuthenticated(authenticated);
+                    }
+                } catch (error) {
+                    console.error('Failed to check authentication:', error);
+                }
+            };
+
+            const handleAuthenticate = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    if (window.GoogleCalendarService) {
+                        await window.GoogleCalendarService.openAuthPopup();
+                        setIsAuthenticated(true);
+                    }
+                } catch (error) {
+                    console.error('Authentication failed:', error);
+                    setError(error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleCreateEvent = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    if (window.GoogleCalendarService) {
+                        const event = await window.GoogleCalendarService.createEvent(testFollowUp);
+                        console.log('Event created:', event);
+                        alert('Event created successfully in Google Calendar!');
+                    }
+                } catch (error) {
+                    console.error('Failed to create event:', error);
+                    setError(error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleGetEvents = async () => {
+                setLoading(true);
+                setError(null);
+                try {
+                    if (window.GoogleCalendarService) {
+                        const upcomingEvents = await window.GoogleCalendarService.getUpcomingEvents();
+                        setEvents(upcomingEvents);
+                    }
+                } catch (error) {
+                    console.error('Failed to get events:', error);
+                    setError(error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            const handleDisconnect = () => {
+                if (window.GoogleCalendarService) {
+                    window.GoogleCalendarService.disconnect();
+                    setIsAuthenticated(false);
+                    setEvents([]);
+                }
+            };
+
+            return (
+                <div className="space-y-6">
+                    {/* Authentication Status */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <h2 className="text-lg font-semibold mb-2">Authentication Status</h2>
+                        <div className="flex items-center gap-2">
+                            {isAuthenticated ? (
+                                <span className="text-green-600">
+                                    <i className="fas fa-check-circle mr-1"></i>
+                                    Connected to Google Calendar
+                                </span>
+                            ) : (
+                                <span className="text-red-600">
+                                    <i className="fas fa-times-circle mr-1"></i>
+                                    Not connected to Google Calendar
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Error Display */}
+                    {error && (
+                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                            <i className="fas fa-exclamation-triangle mr-2"></i>
+                            {error}
+                        </div>
+                    )}
+
+                    {/* Test Controls */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <h2 className="text-lg font-semibold mb-4">Test Controls</h2>
+                        <div className="space-y-3">
+                            {!isAuthenticated ? (
+                                <button
+                                    onClick={handleAuthenticate}
+                                    disabled={loading}
+                                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    <i className="fab fa-google mr-2"></i>
+                                    {loading ? 'Connecting...' : 'Connect to Google Calendar'}
+                                </button>
+                            ) : (
+                                <div className="space-x-3">
+                                    <button
+                                        onClick={handleCreateEvent}
+                                        disabled={loading}
+                                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        <i className="fas fa-calendar-plus mr-2"></i>
+                                        {loading ? 'Creating...' : 'Create Test Event'}
+                                    </button>
+                                    <button
+                                        onClick={handleGetEvents}
+                                        disabled={loading}
+                                        className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
+                                    >
+                                        <i className="fas fa-list mr-2"></i>
+                                        {loading ? 'Loading...' : 'Get Upcoming Events'}
+                                    </button>
+                                    <button
+                                        onClick={handleDisconnect}
+                                        className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700"
+                                    >
+                                        <i className="fas fa-sign-out-alt mr-2"></i>
+                                        Disconnect
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Test Follow-up Display */}
+                    <div className="bg-gray-50 p-4 rounded-lg">
+                        <h2 className="text-lg font-semibold mb-4">Test Follow-up</h2>
+                        <div className="bg-white border border-gray-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="px-2 py-1 text-xs rounded font-medium bg-purple-100 text-purple-700">
+                                    {testFollowUp.type}
+                                </span>
+                                <span className="text-sm font-medium text-gray-900">
+                                    {testFollowUp.date} at {testFollowUp.time}
+                                </span>
+                            </div>
+                            <p className="text-sm text-gray-600">{testFollowUp.description}</p>
+                            <p className="text-xs text-gray-500 mt-1">Client: {testFollowUp.clientName}</p>
+                        </div>
+                    </div>
+
+                    {/* Google Calendar Sync Component Test */}
+                    {window.GoogleCalendarSync && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h2 className="text-lg font-semibold mb-4">Google Calendar Sync Component</h2>
+                            <div className="bg-white border border-gray-200 rounded-lg p-3">
+                                <GoogleCalendarSync
+                                    followUp={testFollowUp}
+                                    clientName={testFollowUp.clientName}
+                                    clientId={testFollowUp.clientId}
+                                    onEventCreated={(updatedFollowUp) => {
+                                        console.log('Event created:', updatedFollowUp);
+                                        alert('Event created via sync component!');
+                                    }}
+                                    onEventUpdated={(updatedFollowUp) => {
+                                        console.log('Event updated:', updatedFollowUp);
+                                        alert('Event updated via sync component!');
+                                    }}
+                                    onEventDeleted={(updatedFollowUp) => {
+                                        console.log('Event deleted:', updatedFollowUp);
+                                        alert('Event deleted via sync component!');
+                                    }}
+                                    onError={(error) => {
+                                        console.error('Sync component error:', error);
+                                        setError(error);
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Events List */}
+                    {events.length > 0 && (
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h2 className="text-lg font-semibold mb-4">Upcoming Events</h2>
+                            <div className="space-y-2">
+                                {events.map((event, index) => (
+                                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-3">
+                                        <h3 className="font-medium text-gray-900">{event.summary}</h3>
+                                        <p className="text-sm text-gray-600">
+                                            {new Date(event.start.dateTime || event.start.date).toLocaleString()}
+                                        </p>
+                                        {event.description && (
+                                            <p className="text-sm text-gray-500 mt-1">{event.description}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        ReactDOM.render(<GoogleCalendarTest />, document.getElementById('test-container'));
+    </script>
+</body>
+</html>
