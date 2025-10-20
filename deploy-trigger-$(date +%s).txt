@@ -1,0 +1,12 @@
+Pipeline Clients Module Fixes - Deployment Trigger
+Date: $(date)
+Commit: d3ddcd1
+
+Changes:
+- Removed AIDA Framework box from pipeline view
+- Fixed leads and opportunities separation in stats
+- Fixed board display to show active items only
+- Added Active/Inactive status controls for leads
+- Improved drag-and-drop functionality
+
+This file triggers automatic deployment via Railway.
