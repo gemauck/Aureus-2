@@ -62,7 +62,8 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(express.static(rootDir))
 
-app.use('/api/*', async (req, res) => {
+// API routes - must come before catch-all route
+app.use('/api', async (req, res) => {
   try {
     const handlerPath = toHandlerPath(req.url)
     console.log(`🔍 Railway API: ${req.method} ${req.url} -> ${path.relative(rootDir, handlerPath)}`)
@@ -96,6 +97,7 @@ app.get('/health', (req, res) => {
   })
 })
 
+// Catch-all route for static files - must come last
 app.get('*', (req, res) => {
   res.sendFile(path.join(rootDir, 'index.html'))
 })

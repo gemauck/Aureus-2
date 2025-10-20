@@ -21,8 +21,11 @@ async function handler(req, res) {
     // List Clients (GET /api/clients)
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[1] === 'clients') {
       try {
-        const clients = await prisma.client.findMany({ orderBy: { createdAt: 'desc' } })
-        console.log('✅ Clients retrieved successfully:', clients.length)
+        const clients = await prisma.client.findMany({ 
+          where: { ownerId: req.user?.sub || null },
+          orderBy: { createdAt: 'desc' } 
+        })
+        console.log('✅ Clients retrieved successfully:', clients.length, 'for user:', req.user?.sub)
         return ok(res, { clients })
       } catch (dbError) {
         console.error('❌ Database error listing clients:', dbError)
