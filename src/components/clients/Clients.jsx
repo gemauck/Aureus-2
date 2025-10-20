@@ -1082,8 +1082,18 @@ const Clients = () => {
         }, []);
 
         // Filter active leads and opportunities only
-        const activeLeads = leads.filter(lead => lead.status !== 'Inactive' && lead.status !== 'Closed Lost');
-        const activeOpportunities = clientOpportunities.filter(opp => opp.status !== 'Inactive' && opp.status !== 'Closed Lost');
+        console.log('🔍 Pipeline Debug - All leads:', leads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
+        const activeLeads = leads.filter(lead => 
+            lead.status !== 'Inactive' && 
+            lead.status !== 'Closed Lost' && 
+            lead.status !== 'Closed Won'
+        );
+        console.log('🔍 Pipeline Debug - Active leads:', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
+        const activeOpportunities = clientOpportunities.filter(opp => 
+            opp.status !== 'Inactive' && 
+            opp.status !== 'Closed Lost' && 
+            opp.status !== 'Closed Won'
+        );
 
         const handleDragStart = (item, type) => {
             setDraggedItem(item);
