@@ -34,6 +34,14 @@ const DatabaseAPI = {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                console.error(`Non-JSON response from ${endpoint}:`, text.substring(0, 200));
+                throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
+            }
+
             const data = await response.json();
             return data;
         } catch (error) {

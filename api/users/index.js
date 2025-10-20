@@ -1,16 +1,15 @@
 // Users management API endpoint
+import { authRequired } from '../_lib/authRequired.js'
 import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { authenticate } from '../_lib/auth.js'
 
 async function handler(req, res) {
     if (req.method === 'GET') {
         try {
-            // Get current user
-            const user = await authenticate(req)
-            if (!user || user.role !== 'admin') {
+            // Check if user is admin (req.user is set by authRequired)
+            if (!req.user || req.user.role !== 'admin') {
                 return unauthorized(res, 'Admin access required')
             }
 
@@ -47,9 +46,8 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
         try {
-            // Get current user
-            const user = await authenticate(req)
-            if (!user || user.role !== 'admin') {
+            // Check if user is admin (req.user is set by authRequired)
+            if (!req.user || req.user.role !== 'admin') {
                 return unauthorized(res, 'Admin access required')
             }
 
@@ -60,7 +58,7 @@ async function handler(req, res) {
             }
 
             // Prevent deleting own account
-            if (user.id === userId) {
+            if (req.user.id === userId) {
                 return badRequest(res, 'Cannot delete your own account')
             }
 
@@ -80,4 +78,4 @@ async function handler(req, res) {
     return badRequest(res, 'Invalid method')
 }
 
-export default withHttp(withLogging(handler))
+export default withHttp(withLogging(authRequired(handler)))

@@ -122,12 +122,12 @@ const DashboardLive = () => {
 
             const [clientsRes, leadsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = await Promise.all(dataPromises);
 
-            const clients = clientsRes.data?.clients || [];
-            const leads = leadsRes.data || [];
-            const projects = projectsRes.data || [];
-            const invoices = invoicesRes.data || [];
-            const timeEntries = timeEntriesRes.data || [];
-            const users = usersRes.data || [];
+            const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients : [];
+            const leads = Array.isArray(leadsRes.data) ? leadsRes.data : [];
+            const projects = Array.isArray(projectsRes.data) ? projectsRes.data : [];
+            const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : [];
+            const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : [];
+            const users = Array.isArray(usersRes.data) ? usersRes.data : [];
 
             // Calculate comprehensive statistics
             const now = new Date();
@@ -437,7 +437,7 @@ const DashboardLive = () => {
                                 {dashboardData.stats.totalClients}
                             </p>
                             <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
-                                {dashboardData.clients.filter(c => c.status === 'active' || c.status === 'Active').length} active
+                                {Array.isArray(dashboardData.clients) ? dashboardData.clients.filter(c => c.status === 'active' || c.status === 'Active').length : 0} active
                             </p>
                         </div>
                         <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center">
@@ -560,9 +560,9 @@ const DashboardLive = () => {
                 {/* Recent Clients */}
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                     <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
-                        Recent Clients ({dashboardData.clients.length})
+                        Recent Clients ({Array.isArray(dashboardData.clients) ? dashboardData.clients.length : 0})
                     </h2>
-                    {dashboardData.clients.length > 0 ? (
+                    {Array.isArray(dashboardData.clients) && dashboardData.clients.length > 0 ? (
                         <div className="space-y-2">
                             {dashboardData.clients.slice(0, 5).map(client => (
                                 <div key={client.id} className={`${isDark ? 'border-gray-700' : 'border-gray-200'} border-b pb-2 last:border-b-0 last:pb-0`}>
@@ -597,9 +597,9 @@ const DashboardLive = () => {
                 {/* Recent Projects */}
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                     <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
-                        Recent Projects ({dashboardData.projects.length})
+                        Recent Projects ({Array.isArray(dashboardData.projects) ? dashboardData.projects.length : 0})
                     </h2>
-                    {dashboardData.projects.length > 0 ? (
+                    {Array.isArray(dashboardData.projects) && dashboardData.projects.length > 0 ? (
                         <div className="space-y-2">
                             {dashboardData.projects.slice(0, 5).map(project => (
                                 <div key={project.id} className={`${isDark ? 'border-gray-700' : 'border-gray-200'} border-b pb-2 last:border-b-0 last:pb-0`}>

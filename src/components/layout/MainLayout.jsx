@@ -53,8 +53,8 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window - prioritize live dashboard over others
-    const Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    // Get components from window - prioritize live dashboard over others with fallback
+    const Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
     const Projects = window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
@@ -81,30 +81,56 @@ const MainLayout = () => {
     ];
 
     const renderPage = () => {
+        console.log('🔄 MainLayout: Rendering page:', currentPage);
+        console.log('🔄 MainLayout: Available components:', {
+            Dashboard: !!Dashboard,
+            Clients: !!Clients,
+            Projects: !!Projects,
+            Teams: !!Teams,
+            Users: !!Users,
+            TimeTracking: !!TimeTracking,
+            HR: !!HR,
+            Manufacturing: !!Manufacturing,
+            Tools: !!Tools,
+            Reports: !!Reports
+        });
+        
         switch(currentPage) {
             case 'dashboard': 
+                console.log('🔄 MainLayout: Rendering Dashboard component');
                 return <Dashboard />;
             case 'clients': 
+                console.log('🔄 MainLayout: Rendering Clients component');
                 return <Clients />;
             case 'projects': 
+                console.log('🔄 MainLayout: Rendering Projects component');
                 return <Projects />;
             case 'teams': 
+                console.log('🔄 MainLayout: Rendering Teams component');
                 return <Teams />;
             case 'users': 
+                console.log('🔄 MainLayout: Rendering Users component');
                 return <Users />;
             case 'time': 
+                console.log('🔄 MainLayout: Rendering TimeTracking component');
                 return <TimeTracking />;
             case 'hr': 
+                console.log('🔄 MainLayout: Rendering HR component');
                 return <HR />;
             case 'manufacturing': 
+                console.log('🔄 MainLayout: Rendering Manufacturing component');
                 return <Manufacturing />;
             case 'tools': 
+                console.log('🔄 MainLayout: Rendering Tools component');
                 return <Tools />;
             case 'reports': 
+                console.log('🔄 MainLayout: Rendering Reports component');
                 return <Reports />;
             case 'documents': 
+                console.log('🔄 MainLayout: Rendering Documents placeholder');
                 return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
             default: 
+                console.log('🔄 MainLayout: Rendering default Dashboard component');
                 return <Dashboard />;
         }
     };
@@ -150,7 +176,10 @@ const MainLayout = () => {
                     {menuItems.map(item => (
                         <button
                             key={item.id}
-                            onClick={() => setCurrentPage(item.id)}
+                            onClick={() => {
+                                console.log('🔄 MainLayout: Navigation clicked:', item.id);
+                                setCurrentPage(item.id);
+                            }}
                             className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-sm lg:text-xs touch-target ${
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 

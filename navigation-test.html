@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Navigation Test - Abcotronics ERP</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Tailwind Config -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#e0f2fe',
+                            100: '#bae6fd',
+                            200: '#7dd3fc',
+                            300: '#38bdf8',
+                            400: '#0ea5e9',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm border-b">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between items-center py-4">
+                    <div>
+                        <h1 class="text-2xl font-bold text-gray-900">Navigation Test</h1>
+                        <p class="text-sm text-gray-600">Testing dashboard navigation and component loading</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-sm text-gray-600">
+                            <span id="current-page">dashboard</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Test Navigation -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Test Navigation</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <button id="nav-dashboard" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                        Dashboard
+                    </button>
+                    <button id="nav-clients" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+                        Clients
+                    </button>
+                    <button id="nav-projects" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700">
+                        Projects
+                    </button>
+                    <button id="nav-time" class="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700">
+                        Time Tracking
+                    </button>
+                </div>
+            </div>
+
+            <!-- Component Status -->
+            <div class="bg-white rounded-lg shadow p-6 mb-8">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Component Status</h2>
+                <div id="component-status" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>Loading component status...</div>
+                </div>
+            </div>
+
+            <!-- Live Dashboard Test -->
+            <div id="dashboard-container" class="bg-white rounded-lg shadow p-6">
+                <div class="text-center py-12">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p class="text-gray-600">Loading Dashboard...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Load utilities -->
+    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/localStorage.js"></script>
+    <script type="text/babel" src="./src/utils/authStorage.js"></script>
+    <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
+    <script type="text/babel" src="./src/utils/liveDataSync.js"></script>
+
+    <!-- Load components -->
+    <script type="text/babel" src="./src/components/auth/AuthProvider.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardSimple.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardFallback.jsx"></script>
+    <script type="text/babel" src="./src/components/dashboard/DashboardLive.jsx"></script>
+    <script type="text/babel" src="./src/components/layout/MainLayout.jsx"></script>
+
+    <!-- Test Script -->
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const TestApp = () => {
+            const [currentPage, setCurrentPage] = useState('dashboard');
+            const [componentStatus, setComponentStatus] = useState({});
+
+            useEffect(() => {
+                // Check component availability
+                const status = {
+                    DashboardSimple: !!window.DashboardSimple,
+                    DashboardFallback: !!window.DashboardFallback,
+                    DashboardLive: !!window.DashboardLive,
+                    MainLayout: !!window.MainLayout,
+                    DatabaseAPI: !!window.DatabaseAPI,
+                    LiveDataSync: !!window.LiveDataSync,
+                    AuthProvider: !!window.AuthProvider
+                };
+                setComponentStatus(status);
+                console.log('🔍 Component Status:', status);
+
+                // Update current page display
+                document.getElementById('current-page').textContent = currentPage;
+            }, [currentPage]);
+
+            const renderPage = () => {
+                console.log('🔄 TestApp: Rendering page:', currentPage);
+                
+                switch(currentPage) {
+                    case 'dashboard':
+                        if (window.DashboardLive) {
+                            console.log('🔄 TestApp: Using DashboardLive');
+                            return <window.DashboardLive />;
+                        } else if (window.DashboardFallback) {
+                            console.log('🔄 TestApp: Using DashboardFallback');
+                            return <window.DashboardFallback />;
+                        } else if (window.DashboardSimple) {
+                            console.log('🔄 TestApp: Using DashboardSimple');
+                            return <window.DashboardSimple />;
+                        } else {
+                            console.log('🔄 TestApp: Using fallback div');
+                            return <div className="text-center py-12 text-gray-500">No dashboard component available</div>;
+                        }
+                    case 'clients':
+                        return <div className="text-center py-12 text-gray-500">Clients module - Coming soon!</div>;
+                    case 'projects':
+                        return <div className="text-center py-12 text-gray-500">Projects module - Coming soon!</div>;
+                    case 'time':
+                        return <div className="text-center py-12 text-gray-500">Time Tracking module - Coming soon!</div>;
+                    default:
+                        return <div className="text-center py-12 text-gray-500">Unknown page: {currentPage}</div>;
+                }
+            };
+
+            return (
+                <div>
+                    <div className="mb-6">
+                        <h2 className="text-lg font-semibold text-gray-900 mb-2">Current Page: {currentPage}</h2>
+                        <p className="text-sm text-gray-600">Testing navigation and component rendering</p>
+                    </div>
+                    <div id="page-content">
+                        {renderPage()}
+                    </div>
+                </div>
+            );
+        };
+
+        // Event listeners for navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            // Navigation buttons
+            document.getElementById('nav-dashboard').addEventListener('click', () => {
+                console.log('🔄 Navigation: Dashboard clicked');
+                setCurrentPage('dashboard');
+            });
+
+            document.getElementById('nav-clients').addEventListener('click', () => {
+                console.log('🔄 Navigation: Clients clicked');
+                setCurrentPage('clients');
+            });
+
+            document.getElementById('nav-projects').addEventListener('click', () => {
+                console.log('🔄 Navigation: Projects clicked');
+                setCurrentPage('projects');
+            });
+
+            document.getElementById('nav-time').addEventListener('click', () => {
+                console.log('🔄 Navigation: Time clicked');
+                setCurrentPage('time');
+            });
+
+            // Update component status display
+            const updateComponentStatus = () => {
+                const status = {
+                    DashboardSimple: !!window.DashboardSimple,
+                    DashboardFallback: !!window.DashboardFallback,
+                    DashboardLive: !!window.DashboardLive,
+                    MainLayout: !!window.MainLayout,
+                    DatabaseAPI: !!window.DatabaseAPI,
+                    LiveDataSync: !!window.LiveDataSync,
+                    AuthProvider: !!window.AuthProvider
+                };
+
+                const statusHtml = Object.entries(status).map(([name, available]) => `
+                    <div class="flex items-center justify-between p-2 border rounded">
+                        <span class="text-sm font-medium">${name}</span>
+                        <span class="text-xs px-2 py-1 rounded ${available ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+                            ${available ? 'Available' : 'Not Available'}
+                        </span>
+                    </div>
+                `).join('');
+
+                document.getElementById('component-status').innerHTML = statusHtml;
+            };
+
+            // Update status every second
+            setInterval(updateComponentStatus, 1000);
+            updateComponentStatus();
+
+            // Global function to update current page
+            window.setCurrentPage = (page) => {
+                console.log('🔄 Global setCurrentPage called:', page);
+                setCurrentPage(page);
+            };
+        });
+
+        // Render the app
+        ReactDOM.render(<TestApp />, document.getElementById('dashboard-container'));
+    </script>
+</body>
+</html>

@@ -298,17 +298,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                 </div>
 
                 {/* Tabs */}
-                <div className="border-b border-gray-200 px-6">
-                    <div className="flex gap-6">
+                <div className="border-b border-gray-200 px-3 sm:px-6">
+                    <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
-                                className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+                                className={`py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
                                     activeTab === tab
                                         ? 'border-primary-600 text-primary-600'
                                         : 'border-transparent text-gray-600 hover:text-gray-900'
                                 }`}
+                                style={{ minWidth: 'max-content' }}
                             >
                                 <i className={`fas fa-${
                                     tab === 'overview' ? 'info-circle' :
@@ -1111,17 +1112,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onConvertToClient, allProjects
                     <div className="flex-1 overflow-y-auto">
                         <form onSubmit={handleSubmit} className="h-full flex flex-col">
                             {/* Tabs */}
-                            <div className="border-b border-gray-200 px-6">
-                                <div className="flex gap-6">
+                            <div className="border-b border-gray-200 px-3 sm:px-6">
+                                <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                                     {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
                                         <button
                                             key={tab}
                                             onClick={() => handleTabChange(tab)}
-                                            className={`py-3 text-sm font-medium border-b-2 transition-colors ${
+                                            className={`py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
                                                 activeTab === tab
                                                     ? 'border-primary-600 text-primary-600'
                                                     : 'border-transparent text-gray-600 hover:text-gray-900'
                                             }`}
+                                            style={{ minWidth: 'max-content' }}
                                         >
                                             {tab.charAt(0).toUpperCase() + tab.slice(1)}
                                         </button>

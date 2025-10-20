@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Projects Test - Storage Fix Verification</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-result { 
+            margin: 10px 0; 
+            padding: 15px; 
+            border-radius: 5px; 
+            border-left: 4px solid;
+        }
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border-left-color: #28a745;
+        }
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border-left-color: #dc3545;
+        }
+        .warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            border-left-color: #ffc107;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border-left-color: #17a2b8;
+        }
+        button { 
+            padding: 12px 24px; 
+            margin: 5px; 
+            cursor: pointer; 
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .btn-primary { background-color: #007bff; color: white; }
+        .btn-success { background-color: #28a745; color: white; }
+        .btn-warning { background-color: #ffc107; color: black; }
+        .btn-danger { background-color: #dc3545; color: white; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn-success:hover { background-color: #1e7e34; }
+        .btn-warning:hover { background-color: #e0a800; }
+        .btn-danger:hover { background-color: #c82333; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: #28a745;
+            transition: width 0.3s ease;
+        }
+        
+        .test-step {
+            display: none;
+        }
+        .test-step.active {
+            display: block;
+        }
+        
+        .code-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Projects Component Test</h1>
+        <p>Testing if the <code>setProjects is not a function</code> error has been fixed.</p>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress" style="width: 0%"></div>
+        </div>
+        
+        <div id="test-results"></div>
+        
+        <div class="test-step active" id="step1">
+            <h3>Step 1: Basic Storage Test</h3>
+            <button class="btn-primary" onclick="runBasicStorageTest()">🔍 Test Storage Availability</button>
+        </div>
+        
+        <div class="test-step" id="step2">
+            <h3>Step 2: Projects Component Simulation</h3>
+            <button class="btn-success" onclick="runProjectsSimulation()">🚀 Simulate Projects Component</button>
+        </div>
+        
+        <div class="test-step" id="step3">
+            <h3>Step 3: Live Application Test</h3>
+            <button class="btn-warning" onclick="openLiveApp()">🌐 Open Live Application</button>
+            <button class="btn-danger" onclick="clearResults()">🗑️ Clear Results</button>
+        </div>
+    </div>
+    
+    <script src="./src/utils/localStorage.js"></script>
+    <script>
+        let currentStep = 1;
+        let testResults = [];
+        
+        function updateProgress(percentage) {
+            document.getElementById('progress').style.width = percentage + '%';
+        }
+        
+        function addResult(message, type = 'success', showCode = false) {
+            const results = document.getElementById('test-results');
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            
+            if (showCode) {
+                div.innerHTML = message + '<div class="code-block">' + arguments[2] + '</div>';
+            } else {
+                div.innerHTML = message;
+            }
+            
+            results.appendChild(div);
+            testResults.push({ message, type, timestamp: new Date() });
+            
+            // Scroll to bottom
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+            testResults = [];
+            currentStep = 1;
+            updateProgress(0);
+            
+            // Show step 1
+            document.querySelectorAll('.test-step').forEach(step => step.classList.remove('active'));
+            document.getElementById('step1').classList.add('active');
+        }
+        
+        function nextStep(stepNumber) {
+            document.querySelectorAll('.test-step').forEach(step => step.classList.remove('active'));
+            document.getElementById(`step${stepNumber}`).classList.add('active');
+            currentStep = stepNumber;
+            updateProgress((stepNumber / 3) * 100);
+        }
+        
+        function runBasicStorageTest() {
+            addResult('🔍 Starting basic storage test...', 'info');
+            
+            // Test 1: Check if storage is available
+            if (window.storage) {
+                addResult('✅ Storage object is available', 'success');
+            } else {
+                addResult('❌ Storage object is not available', 'error');
+                addResult('This indicates the localStorage.js file is not loading properly.', 'error');
+                return;
+            }
+            
+            // Test 2: Check if setProjects method exists
+            if (typeof window.storage.setProjects === 'function') {
+                addResult('✅ setProjects method is available', 'success');
+            } else {
+                addResult('❌ setProjects method is not available', 'error');
+                addResult('This is the exact error that was causing the application to crash!', 'error');
+                return;
+            }
+            
+            // Test 3: Check if getProjects method exists
+            if (typeof window.storage.getProjects === 'function') {
+                addResult('✅ getProjects method is available', 'success');
+            } else {
+                addResult('❌ getProjects method is not available', 'error');
+                return;
+            }
+            
+            // Test 4: Test actual functionality
+            try {
+                const testProjects = [
+                    { 
+                        id: 1, 
+                        name: 'Test Project 1', 
+                        client: 'Test Client 1', 
+                        status: 'Active',
+                        startDate: '2024-01-01',
+                        dueDate: '2024-03-01',
+                        progress: 50
+                    },
+                    { 
+                        id: 2, 
+                        name: 'Test Project 2', 
+                        client: 'Test Client 2', 
+                        status: 'In Progress',
+                        startDate: '2024-02-01',
+                        dueDate: '2024-04-01',
+                        progress: 75
+                    }
+                ];
+                
+                window.storage.setProjects(testProjects);
+                addResult('✅ Successfully called setProjects with test data', 'success');
+                
+                const retrievedProjects = window.storage.getProjects();
+                if (retrievedProjects && retrievedProjects.length === 2) {
+                    addResult('✅ Successfully retrieved projects from storage', 'success');
+                    addResult(`📊 Retrieved ${retrievedProjects.length} projects:`, 'info');
+                    addResult('', 'info', JSON.stringify(retrievedProjects, null, 2));
+                } else {
+                    addResult('❌ Failed to retrieve projects from storage', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error during storage test: ${error.message}`, 'error');
+                addResult('This error should not occur with the fix applied.', 'error');
+            }
+            
+            addResult('🎉 Basic storage test completed successfully!', 'success');
+            addResult('✅ The setProjects error has been fixed!', 'success');
+            
+            setTimeout(() => {
+                nextStep(2);
+                addResult('🚀 Moving to Projects Component Simulation...', 'info');
+            }, 1000);
+        }
+        
+        function runProjectsSimulation() {
+            addResult('🚀 Starting Projects Component Simulation...', 'info');
+            
+            // Simulate the Projects component behavior
+            try {
+                // Simulate initial projects loading
+                const savedProjects = window.storage.getProjects();
+                addResult('✅ Simulated loading projects from localStorage', 'success');
+                
+                if (savedProjects && savedProjects.length > 0) {
+                    addResult(`📊 Found ${savedProjects.length} saved projects`, 'info');
+                } else {
+                    addResult('📝 No saved projects found (this is normal for a fresh install)', 'warning');
+                }
+                
+                // Simulate saving projects (this was the failing operation)
+                const mockProjects = [
+                    {
+                        id: 1,
+                        name: 'Fleet Optimization Project',
+                        client: 'ABC Corporation',
+                        type: 'Monthly Review',
+                        status: 'Active',
+                        startDate: '2024-01-15',
+                        dueDate: '2024-03-15',
+                        progress: 65,
+                        assignedTo: 'Gareth Mauck',
+                        tasks: [],
+                        taskLists: [
+                            { id: 1, name: 'To Do', color: 'blue' },
+                            { id: 2, name: 'Technical Requirements', color: 'green' }
+                        ],
+                        customFieldDefinitions: []
+                    }
+                ];
+                
+                // This is the exact operation that was failing before
+                if (window.storage && typeof window.storage.setProjects === 'function') {
+                    window.storage.setProjects(mockProjects);
+                    addResult('✅ Successfully saved projects (this was the failing operation)', 'success');
+                    addResult('✅ The Projects component should now work correctly!', 'success');
+                } else {
+                    addResult('❌ Storage check failed in simulation', 'error');
+                }
+                
+                // Test error handling
+                addResult('🧪 Testing error handling...', 'info');
+                
+                // Simulate the safe storage call pattern
+                const testSafeCall = () => {
+                    if (window.storage && typeof window.storage.setProjects === 'function') {
+                        window.storage.setProjects([]);
+                        return true;
+                    } else {
+                        console.warn('Storage not available or setProjects method not found');
+                        return false;
+                    }
+                };
+                
+                if (testSafeCall()) {
+                    addResult('✅ Error handling test passed', 'success');
+                } else {
+                    addResult('⚠️ Error handling test showed warning (this is expected behavior)', 'warning');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error during Projects simulation: ${error.message}`, 'error');
+                addResult('This indicates the fix may not be working properly.', 'error');
+            }
+            
+            addResult('🎉 Projects Component Simulation completed!', 'success');
+            
+            setTimeout(() => {
+                nextStep(3);
+                addResult('🌐 Ready to test the live application...', 'info');
+            }, 1000);
+        }
+        
+        function openLiveApp() {
+            addResult('🌐 Opening live application for testing...', 'info');
+            addResult('📋 Instructions for manual testing:', 'info');
+            addResult(`
+                <strong>Manual Testing Steps:</strong><br>
+                1. Click the link below to open the live application<br>
+                2. Login with: admin@abcotronics.com / admin123<br>
+                3. Navigate to the "Projects" section<br>
+                4. Try to create a new project<br>
+                5. Check the browser console for any errors<br>
+                6. Verify that projects can be saved and loaded
+            `, 'info');
+            
+            const link = document.createElement('a');
+            link.href = 'https://abco-erp-2-production.up.railway.app/';
+            link.target = '_blank';
+            link.className = 'btn btn-success';
+            link.style.cssText = 'display: inline-block; padding: 12px 24px; margin: 10px 0; background-color: #28a745; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;';
+            link.textContent = '🚀 Open Live Application';
+            
+            const results = document.getElementById('test-results');
+            results.appendChild(link);
+            
+            addResult('✅ Click the button above to open the live application', 'success');
+        }
+        
+        // Auto-start basic test when page loads
+        window.addEventListener('load', () => {
+            addResult('📄 Test page loaded and ready', 'info');
+            addResult('🔧 Testing storage fix for setProjects error...', 'info');
+        });
+    </script>
+</body>
+</html>

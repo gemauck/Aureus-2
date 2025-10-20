@@ -633,18 +633,19 @@ const ClientDetailModal = ({ client, onSave, onClose, allProjects, onNavigateToP
 
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
-                    <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`}>
+                    <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
                         {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'contracts', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
-                                className={`${isFullPage ? 'py-4 px-2' : 'py-3'} text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                                className={`${isFullPage ? 'py-4 px-2' : 'py-3'} text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
                                     activeTab === tab
                                         ? 'border-primary-600 text-primary-600'
                                         : isDark 
                                             ? 'border-transparent text-gray-400 hover:text-gray-200' 
                                             : 'border-transparent text-gray-600 hover:text-gray-900'
                                 }`}
+                                style={{ minWidth: 'max-content' }}
                             >
                                 <i className={`fas fa-${
                                     tab === 'overview' ? 'info-circle' :
