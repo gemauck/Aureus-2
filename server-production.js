@@ -1,6 +1,7 @@
 // Production Railway ERP Server with Database
 import express from 'express'
 import path from 'path'
+import fs from 'fs'
 import { fileURLToPath } from 'url'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
@@ -8,11 +9,64 @@ import jwt from 'jsonwebtoken'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+const rootDir = __dirname
+const apiDir = path.join(__dirname, 'api')
 const app = express()
 const PORT = process.env.PORT || 3000
 
 // Initialize Prisma
 const prisma = new PrismaClient()
+
+// Dynamic API handler loading
+function toHandlerPath(urlPath) {
+  const parts = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+  console.log(`🔍 Parsing URL path: "${urlPath}" -> parts: [${parts.join(', ')}]`)
+  
+  if (parts.length === 0) {
+    return path.join(apiDir, 'health.js')
+  }
+
+  const candidates = []
+  
+  // Direct file matches (e.g., /api/leads -> api/leads.js)
+  const directFile = path.join(apiDir, `${parts.join('/')}.js`)
+  candidates.push(directFile)
+  
+  // Nested directory matches
+  if (parts.length > 1) {
+    const nestedIndex = path.join(apiDir, ...parts, 'index.js')
+    const nestedFile = path.join(apiDir, ...parts.slice(0, -1), `${parts[parts.length - 1]}.js`)
+    candidates.push(nestedIndex)
+    candidates.push(nestedFile)
+  }
+  
+  // Dynamic route matches (e.g., /api/clients/123 -> api/clients/[id].js)
+  if (parts.length === 2) {
+    const dynamicFile = path.join(apiDir, parts[0], '[id].js')
+    candidates.push(dynamicFile)
+  }
+  
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) {
+      console.log(`✅ Found handler: ${path.relative(apiDir, candidate)} for ${urlPath}`)
+      return candidate
+    }
+  }
+  
+  console.log(`❌ No handler found for: ${urlPath}`)
+  return null
+}
+
+async function loadHandler(handlerPath) {
+  if (!handlerPath) return null
+  try {
+    const module = await import(`file://${handlerPath}`)
+    return module.default
+  } catch (error) {
+    console.error(`Failed to load handler ${handlerPath}:`, error)
+    return null
+  }
+}
 
 // Middleware
 app.use(express.json({ limit: '10mb' }))
@@ -72,342 +126,37 @@ const authRequired = (req, res, next) => {
   }
 }
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    platform: 'railway',
-    version: '1.0.0',
-    environment: process.env.NODE_ENV || 'production'
-  })
-})
-
-// Login endpoint
-app.post('/api/auth/login', async (req, res) => {
+// Dynamic API routing middleware - handles all API endpoints
+app.use('/api', async (req, res) => {
   try {
-    console.log('🔐 Login attempt:', req.body)
+    const handlerPath = toHandlerPath(req.url)
+    console.log(`🔍 Railway API: ${req.method} ${req.url} -> ${handlerPath ? path.relative(rootDir, handlerPath) : 'not found'}`)
     
-    const { email, password } = req.body || {}
-    
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' })
+    const handler = await loadHandler(handlerPath)
+    if (!handler) {
+      console.log(`❌ No handler found for: ${req.method} ${req.url}`)
+      return res.status(404).json({ error: 'API endpoint not found' })
     }
     
-    // Find user in database
-    const user = await prisma.user.findUnique({ 
-      where: { email } 
-    })
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
     
-    if (!user || !user.passwordHash) {
-      return res.status(401).json({ error: 'Invalid credentials' })
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end()
     }
     
-    // Verify password
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    
-    if (!valid) {
-      return res.status(401).json({ error: 'Invalid credentials' })
-    }
-    
-    // Generate JWT token
-    const payload = { sub: user.id, email: user.email, role: user.role }
-    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
-    
-    res.json({ 
-      data: {
-        accessToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        }
-      }
-    })
-    
+    console.log(`✅ Executing handler for: ${req.method} ${req.url}`)
+    await handler(req, res)
   } catch (error) {
-    console.error('Login error:', error)
-    res.status(500).json({ error: 'Login failed', details: error.message })
+    console.error('Railway API Error:', error)
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error', details: error.message })
+    }
   }
 })
 
-// Refresh endpoint
-app.post('/api/auth/refresh', async (req, res) => {
-  try {
-    const refreshToken = req.cookies?.refreshToken
-    if (!refreshToken) {
-      return res.status(401).json({ error: 'No refresh token' })
-    }
-    
-    // For now, just return a new access token (simplified)
-    const payload = { sub: 'cmguk4zd30000141hik9uicpo', email: 'admin@abcotronics.com', role: 'admin' }
-    const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' })
-    
-    res.json({ data: { accessToken } })
-  } catch (error) {
-    console.error('Refresh error:', error)
-    res.status(500).json({ error: 'Refresh failed', details: error.message })
-  }
-})
-
-// Me endpoint
-app.get('/api/me', authRequired, async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({ 
-      where: { id: req.user.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        provider: true,
-        lastLoginAt: true
-      }
-    })
-    
-    if (!user) {
-      return res.status(401).json({ error: 'User not found' })
-    }
-    
-    res.json({ user })
-  } catch (error) {
-    console.error('Me endpoint error:', error)
-    res.status(500).json({ error: 'Failed to get user info', details: error.message })
-  }
-})
-
-// List clients endpoint
-app.get('/api/clients', authRequired, async (req, res) => {
-  try {
-    console.log('📋 Listing clients for user:', req.user.sub)
-    
-    const clients = await prisma.client.findMany({ 
-      where: { ownerId: req.user.sub },
-      orderBy: { createdAt: 'desc' } 
-    })
-    
-    console.log('✅ Found clients:', clients.length)
-    res.json({ data: { clients } })
-  } catch (error) {
-    console.error('Error listing clients:', error)
-    res.status(500).json({ error: 'Failed to list clients', details: error.message })
-  }
-})
-
-// Create client endpoint
-app.post('/api/clients', authRequired, async (req, res) => {
-  try {
-    console.log('📝 Creating client:', req.body)
-    
-    const clientData = {
-      name: req.body.name,
-      type: req.body.type || 'client', // Handle type field for leads vs clients
-      industry: req.body.industry || 'Other',
-      status: req.body.status || 'active',
-      revenue: parseFloat(req.body.revenue) || 0,
-      lastContact: req.body.lastContact ? new Date(req.body.lastContact) : new Date(),
-      address: req.body.address || '',
-      website: req.body.website || '',
-      notes: req.body.notes || '',
-      contacts: Array.isArray(req.body.contacts) ? req.body.contacts : [],
-      followUps: Array.isArray(req.body.followUps) ? req.body.followUps : [],
-      projectIds: Array.isArray(req.body.projectIds) ? req.body.projectIds : [],
-      comments: Array.isArray(req.body.comments) ? req.body.comments : [],
-      sites: Array.isArray(req.body.sites) ? req.body.sites : [],
-      contracts: Array.isArray(req.body.contracts) ? req.body.contracts : [],
-      activityLog: Array.isArray(req.body.activityLog) ? req.body.activityLog : [],
-      billingTerms: typeof req.body.billingTerms === 'object' ? req.body.billingTerms : {
-        paymentTerms: 'Net 30',
-        billingFrequency: 'Monthly',
-        currency: 'ZAR',
-        retainerAmount: 0,
-        taxExempt: false,
-        notes: ''
-      },
-      ownerId: req.user.sub
-    }
-    
-    const client = await prisma.client.create({ data: clientData })
-    console.log('✅ Client created:', client.id)
-    
-    res.json({ data: { client } })
-  } catch (error) {
-    console.error('Error creating client:', error)
-    res.status(500).json({ error: 'Failed to create client', details: error.message })
-  }
-})
-
-// Update client endpoint
-app.patch('/api/clients/:id', authRequired, async (req, res) => {
-  try {
-    const clientId = req.params.id
-    console.log('📝 Updating client:', clientId, req.body)
-    
-    const updateData = {
-      name: req.body.name,
-      industry: req.body.industry,
-      status: req.body.status,
-      revenue: req.body.revenue,
-      lastContact: req.body.lastContact ? new Date(req.body.lastContact) : undefined,
-      address: req.body.address,
-      website: req.body.website,
-      notes: req.body.notes,
-      contacts: Array.isArray(req.body.contacts) ? req.body.contacts : undefined,
-      followUps: Array.isArray(req.body.followUps) ? req.body.followUps : undefined,
-      projectIds: Array.isArray(req.body.projectIds) ? req.body.projectIds : undefined,
-      comments: Array.isArray(req.body.comments) ? req.body.comments : undefined,
-      sites: Array.isArray(req.body.sites) ? req.body.sites : undefined,
-      contracts: Array.isArray(req.body.contracts) ? req.body.contracts : undefined,
-      activityLog: Array.isArray(req.body.activityLog) ? req.body.activityLog : undefined,
-      billingTerms: typeof req.body.billingTerms === 'object' ? req.body.billingTerms : undefined
-    }
-    
-    // Remove undefined values
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] === undefined) {
-        delete updateData[key]
-      }
-    })
-    
-    const client = await prisma.client.update({
-      where: { id: clientId },
-      data: updateData
-    })
-    
-    console.log('✅ Client updated:', client.id)
-    res.json({ data: { client } })
-  } catch (error) {
-    console.error('Error updating client:', error)
-    res.status(500).json({ error: 'Failed to update client', details: error.message })
-  }
-})
-
-// Delete client endpoint
-app.delete('/api/clients/:id', authRequired, async (req, res) => {
-  try {
-    const clientId = req.params.id
-    console.log('🗑️ Deleting client:', clientId)
-    
-    await prisma.client.delete({ where: { id: clientId } })
-    
-    console.log('✅ Client deleted:', clientId)
-    res.json({ message: 'Client deleted successfully' })
-  } catch (error) {
-    console.error('Error deleting client:', error)
-    res.status(500).json({ error: 'Failed to delete client', details: error.message })
-  }
-})
-
-// Get single client endpoint
-app.get('/api/clients/:id', authRequired, async (req, res) => {
-  try {
-    const clientId = req.params.id
-    console.log('📖 Getting client:', clientId)
-    
-    const client = await prisma.client.findUnique({ 
-      where: { id: clientId } 
-    })
-    
-    if (!client) {
-      return res.status(404).json({ error: 'Client not found' })
-    }
-    
-    res.json({ data: { client } })
-  } catch (error) {
-    console.error('Error getting client:', error)
-    res.status(500).json({ error: 'Failed to get client', details: error.message })
-  }
-})
-
-// Users management endpoint
-app.get('/api/users', authRequired, async (req, res) => {
-  try {
-    console.log('👥 Getting users for admin:', req.user.sub)
-    
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' })
-    }
-
-    // Get all users
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        lastLoginAt: true,
-        invitedBy: true
-      },
-      orderBy: { createdAt: 'desc' }
-    })
-
-    // Get all invitations
-    const invitations = await prisma.invitation.findMany({
-      orderBy: { createdAt: 'desc' }
-    })
-
-    console.log('✅ Found users:', users.length)
-    res.json({
-      users,
-      invitations
-    })
-  } catch (error) {
-    console.error('Error getting users:', error)
-    res.status(500).json({ error: 'Failed to get users', details: error.message })
-  }
-})
-
-// Delete user endpoint
-app.delete('/api/users', authRequired, async (req, res) => {
-  try {
-    console.log('🗑️ Deleting user:', req.body)
-    
-    // Check if user is admin
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' })
-    }
-
-    const { userId } = req.body || {}
-    
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' })
-    }
-
-    // Prevent deleting own account
-    if (req.user.sub === userId) {
-      return res.status(400).json({ error: 'Cannot delete your own account' })
-    }
-
-    // Delete user
-    await prisma.user.delete({
-      where: { id: userId }
-    })
-
-    console.log('✅ User deleted:', userId)
-    res.json({ success: true, message: 'User deleted successfully' })
-  } catch (error) {
-    console.error('Error deleting user:', error)
-    res.status(500).json({ error: 'Failed to delete user', details: error.message })
-  }
-})
-
-// Logout endpoint
-app.post('/api/auth/logout', (req, res) => {
-  try {
-    // Clear refresh token cookie
-    res.setHeader('Set-Cookie', [
-      `refreshToken=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`
-    ])
-    res.json({ message: 'Logged out successfully' })
-  } catch (error) {
-    console.error('Logout error:', error)
-    res.status(500).json({ error: 'Logout failed', details: error.message })
-  }
-})
+// All API endpoints are now handled by the dynamic routing middleware above
 
 // Catch-all route for SPA
 app.get('*', (req, res) => {
