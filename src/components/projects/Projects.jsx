@@ -4,82 +4,8 @@ const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
 
-const initialProjects = [
-    { 
-        id: 1, 
-        name: 'Exxaro Mining Fleet Optimization', 
-        client: 'Exxaro', 
-        clientType: 'client',
-        type: 'Monthly Review', 
-        status: 'Active', 
-        startDate: '2024-01-15', 
-        dueDate: '2024-03-15', 
-        progress: 65, 
-        assignedTo: 'Gareth Mauck',
-        tasks: [],
-        taskLists: [
-            { id: 1, name: 'To Do', color: 'blue' },
-            { id: 2, name: 'Technical Requirements', color: 'green' },
-            { id: 3, name: 'Client Deliverables', color: 'purple' }
-        ],
-        customFieldDefinitions: []
-    },
-    { 
-        id: 2, 
-        name: 'RGN Lead Assessment Project', 
-        client: 'RGN', 
-        clientType: 'lead',
-        type: 'Assessment', 
-        status: 'Planning', 
-        startDate: '2024-02-01', 
-        dueDate: '2024-02-28', 
-        progress: 20, 
-        assignedTo: 'David Buttemer',
-        tasks: [],
-        taskLists: [
-            { id: 1, name: 'Initial Assessment', color: 'blue' },
-            { id: 2, name: 'Lead Qualification', color: 'yellow' }
-        ],
-        customFieldDefinitions: []
-    },
-    { 
-        id: 3, 
-        name: 'Annual Fuel Audit', 
-        client: 'XYZ Industries', 
-        clientType: 'client',
-        type: 'Audit', 
-        status: 'Active', 
-        startDate: '2024-02-01', 
-        dueDate: '2024-02-28', 
-        progress: 90, 
-        assignedTo: 'David Buttemer',
-        tasks: [],
-        taskLists: [
-            { id: 1, name: 'To Do', color: 'blue' }
-        ],
-        customFieldDefinitions: []
-    },
-    { 
-        id: 4, 
-        name: 'Cost Analysis Study', 
-        client: 'Logistics Ltd', 
-        clientType: 'client',
-        type: 'Monthly Review', 
-        status: 'Active', 
-        startDate: '2024-03-01', 
-        dueDate: '2024-04-30', 
-        progress: 25, 
-        assignedTo: 'Gareth Mauck',
-        tasks: [],
-        taskLists: [
-            { id: 1, name: 'Main Tasks', color: 'blue' }
-        ],
-        customFieldDefinitions: []
-    }
-];
-
 const Projects = () => {
-    const [projects, setProjects] = useState(initialProjects);
+    const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
     const [viewingProject, setViewingProject] = useState(null);
@@ -111,30 +37,37 @@ const Projects = () => {
     useEffect(() => {
         const loadProjects = async () => {
             try {
-                console.log('🔄 Projects: Loading projects from data service');
-                const savedProjects = await window.dataService.getProjects();
-                if (savedProjects && savedProjects.length > 0) {
-                    setProjects(savedProjects);
-                    
-                    // Sync existing projects with clients
-                    syncProjectsWithClients(savedProjects);
-                    
-                    // Check if there's a project to open immediately after loading
-                    const projectIdToOpen = sessionStorage.getItem('openProjectId');
-                    if (projectIdToOpen) {
-                        const project = savedProjects.find(p => p.id === parseInt(projectIdToOpen));
-                        if (project) {
-                            // Open the project immediately
-                            setViewingProject(project);
-                            // Clear the flag
-                            sessionStorage.removeItem('openProjectId');
-                        }
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    console.warn('⚠️ Projects: No authentication token found');
+                    setProjects([]);
+                    return;
+                }
+
+                console.log('🔄 Projects: Loading projects from database');
+                const response = await window.DatabaseAPI.getProjects();
+                const apiProjects = response?.data || [];
+                console.log('📡 Database returned projects:', apiProjects.length);
+                
+                setProjects(apiProjects);
+                
+                // Sync existing projects with clients
+                syncProjectsWithClients(apiProjects);
+                
+                // Check if there's a project to open immediately after loading
+                const projectIdToOpen = sessionStorage.getItem('openProjectId');
+                if (projectIdToOpen) {
+                    const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
+                    if (project) {
+                        // Open the project immediately
+                        setViewingProject(project);
+                        // Clear the flag
+                        sessionStorage.removeItem('openProjectId');
                     }
-                } else {
-                    console.log('📝 Projects: No saved projects found, using initial data');
                 }
             } catch (error) {
-                console.error('❌ Projects: Error loading projects:', error);
+                console.error('❌ Projects: Error loading projects from database:', error);
+                setProjects([]);
             }
         };
 
@@ -214,42 +147,80 @@ const Projects = () => {
         }
     };
 
-    const handleSaveProject = (projectData) => {
-        if (selectedProject) {
-            // Editing existing project - preserve tasks and lists
-            const updatedProjects = projects.map(p => 
-                p.id === selectedProject.id 
-                    ? { ...p, ...projectData }
-                    : p
-            );
-            setProjects(updatedProjects);
-            
-            // Update client's projectIds if client changed
-            if (projectData.client && projectData.client !== selectedProject.client) {
-                updateClientProjectIds(selectedProject.client, projectData.client, selectedProject.id);
+    const handleSaveProject = async (projectData) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('No authentication token found. Please log in.');
+                return;
             }
-        } else {
-            // Creating new project - start with empty tasks
-            const newProject = {
-                id: Math.max(0, ...projects.map(p => p.id)) + 1,
-                ...projectData,
-                status: 'Active',
-                progress: 0,
-                tasks: [], // Empty tasks for new project
-                taskLists: [ // Default task lists
-                    { id: 1, name: 'To Do', color: 'blue' }
-                ],
-                customFieldDefinitions: [] // Empty custom fields
-            };
-            setProjects([...projects, newProject]);
-            
-            // Update client's projectIds for new project
-            if (projectData.client) {
-                updateClientProjectIds(null, projectData.client, newProject.id);
+
+            if (selectedProject) {
+                // Editing existing project
+                console.log('🌐 Updating project in database:', selectedProject.id);
+                const updatedProject = { ...selectedProject, ...projectData };
+                const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatedProject);
+                const updatedProjectFromAPI = apiResponse?.data || apiResponse;
+                
+                if (updatedProjectFromAPI && updatedProjectFromAPI.id) {
+                    const updatedProjects = projects.map(p => 
+                        p.id === selectedProject.id ? updatedProjectFromAPI : p
+                    );
+                    setProjects(updatedProjects);
+                } else {
+                    const updatedProjects = projects.map(p => 
+                        p.id === selectedProject.id ? updatedProject : p
+                    );
+                    setProjects(updatedProjects);
+                }
+                
+                // Update client's projectIds if client changed
+                if (projectData.client && projectData.client !== selectedProject.client) {
+                    updateClientProjectIds(selectedProject.client, projectData.client, selectedProject.id);
+                }
+            } else {
+                // Creating new project
+                const newProject = {
+                    ...projectData,
+                    status: 'Active',
+                    progress: 0,
+                    tasks: [], // Empty tasks for new project
+                    taskLists: [ // Default task lists
+                        { id: 1, name: 'To Do', color: 'blue' }
+                    ],
+                    customFieldDefinitions: [] // Empty custom fields
+                };
+                
+                console.log('🌐 Creating project in database:', newProject);
+                const apiResponse = await window.DatabaseAPI.createProject(newProject);
+                const savedProject = apiResponse?.data || apiResponse;
+                
+                if (savedProject && savedProject.id) {
+                    setProjects([...projects, savedProject]);
+                    
+                    // Update client's projectIds for new project
+                    if (projectData.client) {
+                        updateClientProjectIds(null, projectData.client, savedProject.id);
+                    }
+                } else {
+                    // Fallback to local state if API doesn't return the project
+                    const fallbackProject = {
+                        id: Math.max(0, ...projects.map(p => p.id)) + 1,
+                        ...newProject
+                    };
+                    setProjects([...projects, fallbackProject]);
+                    
+                    if (projectData.client) {
+                        updateClientProjectIds(null, projectData.client, fallbackProject.id);
+                    }
+                }
             }
+            setShowModal(false);
+            setSelectedProject(null);
+        } catch (error) {
+            console.error('❌ Error saving project:', error);
+            alert('Failed to save project: ' + error.message);
         }
-        setShowModal(false);
-        setSelectedProject(null);
     };
 
     // Helper function to update client's projectIds
@@ -289,14 +260,30 @@ const Projects = () => {
         }
     };
 
-    const handleDeleteProject = (projectId) => {
+    const handleDeleteProject = async (projectId) => {
         if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-            const projectToDelete = projects.find(p => p.id === projectId);
-            setProjects(projects.filter(p => p.id !== projectId));
-            
-            // Remove project from client's projectIds
-            if (projectToDelete && projectToDelete.client) {
-                updateClientProjectIds(projectToDelete.client, null, projectId);
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    alert('No authentication token found. Please log in.');
+                    return;
+                }
+
+                const projectToDelete = projects.find(p => p.id === projectId);
+                
+                console.log('🌐 Deleting project from database:', projectId);
+                await window.DatabaseAPI.deleteProject(projectId);
+                
+                // Update local state
+                setProjects(projects.filter(p => p.id !== projectId));
+                
+                // Remove project from client's projectIds
+                if (projectToDelete && projectToDelete.client) {
+                    updateClientProjectIds(projectToDelete.client, null, projectId);
+                }
+            } catch (error) {
+                console.error('❌ Error deleting project:', error);
+                alert('Failed to delete project: ' + error.message);
             }
         }
     };
@@ -530,6 +517,7 @@ const Projects = () => {
                     <ProjectModal
                         project={selectedProject}
                         onSave={handleSaveProject}
+                        onDelete={handleDeleteProject}
                         onClose={() => {
                             setShowModal(false);
                             setSelectedProject(null);

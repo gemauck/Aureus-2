@@ -10,7 +10,7 @@ const ClientsMobile = () => {
         const savedClients = storage.getClients();
         return savedClients || [];
     });
-    const [leads, setLeads] = useState(initialLeads);
+    const [leads, setLeads] = useState([]); // Leads are database-only
     const [projects, setProjects] = useState([]);
     const [isEditing, setIsEditing] = useState(false);
     const [selectedClient, setSelectedClient] = useState(null);
@@ -70,9 +70,7 @@ const ClientsMobile = () => {
         storage.setClients(clients);
     }, [clients]);
     
-    useEffect(() => {
-        storage.setLeads(leads);
-    }, [leads]);
+    // Leads are database-only, no localStorage sync needed
 
     const handleSaveClient = async (clientFormData) => {
         try {
@@ -512,14 +510,51 @@ const ClientsMobile = () => {
                         </div>
                         <LeadDetailModal
                             lead={selectedLead}
-                            onSave={(leadData) => {
-                                if (selectedLead) {
-                                    const updated = leads.map(l => l.id === selectedLead.id ? leadData : l);
-                                    setLeads(updated);
-                                } else {
-                                    setLeads([...leads, leadData]);
+                            onSave={async (leadData) => {
+                                try {
+                                    const token = storage.getToken();
+                                    if (!token) {
+                                        alert('No authentication token found. Please log in.');
+                                        return;
+                                    }
+
+                                    if (selectedLead) {
+                                        // Update existing lead
+                                        const updatedLead = { ...selectedLead, ...leadData };
+                                        const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                                        const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                                        
+                                        if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                                            const updated = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
+                                            setLeads(updated);
+                                        } else {
+                                            const updated = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                                            setLeads(updated);
+                                        }
+                                    } else {
+                                        // Create new lead
+                                        const newLead = {
+                                            ...leadData,
+                                            type: 'lead',
+                                            lastContact: new Date().toISOString().split('T')[0],
+                                            activityLog: [{
+                                                id: Date.now(),
+                                                type: 'Lead Created',
+                                                description: `Lead created: ${leadData.name}`,
+                                                timestamp: new Date().toISOString(),
+                                                user: 'Current User'
+                                            }]
+                                        };
+                                        
+                                        const apiResponse = await window.api.createLead(newLead);
+                                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                                        setLeads([...leads, savedLead]);
+                                    }
+                                    setIsEditing(false);
+                                } catch (error) {
+                                    console.error('Failed to save lead:', error);
+                                    alert('Failed to save lead: ' + error.message);
                                 }
-                                setIsEditing(false);
                             }}
                             onClose={() => {
                                 setViewMode('leads');

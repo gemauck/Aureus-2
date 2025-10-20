@@ -8,8 +8,6 @@ const LeadDetailModal = window.LeadDetailModal;
 const safeStorage = {
     getClients: () => storage.getClients ? safeStorage.getClients() : null,
     setClients: (data) => storage.setClients ? safeStorage.setClients(data) : null,
-    getLeads: () => storage.getLeads ? safeStorage.getLeads() : null,
-    setLeads: (data) => storage.setLeads ? safeStorage.setLeads(data) : null,
     getProjects: () => storage.getProjects ? safeStorage.getProjects() : null,
     setProjects: (data) => storage.setProjects ? safeStorage.setProjects(data) : null,
 };
@@ -102,177 +100,6 @@ const initialClients = [
         sites: [],
         opportunities: [],
         activityLog: []
-    }
-];
-
-const initialLeads = [
-    {
-        id: 101,
-        name: 'RGN',
-        industry: 'Mining',
-        status: 'Potential',
-        source: 'Website',
-        stage: 'Awareness',
-        notes: 'Potential lead for fuel management services in mining operations',
-        contacts: [
-            {
-                id: 101,
-                name: 'RGN Contact',
-                role: 'Operations Manager',
-                department: 'Operations',
-                email: 'contact@rgn.co.za',
-                phone: '011-555-0201',
-                isPrimary: true
-            }
-        ],
-        followUps: [],
-        projectIds: [],
-        comments: [],
-        activityLog: [],
-        firstContactDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 5 days ago
-    },
-    {
-        id: 102,
-        name: 'Green Fleet Solutions',
-        industry: 'Forestry',
-        status: 'Potential',
-        source: 'Website',
-        stage: 'Awareness',
-        notes: 'Inquiry about fuel monitoring systems for 50 vehicle fleet',
-        contacts: [
-            {
-                id: 102,
-                name: 'Michael Chen',
-                role: 'Fleet Operations Manager',
-                department: 'Operations',
-                email: 'michael@greenfleet.co.za',
-                phone: '011-555-0202',
-                isPrimary: true
-            }
-        ],
-        followUps: [],
-        projectIds: [],
-        comments: [],
-        activityLog: [],
-        firstContactDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 5 days ago
-    },
-    {
-        id: 102,
-        name: 'TransLogix SA',
-        industry: 'Agriculture',
-        status: 'Active',
-        source: 'Referral',
-        stage: 'Interest',
-        notes: 'Interested in GPS tracking and fuel telemetry for their logistics division',
-        contacts: [
-            {
-                id: 102,
-                name: 'Nomsa Dlamini',
-                role: 'Technology Director',
-                department: 'IT',
-                email: 'nomsa.dlamini@translogix.co.za',
-                phone: '021-555-0302',
-                isPrimary: true
-            }
-        ],
-        followUps: [
-            {
-                id: 1001,
-                date: '2024-03-15',
-                time: '10:00',
-                type: 'Demo',
-                description: 'Product demonstration for management team',
-                completed: false,
-                createdAt: new Date().toISOString()
-            }
-        ],
-        projectIds: [],
-        comments: [],
-        activityLog: [],
-        firstContactDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 14 days ago
-    },
-    {
-        id: 103,
-        name: 'Coastal Mining Corp',
-        industry: 'Mining',
-        status: 'Active',
-        source: 'Trade Show',
-        stage: 'Desire',
-        notes: 'Ready to move forward with implementation. Requires 100+ units',
-        contacts: [
-            {
-                id: 103,
-                name: 'David van der Merwe',
-                role: 'Procurement Manager',
-                department: 'Procurement',
-                email: 'dvdmerwe@coastalmining.co.za',
-                phone: '031-555-0403',
-                isPrimary: true
-            }
-        ],
-        followUps: [
-            {
-                id: 1002,
-                date: '2024-03-12',
-                time: '14:30',
-                type: 'Proposal Review',
-                description: 'Final proposal presentation to board',
-                completed: false,
-                createdAt: new Date().toISOString()
-            }
-        ],
-        projectIds: [],
-        comments: [
-            {
-                id: 2001,
-                text: 'Received positive feedback on technical specifications',
-                createdAt: new Date(Date.now() - 86400000).toISOString(),
-                createdBy: 'Gareth Mauck'
-            }
-        ],
-        activityLog: []
-    },
-    {
-        id: 104,
-        name: 'Express Couriers Ltd',
-        industry: 'Other',
-        status: 'Active',
-        source: 'LinkedIn',
-        stage: 'Action',
-        notes: 'Contract negotiations in final stage. Ready to sign this week',
-        contacts: [
-            {
-                id: 104,
-                name: 'Sarah Mthembu',
-                role: 'COO',
-                department: 'Executive',
-                email: 'sarah@expresscouriers.co.za',
-                phone: '011-555-0504',
-                isPrimary: true
-            }
-        ],
-        followUps: [
-            {
-                id: 1003,
-                date: '2024-03-11',
-                time: '09:00',
-                type: 'Meeting',
-                description: 'Contract signing and project kickoff',
-                completed: false,
-                createdAt: new Date().toISOString()
-            }
-        ],
-        projectIds: [],
-        comments: [
-            {
-                id: 2002,
-                text: 'Legal team approved contract terms',
-                createdAt: new Date(Date.now() - 172800000).toISOString(),
-                createdBy: 'David Buttemer'
-            }
-        ],
-        activityLog: [],
-        firstContactDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 30 days ago
     }
 ];
 
@@ -373,7 +200,7 @@ const Clients = () => {
                 if (message.dataType === 'leads') {
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
                     setLeads(processedLeads);
-                    safeStorage.setLeads(processedLeads);
+                    // Leads are database-only, no localStorage sync
                 }
             }
         };
@@ -499,11 +326,11 @@ const Clients = () => {
                     setLeads(leadsOnly);
                     console.log('✅ Clients and leads set from API');
                     
-                    // Save processed data to localStorage for offline access
+                    // Save processed data to localStorage for offline access (leads are database-only)
                     // This ensures all users have the same data cached
                     safeStorage.setClients(clientsOnly);
-                    safeStorage.setLeads(leadsOnly);
-                    console.log('✅ Clients and leads saved to localStorage for consistency');
+                    // Leads are database-only, no localStorage sync
+                    console.log('✅ Clients saved to localStorage for consistency');
                     
                     // Log the separation for debugging
                     console.log('📊 Data separation summary:');
@@ -548,49 +375,26 @@ const Clients = () => {
         // No localStorage persistence for projects
     };
 
-    // Load leads from API and localStorage
+    // Load leads from database only
     const loadLeads = async () => {
         try {
             const token = window.storage?.getToken?.();
             if (token && window.api?.getLeads) {
-                try {
-                    console.log('🔄 Loading leads from API...');
-                    const apiResponse = await window.api.getLeads();
-                    const apiLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
-                    console.log('📡 API returned leads:', apiLeads.length);
-                    
-                    // Always use API data, even if empty (this ensures deletions persist)
-                    setLeads(apiLeads);
-                    safeStorage.setLeads(apiLeads);
-                    console.log('✅ Leads loaded from API (including empty result)');
-                    return;
-                } catch (error) {
-                    console.warn('⚠️ Failed to load leads from API:', error);
-                    // Only fall back to localStorage if API completely fails
-                    const savedLeads = safeStorage.getLeads();
-                    if (savedLeads && savedLeads.length > 0) {
-                        setLeads(savedLeads);
-                        console.log('✅ Leads loaded from localStorage (API fallback)');
-                    } else {
-                        setLeads([]);
-                        console.log('✅ No leads found (empty state)');
-                    }
-                    return;
-                }
-            }
-            
-            // No token or API available - use localStorage only
-            const savedLeads = safeStorage.getLeads();
-            if (savedLeads && savedLeads.length > 0) {
-                setLeads(savedLeads);
-                console.log('✅ Leads loaded from localStorage (no API)');
+                console.log('🔄 Loading leads from database...');
+                const apiResponse = await window.api.getLeads();
+                const apiLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+                console.log('📡 Database returned leads:', apiLeads.length);
+                
+                // Only use database data
+                setLeads(apiLeads);
+                console.log('✅ Leads loaded from database');
             } else {
+                console.warn('⚠️ No authentication token or API available');
                 setLeads([]);
-                console.log('✅ No leads found (empty state)');
+                console.log('✅ No leads found (no authentication)');
             }
         } catch (error) {
-            console.error('❌ Error loading leads:', error);
-            // Fallback to empty state to avoid loading stale data
+            console.error('❌ Error loading leads from database:', error);
             setLeads([]);
         }
     };
@@ -624,9 +428,7 @@ const Clients = () => {
         safeStorage.setClients(clients);
     }, [clients]);
     
-    useEffect(() => {
-        safeStorage.setLeads(leads);
-    }, [leads]);
+    // Leads are now database-only, no localStorage sync needed
 
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         console.log('=== SAVE CLIENT DEBUG ===');
@@ -841,52 +643,35 @@ const Clients = () => {
         console.log('Selected lead:', selectedLead);
         
         try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                throw new Error('No authentication token found. Please log in.');
+            }
+
             if (selectedLead) {
                 // Update existing lead
                 const updatedLead = { ...selectedLead, ...leadFormData };
                 
-                // Try to save to database first
-                const token = window.storage?.getToken?.();
-                if (token && window.api?.updateLead) {
-                    try {
-                        console.log('🌐 Calling API to update lead:', updatedLead.id);
-                        const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
-                        const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                        console.log('✅ Lead updated in database');
-                        
-                        // Use the updated lead from API if available
-                        if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
-                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
-                            setLeads(updatedLeads);
-                            setSelectedLead(updatedLeadFromAPI);
-                            window.storage?.setLeads?.(updatedLeads);
-                        } else {
-                            // Fallback to local update
-                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                            setLeads(updatedLeads);
-                            setSelectedLead(updatedLead);
-                            window.storage?.setLeads?.(updatedLeads);
-                        }
-                    } catch (error) {
-                        console.warn('⚠️ Failed to update lead in database, saving to localStorage:', error);
-                        // Fallback to localStorage
-                        const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                        setLeads(updatedLeads);
-                        setSelectedLead(updatedLead);
-                        window.storage?.setLeads?.(updatedLeads);
-                    }
+                console.log('🌐 Calling API to update lead:', updatedLead.id);
+                const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                console.log('✅ Lead updated in database');
+                
+                // Use the updated lead from API
+                if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
+                    setLeads(updatedLeads);
+                    setSelectedLead(updatedLeadFromAPI);
                 } else {
-                    // No API, save to localStorage only
+                    // Fallback to local update if API doesn't return the lead
                     const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                     setLeads(updatedLeads);
                     setSelectedLead(updatedLead);
-                    window.storage?.setLeads?.(updatedLeads);
                 }
-                console.log('✅ Lead updated and saved to localStorage');
+                console.log('✅ Lead updated');
             } else {
                 // Create new lead
                 const newLead = {
-                    id: Math.max(100, ...leads.map(l => l.id)) + 1,
                     ...leadFormData,
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
@@ -899,35 +684,15 @@ const Clients = () => {
                     }]
                 };
                 
-                // Try to save to database first
-                const token = window.storage?.getToken?.();
-                if (token && window.api?.createLead) {
-                    try {
-                        console.log('🌐 Calling API to create lead:', newLead);
-                        const apiResponse = await window.api.createLead(newLead);
-                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                        console.log('✅ Lead created in database:', savedLead);
-                        
-                        // Use the saved lead from database (with proper ID)
-                        const updatedLeads = [...leads, savedLead];
-                        setLeads(updatedLeads);
-                        window.storage?.setLeads?.(updatedLeads);
-                        console.log('✅ New lead created and saved to database + localStorage');
-                    } catch (error) {
-                        console.warn('⚠️ Failed to create lead in database, saving to localStorage:', error);
-                        // Fallback to localStorage
-                        const updatedLeads = [...leads, newLead];
-                        setLeads(updatedLeads);
-                        window.storage?.setLeads?.(updatedLeads);
-                        console.log('✅ New lead created and saved to localStorage (fallback)');
-                    }
-                } else {
-                    // No token or API, save to localStorage only
-                    const updatedLeads = [...leads, newLead];
-                    setLeads(updatedLeads);
-                    window.storage?.setLeads?.(updatedLeads);
-                    console.log('✅ New lead created and saved to localStorage (no token)');
-                }
+                console.log('🌐 Calling API to create lead:', newLead);
+                const apiResponse = await window.api.createLead(newLead);
+                const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                console.log('✅ Lead created in database:', savedLead);
+                
+                // Use the saved lead from database (with proper ID)
+                const updatedLeads = [...leads, savedLead];
+                setLeads(updatedLeads);
+                console.log('✅ New lead created and saved to database');
                 
                 // For new leads, redirect to main leads view to show the newly added lead
                 setViewMode('leads');
@@ -942,31 +707,7 @@ const Clients = () => {
             }
         } catch (error) {
             console.error('❌ Error saving lead:', error);
-            // Still save to localStorage as fallback
-            if (selectedLead) {
-                const updatedLead = { ...selectedLead, ...leadFormData };
-                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                setLeads(updatedLeads);
-                setSelectedLead(updatedLead);
-                window.storage?.setLeads?.(updatedLeads);
-            } else {
-                const newLead = {
-                    id: Math.max(100, ...leads.map(l => l.id)) + 1,
-                    ...leadFormData,
-                    type: 'lead',
-                    lastContact: new Date().toISOString().split('T')[0],
-                    activityLog: [{
-                        id: Date.now(),
-                        type: 'Lead Created',
-                        description: `Lead created: ${leadFormData.name}`,
-                        timestamp: new Date().toISOString(),
-                        user: 'Current User'
-                    }]
-                };
-                const updatedLeads = [...leads, newLead];
-                setLeads(updatedLeads);
-                window.storage?.setLeads?.(updatedLeads);
-            }
+            alert('Failed to save lead: ' + error.message);
         }
     };
 
@@ -998,22 +739,19 @@ const Clients = () => {
             console.log('🗑️ Deleting lead:', leadId);
             console.log('Current leads before deletion:', leads.length);
             
-            // Try to delete from database first
             const token = window.storage?.getToken?.();
-            if (token && window.api?.deleteLead) {
-                try {
-                    await window.api.deleteLead(leadId);
-                    console.log('✅ Lead deleted from database');
-                } catch (error) {
-                    console.warn('⚠️ Failed to delete lead from database:', error);
-                }
+            if (!token) {
+                throw new Error('No authentication token found. Please log in.');
             }
+
+            // Delete from database
+            await window.api.deleteLead(leadId);
+            console.log('✅ Lead deleted from database');
             
-            // Update local state and localStorage
+            // Update local state
             const updatedLeads = leads.filter(l => l.id !== leadId);
             setLeads(updatedLeads);
-            safeStorage.setLeads(updatedLeads);
-            console.log('✅ Lead deleted from localStorage, new count:', updatedLeads.length);
+            console.log('✅ Lead deleted, new count:', updatedLeads.length);
             
             // Force a refresh to ensure API data is loaded
             setTimeout(() => {
@@ -1023,6 +761,7 @@ const Clients = () => {
             
         } catch (error) {
             console.error('❌ Error deleting lead:', error);
+            alert('Failed to delete lead: ' + error.message);
         }
     };
 
@@ -1228,7 +967,7 @@ const Clients = () => {
                     lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
                 );
                 setLeads(updatedLeads);
-                safeStorage.setLeads(updatedLeads);
+                // Leads are database-only, no localStorage sync
             } else if (draggedType === 'opportunity') {
                 const updatedClients = clients.map(client => {
                     if (client.id === draggedItem.clientId) {

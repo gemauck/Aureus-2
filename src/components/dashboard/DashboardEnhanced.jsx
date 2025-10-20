@@ -21,16 +21,14 @@ const DashboardEnhanced = () => {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {
-                    // Load from localStorage only
+                    // Load from localStorage only (projects are database-only)
                     const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
-                    const savedLeads = (storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : [];
-                    const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                     const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
                     const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
-                    setLeads(savedLeads);
-                    setProjects(savedProjects);
+                    setLeads([]); // Leads are database-only
+                    setProjects([]); // Projects are database-only
                     setTimeEntries(savedTimeEntries);
                     setInvoices(savedInvoices);
                 } else {
@@ -45,15 +43,15 @@ const DashboardEnhanced = () => {
                         ]);
 
                         setClients(clientsResponse.status === 'fulfilled' ? clientsResponse.value : ((storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : []));
-                        setLeads(leadsResponse.status === 'fulfilled' ? leadsResponse.value.data || [] : ((storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : []));
-                        setProjects(projectsResponse.status === 'fulfilled' ? projectsResponse.value.data || [] : ((storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : []));
+                        setLeads(leadsResponse.status === 'fulfilled' ? leadsResponse.value.data || [] : []); // Leads are database-only
+                        setProjects(projectsResponse.status === 'fulfilled' ? projectsResponse.value.data || [] : []); // Projects are database-only
                         setTimeEntries(timeResponse.status === 'fulfilled' ? timeResponse.value.data || [] : ((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []));
                         setInvoices(invoicesResponse.status === 'fulfilled' ? invoicesResponse.value.data || [] : ((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []));
                     } catch (error) {
                         console.error('Error loading data:', error);
-                        // Fallback to localStorage
+                        // Fallback to localStorage (leads are database-only)
                         setClients((storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : []);
-                        setLeads((storage && typeof storage.getLeads === 'function') ? storage.getLeads() || [] : []);
+                        setLeads([]); // Leads are database-only
                         setProjects((storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : []);
                         setTimeEntries((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []);
                         setInvoices((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []);

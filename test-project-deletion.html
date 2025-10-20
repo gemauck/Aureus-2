@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Deletion Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .delete-btn {
+            background-color: #dc3545;
+        }
+        .delete-btn:hover {
+            background-color: #c82333;
+        }
+        .project-item {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .project-form {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .project-form input, .project-form select, .project-form textarea {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .project-form button {
+            margin: 5px 5px 5px 0;
+        }
+        .project-info {
+            flex: 1;
+        }
+        .project-actions {
+            display: flex;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Deletion Test</h1>
+    <p>This test verifies that project deletion works correctly with the database.</p>
+
+    <div class="test-container">
+        <h2>Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Authentication Status</h2>
+        <div id="auth-status"></div>
+        <button onclick="checkAuth()">Check Authentication</button>
+    </div>
+
+    <div class="test-container">
+        <h2>Database Connection Test</h2>
+        <div id="db-status"></div>
+        <button onclick="testDatabaseConnection()">Test Database Connection</button>
+    </div>
+
+    <div class="test-container">
+        <h2>Project Operations Test</h2>
+        <div id="projects-status"></div>
+        <button onclick="testProjectOperations()">Test Project Operations</button>
+        <button onclick="loadProjects()">Load Projects</button>
+        <button onclick="clearTestData()">Clear Test Data</button>
+    </div>
+
+    <div class="test-container">
+        <h2>Add Test Project</h2>
+        <div class="project-form">
+            <input type="text" id="project-name" placeholder="Project Name" value="Test Project">
+            <input type="text" id="project-client" placeholder="Client" value="Test Client">
+            <select id="project-type">
+                <option value="Assessment">Assessment</option>
+                <option value="Audit">Audit</option>
+                <option value="Monthly Review">Monthly Review</option>
+                <option value="Implementation">Implementation</option>
+            </select>
+            <input type="date" id="project-start-date" value="2024-01-01">
+            <input type="date" id="project-due-date" value="2024-12-31">
+            <textarea id="project-description" placeholder="Description">Test project for deletion verification</textarea>
+            <button onclick="addTestProject()">Add Test Project</button>
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>Current Projects</h2>
+        <div id="projects-list"></div>
+    </div>
+
+    <script>
+        // Load required scripts
+        const scripts = [
+            'src/utils/localStorage.js',
+            'src/utils/databaseAPI.js'
+        ];
+
+        let loadedScripts = 0;
+        scripts.forEach(src => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedScripts++;
+                if (loadedScripts === scripts.length) {
+                    initializeTest();
+                }
+            };
+            script.onerror = () => {
+                addResult('error', `Failed to load script: ${src}`);
+            };
+            document.head.appendChild(script);
+        });
+
+        function addResult(type, message) {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function initializeTest() {
+            addResult('info', 'Test environment initialized');
+            checkAuth();
+        }
+
+        function checkAuth() {
+            const authDiv = document.getElementById('auth-status');
+            const token = window.storage?.getToken?.();
+            
+            if (token) {
+                authDiv.innerHTML = '<div class="test-result success">✅ Authenticated - Token found</div>';
+                addResult('success', 'Authentication token found');
+            } else {
+                authDiv.innerHTML = '<div class="test-result error">❌ Not authenticated - No token found</div>';
+                addResult('error', 'No authentication token found');
+            }
+        }
+
+        async function testDatabaseConnection() {
+            const dbDiv = document.getElementById('db-status');
+            dbDiv.innerHTML = '<div class="test-result info">🔄 Testing database connection...</div>';
+            
+            try {
+                if (!window.DatabaseAPI) {
+                    throw new Error('DatabaseAPI not available');
+                }
+                
+                const response = await window.DatabaseAPI.healthCheck();
+                dbDiv.innerHTML = '<div class="test-result success">✅ Database connection successful</div>';
+                addResult('success', 'Database connection test passed');
+            } catch (error) {
+                dbDiv.innerHTML = `<div class="test-result error">❌ Database connection failed: ${error.message}</div>`;
+                addResult('error', `Database connection failed: ${error.message}`);
+            }
+        }
+
+        async function testProjectOperations() {
+            const projectsDiv = document.getElementById('projects-status');
+            projectsDiv.innerHTML = '<div class="test-result info">🔄 Testing project operations...</div>';
+            
+            try {
+                // Test 1: Load projects
+                addResult('info', 'Testing loadProjects operation...');
+                const projectsResponse = await window.DatabaseAPI.getProjects();
+                addResult('success', `Load projects successful: ${projectsResponse?.data?.length || 0} projects found`);
+                
+                // Test 2: Create a test project
+                addResult('info', 'Testing createProject operation...');
+                const testProject = {
+                    name: 'Database Test Project',
+                    client: 'Test Client',
+                    type: 'Assessment',
+                    status: 'Active',
+                    startDate: '2024-01-01',
+                    dueDate: '2024-12-31',
+                    progress: 0,
+                    tasks: [],
+                    taskLists: [
+                        { id: 1, name: 'To Do', color: 'blue' }
+                    ],
+                    customFieldDefinitions: []
+                };
+                
+                const createResponse = await window.DatabaseAPI.createProject(testProject);
+                addResult('success', `Create project successful: Project ID ${createResponse?.data?.id || 'unknown'}`);
+                
+                // Test 3: Update the project
+                addResult('info', 'Testing updateProject operation...');
+                const updatedProject = {
+                    ...testProject,
+                    progress: 50,
+                    status: 'In Progress'
+                };
+                
+                const projectId = createResponse?.data?.id;
+                if (projectId) {
+                    const updateResponse = await window.DatabaseAPI.updateProject(projectId, updatedProject);
+                    addResult('success', `Update project successful: Project ID ${projectId}`);
+                    
+                    // Test 4: Delete the project
+                    addResult('info', 'Testing deleteProject operation...');
+                    await window.DatabaseAPI.deleteProject(projectId);
+                    addResult('success', `Delete project successful: Project ID ${projectId}`);
+                }
+                
+                projectsDiv.innerHTML = '<div class="test-result success">✅ All project operations successful</div>';
+                addResult('success', 'All project operations completed successfully');
+                
+            } catch (error) {
+                projectsDiv.innerHTML = `<div class="test-result error">❌ Project operations failed: ${error.message}</div>`;
+                addResult('error', `Project operations failed: ${error.message}`);
+            }
+        }
+
+        async function loadProjects() {
+            try {
+                addResult('info', 'Loading projects from database...');
+                const response = await window.DatabaseAPI.getProjects();
+                const projects = response?.data || [];
+                
+                const projectsListDiv = document.getElementById('projects-list');
+                projectsListDiv.innerHTML = '';
+                
+                if (projects.length === 0) {
+                    projectsListDiv.innerHTML = '<div class="test-result info">No projects found in database</div>';
+                } else {
+                    projects.forEach(project => {
+                        const projectDiv = document.createElement('div');
+                        projectDiv.className = 'project-item';
+                        projectDiv.innerHTML = `
+                            <div class="project-info">
+                                <strong>${project.name}</strong> - ${project.client}
+                                <br><small>Type: ${project.type} | Status: ${project.status} | Progress: ${project.progress || 0}%</small>
+                                <br><small>Start: ${project.startDate} | Due: ${project.dueDate}</small>
+                                <br><small>ID: ${project.id}</small>
+                            </div>
+                            <div class="project-actions">
+                                <button class="delete-btn" onclick="deleteProject(${project.id})">Delete</button>
+                            </div>
+                        `;
+                        projectsListDiv.appendChild(projectDiv);
+                    });
+                }
+                
+                addResult('success', `Loaded ${projects.length} projects from database`);
+            } catch (error) {
+                addResult('error', `Failed to load projects: ${error.message}`);
+            }
+        }
+
+        async function addTestProject() {
+            try {
+                const projectData = {
+                    name: document.getElementById('project-name').value,
+                    client: document.getElementById('project-client').value,
+                    type: document.getElementById('project-type').value,
+                    status: 'Active',
+                    startDate: document.getElementById('project-start-date').value,
+                    dueDate: document.getElementById('project-due-date').value,
+                    progress: 0,
+                    tasks: [],
+                    taskLists: [
+                        { id: 1, name: 'To Do', color: 'blue' }
+                    ],
+                    customFieldDefinitions: [],
+                    description: document.getElementById('project-description').value
+                };
+                
+                addResult('info', `Creating project: ${projectData.name}`);
+                const response = await window.DatabaseAPI.createProject(projectData);
+                addResult('success', `Project created successfully: ${response?.data?.id || 'unknown'}`);
+                
+                // Clear form
+                document.getElementById('project-name').value = '';
+                document.getElementById('project-client').value = '';
+                document.getElementById('project-description').value = '';
+                
+                // Reload projects list
+                loadProjects();
+            } catch (error) {
+                addResult('error', `Failed to create project: ${error.message}`);
+            }
+        }
+
+        async function deleteProject(projectId) {
+            if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                addResult('info', `Deleting project: ${projectId}`);
+                await window.DatabaseAPI.deleteProject(projectId);
+                addResult('success', `Project deleted successfully: ${projectId}`);
+                
+                // Reload projects list
+                loadProjects();
+            } catch (error) {
+                addResult('error', `Failed to delete project: ${error.message}`);
+            }
+        }
+
+        async function clearTestData() {
+            try {
+                addResult('info', 'Clearing test data...');
+                const response = await window.DatabaseAPI.getProjects();
+                const projects = response?.data || [];
+                
+                let deletedCount = 0;
+                for (const project of projects) {
+                    if (project.name.includes('Test') || project.name.includes('Database Test')) {
+                        await window.DatabaseAPI.deleteProject(project.id);
+                        deletedCount++;
+                    }
+                }
+                
+                addResult('success', `Cleared ${deletedCount} test projects`);
+                loadProjects();
+            } catch (error) {
+                addResult('error', `Failed to clear test data: ${error.message}`);
+            }
+        }
+
+        // Auto-load projects when page loads
+        setTimeout(() => {
+            if (window.storage?.getToken?.()) {
+                loadProjects();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

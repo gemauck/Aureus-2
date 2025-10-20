@@ -114,9 +114,8 @@ const Pipeline = () => {
                 setClients(clientsWithOpportunities);
                 setLeads(apiLeads);
                 
-                // Update localStorage for offline access
+                // Update localStorage for clients only (leads are database-only)
                 storage.setClients(clientsWithOpportunities);
-                storage.setLeads(apiLeads);
                 
                 console.log('✅ Pipeline: API data loaded and cached');
                 return;
@@ -125,10 +124,9 @@ const Pipeline = () => {
             console.warn('⚠️ Pipeline: API loading failed, falling back to localStorage:', error);
         }
         
-        // Fallback to localStorage
-        console.log('💾 Pipeline: Loading data from localStorage...');
+        // Fallback to localStorage for clients only (leads are database-only)
+        console.log('💾 Pipeline: Loading clients from localStorage...');
         const savedClients = storage.getClients() || [];
-        const savedLeads = storage.getLeads() || [];
         
         // Ensure all clients have opportunities array
         const clientsWithOpportunities = savedClients.map(client => ({
@@ -137,9 +135,9 @@ const Pipeline = () => {
         }));
         
         setClients(clientsWithOpportunities);
-        setLeads(savedLeads);
+        setLeads([]); // Leads are database-only, no localStorage fallback
         
-        console.log('✅ Pipeline: localStorage data loaded - Clients:', clientsWithOpportunities.length, 'Leads:', savedLeads.length);
+        console.log('✅ Pipeline: localStorage data loaded - Clients:', clientsWithOpportunities.length, 'Leads: 0 (database-only)');
     };
 
     // Get all pipeline items (leads + client opportunities)
@@ -302,7 +300,6 @@ const Pipeline = () => {
                 lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
             );
             setLeads(updatedLeads);
-            storage.setLeads(updatedLeads);
             
             // Update lead in API if authenticated
             const token = storage.getToken();
