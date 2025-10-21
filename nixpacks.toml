@@ -3,8 +3,7 @@ nixPkgs = ["nodejs", "openssl", "openssl.dev"]
 
 [phases.install]
 cmds = [
-  "npm ci --include=dev --no-optional",
-  "npx prisma generate --no-engine"
+  "npm ci --include=dev --no-optional"
 ]
 
 [phases.build]

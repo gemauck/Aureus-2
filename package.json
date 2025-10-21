@@ -2,13 +2,16 @@
   "name": "abcotronics-erp-modular",
   "version": "0.1.1",
   "description": "Abcotronics ERP - Fuel Management Services",
+  "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server-production.js",
-    "dev": "node server-local.js",
-    "build": "echo 'Production build completed'",
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build": "npm run build:css && npx prisma generate",
     "build:css": "npx tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
-    "railway-build": "npm run build:css && echo 'Railway build completed'"
+    "railway-build": "npm run build:css && npx prisma generate && echo 'Railway build completed'",
+    "postinstall": "npx prisma generate",
+    "deploy": "./deploy-production.sh"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",

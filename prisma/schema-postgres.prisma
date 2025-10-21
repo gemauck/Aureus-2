@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  engineType = "binary"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -58,14 +60,14 @@ model Client {
   address       String        @default("")
   website       String        @default("")
   notes         String        @default("")
-  contacts      String        @default("[]") // Changed from Json to String for SQLite
-  followUps     String        @default("[]") // Changed from Json to String for SQLite
-  projectIds    String        @default("[]") // Changed from Json to String for SQLite
-  comments      String        @default("[]") // Changed from Json to String for SQLite
-  sites         String        @default("[]") // Changed from Json to String for SQLite
-  contracts     String        @default("[]") // Changed from Json to String for SQLite
-  activityLog   String        @default("[]") // Changed from Json to String for SQLite
-  billingTerms  String        @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}") // Changed from Json to String for SQLite
+  contacts      Json          @default("[]")
+  followUps     Json          @default("[]")
+  projectIds    Json          @default("[]")
+  comments      Json          @default("[]")
+  sites         Json          @default("[]")
+  contracts     Json          @default("[]")
+  activityLog   Json          @default("[]")
+  billingTerms  Json          @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   ownerId       String?
   owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
   projects      Project[]
@@ -86,8 +88,8 @@ model Project {
   dueDate     DateTime?
   budget      Float       @default(0)
   priority    String      @default("Medium")
-  tasksList   String      @default("[]") // Changed from Json to String for SQLite
-  team        String      @default("[]") // Changed from Json to String for SQLite
+  tasksList   Json        @default("[]")
+  team        Json        @default("[]")
   notes       String      @default("")
   ownerId     String?
   owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
@@ -124,7 +126,7 @@ model Invoice {
   tax           Float     @default(0)
   total         Float     @default(0)
   balance       Float     @default(0)
-  items         String    @default("[]") // Changed from Json to String for SQLite
+  items         Json      @default("[]")
   notes         String    @default("")
   ownerId       String?
   client        Client?   @relation(fields: [clientId], references: [id])
@@ -172,7 +174,7 @@ model AuditLog {
   action    String
   entity    String
   entityId  String
-  diff      String?  // Changed from Json? to String? for SQLite
+  diff      Json?
   actor     User     @relation("AuditActor", fields: [actorId], references: [id])
   createdAt DateTime @default(now())
 }
@@ -200,7 +202,7 @@ model Feedback {
   message   String
   type      String   @default("feedback") // feedback | bug | idea
   severity  String   @default("medium") // low | medium | high
-  meta      String?  // Changed from Json? to String? for SQLite
+  meta      Json?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
   createdAt DateTime @default(now())
 }
