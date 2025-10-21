@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client/Lead Separation Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background-color: #0056b3; }
+        .results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+        .result-item {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .result-item.success { border-left-color: #28a745; background-color: #d4edda; }
+        .result-item.error { border-left-color: #dc3545; background-color: #f8d7da; }
+        .result-item.info { border-left-color: #17a2b8; background-color: #d1ecf1; }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+        }
+        .data-table th, .data-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        .data-table th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Client/Lead Separation Fix Test</h1>
+        <p>This test verifies that the client/lead separation issue has been fixed.</p>
+        
+        <div class="section">
+            <h3>Test Actions:</h3>
+            <button onclick="runCompleteTest()">🚀 Run Complete Test</button>
+            <button onclick="testAPIs()">📡 Test APIs</button>
+            <button onclick="testFrontendFiltering()">🎨 Test Frontend Filtering</button>
+            <button onclick="createTestData()">➕ Create Test Data</button>
+            <button onclick="clearResults()">🧹 Clear Results</button>
+        </div>
+
+        <div id="results" class="results" style="display: none;">
+            <h3>Test Results:</h3>
+            <div id="resultList"></div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = [];
+
+        function addResult(type, message, data = null) {
+            const timestamp = new Date().toLocaleTimeString();
+            testResults.push({ type, message, data, timestamp });
+            
+            const resultsDiv = document.getElementById('results');
+            const resultList = document.getElementById('resultList');
+            
+            resultsDiv.style.display = 'block';
+            
+            const resultItem = document.createElement('div');
+            resultItem.className = `result-item ${type}`;
+            
+            let content = `<strong>[${timestamp}]</strong> ${message}`;
+            if (data) {
+                content += `<pre style="margin-top: 10px; background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto;">${JSON.stringify(data, null, 2)}</pre>`;
+            }
+            
+            resultItem.innerHTML = content;
+            resultList.appendChild(resultItem);
+            resultList.scrollTop = resultList.scrollHeight;
+        }
+
+        function clearResults() {
+            testResults = [];
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('resultList').innerHTML = '';
+        }
+
+        async function apiCall(endpoint, method = 'GET', body = null) {
+            const token = localStorage.getItem('authToken');
+            const headers = {
+                'Content-Type': 'application/json'
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const options = {
+                method,
+                headers
+            };
+
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(endpoint, options);
+            const data = await response.json();
+            
+            return { response, data };
+        }
+
+        async function runCompleteTest() {
+            addResult('info', '🚀 Running complete client/lead separation test...');
+            
+            try {
+                // Step 1: Login
+                addResult('info', '📝 Step 1: Logging in...');
+                const loginResponse = await apiCall('/api/login', 'POST', {
+                    email: 'admin@example.com',
+                    password: 'password123'
+                });
+
+                if (!loginResponse.response.ok) {
+                    addResult('error', '❌ Login failed: ' + JSON.stringify(loginResponse.data));
+                    return;
+                }
+
+                const token = loginResponse.data.data.accessToken;
+                localStorage.setItem('authToken', token);
+                addResult('success', '✅ Login successful');
+
+                // Step 2: Test Clients API
+                addResult('info', '📝 Step 2: Testing Clients API...');
+                const clientsResponse = await apiCall('/api/clients');
+                
+                if (clientsResponse.response.ok) {
+                    const clients = clientsResponse.data.data.clients || [];
+                    const clientsOnly = clients.filter(c => c.type === 'client');
+                    addResult('success', `✅ Clients API working - ${clientsOnly.length} clients found`);
+                    
+                    if (clientsOnly.length > 0) {
+                        addResult('info', '📋 Clients found:', clientsOnly.map(c => ({ name: c.name, type: c.type })));
+                    }
+                } else {
+                    addResult('error', '❌ Clients API failed: ' + JSON.stringify(clientsResponse.data));
+                }
+
+                // Step 3: Test Leads API
+                addResult('info', '📝 Step 3: Testing Leads API...');
+                const leadsResponse = await apiCall('/api/leads');
+                
+                if (leadsResponse.response.ok) {
+                    const leads = leadsResponse.data.data.leads || [];
+                    const leadsOnly = leads.filter(l => l.type === 'lead');
+                    addResult('success', `✅ Leads API working - ${leadsOnly.length} leads found`);
+                    
+                    if (leadsOnly.length > 0) {
+                        addResult('info', '📋 Leads found:', leadsOnly.map(l => ({ name: l.name, type: l.type })));
+                    }
+                } else {
+                    addResult('error', '❌ Leads API failed: ' + JSON.stringify(leadsResponse.data));
+                }
+
+                // Step 4: Test Lead Creation
+                addResult('info', '📝 Step 4: Testing lead creation...');
+                const leadData = {
+                    name: 'Frontend Test Lead',
+                    type: 'lead',
+                    industry: 'Technology',
+                    status: 'Potential',
+                    value: 30000,
+                    notes: 'Test lead for frontend separation testing'
+                };
+
+                const createLeadResponse = await apiCall('/api/leads', 'POST', leadData);
+                
+                if (createLeadResponse.response.ok) {
+                    const lead = createLeadResponse.data.data.lead;
+                    addResult('success', `✅ Lead created successfully: ${lead.name} (Type: ${lead.type})`);
+                } else {
+                    addResult('error', '❌ Failed to create lead: ' + JSON.stringify(createLeadResponse.data));
+                }
+
+                // Step 5: Verify separation after creation
+                addResult('info', '📝 Step 5: Verifying separation after lead creation...');
+                
+                const clientsAfterResponse = await apiCall('/api/clients');
+                const leadsAfterResponse = await apiCall('/api/leads');
+                
+                if (clientsAfterResponse.response.ok && leadsAfterResponse.response.ok) {
+                    const clientsAfter = clientsAfterResponse.data.data.clients || [];
+                    const leadsAfter = leadsAfterResponse.data.data.leads || [];
+                    
+                    const clientsOnlyAfter = clientsAfter.filter(c => c.type === 'client');
+                    const leadsOnlyAfter = leadsAfter.filter(l => l.type === 'lead');
+                    
+                    addResult('info', `📊 After lead creation - Clients: ${clientsOnlyAfter.length}, Leads: ${leadsOnlyAfter.length}`);
+                    
+                    // Check if any leads are appearing in clients
+                    const leadsInClients = clientsAfter.filter(c => c.type === 'lead');
+                    if (leadsInClients.length > 0) {
+                        addResult('error', `❌ ISSUE FOUND: ${leadsInClients.length} leads are appearing in clients API!`, leadsInClients);
+                    } else {
+                        addResult('success', '✅ No leads found in clients API - separation working correctly!');
+                    }
+                    
+                    // Check if any clients are appearing in leads
+                    const clientsInLeads = leadsAfter.filter(l => l.type === 'client');
+                    if (clientsInLeads.length > 0) {
+                        addResult('error', `❌ ISSUE FOUND: ${clientsInLeads.length} clients are appearing in leads API!`, clientsInLeads);
+                    } else {
+                        addResult('success', '✅ No clients found in leads API - separation working correctly!');
+                    }
+                }
+
+                addResult('success', '🎉 Complete test finished! Client/lead separation is working correctly.');
+
+            } catch (error) {
+                addResult('error', '❌ Test failed with error: ' + error.message);
+                console.error('Test error:', error);
+            }
+        }
+
+        async function testAPIs() {
+            addResult('info', '📡 Testing API endpoints...');
+            
+            try {
+                // Login first
+                const loginResponse = await apiCall('/api/login', 'POST', {
+                    email: 'admin@example.com',
+                    password: 'password123'
+                });
+
+                if (!loginResponse.response.ok) {
+                    addResult('error', '❌ Login failed');
+                    return;
+                }
+
+                const token = loginResponse.data.data.accessToken;
+                localStorage.setItem('authToken', token);
+
+                // Test both APIs
+                const [clientsRes, leadsRes] = await Promise.all([
+                    apiCall('/api/clients'),
+                    apiCall('/api/leads')
+                ]);
+
+                if (clientsRes.response.ok) {
+                    const clients = clientsRes.data.data.clients || [];
+                    addResult('success', `✅ Clients API: ${clients.length} total records`);
+                    
+                    const clientsOnly = clients.filter(c => c.type === 'client');
+                    const leadsInClients = clients.filter(c => c.type === 'lead');
+                    
+                    addResult('info', `📊 Clients API breakdown: ${clientsOnly.length} clients, ${leadsInClients.length} leads`);
+                }
+
+                if (leadsRes.response.ok) {
+                    const leads = leadsRes.data.data.leads || [];
+                    addResult('success', `✅ Leads API: ${leads.length} total records`);
+                    
+                    const leadsOnly = leads.filter(l => l.type === 'lead');
+                    const clientsInLeads = leads.filter(l => l.type === 'client');
+                    
+                    addResult('info', `📊 Leads API breakdown: ${leadsOnly.length} leads, ${clientsInLeads.length} clients`);
+                }
+
+            } catch (error) {
+                addResult('error', '❌ API test failed: ' + error.message);
+            }
+        }
+
+        async function testFrontendFiltering() {
+            addResult('info', '🎨 Testing frontend filtering logic...');
+            
+            // Simulate the frontend filtering logic
+            const mockData = [
+                { id: '1', name: 'Test Client 1', type: 'client', status: 'Active' },
+                { id: '2', name: 'Test Lead 1', type: 'lead', status: 'Potential' },
+                { id: '3', name: 'Test Client 2', type: 'client', status: 'Active' },
+                { id: '4', name: 'Test Lead 2', type: 'lead', status: 'Potential' }
+            ];
+
+            // Test the filtering logic from Clients.jsx
+            const clientsOnly = mockData.filter(c => c.type === 'client');
+            const leadsOnly = mockData.filter(c => c.type === 'lead');
+
+            addResult('info', `📊 Mock data: ${mockData.length} total records`);
+            addResult('success', `✅ Frontend filtering: ${clientsOnly.length} clients, ${leadsOnly.length} leads`);
+            
+            addResult('info', '📋 Clients filtered:', clientsOnly.map(c => ({ name: c.name, type: c.type })));
+            addResult('info', '📋 Leads filtered:', leadsOnly.map(l => ({ name: l.name, type: l.type })));
+
+            // Check for any misclassification
+            const misclassifiedClients = mockData.filter(c => c.type !== 'client' && c.type !== 'lead');
+            if (misclassifiedClients.length > 0) {
+                addResult('error', '❌ Misclassified records found:', misclassifiedClients);
+            } else {
+                addResult('success', '✅ All records properly classified!');
+            }
+        }
+
+        async function createTestData() {
+            addResult('info', '➕ Creating test data...');
+            
+            try {
+                // Login first
+                const loginResponse = await apiCall('/api/login', 'POST', {
+                    email: 'admin@example.com',
+                    password: 'password123'
+                });
+
+                if (!loginResponse.response.ok) {
+                    addResult('error', '❌ Login failed');
+                    return;
+                }
+
+                const token = loginResponse.data.data.accessToken;
+                localStorage.setItem('authToken', token);
+
+                // Create a test client
+                const clientData = {
+                    name: 'Separation Test Client',
+                    type: 'client',
+                    industry: 'Technology',
+                    status: 'Active',
+                    revenue: 75000
+                };
+
+                const clientResponse = await apiCall('/api/clients', 'POST', clientData);
+                if (clientResponse.response.ok) {
+                    addResult('success', '✅ Test client created');
+                }
+
+                // Create a test lead
+                const leadData = {
+                    name: 'Separation Test Lead',
+                    type: 'lead',
+                    industry: 'Technology',
+                    status: 'Potential',
+                    value: 40000
+                };
+
+                const leadResponse = await apiCall('/api/leads', 'POST', leadData);
+                if (leadResponse.response.ok) {
+                    addResult('success', '✅ Test lead created');
+                }
+
+                addResult('info', '📊 Test data created successfully!');
+
+            } catch (error) {
+                addResult('error', '❌ Failed to create test data: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

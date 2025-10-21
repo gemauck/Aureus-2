@@ -293,12 +293,46 @@ const Clients = () => {
             if (token && window.api?.getLeads) {
                 console.log('🔄 Loading leads from database...');
                 const apiResponse = await window.api.getLeads();
-                const apiLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
-                console.log('📡 Database returned leads:', apiLeads.length);
+                const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+                console.log('📡 Database returned leads:', rawLeads.length);
                 
-                // Only use database data
-                setLeads(apiLeads);
-                console.log('✅ Leads loaded from database');
+                // Map database fields to UI expected format
+                const mappedLeads = rawLeads.map(lead => ({
+                    id: lead.id,
+                    name: lead.name || '',
+                    industry: lead.industry || 'Other',
+                    status: lead.status || 'Potential',
+                    stage: lead.stage || 'Awareness',
+                    source: lead.source || 'Website',
+                    value: lead.value || lead.revenue || 0,
+                    probability: lead.probability || 0,
+                    firstContactDate: lead.firstContactDate || lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                    lastContact: lead.lastContact || lead.updatedAt ? new Date(lead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                    address: lead.address || '',
+                    website: lead.website || '',
+                    notes: lead.notes || '',
+                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }),
+                    type: lead.type || 'lead',
+                    ownerId: lead.ownerId || null,
+                    createdAt: lead.createdAt,
+                    updatedAt: lead.updatedAt
+                }));
+                
+                console.log('🔄 Mapped leads:', mappedLeads.map(l => ({ id: l.id, name: l.name, status: l.status })));
+                setLeads(mappedLeads);
+                console.log('✅ Leads loaded and mapped from database');
             } else {
                 console.warn('⚠️ No authentication token or API available');
                 // Keep existing leads if any, don't clear them
@@ -888,14 +922,17 @@ const Clients = () => {
         // Filter active leads and opportunities only
         console.log('🔍 Pipeline Debug - All leads:', leads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
         
-        // TEMPORARY: Show all leads in pipeline for debugging (remove status filtering)
-        const activeLeads = leads.filter(lead => {
-            // Ensure lead has a stage
+        // Filter active leads and assign default stage if missing
+        const activeLeads = leads.map(lead => {
+            // Assign default stage if missing
             if (!lead.stage) {
-                console.log('⚠️ Lead missing stage:', lead.name);
-                return false;
+                console.log('⚠️ Lead missing stage, assigning default:', lead.name);
+                return { ...lead, stage: 'Awareness' };
             }
-            return true;
+            return lead;
+        }).filter(lead => {
+            // Filter out inactive leads
+            return lead.status !== 'Inactive' && lead.status !== 'Disinterested';
         });
         
         console.log('🔍 Pipeline Debug - Active leads (after stage filter):', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
@@ -1225,10 +1262,78 @@ const Clients = () => {
     );
 
     // Leads List View
-    const handleLeadStatusChange = (leadId, newStatus) => {
-        const updatedLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
-        setLeads(updatedLeads);
-        window.storage?.setLeads?.(updatedLeads);
+    const handleLeadStatusChange = async (leadId, newStatus) => {
+        console.log('🔄 handleLeadStatusChange called:', { leadId, newStatus, currentLeads: leads.length });
+        
+        try {
+            const token = window.storage?.getToken?.();
+            const leadToUpdate = leads.find(l => l.id === leadId);
+            
+            console.log('🔍 Lead lookup result:', { 
+                leadId, 
+                found: !!leadToUpdate, 
+                currentStatus: leadToUpdate?.status,
+                newStatus,
+                tokenPresent: !!token,
+                hasApi: !!window.api?.updateLead
+            });
+            
+            if (!leadToUpdate) {
+                console.error('❌ Lead not found for status update:', leadId);
+                console.error('❌ Available leads:', leads.map(l => ({ id: l.id, name: l.name, status: l.status })));
+                return;
+            }
+
+            console.log('🔄 Updating local state...');
+            // Update local state immediately for responsive UI
+            const updatedLeads = leads.map(l => l.id === leadId ? { ...l, status: newStatus } : l);
+            setLeads(updatedLeads);
+            window.storage?.setLeads?.(updatedLeads);
+            console.log('✅ Local state updated');
+
+            // Persist to database via API
+            if (token && window.api?.updateLead) {
+                try {
+                    console.log('🌐 Calling API to update lead status:', leadId, newStatus);
+                    const updatedLead = { ...leadToUpdate, status: newStatus };
+                    console.log('📤 Sending to API:', { id: leadId, leadData: updatedLead });
+                    
+                    const apiResponse = await window.api.updateLead(leadId, updatedLead);
+                    console.log('📥 API Response:', apiResponse);
+                    
+                    const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                    
+                    if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                        console.log('🔄 Updating with API response data...');
+                        // Update with the response from API to ensure consistency
+                        const finalUpdatedLeads = leads.map(l => l.id === leadId ? updatedLeadFromAPI : l);
+                        setLeads(finalUpdatedLeads);
+                        window.storage?.setLeads?.(finalUpdatedLeads);
+                        console.log('✅ Lead status updated in database and UI refreshed');
+                    } else {
+                        console.warn('⚠️ API response did not contain expected lead data');
+                    }
+                } catch (apiError) {
+                    console.error('❌ API error updating lead status:', apiError);
+                    console.error('❌ API error details:', {
+                        message: apiError.message,
+                        status: apiError.status,
+                        response: apiError.response
+                    });
+                    // Status change was already applied locally, so user experience is maintained
+                }
+            } else {
+                console.log('✅ Lead status updated locally (no authentication or API)');
+                console.log('🔍 Debug info:', { 
+                    tokenPresent: !!token, 
+                    hasUpdateLead: !!window.api?.updateLead,
+                    apiMethods: window.api ? Object.keys(window.api) : 'No API object'
+                });
+            }
+        } catch (error) {
+            console.error('❌ Error updating lead status:', error);
+            console.error('❌ Error stack:', error.stack);
+        }
     };
 
     const LeadsListView = () => (
@@ -1284,7 +1389,7 @@ const Clients = () => {
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <select
                                             value={lead.status}
-                                            onChange={(e) => handleLeadStatusChange(lead.id, e.target.value)}
+                                            onChange={async (e) => await handleLeadStatusChange(lead.id, e.target.value)}
                                             className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border`}
                                         >
                                             <option>Potential</option>
@@ -1341,7 +1446,8 @@ const Clients = () => {
 
             {/* Full-page client detail content */}
             <div className="p-6">
-                <ClientDetailModal
+                {ClientDetailModal ? (
+                    <ClientDetailModal
                     client={selectedClient}
                     onSave={handleSaveClient}
                     onClose={() => {
@@ -1358,6 +1464,12 @@ const Clients = () => {
                     initialTab={currentTab}
                     onTabChange={setCurrentTab}
                 />
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                        <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1392,7 +1504,8 @@ const Clients = () => {
 
             {/* Full-page lead detail content */}
             <div className="p-6">
-                <LeadDetailModal
+                {LeadDetailModal ? (
+                    <LeadDetailModal
                     lead={selectedLead}
                     onSave={handleSaveLead}
                     onClose={() => {
@@ -1409,6 +1522,12 @@ const Clients = () => {
                     initialTab={currentLeadTab}
                     onTabChange={setCurrentLeadTab}
                 />
+                ) : (
+                    <div className="text-center py-8 text-gray-500">
+                        <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                        <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -1433,6 +1552,7 @@ const Clients = () => {
                         onClick={() => {
                             setSelectedClient(null);
                             setSelectedLead(null);
+                            setCurrentTab('overview');
                             setViewMode('client-detail');
                         }}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"

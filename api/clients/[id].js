@@ -83,9 +83,34 @@ async function handler(req, res) {
     // Delete Client (DELETE /api/clients/[id])
     if (req.method === 'DELETE') {
       try {
+        // First, delete all related records to avoid foreign key constraints
+        console.log('🔍 Checking for related records before deleting client:', id)
+        
+        // Delete opportunities
+        const opportunitiesDeleted = await prisma.opportunity.deleteMany({
+          where: { clientId: id }
+        })
+        console.log('🗑️ Deleted opportunities:', opportunitiesDeleted.count)
+        
+        // Delete invoices
+        const invoicesDeleted = await prisma.invoice.deleteMany({
+          where: { clientId: id }
+        })
+        console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
+        
+        // Update projects to remove client reference (set clientId to null)
+        const projectsUpdated = await prisma.project.updateMany({
+          where: { clientId: id },
+          data: { clientId: null }
+        })
+        console.log('🔄 Updated projects (removed client reference):', projectsUpdated.count)
+        
+        // Now delete the client
         await prisma.client.delete({ where: { id } })
         console.log('✅ Client deleted successfully:', id)
-        return ok(res, { message: 'Client deleted successfully' })
+        return ok(res, { 
+          message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, and updated ${projectsUpdated.count} projects.`
+        })
       } catch (dbError) {
         console.error('❌ Database error deleting client:', dbError)
         return serverError(res, 'Failed to delete client', dbError.message)

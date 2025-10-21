@@ -50,9 +50,11 @@ const AuthProvider = ({ children }) => {
                 window.AuditLogger.log('login', 'authentication', { email: me.email, loginMethod: 'email_password' }, me);
             }
             
-            // Start live data sync on successful login
+            // Start live data sync on successful login (with a small delay to ensure token is set)
             if (window.LiveDataSync) {
-                window.LiveDataSync.start();
+                setTimeout(() => {
+                    window.LiveDataSync.start();
+                }, 100);
             }
             
             console.log('🎉 Login flow completed successfully');

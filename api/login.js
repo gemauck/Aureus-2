@@ -23,8 +23,8 @@ async function handler(req, res) {
     const refreshToken = signRefreshToken(payload)
 
     res.setHeader('Set-Cookie', [
-      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax`]
-    )
+      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800` // 7 days
+    ])
     return ok(res, { accessToken })
   } catch (e) {
     return serverError(res, 'Login failed', e.message)

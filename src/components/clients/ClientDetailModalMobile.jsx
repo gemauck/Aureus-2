@@ -113,13 +113,40 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
         onSave(updatedFormData);
     };
 
-    const removeOpportunity = (opportunityId) => {
-        const updatedFormData = {
-            ...formData,
-            opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
-        };
-        setFormData(updatedFormData);
-        onSave(updatedFormData);
+    const removeOpportunity = async (opportunityId) => {
+        const opportunity = formData.opportunities.find(o => o.id === opportunityId);
+        if (confirm('Delete this opportunity?')) {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    alert('❌ Please log in to delete opportunities from the database');
+                    return;
+                }
+                
+                if (!window.api?.deleteOpportunity) {
+                    alert('❌ Opportunity API not available. Please refresh the page.');
+                    return;
+                }
+                
+                console.log('🌐 Deleting opportunity via API:', opportunityId);
+                await window.api.deleteOpportunity(opportunityId);
+                
+                // Update local opportunities array
+                const updatedFormData = {
+                    ...formData,
+                    opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
+                };
+                setFormData(updatedFormData);
+                onSave(updatedFormData);
+                
+                alert('✅ Opportunity deleted from database successfully!');
+                
+                console.log('✅ Opportunity deleted from database:', opportunityId);
+            } catch (error) {
+                console.error('❌ Error deleting opportunity:', error);
+                alert('❌ Error deleting opportunity from database: ' + error.message);
+            }
+        }
     };
 
     // Mobile-optimized tabs
@@ -661,7 +688,7 @@ const ClientDetailModalMobile = ({ client, onSave, onClose, allProjects, onNavig
                                     <div key={opportunity.id} className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                                <h4 className="font-medium text-gray-900 dark:text-gray-100">{opportunity.name}</h4>
+                                                <h4 className="font-medium text-gray-900 dark:text-gray-100">{opportunity.title || opportunity.name}</h4>
                                                 <div className="flex items-center space-x-4 mt-2">
                                                     <span className="px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full">
                                                         {opportunity.stage}

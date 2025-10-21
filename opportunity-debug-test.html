@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opportunity Creation Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .debug { background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Opportunity Creation Debug Test</h1>
+        
+        <form id="opportunityForm">
+            <div class="form-group">
+                <label for="name">Opportunity Name:</label>
+                <input type="text" id="name" name="name" placeholder="Enter opportunity name" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="stage">Stage:</label>
+                <select id="stage" name="stage">
+                    <option value="Awareness">Awareness</option>
+                    <option value="Interest">Interest</option>
+                    <option value="Consideration">Consideration</option>
+                    <option value="Intent">Intent</option>
+                    <option value="Evaluation">Evaluation</option>
+                    <option value="Purchase">Purchase</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label for="value">Value:</label>
+                <input type="number" id="value" name="value" placeholder="Enter value" step="0.01">
+            </div>
+            
+            <div class="form-group">
+                <label for="clientId">Client ID:</label>
+                <input type="text" id="clientId" name="clientId" placeholder="Enter client ID" required>
+            </div>
+            
+            <button type="submit">Create Opportunity</button>
+        </form>
+        
+        <div id="debug" class="debug" style="display: none;">
+            <h3>Debug Information</h3>
+            <div id="debugContent"></div>
+        </div>
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Load the API utilities
+        const script = document.createElement('script');
+        script.src = '/src/utils/api.js';
+        script.onload = function() {
+            console.log('✅ API utilities loaded');
+        };
+        document.head.appendChild(script);
+        
+        // Load storage utilities
+        const storageScript = document.createElement('script');
+        storageScript.src = '/src/utils/storage.js';
+        storageScript.onload = function() {
+            console.log('✅ Storage utilities loaded');
+        };
+        document.head.appendChild(storageScript);
+        
+        document.getElementById('opportunityForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const opportunityData = {
+                title: formData.get('name'),
+                clientId: formData.get('clientId'),
+                stage: formData.get('stage') || 'prospect',
+                value: parseFloat(formData.get('value')) || 0
+            };
+            
+            console.log('🔍 Form data collected:', {
+                formData: Object.fromEntries(formData),
+                opportunityData,
+                titleValue: opportunityData.title,
+                titleType: typeof opportunityData.title,
+                titleLength: opportunityData.title?.length
+            });
+            
+            // Show debug info
+            const debugDiv = document.getElementById('debug');
+            const debugContent = document.getElementById('debugContent');
+            debugDiv.style.display = 'block';
+            debugContent.innerHTML = `
+                <p><strong>Form Data:</strong></p>
+                <pre>${JSON.stringify(Object.fromEntries(formData), null, 2)}</pre>
+                <p><strong>Opportunity Data:</strong></p>
+                <pre>${JSON.stringify(opportunityData, null, 2)}</pre>
+                <p><strong>Title Details:</strong></p>
+                <ul>
+                    <li>Value: "${opportunityData.title}"</li>
+                    <li>Type: ${typeof opportunityData.title}</li>
+                    <li>Length: ${opportunityData.title?.length}</li>
+                    <li>Truthy: ${!!opportunityData.title}</li>
+                </ul>
+            `;
+            
+            try {
+                // Check if API is available
+                if (!window.api?.createOpportunity) {
+                    throw new Error('API not available. Please refresh the page.');
+                }
+                
+                // Check authentication
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    throw new Error('Please log in first');
+                }
+                
+                console.log('🚀 Calling API with:', opportunityData);
+                const response = await window.api.createOpportunity(opportunityData);
+                
+                document.getElementById('result').innerHTML = `
+                    <div class="success">
+                        <h3>✅ Success!</h3>
+                        <p>Opportunity created successfully</p>
+                        <pre>${JSON.stringify(response, null, 2)}</pre>
+                    </div>
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error:', error);
+                document.getElementById('result').innerHTML = `
+                    <div class="error">
+                        <h3>❌ Error</h3>
+                        <p>${error.message}</p>
+                        <pre>${error.stack}</pre>
+                    </div>
+                `;
+            }
+        });
+        
+        // Auto-fill with test data
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('name').value = 'Test Opportunity';
+            document.getElementById('clientId').value = 'test-client-id';
+            document.getElementById('value').value = '1000';
+        });
+    </script>
+</body>
+</html>

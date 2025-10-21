@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeadDetailModal Debug Test</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .error { color: red; }
+        .success { color: green; }
+        .info { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>LeadDetailModal Debug Test</h1>
+    <div id="status"></div>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const StatusDiv = document.getElementById('status');
+        
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            StatusDiv.appendChild(div);
+            console.log(message);
+        }
+        
+        log('Starting LeadDetailModal debug test...');
+        
+        // Check if React is loaded
+        if (typeof React === 'undefined') {
+            log('ERROR: React is not loaded', 'error');
+        } else {
+            log('SUCCESS: React is loaded', 'success');
+        }
+        
+        // Check if ReactDOM is loaded
+        if (typeof ReactDOM === 'undefined') {
+            log('ERROR: ReactDOM is not loaded', 'error');
+        } else {
+            log('SUCCESS: ReactDOM is loaded', 'success');
+        }
+        
+        // Try to load the component
+        log('Attempting to load LeadDetailModal component...');
+        
+        // Add error handler for script loading
+        window.addEventListener('error', function(e) {
+            if (e.filename && e.filename.includes('LeadDetailModal')) {
+                log(`ERROR loading LeadDetailModal: ${e.message}`, 'error');
+                log(`Error at line ${e.lineno}: ${e.message}`, 'error');
+            }
+        });
+        
+        // Check if component is available after a delay
+        setTimeout(() => {
+            if (window.LeadDetailModal) {
+                log('SUCCESS: LeadDetailModal component is available', 'success');
+                
+                // Try to render a simple test
+                try {
+                    const testElement = React.createElement(window.LeadDetailModal, {
+                        lead: null,
+                        onSave: () => log('Save called'),
+                        onClose: () => log('Close called'),
+                        onDelete: () => log('Delete called'),
+                        onConvertToClient: () => log('Convert called'),
+                        allProjects: [],
+                        isFullPage: false,
+                        isEditing: false
+                    });
+                    
+                    ReactDOM.render(testElement, document.getElementById('root'));
+                    log('SUCCESS: LeadDetailModal rendered successfully', 'success');
+                } catch (error) {
+                    log(`ERROR rendering LeadDetailModal: ${error.message}`, 'error');
+                }
+            } else {
+                log('ERROR: LeadDetailModal component is not available', 'error');
+            }
+        }, 2000);
+    </script>
+    
+    <script type="text/babel" src="/src/components/clients/LeadDetailModal.jsx" onerror="console.error('Failed to load LeadDetailModal script')"></script>
+</body>
+</html>

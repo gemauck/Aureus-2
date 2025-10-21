@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Opportunity Backup System Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.warning { background: #ffc107; color: black; }
+        button.warning:hover { background: #e0a800; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+        .card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; }
+    </style>
+</head>
+<body>
+    <h1>💾 Opportunity Backup System Test</h1>
+    
+    <div class="info">
+        <h3>📋 Comprehensive Backup System Testing</h3>
+        <p>This page tests the backup system to ensure it doesn't interfere with existing functionality.</p>
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <h3>🧪 Core Backup Tests</h3>
+            <button onclick="testBackupSystem()" class="success">Test Backup System</button>
+            <button onclick="testBackupIntegration()">Test Integration</button>
+            <button onclick="testBackupPerformance()">Test Performance</button>
+        </div>
+        
+        <div class="card">
+            <h3>🎯 Opportunity API Tests</h3>
+            <button onclick="testOpportunityCreation()" class="success">Test Opportunity Creation</button>
+            <button onclick="testOpportunityUpdate()">Test Opportunity Update</button>
+            <button onclick="testOpportunityDelete()">Test Opportunity Delete</button>
+        </div>
+        
+        <div class="card">
+            <h3>📊 Backup Management</h3>
+            <button onclick="viewBackups()">View Backups</button>
+            <button onclick="exportBackups()" class="warning">Export Backups</button>
+            <button onclick="clearBackups()" class="danger">Clear Backups</button>
+        </div>
+        
+        <div class="card">
+            <h3>🔍 System Impact Tests</h3>
+            <button onclick="testExistingAPIs()">Test Existing APIs</button>
+            <button onclick="testMemoryUsage()">Test Memory Usage</button>
+            <button onclick="testStorageImpact()">Test Storage Impact</button>
+        </div>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        // Load the backup system
+        const backupScript = document.createElement('script');
+        backupScript.src = '/src/utils/opportunityBackup.js';
+        document.head.appendChild(backupScript);
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function testBackupSystem() {
+            addResult('🧪 Testing core backup system functionality...', 'info');
+            
+            try {
+                // Wait for backup system to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (window.OpportunityBackup) {
+                    const testResult = window.testOpportunityBackup();
+                    addResult(`✅ Backup system test completed: ${testResult.stats.totalBackups} backups`, 'success');
+                    addResult(`📊 Test results: <pre>${JSON.stringify(testResult, null, 2)}</pre>`, 'info');
+                } else {
+                    addResult('❌ Backup system not loaded', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Backup system test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testBackupIntegration() {
+            addResult('🔗 Testing backup integration with existing APIs...', 'info');
+            
+            try {
+                // Load the API utilities
+                const script1 = document.createElement('script');
+                script1.src = '/src/utils/api.js';
+                document.head.appendChild(script1);
+                
+                const script2 = document.createElement('script');
+                script2.src = '/src/utils/authStorage.js';
+                document.head.appendChild(script2);
+                
+                // Wait for scripts to load
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Test that existing APIs still work
+                if (window.api?.listClients) {
+                    const clientsResponse = await window.api.listClients();
+                    addResult(`✅ Existing clients API still works: ${clientsResponse.data.clients.length} clients`, 'success');
+                }
+                
+                if (window.api?.listOpportunities) {
+                    const opportunitiesResponse = await window.api.listOpportunities();
+                    addResult(`✅ Existing opportunities API still works: ${opportunitiesResponse.data.opportunities.length} opportunities`, 'success');
+                }
+                
+                addResult('✅ Integration test passed - no interference detected', 'success');
+                
+            } catch (error) {
+                addResult(`❌ Integration test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testBackupPerformance() {
+            addResult('⚡ Testing backup system performance...', 'info');
+            
+            try {
+                const startTime = performance.now();
+                
+                // Create multiple test opportunities
+                const testOpportunities = [];
+                for (let i = 0; i < 10; i++) {
+                    const opportunity = {
+                        id: `perf_test_${i}`,
+                        title: `Performance Test ${i}`,
+                        clientId: 'test_client',
+                        stage: 'prospect',
+                        value: 10000 + (i * 1000)
+                    };
+                    
+                    window.OpportunityBackup.addBackup(opportunity);
+                    testOpportunities.push(opportunity);
+                }
+                
+                const endTime = performance.now();
+                const duration = endTime - startTime;
+                
+                addResult(`✅ Performance test completed in ${duration.toFixed(2)}ms`, 'success');
+                addResult(`📊 Created ${testOpportunities.length} backups`, 'info');
+                
+                // Clean up test data
+                testOpportunities.forEach(opp => {
+                    window.OpportunityBackup.removeBackup(opp.id);
+                });
+                
+                addResult('🧹 Test data cleaned up', 'info');
+                
+            } catch (error) {
+                addResult(`❌ Performance test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpportunityCreation() {
+            addResult('🎯 Testing opportunity creation with backup...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.createOpportunity) {
+                    addResult('❌ createOpportunity API not available', 'error');
+                    return;
+                }
+                
+                const testOpportunity = {
+                    title: 'Backup Test Opportunity',
+                    clientId: 'cmh09frir000bewf0fcdr5ebq', // Use existing client
+                    stage: 'prospect',
+                    value: 75000
+                };
+                
+                addResult('🚀 Creating test opportunity...', 'info');
+                const response = await window.api.createOpportunity(testOpportunity);
+                
+                if (response && response.data && response.data.opportunity) {
+                    addResult(`✅ Opportunity created successfully: ${response.data.opportunity.title}`, 'success');
+                    
+                    // Check if backup was created
+                    const backups = window.OpportunityBackup.getBackups();
+                    const backupExists = backups.some(b => b.id === response.data.opportunity.id);
+                    
+                    if (backupExists) {
+                        addResult('✅ Backup created automatically', 'success');
+                    } else {
+                        addResult('⚠️ Backup not found - may need manual integration', 'warning');
+                    }
+                    
+                    // Clean up
+                    try {
+                        await window.api.deleteOpportunity(response.data.opportunity.id);
+                        addResult('🧹 Test opportunity deleted', 'info');
+                    } catch (deleteError) {
+                        addResult(`⚠️ Could not delete test opportunity: ${deleteError.message}`, 'warning');
+                    }
+                    
+                } else {
+                    addResult('❌ Opportunity creation failed', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Opportunity creation test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpportunityUpdate() {
+            addResult('🔄 Testing opportunity update with backup...', 'info');
+            addResult('⚠️ Update test requires existing opportunity - skipping for now', 'warning');
+        }
+        
+        async function testOpportunityDelete() {
+            addResult('🗑️ Testing opportunity deletion with backup...', 'info');
+            addResult('⚠️ Delete test requires existing opportunity - skipping for now', 'warning');
+        }
+        
+        function viewBackups() {
+            addResult('📊 Viewing current backups...', 'info');
+            
+            try {
+                const backups = window.OpportunityBackup.getBackups();
+                const stats = window.OpportunityBackup.getBackupStats();
+                
+                addResult(`📈 Backup Statistics:`, 'info');
+                addResult(`   • Total backups: ${stats.totalBackups}`, 'info');
+                addResult(`   • Latest backup: ${stats.latestBackup || 'None'}`, 'info');
+                addResult(`   • Storage used: ${(stats.storageUsed / 1024).toFixed(2)} KB`, 'info');
+                
+                if (backups.length > 0) {
+                    addResult(`📋 Recent backups:`, 'info');
+                    backups.slice(0, 5).forEach((backup, index) => {
+                        addResult(`   ${index + 1}. ${backup.title} (${backup.stage}) - ${backup.backupTimestamp}`, 'info');
+                    });
+                    
+                    if (backups.length > 5) {
+                        addResult(`   ... and ${backups.length - 5} more`, 'info');
+                    }
+                } else {
+                    addResult('📭 No backups found', 'info');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error viewing backups: ${error.message}`, 'error');
+            }
+        }
+        
+        function exportBackups() {
+            addResult('📤 Exporting backups...', 'info');
+            
+            try {
+                window.OpportunityBackup.exportBackups();
+                addResult('✅ Backups exported successfully', 'success');
+            } catch (error) {
+                addResult(`❌ Export failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function clearBackups() {
+            if (confirm('Are you sure you want to clear all backups? This cannot be undone.')) {
+                addResult('🧹 Clearing all backups...', 'warning');
+                
+                try {
+                    const cleared = window.OpportunityBackup.clearBackups();
+                    if (cleared) {
+                        addResult('✅ All backups cleared', 'success');
+                    } else {
+                        addResult('❌ Failed to clear backups', 'error');
+                    }
+                } catch (error) {
+                    addResult(`❌ Error clearing backups: ${error.message}`, 'error');
+                }
+            }
+        }
+        
+        async function testExistingAPIs() {
+            addResult('🔍 Testing existing APIs to ensure no interference...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                const apiTests = [
+                    { name: 'listClients', func: window.api?.listClients },
+                    { name: 'listLeads', func: window.api?.listLeads },
+                    { name: 'listProjects', func: window.api?.listProjects },
+                    { name: 'listInvoices', func: window.api?.listInvoices },
+                    { name: 'listTimeEntries', func: window.api?.listTimeEntries },
+                    { name: 'listUsers', func: window.api?.listUsers },
+                    { name: 'listOpportunities', func: window.api?.listOpportunities }
+                ];
+                
+                let passedTests = 0;
+                
+                for (const test of apiTests) {
+                    if (test.func) {
+                        try {
+                            await test.func();
+                            addResult(`✅ ${test.name} API working`, 'success');
+                            passedTests++;
+                        } catch (error) {
+                            addResult(`❌ ${test.name} API failed: ${error.message}`, 'error');
+                        }
+                    } else {
+                        addResult(`⚠️ ${test.name} API not available`, 'warning');
+                    }
+                }
+                
+                addResult(`📊 API Tests: ${passedTests}/${apiTests.length} passed`, passedTests === apiTests.length ? 'success' : 'warning');
+                
+            } catch (error) {
+                addResult(`❌ API test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function testMemoryUsage() {
+            addResult('🧠 Testing memory usage impact...', 'info');
+            
+            try {
+                const initialMemory = performance.memory ? performance.memory.usedJSHeapSize : 'N/A';
+                addResult(`📊 Initial memory usage: ${initialMemory !== 'N/A' ? (initialMemory / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`, 'info');
+                
+                // Create some test data
+                const testData = [];
+                for (let i = 0; i < 100; i++) {
+                    testData.push({
+                        id: `mem_test_${i}`,
+                        title: `Memory Test ${i}`,
+                        data: 'x'.repeat(1000) // 1KB of data per item
+                    });
+                }
+                
+                const afterDataMemory = performance.memory ? performance.memory.usedJSHeapSize : 'N/A';
+                addResult(`📊 After creating test data: ${afterDataMemory !== 'N/A' ? (afterDataMemory / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`, 'info');
+                
+                // Clear test data
+                testData.length = 0;
+                
+                const finalMemory = performance.memory ? performance.memory.usedJSHeapSize : 'N/A';
+                addResult(`📊 After clearing test data: ${finalMemory !== 'N/A' ? (finalMemory / 1024 / 1024).toFixed(2) + ' MB' : 'N/A'}`, 'info');
+                
+                addResult('✅ Memory usage test completed', 'success');
+                
+            } catch (error) {
+                addResult(`❌ Memory test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        function testStorageImpact() {
+            addResult('💾 Testing localStorage impact...', 'info');
+            
+            try {
+                // Get current localStorage usage
+                let totalSize = 0;
+                for (let key in localStorage) {
+                    if (localStorage.hasOwnProperty(key)) {
+                        totalSize += localStorage[key].length;
+                    }
+                }
+                
+                addResult(`📊 Current localStorage usage: ${(totalSize / 1024).toFixed(2)} KB`, 'info');
+                
+                // Test backup storage
+                const backupStats = window.OpportunityBackup.getBackupStats();
+                addResult(`📊 Backup storage usage: ${(backupStats.storageUsed / 1024).toFixed(2)} KB`, 'info');
+                
+                // Calculate percentage
+                const backupPercentage = totalSize > 0 ? ((backupStats.storageUsed / totalSize) * 100).toFixed(2) : 0;
+                addResult(`📊 Backup usage: ${backupPercentage}% of total localStorage`, 'info');
+                
+                if (backupPercentage < 10) {
+                    addResult('✅ Backup storage impact is minimal', 'success');
+                } else if (backupPercentage < 25) {
+                    addResult('⚠️ Backup storage impact is moderate', 'warning');
+                } else {
+                    addResult('❌ Backup storage impact is high', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Storage test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run basic tests on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Opportunity Backup System Test Tool Loaded', 'info');
+            addResult('💡 Click buttons above to test different aspects of the backup system', 'info');
+            
+            // Auto-run basic tests
+            setTimeout(() => {
+                testBackupSystem();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

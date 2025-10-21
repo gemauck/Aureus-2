@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Direct Opportunity API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        input, select { padding: 8px; margin: 5px; width: 200px; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <h1>Direct Opportunity API Test</h1>
+    
+    <div class="test-section info">
+        <h3>Authentication Test</h3>
+        <button onclick="testLogin()">Test Login</button>
+        <button onclick="testMe()">Test /me endpoint</button>
+        <div id="authResults" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>Direct API Test</h3>
+        <div>
+            <label>Email: <input type="email" id="email" value="admin@abcotronics.co.za"></label><br>
+            <label>Password: <input type="password" id="password" value="admin123"></label><br>
+            <button onclick="loginAndTest()">Login & Test Opportunity Creation</button>
+        </div>
+        <div id="apiResults" class="log"></div>
+    </div>
+
+    <script>
+        let authToken = null;
+
+        function logAuth(message) {
+            const results = document.getElementById('authResults');
+            const timestamp = new Date().toLocaleTimeString();
+            results.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+
+        function logApi(message) {
+            const results = document.getElementById('apiResults');
+            const timestamp = new Date().toLocaleTimeString();
+            results.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            logAuth('🔐 Testing login...');
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const text = await response.text();
+                logAuth(`📡 Login response status: ${response.status}`);
+                logAuth(`📡 Response text: ${text.substring(0, 200)}...`);
+
+                if (response.ok) {
+                    const data = JSON.parse(text);
+                    authToken = data.accessToken || data.data?.accessToken;
+                    if (authToken) {
+                        logAuth(`✅ Login successful! Token: ${authToken.substring(0, 20)}...`);
+                    } else {
+                        logAuth(`❌ No token in response: ${JSON.stringify(data)}`);
+                    }
+                } else {
+                    logAuth(`❌ Login failed: ${text}`);
+                }
+            } catch (error) {
+                logAuth(`❌ Login error: ${error.message}`);
+            }
+        }
+
+        async function testMe() {
+            if (!authToken) {
+                logAuth('❌ No auth token available. Login first.');
+                return;
+            }
+
+            logAuth('🔍 Testing /me endpoint...');
+            
+            try {
+                const response = await fetch('/api/me', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                const text = await response.text();
+                logAuth(`📡 /me response status: ${response.status}`);
+                logAuth(`📡 Response text: ${text.substring(0, 200)}...`);
+
+                if (response.ok) {
+                    const data = JSON.parse(text);
+                    logAuth(`✅ /me successful: ${JSON.stringify(data)}`);
+                } else {
+                    logAuth(`❌ /me failed: ${text}`);
+                }
+            } catch (error) {
+                logAuth(`❌ /me error: ${error.message}`);
+            }
+        }
+
+        async function loginAndTest() {
+            await testLogin();
+            
+            if (authToken) {
+                await testOpportunityCreation();
+            } else {
+                logApi('❌ Cannot test opportunity creation without auth token');
+            }
+        }
+
+        async function testOpportunityCreation() {
+            logApi('🚀 Testing opportunity creation...');
+            
+            // First get a client ID
+            try {
+                const clientsResponse = await fetch('/api/clients', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!clientsResponse.ok) {
+                    logApi(`❌ Failed to get clients: ${clientsResponse.status}`);
+                    return;
+                }
+
+                const clientsData = await clientsResponse.json();
+                const clients = clientsData.clients || clientsData.data?.clients || [];
+                
+                if (clients.length === 0) {
+                    logApi('❌ No clients available to create opportunity for');
+                    return;
+                }
+
+                const clientId = clients[0].id;
+                logApi(`✅ Using client ID: ${clientId} (${clients[0].name})`);
+
+                // Now create the opportunity
+                const opportunityData = {
+                    title: 'Test Opportunity ' + Date.now(),
+                    clientId: clientId,
+                    stage: 'prospect',
+                    value: 50000
+                };
+
+                logApi(`📤 Creating opportunity: ${JSON.stringify(opportunityData)}`);
+
+                const response = await fetch('/api/opportunities', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify(opportunityData)
+                });
+
+                const text = await response.text();
+                logApi(`📡 Opportunity response status: ${response.status}`);
+                logApi(`📡 Response text: ${text.substring(0, 300)}...`);
+
+                if (response.ok) {
+                    const data = JSON.parse(text);
+                    logApi(`✅ SUCCESS! Opportunity created: ${JSON.stringify(data)}`);
+                } else {
+                    logApi(`❌ Opportunity creation failed: ${text}`);
+                }
+
+            } catch (error) {
+                logApi(`❌ Error: ${error.message}`);
+            }
+        }
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            logAuth('🔧 Direct API Test Tool Loaded');
+            logApi('🔧 Ready to test opportunity creation');
+        });
+    </script>
+</body>
+</html>

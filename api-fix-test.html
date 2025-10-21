@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+    </style>
+</head>
+<body>
+    <h1>🔧 API Fix Test</h1>
+    
+    <div class="success">
+        <h3>✅ API Error Handling Fixed</h3>
+        <p>The frontend API now provides better error messages when receiving HTML instead of JSON.</p>
+    </div>
+    
+    <div class="info">
+        <h3>📋 Test the Fix</h3>
+        <p>This page will test the improved error handling.</p>
+    </div>
+    
+    <button onclick="testClientsAPI()" class="success">Test Clients API</button>
+    <button onclick="testOpportunitiesAPI()">Test Opportunities API</button>
+    <button onclick="testInvalidEndpoint()">Test Invalid Endpoint (Should Show Better Error)</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function testClientsAPI() {
+            addResult('🔍 Testing clients API with improved error handling...', 'info');
+            
+            try {
+                // Load the API utilities
+                const script1 = document.createElement('script');
+                script1.src = '/src/utils/api.js';
+                document.head.appendChild(script1);
+                
+                const script2 = document.createElement('script');
+                script2.src = '/src/utils/authStorage.js';
+                document.head.appendChild(script2);
+                
+                // Wait for scripts to load
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                if (window.api?.listClients) {
+                    addResult('✅ Frontend API loaded successfully', 'success');
+                    
+                    try {
+                        const response = await window.api.listClients();
+                        addResult(`✅ Clients API working! Found ${response.data.clients.length} clients`, 'success');
+                    } catch (apiError) {
+                        addResult(`❌ Clients API error: ${apiError.message}`, 'error');
+                        
+                        // The new error handling should provide more details
+                        if (apiError.message.includes("Server returned HTML")) {
+                            addResult('🔍 This is the improved error message for HTML responses!', 'info');
+                        }
+                    }
+                } else {
+                    addResult('❌ Frontend API not available', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpportunitiesAPI() {
+            addResult('🎯 Testing opportunities API...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (window.api?.listOpportunities) {
+                    try {
+                        const response = await window.api.listOpportunities();
+                        addResult(`✅ Opportunities API working! Found ${response.data.opportunities.length} opportunities`, 'success');
+                    } catch (apiError) {
+                        addResult(`❌ Opportunities API error: ${apiError.message}`, 'error');
+                    }
+                } else {
+                    addResult('❌ Opportunities API not available', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Test error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testInvalidEndpoint() {
+            addResult('🧪 Testing invalid endpoint to see improved error message...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // Try to call a non-existent endpoint
+                const response = await fetch('http://localhost:3000/api/nonexistent', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const text = await response.text();
+                addResult(`📡 Invalid endpoint response: <pre>${text}</pre>`, 'info');
+                
+                if (text.trim().startsWith('<')) {
+                    addResult('✅ This demonstrates the HTML response that was causing the error!', 'success');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Test error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Auto-run clients API test on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 API Fix Test Tool Loaded', 'info');
+            addResult('💡 The API now provides better error messages for HTML responses', 'info');
+            
+            // Auto-run clients API test
+            setTimeout(() => {
+                testClientsAPI();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Opportunity Title Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Opportunity Title Fix Test</h1>
+    
+    <div class="success">
+        <h3>✅ API Body Parsing Fixed</h3>
+        <p>The opportunities API now uses <code>req.body</code> instead of <code>parseJsonBody(req)</code> to properly receive the title field.</p>
+    </div>
+    
+    <div class="form-group">
+        <label>Opportunity Title:</label>
+        <input type="text" id="opportunityTitle" placeholder="e.g., New Software License" value="Test Opportunity Fix">
+        
+        <label>Client ID:</label>
+        <input type="text" id="clientId" placeholder="Client ID" value="">
+        
+        <br>
+        <button onclick="getClientIds()">Get Client IDs</button>
+        <button onclick="testOpportunityCreation()" class="success">Test Opportunity Creation</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        // Load the API utilities
+        const script1 = document.createElement('script');
+        script1.src = '/src/utils/api.js';
+        document.head.appendChild(script1);
+        
+        const script2 = document.createElement('script');
+        script2.src = '/src/utils/authStorage.js';
+        document.head.appendChild(script2);
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function getClientIds() {
+            addResult('📋 Getting client IDs...', 'info');
+            
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.listClients) {
+                    addResult('❌ listClients function not available', 'error');
+                    return;
+                }
+                
+                const response = await window.api.listClients();
+                
+                if (response && response.data && response.data.clients) {
+                    const clients = response.data.clients;
+                    addResult(`✅ Found ${clients.length} clients`, 'success');
+                    
+                    if (clients.length > 0) {
+                        document.getElementById('clientId').value = clients[0].id;
+                        addResult(`💡 Auto-filled client ID: ${clients[0].id}`, 'success');
+                    }
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error getting clients: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpportunityCreation() {
+            const title = document.getElementById('opportunityTitle').value;
+            const clientId = document.getElementById('clientId').value;
+            
+            if (!title) {
+                addResult('❌ Title is required', 'error');
+                return;
+            }
+            
+            if (!clientId) {
+                addResult('❌ Client ID is required. Click "Get Client IDs" first.', 'error');
+                return;
+            }
+            
+            addResult(`🚀 Testing opportunity creation with title: "${title}"`, 'info');
+            
+            try {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.createOpportunity) {
+                    addResult('❌ createOpportunity function not available', 'error');
+                    return;
+                }
+                
+                const opportunityData = {
+                    title: title,
+                    clientId: clientId,
+                    stage: 'prospect',
+                    value: 50000
+                };
+                
+                addResult(`📤 Sending data: ${JSON.stringify(opportunityData, null, 2)}`, 'info');
+                
+                const response = await window.api.createOpportunity(opportunityData);
+                
+                if (response && response.data && response.data.opportunity) {
+                    addResult(`✅ SUCCESS! Opportunity created: ${response.data.opportunity.title}`, 'success');
+                    addResult(`📊 Opportunity ID: ${response.data.opportunity.id}`, 'success');
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error creating opportunity: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Opportunity Title Fix Test Tool Loaded', 'info');
+            addResult('💡 This should now work without "title required" error', 'info');
+            
+            setTimeout(() => {
+                getClientIds();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

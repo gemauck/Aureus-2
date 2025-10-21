@@ -9,6 +9,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         setActiveTab(initialTab);
     }, [initialTab]);
     
+    // Update formData when lead prop changes
+    useEffect(() => {
+        if (lead) {
+            const parsedLead = {
+                ...lead,
+                contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+            };
+            setFormData(parsedLead);
+        }
+    }, [lead]);
+    
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
         setActiveTab(tab);
@@ -17,20 +33,33 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
     };
     
-    const [formData, setFormData] = useState(lead || {
-        name: '',
-        industry: '',
-        status: 'Potential',
-        source: 'Website',
-        stage: 'Awareness',
-        value: 0,
-        notes: '',
-        contacts: [],
-        followUps: [],
-        projectIds: [],
-        comments: [],
-        activityLog: [],
-        firstContactDate: new Date().toISOString().split('T')[0]
+    const [formData, setFormData] = useState(() => {
+        // Parse JSON strings to arrays/objects if needed
+        const parsedLead = lead ? {
+            ...lead,
+            contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+            followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+            projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+            comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+            activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+        } : {
+            name: '',
+            industry: '',
+            status: 'Potential',
+            source: 'Website',
+            stage: 'Awareness',
+            value: 0,
+            notes: '',
+            contacts: [],
+            followUps: [],
+            projectIds: [],
+            comments: [],
+            activityLog: [],
+            firstContactDate: new Date().toISOString().split('T')[0]
+        };
+        
+        return parsedLead;
     });
     
     const [editingContact, setEditingContact] = useState(null);
@@ -108,7 +137,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             return;
         }
         
-        const updatedContacts = [...(formData.contacts || []), {
+        const updatedContacts = [...(Array.isArray(formData.contacts) ? formData.contacts : []), {
             ...newContact,
             id: Date.now()
         }];
@@ -142,7 +171,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleUpdateContact = () => {
-        const updatedContacts = formData.contacts.map(c => 
+        const contacts = Array.isArray(formData.contacts) ? formData.contacts : [];
+        const updatedContacts = contacts.map(c => 
             c.id === editingContact.id ? {...newContact, id: c.id} : c
         );
         const updatedFormData = {...formData, contacts: updatedContacts};
@@ -170,9 +200,10 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
     const handleDeleteContact = (contactId) => {
         if (confirm('Remove this contact?')) {
+            const contacts = Array.isArray(formData.contacts) ? formData.contacts : [];
             const updatedFormData = {
                 ...formData,
-                contacts: formData.contacts.filter(c => c.id !== contactId)
+                contacts: contacts.filter(c => c.id !== contactId)
             };
             setFormData(updatedFormData);
             
@@ -190,7 +221,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             return;
         }
         
-        const updatedFollowUps = [...(formData.followUps || []), {
+        const updatedFollowUps = [...(Array.isArray(formData.followUps) ? formData.followUps : []), {
             ...newFollowUp,
             id: Date.now(),
             createdAt: new Date().toISOString()
@@ -208,8 +239,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleToggleFollowUp = (followUpId) => {
-        const followUp = formData.followUps.find(f => f.id === followUpId);
-        const updatedFollowUps = formData.followUps.map(f => 
+        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+        const followUp = followUps.find(f => f.id === followUpId);
+        const updatedFollowUps = followUps.map(f => 
             f.id === followUpId ? {...f, completed: !f.completed} : f
         );
         setFormData({...formData, followUps: updatedFollowUps});
@@ -220,16 +252,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
     const handleDeleteFollowUp = (followUpId) => {
         if (confirm('Delete this follow-up?')) {
+            const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
             setFormData({
                 ...formData,
-                followUps: formData.followUps.filter(f => f.id !== followUpId)
+                followUps: followUps.filter(f => f.id !== followUpId)
             });
         }
     };
 
     // Google Calendar event handlers
     const handleGoogleEventCreated = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
+        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+        const updatedFollowUps = followUps.map(f => 
             f.id === followUpId ? { ...f, ...updatedFollowUp } : f
         );
         setFormData({
@@ -239,7 +273,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleGoogleEventUpdated = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
+        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+        const updatedFollowUps = followUps.map(f => 
             f.id === followUpId ? { ...f, ...updatedFollowUp } : f
         );
         setFormData({
@@ -249,7 +284,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleGoogleEventDeleted = (followUpId, updatedFollowUp) => {
-        const updatedFollowUps = formData.followUps.map(f => 
+        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+        const updatedFollowUps = followUps.map(f => 
             f.id === followUpId ? { ...f, ...updatedFollowUp } : f
         );
         setFormData({
@@ -267,7 +303,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
-        const updatedComments = [...(formData.comments || []), {
+        const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {
             id: Date.now(),
             text: newComment,
             tags: Array.isArray(newNoteTags) ? newNoteTags : [],
@@ -300,15 +336,16 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         };
         setFormData({
             ...formData,
-            activityLog: [...(formData.activityLog || []), activity]
+            activityLog: [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity]
         });
     };
 
     const handleDeleteComment = (commentId) => {
         if (confirm('Delete this comment?')) {
+            const comments = Array.isArray(formData.comments) ? formData.comments : [];
             setFormData({
                 ...formData,
-                comments: formData.comments.filter(c => c.id !== commentId)
+                comments: comments.filter(c => c.id !== commentId)
             });
         }
     };
@@ -335,7 +372,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         !selectedProjectIds.includes(p.id) && 
         p.client === formData.name
     ) || [];
-    const upcomingFollowUps = (formData.followUps || [])
+    const upcomingFollowUps = (Array.isArray(formData.followUps) ? formData.followUps : [])
         .filter(f => !f.completed)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
 
@@ -401,7 +438,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     'comment-alt'
                                 } mr-2`}></i>
                                 {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                {tab === 'contacts' && formData.contacts?.length > 0 && (
+                                {tab === 'contacts' && Array.isArray(formData.contacts) && formData.contacts.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {formData.contacts.length}
                                     </span>
@@ -411,7 +448,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                         {selectedProjectIds.length}
                                     </span>
                                 )}
-                                {tab === 'calendar' && upcomingFollowUps.length > 0 && (
+                                {tab === 'calendar' && Array.isArray(upcomingFollowUps) && upcomingFollowUps.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-yellow-100 text-yellow-600 rounded text-xs">
                                         {upcomingFollowUps.length}
                                     </span>
@@ -474,12 +511,23 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                                         <select 
                                             value={formData.status}
-                                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                            onChange={(e) => {
+                                                const newStatus = e.target.value;
+                                                console.log('Status changed to:', newStatus);
+                                                const updatedFormData = {...formData, status: newStatus};
+                                                setFormData(updatedFormData);
+                                                
+                                                // Auto-save status change immediately
+                                                if (lead) {
+                                                    console.log('Auto-saving status change...');
+                                                    onSave(updatedFormData, true); // true = stay in edit mode
+                                                }
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
-                                            <option>Potential</option>
-                                            <option>Active</option>
-                                            <option>Disinterested</option>
+                                            <option value="Potential">Potential</option>
+                                            <option value="Active">Active</option>
+                                            <option value="Disinterested">Disinterested</option>
                                         </select>
                                     </div>
                                     <div>
@@ -503,7 +551,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                         </label>
                                         <select 
                                             value={formData.stage}
-                                            onChange={(e) => setFormData({...formData, stage: e.target.value})}
+                                            onChange={(e) => {
+                                                const newStage = e.target.value;
+                                                console.log('Stage changed to:', newStage);
+                                                const updatedFormData = {...formData, stage: newStage};
+                                                setFormData(updatedFormData);
+                                                
+                                                // Auto-save stage change immediately
+                                                if (lead) {
+                                                    console.log('Auto-saving stage change...');
+                                                    onSave(updatedFormData, true); // true = stay in edit mode
+                                                }
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="Awareness">Awareness - Lead knows about us</option>
@@ -653,13 +712,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 )}
 
                                 <div className="space-y-2">
-                                    {(!formData.contacts || formData.contacts.length === 0) ? (
+                                    {(!Array.isArray(formData.contacts) || formData.contacts.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
                                             <i className="fas fa-users text-3xl mb-2"></i>
                                             <p>No contacts added yet</p>
                                         </div>
                                     ) : (
-                                        formData.contacts.map(contact => (
+                                        (Array.isArray(formData.contacts) ? formData.contacts : []).map(contact => (
                                             <div key={contact.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-primary-300 transition">
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex-1">
@@ -785,13 +844,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
                                 <div className="space-y-2">
                                     <h4 className="font-medium text-gray-900 text-sm">Upcoming Follow-ups</h4>
-                                    {upcomingFollowUps.length === 0 ? (
+                                    {!Array.isArray(upcomingFollowUps) || upcomingFollowUps.length === 0 ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
                                             <i className="fas fa-calendar-alt text-3xl mb-2"></i>
                                             <p>No upcoming follow-ups scheduled</p>
                                         </div>
                                     ) : (
-                                        upcomingFollowUps.map(followUp => (
+                                        (Array.isArray(upcomingFollowUps) ? upcomingFollowUps : []).map(followUp => (
                                             <div key={followUp.id} className="bg-white border border-gray-200 rounded-lg p-3">
                                                 <div className="flex justify-between items-start">
                                                     <div className="flex items-start gap-3 flex-1">
@@ -848,7 +907,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     )}
                                 </div>
 
-                                {formData.followUps?.filter(f => f.completed).length > 0 && (
+                                {Array.isArray(formData.followUps) && formData.followUps.filter(f => f.completed).length > 0 && (
                                     <div className="space-y-2">
                                         <h4 className="font-medium text-gray-900 text-sm">Completed Follow-ups</h4>
                                         {formData.followUps.filter(f => f.completed).map(followUp => (
@@ -981,11 +1040,11 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 <div className="flex justify-between items-center">
                                     <h3 className="text-lg font-semibold text-gray-900">Activity Timeline</h3>
                                     <div className="text-sm text-gray-600">
-                                        {(formData.activityLog || []).length} activities
+                                        {(Array.isArray(formData.activityLog) ? formData.activityLog : []).length} activities
                                     </div>
                                 </div>
 
-                                {(!formData.activityLog || formData.activityLog.length === 0) ? (
+                                    {(!Array.isArray(formData.activityLog) || formData.activityLog.length === 0) ? (
                                     <div className="text-center py-8 text-gray-500 text-sm">
                                         <i className="fas fa-history text-3xl mb-2"></i>
                                         <p>No activity recorded yet</p>
@@ -997,7 +1056,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                         <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
                                         
                                         <div className="space-y-4">
-                                            {[...(formData.activityLog || [])].reverse().map((activity, index) => {
+                                            {[...(Array.isArray(formData.activityLog) ? formData.activityLog : [])].reverse().map((activity, index) => {
                                                 const activityIcon = 
                                                     activity.type === 'Contact Added' ? 'user-plus' :
                                                     activity.type === 'Contact Updated' ? 'user-edit' :
@@ -1141,7 +1200,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs text-gray-600">Filter by tag:</span>
                                     <button type="button" className={`text-xs px-2 py-0.5 rounded ${!notesTagFilter ? 'bg-gray-200' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(null)}>All</button>
-                                    {Array.from(new Set((formData.comments || []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
+                                    {Array.from(new Set((Array.isArray(formData.comments) ? formData.comments : []).flatMap(c => Array.isArray(c.tags) ? c.tags : []))).map(tag => (
                                         <button key={tag} type="button" className={`text-xs px-2 py-0.5 rounded ${notesTagFilter === tag ? 'bg-primary-200 text-primary-800' : 'bg-gray-100'}`} onClick={() => setNotesTagFilter(tag)}>
                                             <i className="fas fa-tag mr-1"></i>{tag}
                                         </button>
@@ -1149,13 +1208,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 </div>
 
                                 <div className="space-y-2">
-                                    {(!formData.comments || formData.comments.length === 0) ? (
+                                    {(!Array.isArray(formData.comments) || formData.comments.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
                                             <i className="fas fa-comment-alt text-3xl mb-2"></i>
                                             <p>No comments yet</p>
                                         </div>
                                     ) : (
-                                        (formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter)))).map(comment => (
+                                        (Array.isArray(formData.comments) ? formData.comments.filter(c => !notesTagFilter || (Array.isArray(c.tags) && c.tags.includes(notesTagFilter))) : []).map(comment => (
                                             <div key={comment.id} className="bg-white border border-gray-200 rounded-lg p-3">
                                                 <div className="flex justify-between items-start mb-2">
                                                     <div className="flex items-center gap-2">
