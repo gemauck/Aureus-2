@@ -112,10 +112,6 @@ app.use('/api', async (req, res) => {
       return res.status(404).json({ error: 'API endpoint not found' })
     }
     
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    
     if (req.method === 'OPTIONS') {
       return res.status(204).end()
     }

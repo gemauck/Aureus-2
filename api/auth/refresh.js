@@ -23,7 +23,7 @@ async function handler(req, res) {
     res.setHeader('Set-Cookie', [
       `refreshToken=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax`]
     )
-    return ok(res, { accessToken })
+    return ok(res, { data: { accessToken } })
   } catch (e) {
     return serverError(res, 'Refresh failed', e.message)
   }

@@ -1,7 +1,13 @@
 // Database-First API Utility - All data operations go through database
 const DatabaseAPI = {
-    // Base configuration
-    API_BASE: 'https://abco-erp-2-production.up.railway.app',
+    // Base configuration - Use local API for localhost, production for deployed
+    API_BASE: (() => {
+        const hostname = window.location.hostname;
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+        const apiBase = isLocalhost ? 'http://localhost:3000' : 'https://abco-erp-2-production.up.railway.app';
+        console.log('🔧 DatabaseAPI Base URL:', { hostname, isLocalhost, apiBase });
+        return apiBase;
+    })(),
     
     // Helper function to make authenticated requests
     async makeRequest(endpoint, options = {}) {
@@ -10,7 +16,7 @@ const DatabaseAPI = {
             throw new Error('No authentication token found. Please log in.');
         }
 
-        const url = `${this.API_BASE}${endpoint}`;
+        const url = `${this.API_BASE}/api${endpoint}`;
         const config = {
             headers: {
                 'Content-Type': 'application/json',

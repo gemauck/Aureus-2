@@ -1,4 +1,10 @@
-const API_BASE = window.location.origin + '/api'
+const API_BASE = (() => {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const apiBase = isLocalhost ? 'http://localhost:3000/api' : window.location.origin + '/api';
+    console.log('🔧 API Base URL:', { hostname, isLocalhost, apiBase });
+    return apiBase;
+})()
 
 async function request(path, options = {}) {
   const token = window.storage?.getToken?.()

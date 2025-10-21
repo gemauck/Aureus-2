@@ -4,12 +4,22 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
+  'http://localhost:8000',
   'https://abco-erp-2-cnlz.vercel.app'
 ].filter(Boolean)
 
 const ALLOWED_ORIGIN = (req) => {
   const origin = req.headers.origin
-  return allowedOrigins.includes(origin) ? origin : allowedOrigins[0] || '*'
+  if (allowedOrigins.includes(origin)) {
+    return origin
+  }
+  
+  // For localhost development, allow localhost origins
+  if (origin && origin.startsWith('http://localhost:')) {
+    return origin
+  }
+  
+  return allowedOrigins[0] || '*'
 }
 
 export function withHttp(handler) {

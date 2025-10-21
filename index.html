@@ -230,6 +230,17 @@
     <!-- Babel Standalone -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Fix for exports undefined errors -->
+    <script>
+        // Polyfill for CommonJS exports in browser environment
+        if (typeof exports === 'undefined') {
+            window.exports = {};
+        }
+        if (typeof module === 'undefined') {
+            window.module = { exports: {} };
+        }
+    </script>
+    
     <!-- PDF.js for PDF to Word Converter -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
@@ -272,11 +283,11 @@
     <script type="text/babel" src="./src/components/theme/ThemeProvider.jsx"></script>
     
     <!-- Load all components inline -->
-    <script type="text/babel" src="./src/utils/api.js"></script>
+    <script type="text/babel" src="./src/utils/api.js?v=999"></script>
     <script type="text/babel" src="./src/utils/localStorage.js"></script>
     <script type="text/babel" src="./src/utils/dataService.js"></script>
     <script type="text/babel" src="./src/utils/authStorage.js"></script>
-    <script type="text/babel" src="./src/utils/databaseAPI.js"></script>
+    <script type="text/babel" src="./src/utils/databaseAPI-new.js"></script>
     <script type="text/babel" src="./src/utils/liveDataSync.js"></script>
     <script type="text/babel" src="./src/utils/auditLogger.js"></script>
     

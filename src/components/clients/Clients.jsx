@@ -6,10 +6,10 @@ const LeadDetailModal = window.LeadDetailModal;
 
 // Safe storage helper functions
 const safeStorage = {
-    getClients: () => storage.getClients ? safeStorage.getClients() : null,
-    setClients: (data) => storage.setClients ? safeStorage.setClients(data) : null,
-    getProjects: () => storage.getProjects ? safeStorage.getProjects() : null,
-    setProjects: (data) => storage.setProjects ? safeStorage.setProjects(data) : null,
+    getClients: () => storage.getClients ? storage.getClients() : null,
+    setClients: (data) => storage.setClients ? storage.setClients(data) : null,
+    getProjects: () => storage.getProjects ? storage.getProjects() : null,
+    setProjects: (data) => storage.setProjects ? storage.setProjects(data) : null,
 };
 
 // No initial data - all data comes from database
@@ -174,9 +174,9 @@ const Clients = () => {
                     console.log('✅ Setting clients from localStorage');
                     setClients(savedClients);
                 } else {
-                    console.log('📁 No saved clients, loading initial clients data');
-                    setClients(initialClients);
-                    safeStorage.setClients(initialClients);
+                    console.log('📁 No saved clients, using empty array');
+                    setClients([]);
+                    safeStorage.setClients([]);
                 }
             } else {
                 try {
@@ -301,12 +301,13 @@ const Clients = () => {
                 console.log('✅ Leads loaded from database');
             } else {
                 console.warn('⚠️ No authentication token or API available');
-                setLeads([]);
-                console.log('✅ No leads found (no authentication)');
+                // Keep existing leads if any, don't clear them
+                console.log('✅ Keeping existing leads (no authentication)');
             }
         } catch (error) {
             console.error('❌ Error loading leads from database:', error);
-            setLeads([]);
+            // Keep existing leads on error, don't clear them
+            console.log('✅ Keeping existing leads (API error)');
         }
     };
 
@@ -557,35 +558,50 @@ const Clients = () => {
         
         try {
             const token = window.storage?.getToken?.();
-            if (!token) {
-                throw new Error('No authentication token found. Please log in.');
-            }
-
+            
             if (selectedLead) {
                 // Update existing lead
                 const updatedLead = { ...selectedLead, ...leadFormData };
                 
-                console.log('🌐 Calling API to update lead:', updatedLead.id);
-                const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
-                const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                console.log('✅ Lead updated in database');
-                
-                // Use the updated lead from API
-                if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
-                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
-                    setLeads(updatedLeads);
-                    setSelectedLead(updatedLeadFromAPI);
+                if (token && window.api?.updateLead) {
+                    try {
+                        console.log('🌐 Calling API to update lead:', updatedLead.id);
+                        const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
+                        const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        console.log('✅ Lead updated in database');
+                        
+                        // Use the updated lead from API
+                        if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLeadFromAPI : l);
+                            setLeads(updatedLeads);
+                            setSelectedLead(updatedLeadFromAPI);
+                        } else {
+                            // Fallback to local update if API doesn't return the lead
+                            const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                            setLeads(updatedLeads);
+                            setSelectedLead(updatedLead);
+                        }
+                    } catch (apiError) {
+                        console.error('❌ API error updating lead:', apiError);
+                        // Fallback to local update
+                        const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                        setLeads(updatedLeads);
+                        setSelectedLead(updatedLead);
+                        console.log('✅ Lead updated locally (API fallback)');
+                    }
                 } else {
-                    // Fallback to local update if API doesn't return the lead
+                    // No token or API, update locally only
                     const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                     setLeads(updatedLeads);
                     setSelectedLead(updatedLead);
+                    console.log('✅ Lead updated locally (no authentication)');
                 }
                 console.log('✅ Lead updated');
             } else {
                 // Create new lead
                 const newLead = {
                     ...leadFormData,
+                    id: Date.now().toString(), // Generate local ID
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
                     activityLog: [{
@@ -597,26 +613,50 @@ const Clients = () => {
                     }]
                 };
                 
-                console.log('🌐 Calling API to create lead:', newLead);
-                const apiResponse = await window.api.createLead(newLead);
-                const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                console.log('✅ Lead created in database:', savedLead);
-                
-                // Use the saved lead from database (with proper ID)
-                const updatedLeads = [...leads, savedLead];
-                setLeads(updatedLeads);
-                console.log('✅ New lead created and saved to database');
+                if (token && window.api?.createLead) {
+                    try {
+                        console.log('🌐 Calling API to create lead:', newLead);
+                        const apiResponse = await window.api.createLead(newLead);
+                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        console.log('✅ Lead created in database:', savedLead);
+                        
+                        // Use the saved lead from database (with proper ID)
+                        if (savedLead && savedLead.id) {
+                            const updatedLeads = [...leads, savedLead];
+                            setLeads(updatedLeads);
+                            console.log('✅ New lead created and saved to database');
+                        } else {
+                            // Fallback to local lead if API doesn't return proper response
+                            const updatedLeads = [...leads, newLead];
+                            setLeads(updatedLeads);
+                            console.log('✅ New lead created locally (API fallback)');
+                        }
+                    } catch (apiError) {
+                        console.error('❌ API error creating lead:', apiError);
+                        // Fallback to local creation
+                        const updatedLeads = [...leads, newLead];
+                        setLeads(updatedLeads);
+                        console.log('✅ New lead created locally (API fallback)');
+                    }
+                } else {
+                    // No token or API, create locally only
+                    const updatedLeads = [...leads, newLead];
+                    setLeads(updatedLeads);
+                    console.log('✅ New lead created locally (no authentication)');
+                }
                 
                 // For new leads, redirect to main leads view to show the newly added lead
                 setViewMode('leads');
                 setSelectedLead(null);
                 setCurrentLeadTab('overview');
                 
-                // Force a refresh to ensure API data is loaded
-                setTimeout(() => {
-                    console.log('🔄 Refreshing leads after creation...');
-                    loadLeads();
-                }, 100);
+                // Force a refresh to ensure API data is loaded (if authenticated)
+                if (token) {
+                    setTimeout(() => {
+                        console.log('🔄 Refreshing leads after creation...');
+                        loadLeads();
+                    }, 100);
+                }
             }
         } catch (error) {
             console.error('❌ Error saving lead:', error);
@@ -653,24 +693,32 @@ const Clients = () => {
             console.log('Current leads before deletion:', leads.length);
             
             const token = window.storage?.getToken?.();
-            if (!token) {
-                throw new Error('No authentication token found. Please log in.');
+            
+            if (token && window.api?.deleteLead) {
+                try {
+                    // Delete from database
+                    await window.api.deleteLead(leadId);
+                    console.log('✅ Lead deleted from database');
+                } catch (apiError) {
+                    console.error('❌ API error deleting lead:', apiError);
+                    // Continue with local deletion even if API fails
+                }
+            } else {
+                console.log('⚠️ No authentication token or API available, deleting locally only');
             }
-
-            // Delete from database
-            await window.api.deleteLead(leadId);
-            console.log('✅ Lead deleted from database');
             
             // Update local state
             const updatedLeads = leads.filter(l => l.id !== leadId);
             setLeads(updatedLeads);
             console.log('✅ Lead deleted, new count:', updatedLeads.length);
             
-            // Force a refresh to ensure API data is loaded
-            setTimeout(() => {
-                console.log('🔄 Refreshing leads after deletion...');
-                loadLeads();
-            }, 100);
+            // Force a refresh to ensure API data is loaded (if authenticated)
+            if (token) {
+                setTimeout(() => {
+                    console.log('🔄 Refreshing leads after deletion...');
+                    loadLeads();
+                }, 100);
+            }
             
         } catch (error) {
             console.error('❌ Error deleting lead:', error);
