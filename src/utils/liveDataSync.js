@@ -244,8 +244,15 @@ window.LiveDataSync = new LiveDataSync();
 
 // Auto-start if user is authenticated
 if (window.storage?.getToken?.()) {
-    console.log('🚀 Auto-starting live data sync...');
-    window.LiveDataSync.start();
+    // Double-check authentication by trying to get user data
+    const user = window.storage?.getUser?.();
+    if (user) {
+        console.log('🚀 Auto-starting live data sync...');
+        window.LiveDataSync.start();
+    } else {
+        console.log('⚠️ Token exists but no user data, clearing token');
+        window.storage?.removeToken?.();
+    }
 }
 
 // Debug function

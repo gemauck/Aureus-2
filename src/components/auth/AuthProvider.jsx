@@ -50,6 +50,11 @@ const AuthProvider = ({ children }) => {
                 window.AuditLogger.log('login', 'authentication', { email: me.email, loginMethod: 'email_password' }, me);
             }
             
+            // Start live data sync on successful login
+            if (window.LiveDataSync) {
+                window.LiveDataSync.start();
+            }
+            
             console.log('🎉 Login flow completed successfully');
             return me;
         } catch (err) {
@@ -63,7 +68,6 @@ const AuthProvider = ({ children }) => {
     };
 
     const loginWithGoogle = () => {
-        // For prototype, just use first active user or create demo user
         const users = storage.getUsers() || [];
         const demoUser = users.find(u => u.status === 'Active') || {
             id: 'demo-1',
@@ -89,7 +93,6 @@ const AuthProvider = ({ children }) => {
     };
 
     const loginWithMicrosoft = () => {
-        // For prototype, just use first active user or create demo user
         const users = storage.getUsers() || [];
         const demoUser = users.find(u => u.status === 'Active') || {
             id: 'demo-2',
@@ -122,6 +125,11 @@ const AuthProvider = ({ children }) => {
         storage.removeUser();
         if (window.storage.removeToken) window.storage.removeToken();
         setUser(null);
+        
+        // Stop live data sync on logout
+        if (window.LiveDataSync) {
+            window.LiveDataSync.stop();
+        }
     };
 
     return (
