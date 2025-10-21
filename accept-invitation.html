@@ -10,334 +10,254 @@
         .gradient-bg {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
-        .card-shadow {
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-        }
     </style>
 </head>
-<body class="gradient-bg min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl card-shadow p-8 w-full max-w-md">
-        <!-- Logo -->
+<body class="min-h-screen gradient-bg flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-8">
+        <!-- Header -->
         <div class="text-center mb-8">
-            <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <i class="fas fa-user-plus text-white text-2xl"></i>
+            <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-user-plus text-blue-600 text-2xl"></i>
             </div>
             <h1 class="text-2xl font-bold text-gray-900">Accept Invitation</h1>
-            <p class="text-gray-600 mt-2">Join the Abcotronics ERP system</p>
+            <p class="text-gray-600 mt-2">Complete your account setup to join Abcotronics ERP</p>
         </div>
+
+        <!-- Invitation Info -->
+        <div id="invitationInfo" class="hidden bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-info-circle text-blue-600 mr-2"></i>
+                <div>
+                    <h3 class="font-semibold text-blue-900">Invitation Details</h3>
+                    <p class="text-sm text-blue-700" id="invitationDetails"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="hidden bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-exclamation-triangle text-red-600 mr-2"></i>
+                <div>
+                    <h3 class="font-semibold text-red-900">Error</h3>
+                    <p class="text-sm text-red-700" id="errorText"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Message -->
+        <div id="successMessage" class="hidden bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <div class="flex items-center">
+                <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                <div>
+                    <h3 class="font-semibold text-green-900">Success!</h3>
+                    <p class="text-sm text-green-700" id="successText"></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form -->
+        <form id="acceptForm" class="space-y-6">
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                    Full Name <span class="text-red-500">*</span>
+                </label>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    required
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Enter your full name"
+                />
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
+                    Password <span class="text-red-500">*</span>
+                </label>
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    required
+                    minlength="6"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Create a secure password"
+                />
+                <p class="text-xs text-gray-500 mt-1">Password must be at least 6 characters long</p>
+            </div>
+
+            <div>
+                <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-2">
+                    Confirm Password <span class="text-red-500">*</span>
+                </label>
+                <input
+                    type="password"
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    required
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Confirm your password"
+                />
+            </div>
+
+            <button
+                type="submit"
+                id="submitBtn"
+                class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center"
+            >
+                <i class="fas fa-user-plus mr-2"></i>
+                Create Account
+            </button>
+        </form>
 
         <!-- Loading State -->
-        <div id="loading" class="text-center">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p class="text-gray-600 mt-4">Loading invitation details...</p>
+        <div id="loadingState" class="hidden text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p class="text-gray-600">Creating your account...</p>
         </div>
 
-        <!-- Error State -->
-        <div id="error" class="hidden">
-            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-exclamation-triangle text-red-400"></i>
-                    </div>
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-red-800">Invalid Invitation</h3>
-                        <div class="mt-2 text-sm text-red-700">
-                            <p id="error-message"></p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="text-center">
-                <a href="/" class="text-blue-600 hover:text-blue-500 font-medium">
-                    <i class="fas fa-arrow-left mr-2"></i>
-                    Back to Login
+        <!-- Footer -->
+        <div class="text-center mt-8 pt-6 border-t border-gray-200">
+            <p class="text-xs text-gray-500">
+                By creating an account, you agree to our terms of service and privacy policy.
+            </p>
+            <p class="text-xs text-gray-500 mt-2">
+                Need help? Contact us at 
+                <a href="mailto:support@abcotronics.co.za" class="text-blue-600 hover:underline">
+                    support@abcotronics.co.za
                 </a>
-            </div>
-        </div>
-
-        <!-- Invitation Form -->
-        <div id="invitation-form" class="hidden">
-            <!-- Invitation Details -->
-            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <div class="flex items-center mb-3">
-                    <i class="fas fa-info-circle text-blue-500 mr-2"></i>
-                    <h3 class="text-sm font-medium text-blue-800">Invitation Details</h3>
-                </div>
-                <div class="space-y-2 text-sm">
-                    <div><span class="font-medium text-blue-800">Name:</span> <span id="invitation-name" class="text-blue-700"></span></div>
-                    <div><span class="font-medium text-blue-800">Email:</span> <span id="invitation-email" class="text-blue-700"></span></div>
-                    <div><span class="font-medium text-blue-800">Role:</span> <span id="invitation-role" class="text-blue-700 capitalize"></span></div>
-                    <div><span class="font-medium text-blue-800">Invited by:</span> <span id="invitation-by" class="text-blue-700"></span></div>
-                </div>
-            </div>
-
-            <form id="accept-form">
-                <div class="space-y-4">
-                    <!-- Password -->
-                    <div>
-                        <label for="password" class="block text-sm font-medium text-gray-700 mb-2">
-                            Password
-                        </label>
-                        <div class="relative">
-                            <input
-                                type="password"
-                                id="password"
-                                name="password"
-                                required
-                                minlength="6"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Enter your password"
-                            >
-                            <button
-                                type="button"
-                                id="toggle-password"
-                                class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                            >
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
-                    </div>
-
-                    <!-- Confirm Password -->
-                    <div>
-                        <label for="confirmPassword" class="block text-sm font-medium text-gray-700 mb-2">
-                            Confirm Password
-                        </label>
-                        <div class="relative">
-                            <input
-                                type="password"
-                                id="confirmPassword"
-                                name="confirmPassword"
-                                required
-                                minlength="6"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="Confirm your password"
-                            >
-                            <button
-                                type="button"
-                                id="toggle-confirm-password"
-                                class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                            >
-                                <i class="fas fa-eye"></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Terms -->
-                    <div class="flex items-start">
-                        <input
-                            type="checkbox"
-                            id="terms"
-                            name="terms"
-                            required
-                            class="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        >
-                        <label for="terms" class="ml-2 text-sm text-gray-700">
-                            I agree to the <a href="#" class="text-blue-600 hover:text-blue-500">Terms of Service</a> and <a href="#" class="text-blue-600 hover:text-blue-500">Privacy Policy</a>
-                        </label>
-                    </div>
-
-                    <!-- Submit Button -->
-                    <button
-                        type="submit"
-                        id="submit-btn"
-                        class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-200 font-medium"
-                    >
-                        <i class="fas fa-check mr-2"></i>
-                        Accept Invitation
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Success State -->
-        <div id="success" class="hidden">
-            <div class="text-center">
-                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-check text-green-600 text-2xl"></i>
-                </div>
-                <h2 class="text-xl font-bold text-gray-900 mb-2">Account Created Successfully!</h2>
-                <p class="text-gray-600 mb-6">You can now log in to the Abcotronics ERP system.</p>
-                <a href="/" class="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition duration-200 font-medium inline-flex items-center">
-                    <i class="fas fa-sign-in-alt mr-2"></i>
-                    Go to Login
-                </a>
-            </div>
+            </p>
         </div>
     </div>
 
     <script>
-        class InvitationAcceptance {
-            constructor() {
-                this.token = this.getTokenFromURL();
-                this.init();
-            }
+        // Get invitation token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
 
-            getTokenFromURL() {
-                const urlParams = new URLSearchParams(window.location.search);
-                return urlParams.get('token');
-            }
+        if (!token) {
+            showError('Invalid invitation link. Please check your email for the correct invitation link.');
+            document.getElementById('acceptForm').style.display = 'none';
+        }
 
-            async init() {
-                if (!this.token) {
-                    this.showError('No invitation token provided');
-                    return;
-                }
+        // Validate invitation token on page load
+        async function validateInvitation() {
+            if (!token) return;
 
-                try {
-                    await this.loadInvitationDetails();
-                    this.setupEventListeners();
-                } catch (error) {
-                    this.showError('Failed to load invitation details');
-                }
-            }
+            try {
+                const response = await fetch('/api/users/validate-invitation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ token })
+                });
 
-            async loadInvitationDetails() {
-                const response = await fetch(`/api/users/invitation-details?token=${this.token}`);
                 const data = await response.json();
 
-                if (!response.ok) {
-                    throw new Error(data.message || 'Failed to load invitation');
-                }
-
-                this.invitation = data.invitation;
-                this.showInvitationForm();
-            }
-
-            showInvitationForm() {
-                document.getElementById('loading').classList.add('hidden');
-                
-                // Populate invitation details
-                document.getElementById('invitation-name').textContent = this.invitation.name;
-                document.getElementById('invitation-email').textContent = this.invitation.email;
-                document.getElementById('invitation-role').textContent = this.invitation.role;
-                document.getElementById('invitation-by').textContent = this.invitation.invitedBy;
-
-                document.getElementById('invitation-form').classList.remove('hidden');
-            }
-
-            setupEventListeners() {
-                // Password toggle
-                document.getElementById('toggle-password').addEventListener('click', () => {
-                    this.togglePasswordVisibility('password', 'toggle-password');
-                });
-
-                document.getElementById('toggle-confirm-password').addEventListener('click', () => {
-                    this.togglePasswordVisibility('confirmPassword', 'toggle-confirm-password');
-                });
-
-                // Form submission
-                document.getElementById('accept-form').addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    this.acceptInvitation();
-                });
-            }
-
-            togglePasswordVisibility(inputId, buttonId) {
-                const input = document.getElementById(inputId);
-                const button = document.getElementById(buttonId);
-                const icon = button.querySelector('i');
-
-                if (input.type === 'password') {
-                    input.type = 'text';
-                    icon.className = 'fas fa-eye-slash';
+                if (response.ok) {
+                    showInvitationInfo(data.invitation);
                 } else {
-                    input.type = 'password';
-                    icon.className = 'fas fa-eye';
+                    showError(data.message || 'Invalid invitation');
+                    document.getElementById('acceptForm').style.display = 'none';
                 }
-            }
-
-            async acceptInvitation() {
-                const form = document.getElementById('accept-form');
-                const formData = new FormData(form);
-                const submitBtn = document.getElementById('submit-btn');
-
-                // Validate passwords match
-                const password = formData.get('password');
-                const confirmPassword = formData.get('confirmPassword');
-
-                if (password !== confirmPassword) {
-                    this.showFormError('Passwords do not match');
-                    return;
-                }
-
-                // Disable submit button
-                submitBtn.disabled = true;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Creating Account...';
-
-                try {
-                    const response = await fetch('/api/users/accept-invitation', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            token: this.token,
-                            password: password,
-                            confirmPassword: confirmPassword
-                        })
-                    });
-
-                    const data = await response.json();
-
-                    if (!response.ok) {
-                        throw new Error(data.message || 'Failed to accept invitation');
-                    }
-
-                    this.showSuccess();
-
-                } catch (error) {
-                    this.showFormError(error.message);
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Accept Invitation';
-                }
-            }
-
-            showSuccess() {
-                document.getElementById('invitation-form').classList.add('hidden');
-                document.getElementById('success').classList.remove('hidden');
-            }
-
-            showError(message) {
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('error-message').textContent = message;
-                document.getElementById('error').classList.remove('hidden');
-            }
-
-            showFormError(message) {
-                // Create error alert
-                const errorAlert = document.createElement('div');
-                errorAlert.className = 'bg-red-50 border border-red-200 rounded-lg p-4 mb-4';
-                errorAlert.innerHTML = `
-                    <div class="flex">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-exclamation-triangle text-red-400"></i>
-                        </div>
-                        <div class="ml-3">
-                            <h3 class="text-sm font-medium text-red-800">Error</h3>
-                            <div class="mt-2 text-sm text-red-700">
-                                <p>${message}</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-
-                // Insert before form
-                const form = document.getElementById('accept-form');
-                form.parentNode.insertBefore(errorAlert, form);
-
-                // Remove after 5 seconds
-                setTimeout(() => {
-                    errorAlert.remove();
-                }, 5000);
+            } catch (error) {
+                console.error('Error validating invitation:', error);
+                showError('Failed to validate invitation. Please try again.');
             }
         }
 
-        // Initialize when page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            new InvitationAcceptance();
+        function showInvitationInfo(invitation) {
+            const infoDiv = document.getElementById('invitationInfo');
+            const detailsP = document.getElementById('invitationDetails');
+            
+            detailsP.textContent = `You've been invited as ${invitation.role} for ${invitation.email}`;
+            infoDiv.classList.remove('hidden');
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            
+            errorText.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            const successText = document.getElementById('successText');
+            
+            successText.textContent = message;
+            successDiv.classList.remove('hidden');
+        }
+
+        function showLoading() {
+            document.getElementById('acceptForm').classList.add('hidden');
+            document.getElementById('loadingState').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('acceptForm').classList.remove('hidden');
+            document.getElementById('loadingState').classList.add('hidden');
+        }
+
+        // Form submission
+        document.getElementById('acceptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData(e.target);
+            const password = formData.get('password');
+            const confirmPassword = formData.get('confirmPassword');
+
+            // Validate passwords match
+            if (password !== confirmPassword) {
+                showError('Passwords do not match');
+                return;
+            }
+
+            // Validate password strength
+            if (password.length < 6) {
+                showError('Password must be at least 6 characters long');
+                return;
+            }
+
+            showLoading();
+
+            try {
+                const response = await fetch('/api/users/accept-invitation', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        token,
+                        password,
+                        name: formData.get('name')
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showSuccess('Account created successfully! Redirecting to login...');
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 2000);
+                } else {
+                    hideLoading();
+                    showError(data.message || 'Failed to create account');
+                }
+            } catch (error) {
+                hideLoading();
+                console.error('Error creating account:', error);
+                showError('Failed to create account. Please try again.');
+            }
         });
+
+        // Validate invitation on page load
+        validateInvitation();
     </script>
 </body>
 </html>

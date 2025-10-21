@@ -117,16 +117,31 @@ async function handler(req, res) {
         const invitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitationToken}`
         console.log('🔗 Generated invitation link:', invitationLink)
         
-        // Skip email sending for now to prevent timeouts
+        // Send invitation email
         let emailSent = false
-        let emailError = new Error('Email sending temporarily disabled to prevent timeouts')
+        let emailError = null
         
-        console.log('⚠️ Email sending temporarily disabled to prevent timeouts')
+        try {
+            console.log('📧 Attempting to send invitation email...')
+            const emailResult = await sendInvitationEmail({
+                email: invitation.email,
+                name: invitation.name,
+                role: invitation.role,
+                invitationLink
+            })
+            
+            emailSent = true
+            console.log('✅ Invitation email sent successfully:', emailResult.messageId)
+        } catch (emailErr) {
+            emailError = emailErr
+            console.error('❌ Failed to send invitation email:', emailErr.message)
+        }
+        
         console.log('📧 Email config check:', {
             SMTP_HOST: process.env.SMTP_HOST || 'NOT_SET',
             SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
             SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
-            SMTP_PASS: process.env.SMTP_PASS ? '***' : 'NOT_SET',
+            SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
             EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET'
         })
 

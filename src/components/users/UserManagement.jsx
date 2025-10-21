@@ -6,10 +6,19 @@ const UserManagement = () => {
     const [invitations, setInvitations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
+    const [showAddUserModal, setShowAddUserModal] = useState(false);
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
         role: 'user'
+    });
+    const [newUser, setNewUser] = useState({
+        name: '',
+        email: '',
+        role: 'member',
+        department: '',
+        phone: '',
+        status: 'active'
     });
     const [whatsappMessage, setWhatsappMessage] = useState('');
     const [invitationLink, setInvitationLink] = useState('');
@@ -45,6 +54,26 @@ const UserManagement = () => {
             console.error('Error loading users:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleAddUserSubmit = async (e) => {
+        e.preventDefault();
+        
+        if (!newUser.name || !newUser.email) {
+            alert('Name and email are required');
+            return;
+        }
+
+        try {
+            const success = await handleAddUser(newUser);
+            if (success) {
+                setShowAddUserModal(false);
+                setNewUser({ name: '', email: '', role: 'member', department: '', phone: '', status: 'active' });
+            }
+        } catch (error) {
+            console.error('Error adding user:', error);
+            alert('Failed to add user');
         }
     };
 
@@ -147,6 +176,64 @@ const UserManagement = () => {
         document.body.appendChild(modal);
     };
 
+    const handleAddUser = async (userData) => {
+        try {
+            const token = window.storage?.getToken?.();
+            const response = await fetch('/api/users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(userData)
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                loadUsers();
+                alert('User created successfully');
+                return true;
+            } else {
+                alert(data.message || 'Failed to create user');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error creating user:', error);
+            alert('Failed to create user');
+            return false;
+        }
+    };
+
+    const handleEditUser = async (userId, userData) => {
+        try {
+            const token = window.storage?.getToken?.();
+            const response = await fetch('/api/users', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ userId, ...userData })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                loadUsers();
+                alert('User updated successfully');
+                return true;
+            } else {
+                alert(data.message || 'Failed to update user');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error updating user:', error);
+            alert('Failed to update user');
+            return false;
+        }
+    };
+
     const handleDeleteUser = async (userId, userName) => {
         if (!confirm(`Are you sure you want to delete user "${userName}"?`)) {
             return;
@@ -225,13 +312,22 @@ const UserManagement = () => {
                     <h1 className="text-2xl font-bold text-gray-900 dark:text-white">User Management</h1>
                     <p className="text-gray-600 dark:text-gray-400">Manage users and send invitations</p>
                 </div>
-                <button
-                    onClick={() => setShowInviteModal(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-                >
-                    <i className="fas fa-user-plus mr-2"></i>
-                    Invite User
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setShowAddUserModal(true)}
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
+                    >
+                        <i className="fas fa-user-plus mr-2"></i>
+                        Add User
+                    </button>
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                    >
+                        <i className="fas fa-envelope mr-2"></i>
+                        Invite User
+                    </button>
+                </div>
             </div>
 
             {/* Stats Cards */}
@@ -370,6 +466,128 @@ const UserManagement = () => {
                 </div>
             )}
 
+            {/* Add User Modal */}
+            {showAddUserModal && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className={`rounded-xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <i className="fas fa-user-plus mr-2 text-green-600"></i>
+                                Add New User
+                            </h3>
+                            <button
+                                onClick={() => setShowAddUserModal(false)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddUserSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newUser.name}
+                                    onChange={(e) => setNewUser({...newUser, name: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    placeholder="Enter full name"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Email <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    value={newUser.email}
+                                    onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    placeholder="Enter email address"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Role
+                                </label>
+                                <select
+                                    value={newUser.role}
+                                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="member">Member</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Department
+                                </label>
+                                <input
+                                    type="text"
+                                    value={newUser.department}
+                                    onChange={(e) => setNewUser({...newUser, department: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    placeholder="Enter department (optional)"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Phone
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={newUser.phone}
+                                    onChange={(e) => setNewUser({...newUser, phone: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    placeholder="Enter phone number (optional)"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Status
+                                </label>
+                                <select
+                                    value={newUser.status}
+                                    onChange={(e) => setNewUser({...newUser, status: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3 pt-4">
+                                <button
+                                    type="submit"
+                                    className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition-colors"
+                                >
+                                    <i className="fas fa-user-plus mr-2"></i>
+                                    Create User
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddUserModal(false)}
+                                    className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Invite Modal */}
             {showInviteModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -390,7 +608,7 @@ const UserManagement = () => {
                         <form onSubmit={handleInviteUser} className="space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Name
+                                    Name <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="text"
@@ -404,7 +622,7 @@ const UserManagement = () => {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Email
+                                    Email <span className="text-red-500">*</span>
                                 </label>
                                 <input
                                     type="email"
