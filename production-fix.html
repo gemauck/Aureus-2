@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Production Auto-Seeding Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        code { background: #f8f9fa; padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <h1>Production Auto-Seeding Fix</h1>
+    
+    <div class="warning">
+        <h3>⚠️ Production Issue Detected</h3>
+        <p>Your production version at <code>abco-erp-2-production.up.railway.app</code> is still running the old auto-seeding code.</p>
+        <p>This is why RGN and Exxaro keep coming back after deletion.</p>
+    </div>
+    
+    <div class="info">
+        <h3>🔧 Quick Fix Options</h3>
+        <p>Choose one of these methods to fix the production issue:</p>
+    </div>
+    
+    <h3>Option 1: Deploy Fix to Production</h3>
+    <p>Run this command in your terminal:</p>
+    <code>./deploy-seeding-fix.sh</code>
+    <br><br>
+    <button onclick="showDeployInstructions()">Show Deploy Instructions</button>
+    
+    <h3>Option 2: Manual Browser Fix</h3>
+    <p>If you can't deploy right now, you can disable auto-seeding manually:</p>
+    <button onclick="disableAutoSeeding()">Disable Auto-Seeding in Browser</button>
+    <button onclick="deleteRGNAndExxaro()" class="danger">Delete RGN & Exxaro Now</button>
+    
+    <h3>Option 3: Check Current Status</h3>
+    <button onclick="checkProductionStatus()">Check Production Status</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+        }
+        
+        function showDeployInstructions() {
+            addResult('📋 Deploy Instructions:', 'info');
+            addResult('1. Open Terminal/Command Prompt', 'info');
+            addResult('2. Navigate to your project directory', 'info');
+            addResult('3. Run: railway login', 'info');
+            addResult('4. Run: ./deploy-seeding-fix.sh', 'info');
+            addResult('5. Wait for deployment to complete', 'info');
+            addResult('6. Test by deleting RGN and Exxaro', 'info');
+        }
+        
+        function disableAutoSeeding() {
+            addResult('🔧 Disabling auto-seeding in browser...', 'info');
+            
+            try {
+                // Override the auto-seeding function
+                if (window.seedClientsAndLeads) {
+                    const originalFunction = window.seedClientsAndLeads;
+                    window.seedClientsAndLeads = function() {
+                        addResult('🚫 Auto-seeding blocked by manual override', 'success');
+                        return Promise.resolve({
+                            success: false,
+                            message: 'Auto-seeding disabled manually'
+                        });
+                    };
+                    addResult('✅ Auto-seeding disabled for this session', 'success');
+                } else {
+                    addResult('⚠️ Seeding function not found - may not be loaded yet', 'warning');
+                }
+                
+                // Also try to override the runAutoSeeding function
+                if (window.runAutoSeeding) {
+                    window.runAutoSeeding = function() {
+                        addResult('🚫 Auto-seeding run blocked', 'success');
+                    };
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function deleteRGNAndExxaro() {
+            addResult('🗑️ Deleting RGN and Exxaro from production...', 'info');
+            
+            try {
+                // Get current data
+                const leadsResponse = await fetch('https://abco-erp-2-production.up.railway.app/api/leads', {
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                    }
+                });
+                
+                const clientsResponse = await fetch('https://abco-erp-2-production.up.railway.app/api/clients', {
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                    }
+                });
+                
+                if (leadsResponse.ok) {
+                    const leadsData = await leadsResponse.json();
+                    const leads = leadsData.data.leads || [];
+                    const rgnLead = leads.find(l => l.name === 'RGN');
+                    
+                    if (rgnLead) {
+                        const deleteResponse = await fetch(`https://abco-erp-2-production.up.railway.app/api/leads/${rgnLead.id}`, {
+                            method: 'DELETE',
+                            headers: { 
+                                'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                            }
+                        });
+                        
+                        if (deleteResponse.ok) {
+                            addResult('✅ RGN lead deleted from production', 'success');
+                        } else {
+                            addResult('❌ Failed to delete RGN lead', 'warning');
+                        }
+                    } else {
+                        addResult('ℹ️ RGN lead not found in production', 'info');
+                    }
+                }
+                
+                if (clientsResponse.ok) {
+                    const clientsData = await clientsResponse.json();
+                    const clients = clientsData.data.clients || [];
+                    const exxaroClient = clients.find(c => c.name === 'Exxaro');
+                    
+                    if (exxaroClient) {
+                        const deleteResponse = await fetch(`https://abco-erp-2-production.up.railway.app/api/clients/${exxaroClient.id}`, {
+                            method: 'DELETE',
+                            headers: { 
+                                'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                            }
+                        });
+                        
+                        if (deleteResponse.ok) {
+                            addResult('✅ Exxaro client deleted from production', 'success');
+                        } else {
+                            addResult('❌ Failed to delete Exxaro client', 'warning');
+                        }
+                    } else {
+                        addResult('ℹ️ Exxaro client not found in production', 'info');
+                    }
+                }
+                
+                addResult('🎉 Deletion completed! They should stay deleted until auto-seeding is fixed.', 'success');
+                
+            } catch (error) {
+                addResult(`❌ Error during deletion: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function checkProductionStatus() {
+            addResult('🔍 Checking production status...', 'info');
+            
+            try {
+                // Check if we can access the production API
+                const healthResponse = await fetch('https://abco-erp-2-production.up.railway.app/api/health');
+                
+                if (healthResponse.ok) {
+                    addResult('✅ Production API is accessible', 'success');
+                    
+                    // Check current data
+                    const leadsResponse = await fetch('https://abco-erp-2-production.up.railway.app/api/leads', {
+                        headers: { 
+                            'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                        }
+                    });
+                    
+                    const clientsResponse = await fetch('https://abco-erp-2-production.up.railway.app/api/clients', {
+                        headers: { 
+                            'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                        }
+                    });
+                    
+                    if (leadsResponse.ok) {
+                        const leadsData = await leadsResponse.json();
+                        const leads = leadsData.data.leads || [];
+                        const rgnExists = leads.some(l => l.name === 'RGN');
+                        addResult(`📊 RGN Lead: ${rgnExists ? '✅ Exists' : '❌ Missing'}`, rgnExists ? 'warning' : 'success');
+                    }
+                    
+                    if (clientsResponse.ok) {
+                        const clientsData = await clientsResponse.json();
+                        const clients = clientsData.data.clients || [];
+                        const exxaroExists = clients.some(c => c.name === 'Exxaro');
+                        addResult(`📊 Exxaro Client: ${exxaroExists ? '✅ Exists' : '❌ Missing'}`, exxaroExists ? 'warning' : 'success');
+                    }
+                    
+                } else {
+                    addResult('❌ Production API is not accessible', 'warning');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error checking production: ${error.message}`, 'warning');
+            }
+        }
+        
+        // Auto-run status check on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Production Auto-Seeding Fix Tool Loaded', 'info');
+            addResult('📝 Choose an option above to fix the RGN/Exxaro recreation issue', 'info');
+            checkProductionStatus();
+        });
+    </script>
+</body>
+</html>

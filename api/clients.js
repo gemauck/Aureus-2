@@ -35,7 +35,7 @@ async function handler(req, res) {
 
     // Create Client (POST /api/clients)
     if (req.method === 'POST' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
-      const body = await parseJsonBody(req)
+      const body = req.body || {}
       if (!body.name) return badRequest(res, 'name required')
 
       // Ensure type column exists in database
@@ -44,6 +44,22 @@ async function handler(req, res) {
         console.log('✅ Type column ensured in database')
       } catch (error) {
         console.log('Type column already exists or error adding it:', error.message)
+      }
+
+      // Verify user exists before setting ownerId
+      let ownerId = null;
+      if (req.user?.sub) {
+        try {
+          const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+          if (user) {
+            ownerId = req.user.sub;
+            console.log('✅ User verified for ownerId:', user.email);
+          } else {
+            console.log('⚠️ User not found in database, skipping ownerId');
+          }
+        } catch (userError) {
+          console.log('⚠️ Error verifying user, skipping ownerId:', userError.message);
+        }
       }
 
       const clientData = {
@@ -58,23 +74,22 @@ async function handler(req, res) {
         address: body.address || '',
         website: body.website || '',
         notes: body.notes || '',
-        contacts: Array.isArray(body.contacts) ? body.contacts : [],
-        followUps: Array.isArray(body.followUps) ? body.followUps : [],
-        projectIds: Array.isArray(body.projectIds) ? body.projectIds : [],
-        comments: Array.isArray(body.comments) ? body.comments : [],
-        sites: Array.isArray(body.sites) ? body.sites : [],
-        // opportunities: Array.isArray(body.opportunities) ? body.opportunities : [], // Removed - conflicts with relation
-        contracts: Array.isArray(body.contracts) ? body.contracts : [],
-        activityLog: Array.isArray(body.activityLog) ? body.activityLog : [],
-        billingTerms: typeof body.billingTerms === 'object' ? body.billingTerms : {
+        contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
+        followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
+        projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
+        comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
+        sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
+        contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
+        activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+        billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {
           paymentTerms: 'Net 30',
           billingFrequency: 'Monthly',
           currency: 'ZAR',
           retainerAmount: 0,
           taxExempt: false,
           notes: ''
-        },
-        ...(req.user?.sub && { ownerId: req.user.sub })
+        }),
+        ...(ownerId ? { ownerId } : {})
       }
 
       console.log('🔍 Creating client with data:', clientData)
@@ -101,7 +116,7 @@ async function handler(req, res) {
             contracts: clientData.contracts,
             activityLog: clientData.activityLog,
             billingTerms: clientData.billingTerms,
-            ...(clientData.ownerId && { ownerId: clientData.ownerId })
+            ...(ownerId ? { ownerId } : {})
           }
         })
         
@@ -127,7 +142,7 @@ async function handler(req, res) {
         }
       }
       if (req.method === 'PATCH') {
-        const body = await parseJsonBody(req)
+        const body = req.body || {}
         const updateData = {
           name: body.name,
           type: body.type, // Handle type field for leads vs clients
@@ -140,15 +155,14 @@ async function handler(req, res) {
           address: body.address,
           website: body.website,
           notes: body.notes,
-          contacts: body.contacts,
-          followUps: body.followUps,
-          projectIds: body.projectIds,
-          comments: body.comments,
-          sites: Array.isArray(body.sites) ? body.sites : [],
-          // opportunities: body.opportunities, // Removed - conflicts with relation
-          contracts: body.contracts,
-          activityLog: body.activityLog,
-          billingTerms: body.billingTerms
+          contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
+          followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
+          projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
+          comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
+          sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
+          contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
+          activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+          billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
@@ -168,9 +182,35 @@ async function handler(req, res) {
       }
       if (req.method === 'DELETE') {
         try {
+          // First, delete all related records to avoid foreign key constraints
+          console.log('🔍 Checking for related records before deleting client:', id)
+          
+          // Delete opportunities
+          const opportunitiesDeleted = await prisma.opportunity.deleteMany({
+            where: { clientId: id }
+          })
+          console.log('🗑️ Deleted opportunities:', opportunitiesDeleted.count)
+          
+          // Delete invoices
+          const invoicesDeleted = await prisma.invoice.deleteMany({
+            where: { clientId: id }
+          })
+          console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
+          
+          // Update projects to remove client reference (set clientId to null)
+          const projectsUpdated = await prisma.project.updateMany({
+            where: { clientId: id },
+            data: { clientId: null }
+          })
+          console.log('🔄 Updated projects (removed client reference):', projectsUpdated.count)
+          
+          // Now delete the client
           await prisma.client.delete({ where: { id } })
           console.log('✅ Client deleted successfully:', id)
-          return ok(res, { deleted: true })
+          return ok(res, { 
+            deleted: true, 
+            message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, and updated ${projectsUpdated.count} projects.`
+          })
         } catch (dbError) {
           console.error('❌ Database error deleting client:', dbError)
           return serverError(res, 'Failed to delete client', dbError.message)

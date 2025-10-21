@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Opportunity API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Opportunity API Test</h1>
+    
+    <div class="info">
+        <h3>📋 Test Opportunity API Functions</h3>
+        <p>This page tests the opportunity API functions to ensure they work with the database.</p>
+    </div>
+    
+    <div class="form-group">
+        <h3>Create New Opportunity</h3>
+        <label>Title:</label>
+        <input type="text" id="opportunityTitle" placeholder="e.g., New Software License" value="Test Opportunity">
+        
+        <label>Client ID:</label>
+        <input type="text" id="clientId" placeholder="Client ID" value="">
+        
+        <label>Stage:</label>
+        <select id="opportunityStage">
+            <option value="prospect">Prospect</option>
+            <option value="qualification">Qualification</option>
+            <option value="proposal">Proposal</option>
+            <option value="negotiation">Negotiation</option>
+            <option value="closed-won">Closed Won</option>
+            <option value="closed-lost">Closed Lost</option>
+        </select>
+        
+        <label>Value (R):</label>
+        <input type="number" id="opportunityValue" placeholder="50000" value="50000">
+        
+        <br>
+        <button onclick="createOpportunity()">Create Opportunity</button>
+        <button onclick="listOpportunities()">List All Opportunities</button>
+        <button onclick="testAPI()">Test API Functions</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        // Load the API utilities
+        const script1 = document.createElement('script');
+        script1.src = '/src/utils/api.js';
+        document.head.appendChild(script1);
+        
+        const script2 = document.createElement('script');
+        script2.src = '/src/utils/authStorage.js';
+        document.head.appendChild(script2);
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function testAPI() {
+            addResult('🔍 Testing API functions...', 'info');
+            
+            // Wait for API to load
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            if (window.debugAPI) {
+                window.debugAPI();
+                addResult('✅ API debug function called - check console for details', 'success');
+            } else {
+                addResult('❌ API debug function not available', 'error');
+            }
+            
+            // Test individual functions
+            const tests = [
+                { name: 'createOpportunity', func: window.api?.createOpportunity },
+                { name: 'listOpportunities', func: window.api?.listOpportunities },
+                { name: 'updateOpportunity', func: window.api?.updateOpportunity },
+                { name: 'deleteOpportunity', func: window.api?.deleteOpportunity },
+                { name: 'getOpportunity', func: window.api?.getOpportunity },
+                { name: 'getOpportunitiesByClient', func: window.api?.getOpportunitiesByClient }
+            ];
+            
+            tests.forEach(test => {
+                if (typeof test.func === 'function') {
+                    addResult(`✅ ${test.name} function available`, 'success');
+                } else {
+                    addResult(`❌ ${test.name} function missing`, 'error');
+                }
+            });
+        }
+        
+        async function createOpportunity() {
+            const title = document.getElementById('opportunityTitle').value;
+            const clientId = document.getElementById('clientId').value;
+            const stage = document.getElementById('opportunityStage').value;
+            const value = parseFloat(document.getElementById('opportunityValue').value);
+            
+            if (!title) {
+                addResult('❌ Title is required', 'error');
+                return;
+            }
+            
+            if (!clientId) {
+                addResult('❌ Client ID is required', 'error');
+                return;
+            }
+            
+            addResult(`🚀 Creating opportunity: ${title}`, 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.createOpportunity) {
+                    addResult('❌ createOpportunity function not available', 'error');
+                    return;
+                }
+                
+                const opportunityData = {
+                    title: title,
+                    clientId: clientId,
+                    stage: stage,
+                    value: value
+                };
+                
+                console.log('Creating opportunity with data:', opportunityData);
+                const response = await window.api.createOpportunity(opportunityData);
+                
+                if (response && response.data && response.data.opportunity) {
+                    addResult(`✅ Opportunity created successfully! ID: ${response.data.opportunity.id}`, 'success');
+                    addResult(`📊 Response: ${JSON.stringify(response.data.opportunity, null, 2)}`, 'info');
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error creating opportunity: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        async function listOpportunities() {
+            addResult('📋 Listing all opportunities...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.listOpportunities) {
+                    addResult('❌ listOpportunities function not available', 'error');
+                    return;
+                }
+                
+                const response = await window.api.listOpportunities();
+                
+                if (response && response.data && response.data.opportunities) {
+                    const opportunities = response.data.opportunities;
+                    addResult(`✅ Found ${opportunities.length} opportunities`, 'success');
+                    
+                    opportunities.forEach(opp => {
+                        addResult(`📊 ${opp.title} - ${opp.stage} - R${opp.value} (Client: ${opp.client?.name || opp.clientId})`, 'info');
+                    });
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error listing opportunities: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Opportunity API Test Tool Loaded', 'info');
+            addResult('💡 Make sure you are logged in and have a valid client ID', 'info');
+            
+            // Auto-test after a delay
+            setTimeout(() => {
+                testAPI();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

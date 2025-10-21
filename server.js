@@ -1,6 +1,7 @@
 // Railway ERP Server Entry Point
 import 'dotenv/config'
 import express from 'express'
+import cookieParser from 'cookie-parser'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
@@ -35,6 +36,13 @@ function toHandlerPath(urlPath) {
 
   const candidates = []
   
+  // Dynamic route matches first (e.g., /api/clients/123 -> api/clients/[id].js)
+  if (parts.length === 2) {
+    const dynamicFile = path.join(apiDir, parts[0], '[id].js')
+    candidates.push(dynamicFile)
+    console.log(`🔍 Checking dynamic file: ${dynamicFile}`)
+  }
+  
   // Direct file matches (e.g., /api/leads -> api/leads.js)
   const directFile = path.join(apiDir, `${parts.join('/')}.js`)
   candidates.push(directFile)
@@ -47,13 +55,6 @@ function toHandlerPath(urlPath) {
     candidates.push(nestedIndex)
     candidates.push(nestedFile)
     console.log(`🔍 Checking nested files: ${nestedIndex}, ${nestedFile}`)
-  }
-  
-  // Dynamic route matches (e.g., /api/clients/123 -> api/clients/[id].js)
-  if (parts.length === 2) {
-    const dynamicFile = path.join(apiDir, parts[0], '[id].js')
-    candidates.push(dynamicFile)
-    console.log(`🔍 Checking dynamic file: ${dynamicFile}`)
   }
   
   // Single part matches (e.g., /api/login -> api/login.js)
@@ -98,6 +99,7 @@ const PORT = process.env.PORT || 3000
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+app.use(cookieParser())
 
 // CORS middleware for local development
 app.use((req, res, next) => {
@@ -112,18 +114,32 @@ app.use((req, res, next) => {
     'https://abco-erp-2-production.up.railway.app'
   ].filter(Boolean)
   
-  // Allow localhost origins for development
+  console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
+  
+  // Always set credentials to true for authenticated requests
+  res.setHeader('Access-Control-Allow-Credentials', 'true')
+  
+  // When credentials are included, we cannot use wildcard origin
   if (origin && (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:'))) {
     res.setHeader('Access-Control-Allow-Origin', origin)
+    console.log(`✅ CORS: Allowing origin ${origin}`)
+  } else if (origin) {
+    // For unknown origins, don't set Access-Control-Allow-Origin at all
+    // This will cause the browser to reject the request, which is the correct behavior
+    console.log(`🚫 CORS: Rejecting origin ${origin} - not in allowed list`)
+    return res.status(403).json({ error: 'CORS policy violation' })
   } else {
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || '*')
+    // No origin header (e.g., server-to-server requests)
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || 'http://localhost:8000')
+    console.log(`✅ CORS: No origin header, using default: ${allowedOrigins[0] || 'http://localhost:8000'}`)
   }
   
-  res.setHeader('Access-Control-Allow-Credentials', 'true')
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
   
+  // Handle preflight requests
   if (req.method === 'OPTIONS') {
+    console.log(`✅ CORS: Handling preflight request for ${req.url}`)
     return res.status(204).end()
   }
   
@@ -150,6 +166,20 @@ app.all('/api/users/invite', async (req, res, next) => {
     return next(e)
   }
 })
+
+// Explicit mapping for opportunities by client endpoint
+app.all('/api/opportunities/client/:clientId', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'opportunities.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for individual opportunity operations (GET, PUT, DELETE /api/opportunities/[id])
+// This route is handled by the dynamic route resolution below
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {

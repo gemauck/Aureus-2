@@ -36,10 +36,15 @@ async function handler(req, res) {
 
     // Create Lead (POST /api/leads)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
-      const body = await parseJsonBody(req)
+      console.log('🔍 Raw request body:', req.body)
+      console.log('🔍 Request headers:', req.headers)
+      console.log('🔍 Content-Type:', req.headers['content-type'])
+      
+      const body = req.body || {}
       console.log('🔍 Received lead creation data:', body)
       console.log('🔍 Body type:', typeof body)
       console.log('🔍 Body keys:', Object.keys(body))
+      console.log('🔍 Body.name:', body.name)
       
       if (!body.name) {
         console.log('❌ Missing name field in request body')
@@ -90,47 +95,23 @@ async function handler(req, res) {
         address: String(body.address || '').trim(),
         website: String(body.website || '').trim(),
         notes: String(notes).trim(),
-        contacts: Array.isArray(body.contacts) ? body.contacts : [],
-        followUps: Array.isArray(body.followUps) ? body.followUps : [],
-        projectIds: Array.isArray(body.projectIds) ? body.projectIds : [],
-        comments: Array.isArray(body.comments) ? body.comments : [],
-        sites: Array.isArray(body.sites) ? body.sites : [],
-        contracts: Array.isArray(body.contracts) ? body.contracts : [],
-        activityLog: Array.isArray(body.activityLog) ? body.activityLog : [],
-        billingTerms: typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {
+        contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
+        followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
+        projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
+        comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
+        sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
+        contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
+        activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+        billingTerms: JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {
           paymentTerms: 'Net 30',
           billingFrequency: 'Monthly',
           currency: 'ZAR',
           retainerAmount: 0,
           taxExempt: false,
           notes: ''
-        }
+        })
       }
 
-      // Ensure JSON fields are properly formatted
-      const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms']
-      jsonFields.forEach(field => {
-        if (leadData[field] && typeof leadData[field] === 'object') {
-          try {
-            // Ensure it's a valid JSON structure
-            JSON.stringify(leadData[field])
-          } catch (e) {
-            console.log(`⚠️ Invalid JSON for field ${field}, setting to default`)
-            if (field === 'billingTerms') {
-              leadData[field] = {
-                paymentTerms: 'Net 30',
-                billingFrequency: 'Monthly',
-                currency: 'ZAR',
-                retainerAmount: 0,
-                taxExempt: false,
-                notes: ''
-              }
-            } else {
-              leadData[field] = []
-            }
-          }
-        }
-      })
 
       // Filter out any undefined or null values that might cause issues
       Object.keys(leadData).forEach(key => {
@@ -183,8 +164,8 @@ async function handler(req, res) {
           return serverError(res, 'Failed to get lead', dbError.message)
         }
       }
-      if (req.method === 'PUT') {
-        const body = await parseJsonBody(req)
+      if (req.method === 'PUT' || req.method === 'PATCH') {
+        const body = req.body || {}
         const updateData = {
           name: body.name,
           industry: body.industry,

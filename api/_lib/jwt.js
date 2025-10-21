@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken'
 const DAY = 24 * 60 * 60
 
 export function signAccessToken(payload) {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 15 * 60 })
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: 2 * 60 * 60 }) // 2 hours
 }
 
 export function signRefreshToken(payload) {

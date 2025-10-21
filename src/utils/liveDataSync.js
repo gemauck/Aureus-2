@@ -86,7 +86,10 @@ class LiveDataSync {
             // Check authentication
             const token = window.storage?.getToken?.();
             if (!token) {
-                throw new Error('No authentication token');
+                console.log('⚠️ No authentication token, skipping sync');
+                this.connectionStatus = 'disconnected';
+                this.notifySubscribers({ type: 'connection', status: 'disconnected' });
+                return;
             }
 
             // Check if DatabaseAPI is available
@@ -242,17 +245,13 @@ class LiveDataSync {
 // Create global instance
 window.LiveDataSync = new LiveDataSync();
 
-// Auto-start if user is authenticated
-if (window.storage?.getToken?.()) {
-    // Double-check authentication by trying to get user data
-    const user = window.storage?.getUser?.();
-    if (user) {
-        console.log('🚀 Auto-starting live data sync...');
-        window.LiveDataSync.start();
-    } else {
-        console.log('⚠️ Token exists but no user data, clearing token');
-        window.storage?.removeToken?.();
-    }
+// Auto-start if token exists and user data is available
+if (window.storage?.getToken?.() && window.storage?.getUser?.()) {
+    console.log('🚀 Auto-starting live data sync...');
+    window.LiveDataSync.start();
+} else if (window.storage?.getToken?.() && !window.storage?.getUser?.()) {
+    console.log('⚠️ Token exists but no user data, clearing token');
+    window.storage?.removeToken?.();
 }
 
 // Debug function

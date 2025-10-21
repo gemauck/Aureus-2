@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opportunity Save Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        input, select { padding: 8px; margin: 5px; width: 200px; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 3px; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <h1>Opportunity Save Test</h1>
+    
+    <div class="test-section info">
+        <h3>Test Environment</h3>
+        <p>Testing opportunity creation and save functionality</p>
+        <button onclick="testAPI()">Test API Availability</button>
+        <button onclick="testAuth()">Test Authentication</button>
+        <button onclick="testClients()">Test Client List</button>
+    </div>
+
+    <div class="test-section">
+        <h3>Create Test Opportunity</h3>
+        <div>
+            <label>Client ID: <input type="text" id="clientId" placeholder="Enter client ID"></label><br>
+            <label>Title: <input type="text" id="title" placeholder="Opportunity title"></label><br>
+            <label>Stage: 
+                <select id="stage">
+                    <option value="prospect">Prospect</option>
+                    <option value="qualification">Qualification</option>
+                    <option value="proposal">Proposal</option>
+                    <option value="negotiation">Negotiation</option>
+                    <option value="closed-won">Closed Won</option>
+                    <option value="closed-lost">Closed Lost</option>
+                </select>
+            </label><br>
+            <label>Value: <input type="number" id="value" placeholder="0" step="0.01"></label><br>
+            <button onclick="createOpportunity()">Create Opportunity</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h3>Test Results</h3>
+        <div id="results" class="log"></div>
+    </div>
+
+    <script>
+        // Load API utilities
+        const script = document.createElement('script');
+        script.src = '/src/utils/api.js';
+        script.onload = () => {
+            log('✅ API utilities loaded');
+            testAPI();
+        };
+        script.onerror = () => {
+            log('❌ Failed to load API utilities');
+        };
+        document.head.appendChild(script);
+
+        // Load storage utilities
+        const storageScript = document.createElement('script');
+        storageScript.src = '/src/utils/storage.js';
+        storageScript.onload = () => {
+            log('✅ Storage utilities loaded');
+        };
+        storageScript.onerror = () => {
+            log('❌ Failed to load storage utilities');
+        };
+        document.head.appendChild(storageScript);
+
+        function log(message) {
+            const results = document.getElementById('results');
+            const timestamp = new Date().toLocaleTimeString();
+            results.textContent += `[${timestamp}] ${message}\n`;
+            console.log(message);
+        }
+
+        async function testAPI() {
+            log('🔍 Testing API availability...');
+            
+            if (!window.api) {
+                log('❌ window.api not available');
+                return;
+            }
+
+            const apiMethods = [
+                'createOpportunity',
+                'updateOpportunity', 
+                'deleteOpportunity',
+                'listOpportunities',
+                'getOpportunity'
+            ];
+
+            apiMethods.forEach(method => {
+                if (typeof window.api[method] === 'function') {
+                    log(`✅ ${method} available`);
+                } else {
+                    log(`❌ ${method} not available`);
+                }
+            });
+        }
+
+        async function testAuth() {
+            log('🔍 Testing authentication...');
+            
+            if (!window.storage) {
+                log('❌ window.storage not available');
+                return;
+            }
+
+            const token = window.storage.getToken();
+            if (token) {
+                log(`✅ Token available: ${token.substring(0, 20)}...`);
+                
+                try {
+                    const me = await window.api.me();
+                    log(`✅ User authenticated: ${JSON.stringify(me)}`);
+                } catch (error) {
+                    log(`❌ Authentication failed: ${error.message}`);
+                }
+            } else {
+                log('❌ No authentication token');
+            }
+        }
+
+        async function testClients() {
+            log('🔍 Testing client list...');
+            
+            try {
+                const clients = await window.api.listClients();
+                log(`✅ Clients loaded: ${clients.clients?.length || 0} clients`);
+                
+                if (clients.clients && clients.clients.length > 0) {
+                    const firstClient = clients.clients[0];
+                    document.getElementById('clientId').value = firstClient.id;
+                    log(`✅ Pre-filled first client ID: ${firstClient.id} (${firstClient.name})`);
+                }
+            } catch (error) {
+                log(`❌ Failed to load clients: ${error.message}`);
+            }
+        }
+
+        async function createOpportunity() {
+            const clientId = document.getElementById('clientId').value;
+            const title = document.getElementById('title').value;
+            const stage = document.getElementById('stage').value;
+            const value = document.getElementById('value').value;
+
+            if (!clientId || !title) {
+                log('❌ Client ID and Title are required');
+                return;
+            }
+
+            const opportunityData = {
+                clientId: clientId,
+                title: title,
+                stage: stage,
+                value: parseFloat(value) || 0
+            };
+
+            log(`🚀 Creating opportunity with data: ${JSON.stringify(opportunityData)}`);
+
+            try {
+                const response = await window.api.createOpportunity(opportunityData);
+                log(`✅ Opportunity created successfully: ${JSON.stringify(response)}`);
+                
+                // Test if we can retrieve it
+                if (response.opportunity && response.opportunity.id) {
+                    log(`🔍 Testing opportunity retrieval...`);
+                    try {
+                        const retrieved = await window.api.getOpportunity(response.opportunity.id);
+                        log(`✅ Opportunity retrieved: ${JSON.stringify(retrieved)}`);
+                    } catch (retrieveError) {
+                        log(`❌ Failed to retrieve opportunity: ${retrieveError.message}`);
+                    }
+                }
+                
+            } catch (error) {
+                log(`❌ Failed to create opportunity: ${error.message}`);
+                log(`❌ Error details: ${JSON.stringify(error)}`);
+            }
+        }
+
+        // Auto-test on load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                testAuth();
+                testClients();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

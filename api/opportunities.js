@@ -2,7 +2,6 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
-import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
@@ -12,12 +11,21 @@ async function handler(req, res) {
       method: req.method,
       url: req.url,
       headers: req.headers,
-      user: req.user
+      user: req.user,
+      params: req.params
     })
     
     // Parse the URL path (already has /api/ stripped by server)
     const pathSegments = req.url.split('/').filter(Boolean)
-    const id = pathSegments[pathSegments.length - 1]
+    const id = req.params?.id || pathSegments[pathSegments.length - 1]
+    
+    console.log('🔍 Path analysis:', {
+      url: req.url,
+      pathSegments,
+      id,
+      params: req.params,
+      method: req.method
+    })
 
     // List Opportunities (GET /api/opportunities)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
@@ -43,8 +51,10 @@ async function handler(req, res) {
     }
 
     // Get Opportunities by Client (GET /api/opportunities/client/[clientId])
-    if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'opportunities' && pathSegments[1] === 'client') {
-      const clientId = pathSegments[2]
+    // Handle both direct URL and Express route parameter
+    const clientId = req.params?.clientId || (pathSegments.length === 3 && pathSegments[0] === 'opportunities' && pathSegments[1] === 'client' ? pathSegments[2] : null)
+    
+    if (req.method === 'GET' && clientId) {
       if (!clientId) return badRequest(res, 'Client ID required')
       
       try {
@@ -62,7 +72,17 @@ async function handler(req, res) {
 
     // Create Opportunity (POST /api/opportunities)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
-      const body = await parseJsonBody(req)
+      const body = req.body || {}
+      console.log('🔍 Server received opportunity creation request:', {
+        body,
+        bodyKeys: Object.keys(body),
+        title: body.title,
+        titleType: typeof body.title,
+        titleLength: body.title?.length,
+        clientId: body.clientId,
+        stage: body.stage,
+        value: body.value
+      });
       if (!body.title) return badRequest(res, 'title required')
       if (!body.clientId) return badRequest(res, 'clientId required')
 
@@ -93,7 +113,19 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Opportunity (GET, PUT, DELETE /api/opportunities/[id])
-    if (pathSegments.length === 2 && pathSegments[0] === 'opportunities' && id) {
+    // Check if this is a single opportunity operation (either by path segments or Express params)
+    const isSingleOpportunity = (pathSegments.length === 2 && pathSegments[0] === 'opportunities' && id) || 
+                               (req.params?.id && pathSegments[0] === 'opportunities')
+    
+    console.log('🔍 Single opportunity check:', {
+      pathSegmentsLength: pathSegments.length,
+      firstSegment: pathSegments[0],
+      id,
+      hasParamsId: !!req.params?.id,
+      isSingleOpportunity
+    })
+    
+    if (isSingleOpportunity) {
       if (req.method === 'GET') {
         try {
           const opportunity = await prisma.opportunity.findUnique({ 
@@ -118,7 +150,7 @@ async function handler(req, res) {
       }
       
       if (req.method === 'PUT') {
-        const body = await parseJsonBody(req)
+        const body = req.body || {}
         const updateData = {
           title: body.title,
           stage: body.stage,

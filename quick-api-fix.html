@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quick API Fix</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Quick API Fix</h1>
+    
+    <div class="info">
+        <h3>📋 Fix "Unexpected token '<'" Error</h3>
+        <p>This page will help fix the API authentication issue.</p>
+    </div>
+    
+    <button onclick="loginAndTest()" class="success">Login & Test API</button>
+    <button onclick="clearAuthAndRetry()">Clear Auth & Retry</button>
+    <button onclick="testOpportunityAPI()">Test Opportunity API</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function loginAndTest() {
+            addResult('🔐 Logging in and testing API...', 'info');
+            
+            try {
+                // Load the API utilities
+                const script1 = document.createElement('script');
+                script1.src = '/src/utils/api.js';
+                document.head.appendChild(script1);
+                
+                const script2 = document.createElement('script');
+                script2.src = '/src/utils/authStorage.js';
+                document.head.appendChild(script2);
+                
+                // Wait for scripts to load
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // Login
+                addResult('🔑 Attempting login...', 'info');
+                const loginResponse = await window.api.login({
+                    email: 'admin@abcotronics.com',
+                    password: 'admin123'
+                });
+                
+                if (loginResponse && loginResponse.data && loginResponse.data.accessToken) {
+                    addResult('✅ Login successful!', 'success');
+                    
+                    // Test clients API
+                    addResult('📡 Testing clients API...', 'info');
+                    const clientsResponse = await window.api.listClients();
+                    addResult(`✅ Clients API working! Found ${clientsResponse.data.clients.length} clients`, 'success');
+                    
+                    // Test opportunities API
+                    addResult('📡 Testing opportunities API...', 'info');
+                    const opportunitiesResponse = await window.api.listOpportunities();
+                    addResult(`✅ Opportunities API working! Found ${opportunitiesResponse.data.opportunities.length} opportunities`, 'success');
+                    
+                } else {
+                    addResult('❌ Login failed - no access token received', 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        async function clearAuthAndRetry() {
+            addResult('🧹 Clearing authentication and retrying...', 'info');
+            
+            try {
+                // Clear localStorage
+                localStorage.clear();
+                addResult('✅ localStorage cleared', 'success');
+                
+                // Reload the page to get fresh API
+                addResult('🔄 Reloading page...', 'info');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+                
+            } catch (error) {
+                addResult(`❌ Error clearing auth: ${error.message}`, 'error');
+            }
+        }
+        
+        async function testOpportunityAPI() {
+            addResult('🎯 Testing opportunity API specifically...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.createOpportunity) {
+                    addResult('❌ createOpportunity function not available', 'error');
+                    return;
+                }
+                
+                // Test with a simple opportunity
+                const testOpportunity = {
+                    title: 'Test Opportunity',
+                    clientId: 'cmh09frir000bewf0fcdr5ebq', // Exxaro client ID
+                    stage: 'prospect',
+                    value: 50000
+                };
+                
+                addResult('🚀 Creating test opportunity...', 'info');
+                const response = await window.api.createOpportunity(testOpportunity);
+                
+                if (response && response.data && response.data.opportunity) {
+                    addResult(`✅ Opportunity created successfully! ID: ${response.data.opportunity.id}`, 'success');
+                } else {
+                    addResult(`⚠️ Unexpected response: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Opportunity API error: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Auto-run login test on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Quick API Fix Tool Loaded', 'info');
+            addResult('💡 Click "Login & Test API" to fix the authentication issue', 'info');
+        });
+    </script>
+</body>
+</html>

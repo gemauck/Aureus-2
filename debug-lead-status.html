@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Lead Status</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <!-- Load required utilities -->
+    <script src="src/utils/localStorage.js"></script>
+    <script src="src/utils/databaseAPI.js"></script>
+    
+    <!-- Load the Clients component -->
+    <script src="src/components/clients/Clients.jsx" type="text/babel"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const DebugLeadStatus = () => {
+            const [debugLogs, setDebugLogs] = useState([]);
+            const [testResults, setTestResults] = useState([]);
+            const [mockLeads, setMockLeads] = useState([]);
+
+            const addDebugLog = (message, type = 'info') => {
+                const timestamp = new Date().toLocaleTimeString();
+                setDebugLogs(prev => [...prev, { message, type, timestamp }]);
+                console.log(`[${timestamp}] ${type.toUpperCase()}: ${message}`);
+            };
+
+            const addTestResult = (test, status, message) => {
+                setTestResults(prev => [...prev, { test, status, message, timestamp: new Date().toISOString() }]);
+            };
+
+            // Create mock leads for testing
+            useEffect(() => {
+                const mockLeadsData = [
+                    {
+                        id: 'test-lead-1',
+                        name: 'Test Lead 1',
+                        industry: 'Technology',
+                        status: 'Potential',
+                        stage: 'Awareness',
+                        contacts: [{ name: 'John Doe', email: 'john@test.com' }],
+                        firstContactDate: new Date().toISOString().split('T')[0]
+                    }
+                ];
+                setMockLeads(mockLeadsData);
+                addDebugLog('Mock leads created for testing');
+            }, []);
+
+            // Test the actual handleLeadStatusChange function
+            const testStatusChange = async () => {
+                addDebugLog('Starting lead status change test...');
+                
+                try {
+                    // Check if API methods are available
+                    addDebugLog(`API methods available: ${JSON.stringify({
+                        hasApi: !!window.api,
+                        hasUpdateLead: !!window.api?.updateLead,
+                        hasStorage: !!window.storage,
+                        hasToken: !!window.storage?.getToken?.()
+                    })}`);
+
+                    // Check authentication
+                    const token = window.storage?.getToken?.();
+                    addDebugLog(`Authentication token: ${token ? 'Present' : 'Missing'}`);
+                    
+                    if (token) {
+                        addDebugLog(`Token preview: ${token.substring(0, 20)}...`);
+                    }
+
+                    // Test the status change function
+                    const testLeadId = 'test-lead-1';
+                    const newStatus = 'Active';
+                    
+                    addDebugLog(`Attempting to change lead ${testLeadId} status to ${newStatus}`);
+                    
+                    // Find the lead
+                    const leadToUpdate = mockLeads.find(l => l.id === testLeadId);
+                    if (!leadToUpdate) {
+                        throw new Error('Test lead not found');
+                    }
+                    
+                    addDebugLog(`Found lead: ${JSON.stringify(leadToUpdate)}`);
+                    
+                    // Update local state
+                    const updatedLeads = mockLeads.map(l => l.id === testLeadId ? { ...l, status: newStatus } : l);
+                    setMockLeads(updatedLeads);
+                    addDebugLog('Local state updated successfully');
+                    
+                    // Test API call if available
+                    if (token && window.api?.updateLead) {
+                        try {
+                            addDebugLog('Attempting API call...');
+                            const updatedLead = { ...leadToUpdate, status: newStatus };
+                            
+                            addDebugLog(`Sending to API: ${JSON.stringify({
+                                id: testLeadId,
+                                leadData: updatedLead
+                            })}`);
+                            
+                            const apiResponse = await window.api.updateLead(testLeadId, updatedLead);
+                            addDebugLog(`API Response: ${JSON.stringify(apiResponse)}`);
+                            
+                            if (apiResponse && apiResponse.data && apiResponse.data.lead) {
+                                addDebugLog('API call successful - updating with response data');
+                                const finalUpdatedLeads = mockLeads.map(l => l.id === testLeadId ? apiResponse.data.lead : l);
+                                setMockLeads(finalUpdatedLeads);
+                            } else {
+                                addDebugLog('API call completed but response format unexpected', 'warning');
+                            }
+                        } catch (apiError) {
+                            addDebugLog(`API call failed: ${apiError.message}`, 'error');
+                            addDebugLog(`API error details: ${JSON.stringify(apiError)}`, 'error');
+                        }
+                    } else {
+                        addDebugLog('API call skipped - no token or updateLead method', 'warning');
+                    }
+                    
+                    addTestResult('Status Change Test', 'success', 'Status change test completed');
+                    
+                } catch (error) {
+                    addDebugLog(`Test failed: ${error.message}`, 'error');
+                    addTestResult('Status Change Test', 'error', `Test failed: ${error.message}`);
+                }
+            };
+
+            // Test API connectivity
+            const testApiConnectivity = async () => {
+                addDebugLog('Testing API connectivity...');
+                
+                try {
+                    // Test basic API endpoint
+                    const response = await fetch('/api/leads');
+                    addDebugLog(`API response status: ${response.status}`);
+                    addDebugLog(`API response ok: ${response.ok}`);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        addDebugLog(`API returned ${data.leads?.length || 0} leads`);
+                    } else {
+                        const text = await response.text();
+                        addDebugLog(`API error response: ${text}`, 'error');
+                    }
+                } catch (error) {
+                    addDebugLog(`API connectivity test failed: ${error.message}`, 'error');
+                }
+            };
+
+            // Test the actual Clients component
+            const testClientsComponent = () => {
+                addDebugLog('Testing Clients component integration...');
+                
+                try {
+                    // Check if Clients component is available
+                    if (typeof window.Clients === 'function') {
+                        addDebugLog('Clients component is available');
+                        
+                        // Check if the component has the expected methods
+                        const componentMethods = Object.getOwnPropertyNames(window.Clients.prototype || {});
+                        addDebugLog(`Component methods: ${JSON.stringify(componentMethods)}`);
+                        
+                    } else {
+                        addDebugLog('Clients component not found', 'error');
+                    }
+                } catch (error) {
+                    addDebugLog(`Component test failed: ${error.message}`, 'error');
+                }
+            };
+
+            const runAllTests = async () => {
+                setTestResults([]);
+                addDebugLog('Starting comprehensive lead status debugging...');
+                
+                await testApiConnectivity();
+                testClientsComponent();
+                await testStatusChange();
+                
+                addDebugLog('All tests completed');
+            };
+
+            const clearLogs = () => {
+                setDebugLogs([]);
+                setTestResults([]);
+            };
+
+            const getLogColor = (type) => {
+                switch (type) {
+                    case 'error': return 'text-red-600 bg-red-100 border-red-200';
+                    case 'warning': return 'text-yellow-600 bg-yellow-100 border-yellow-200';
+                    case 'success': return 'text-green-600 bg-green-100 border-green-200';
+                    default: return 'text-blue-600 bg-blue-100 border-blue-200';
+                }
+            };
+
+            const getStatusColor = (status) => {
+                switch (status) {
+                    case 'success': return 'text-green-600 bg-green-100';
+                    case 'error': return 'text-red-600 bg-red-100';
+                    case 'warning': return 'text-yellow-600 bg-yellow-100';
+                    default: return 'text-blue-600 bg-blue-100';
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100 py-8">
+                    <div className="max-w-6xl mx-auto px-4">
+                        <div className="bg-white rounded-lg shadow-lg p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h1 className="text-2xl font-bold text-gray-900">Debug Lead Status Issue</h1>
+                                    <p className="text-gray-600 mt-1">Comprehensive debugging for lead status functionality</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button
+                                        onClick={clearLogs}
+                                        className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center"
+                                    >
+                                        <i className="fas fa-trash mr-2"></i>
+                                        Clear Logs
+                                    </button>
+                                    <button
+                                        onClick={runAllTests}
+                                        className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center"
+                                    >
+                                        <i className="fas fa-bug mr-2"></i>
+                                        Run Debug Tests
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Debug Logs */}
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Debug Logs</h3>
+                                    <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
+                                        {debugLogs.length === 0 ? (
+                                            <div className="text-gray-500">No debug logs yet. Click "Run Debug Tests" to start.</div>
+                                        ) : (
+                                            debugLogs.map((log, index) => (
+                                                <div key={index} className="mb-1">
+                                                    <span className="text-gray-400">[{log.timestamp}]</span>{' '}
+                                                    <span className={`${
+                                                        log.type === 'error' ? 'text-red-400' :
+                                                        log.type === 'warning' ? 'text-yellow-400' :
+                                                        log.type === 'success' ? 'text-green-400' :
+                                                        'text-blue-400'
+                                                    }`}>
+                                                        {log.type.toUpperCase()}:
+                                                    </span>{' '}
+                                                    <span className="text-white">{log.message}</span>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Test Results */}
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Test Results</h3>
+                                    {testResults.length === 0 ? (
+                                        <div className="text-center py-8 text-gray-500">
+                                            <i className="fas fa-clipboard-check text-3xl mb-2"></i>
+                                            <p>No test results yet.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3 max-h-96 overflow-y-auto">
+                                            {testResults.map((result, index) => (
+                                                <div key={index} className={`p-3 rounded-lg border-l-4 ${
+                                                    result.status === 'success' ? 'border-green-500 bg-green-50' :
+                                                    result.status === 'error' ? 'border-red-500 bg-red-50' :
+                                                    result.status === 'warning' ? 'border-yellow-500 bg-yellow-50' :
+                                                    'border-blue-500 bg-blue-50'
+                                                }`}>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(result.status)}`}>
+                                                            {result.status.toUpperCase()}
+                                                        </span>
+                                                        <span className="font-medium text-gray-900">{result.test}</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-700">{result.message}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Mock Lead Display */}
+                            <div className="mt-6">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-3">Mock Lead (for testing)</h3>
+                                <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                                    {mockLeads.map(lead => (
+                                        <div key={lead.id} className="flex items-center justify-between">
+                                            <div>
+                                                <h4 className="font-medium text-gray-900">{lead.name}</h4>
+                                                <p className="text-sm text-gray-600">{lead.industry} • {lead.stage}</p>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <span className={`px-3 py-1 text-xs font-medium rounded-full ${
+                                                    lead.status === 'Potential' ? 'bg-blue-100 text-blue-800' :
+                                                    lead.status === 'Active' ? 'bg-green-100 text-green-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                                }`}>
+                                                    Current: {lead.status}
+                                                </span>
+                                                <select
+                                                    value={lead.status}
+                                                    onChange={(e) => {
+                                                        addDebugLog(`Manual status change to: ${e.target.value}`);
+                                                        const updatedLeads = mockLeads.map(l => 
+                                                            l.id === lead.id ? { ...l, status: e.target.value } : l
+                                                        );
+                                                        setMockLeads(updatedLeads);
+                                                    }}
+                                                    className="px-3 py-1 text-sm font-medium rounded border border-gray-300 bg-white text-gray-900"
+                                                >
+                                                    <option>Potential</option>
+                                                    <option>Active</option>
+                                                    <option>Disinterested</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* System Info */}
+                            <div className="mt-6 bg-gray-50 rounded-lg p-4">
+                                <h4 className="font-medium text-gray-900 mb-2">System Information</h4>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="font-medium">API Base:</span> {window.location.origin}/api
+                                    </div>
+                                    <div>
+                                        <span className="font-medium">Storage Available:</span> {window.storage ? 'Yes' : 'No'}
+                                    </div>
+                                    <div>
+                                        <span className="font-medium">API Methods:</span> {window.api ? Object.keys(window.api).length : 0}
+                                    </div>
+                                    <div>
+                                        <span className="font-medium">Token Present:</span> {window.storage?.getToken?.() ? 'Yes' : 'No'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<DebugLeadStatus />, document.getElementById('root'));
+    </script>
+</body>
+</html>

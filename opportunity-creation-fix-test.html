@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Opportunity Creation Fix Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .error { background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+        input, select { padding: 8px; margin: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        .form-group { margin: 10px 0; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Opportunity Creation Fix Test</h1>
+    
+    <div class="success">
+        <h3>✅ API Body Parsing Fixed</h3>
+        <p>The opportunities API now uses <code>req.body</code> instead of <code>parseJsonBody(req)</code> to properly receive data.</p>
+    </div>
+    
+    <div class="info">
+        <h3>📋 Test Opportunity Creation</h3>
+        <p>This will test if opportunities can now be created successfully.</p>
+    </div>
+    
+    <div class="form-group">
+        <label>Title:</label>
+        <input type="text" id="opportunityTitle" placeholder="e.g., New Software License" value="Test Opportunity">
+        
+        <label>Client ID:</label>
+        <input type="text" id="clientId" placeholder="Client ID" value="">
+        
+        <label>Stage:</label>
+        <select id="opportunityStage">
+            <option value="prospect">Prospect</option>
+            <option value="qualification">Qualification</option>
+            <option value="proposal">Proposal</option>
+            <option value="negotiation">Negotiation</option>
+            <option value="closed-won">Closed Won</option>
+            <option value="closed-lost">Closed Lost</option>
+        </select>
+        
+        <label>Value (R):</label>
+        <input type="number" id="opportunityValue" placeholder="50000" value="75000">
+        
+        <br>
+        <button onclick="getClientIds()">Get Client IDs</button>
+        <button onclick="testOpportunityCreation()" class="success">Test Opportunity Creation</button>
+        <button onclick="listOpportunities()">List All Opportunities</button>
+    </div>
+    
+    <div id="results"></div>
+    
+    <script>
+        // Load the API utilities
+        const script1 = document.createElement('script');
+        script1.src = '/src/utils/api.js';
+        document.head.appendChild(script1);
+        
+        const script2 = document.createElement('script');
+        script2.src = '/src/utils/authStorage.js';
+        document.head.appendChild(script2);
+        
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function getClientIds() {
+            addResult('📋 Getting client IDs...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.listClients) {
+                    addResult('❌ listClients function not available', 'error');
+                    return;
+                }
+                
+                const response = await window.api.listClients();
+                
+                if (response && response.data && response.data.clients) {
+                    const clients = response.data.clients;
+                    addResult(`✅ Found ${clients.length} clients`, 'success');
+                    
+                    clients.forEach(client => {
+                        addResult(`📊 ${client.name} - ID: ${client.id}`, 'info');
+                    });
+                    
+                    // Auto-fill the first client ID
+                    if (clients.length > 0) {
+                        document.getElementById('clientId').value = clients[0].id;
+                        addResult(`💡 Auto-filled client ID: ${clients[0].id}`, 'success');
+                    }
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error getting clients: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        async function testOpportunityCreation() {
+            const title = document.getElementById('opportunityTitle').value;
+            const clientId = document.getElementById('clientId').value;
+            const stage = document.getElementById('opportunityStage').value;
+            const value = parseFloat(document.getElementById('opportunityValue').value);
+            
+            if (!title) {
+                addResult('❌ Title is required', 'error');
+                return;
+            }
+            
+            if (!clientId) {
+                addResult('❌ Client ID is required. Click "Get Client IDs" first.', 'error');
+                return;
+            }
+            
+            addResult(`🚀 Testing opportunity creation: ${title}`, 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.createOpportunity) {
+                    addResult('❌ createOpportunity function not available', 'error');
+                    return;
+                }
+                
+                const opportunityData = {
+                    title: title,
+                    clientId: clientId,
+                    stage: stage,
+                    value: value
+                };
+                
+                addResult(`📤 Sending data: ${JSON.stringify(opportunityData, null, 2)}`, 'info');
+                
+                const response = await window.api.createOpportunity(opportunityData);
+                
+                if (response && response.data && response.data.opportunity) {
+                    addResult(`✅ SUCCESS! Opportunity created: ${response.data.opportunity.title}`, 'success');
+                    addResult(`📊 Opportunity ID: ${response.data.opportunity.id}`, 'success');
+                    addResult(`📊 Response: ${JSON.stringify(response.data.opportunity, null, 2)}`, 'info');
+                    
+                    // Test persistence by listing opportunities
+                    setTimeout(() => {
+                        listOpportunities();
+                    }, 1000);
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error creating opportunity: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        async function listOpportunities() {
+            addResult('📋 Listing all opportunities...', 'info');
+            
+            try {
+                // Wait for API to load
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                if (!window.api?.listOpportunities) {
+                    addResult('❌ listOpportunities function not available', 'error');
+                    return;
+                }
+                
+                const response = await window.api.listOpportunities();
+                
+                if (response && response.data && response.data.opportunities) {
+                    const opportunities = response.data.opportunities;
+                    addResult(`✅ Found ${opportunities.length} opportunities in database`, 'success');
+                    
+                    if (opportunities.length === 0) {
+                        addResult('📊 No opportunities found', 'info');
+                    } else {
+                        opportunities.forEach(opp => {
+                            addResult(`📊 ${opp.title} - ${opp.stage} - R${opp.value} (Client: ${opp.client?.name || opp.clientId})`, 'info');
+                        });
+                    }
+                } else {
+                    addResult(`⚠️ Unexpected response format: ${JSON.stringify(response)}`, 'error');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error listing opportunities: ${error.message}`, 'error');
+                console.error('Full error:', error);
+            }
+        }
+        
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Opportunity Creation Fix Test Tool Loaded', 'info');
+            addResult('💡 The API body parsing fix should resolve the "title required" error', 'info');
+            
+            // Auto-get client IDs after a delay
+            setTimeout(() => {
+                getClientIds();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

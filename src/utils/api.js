@@ -19,9 +19,24 @@ async function request(path, options = {}) {
     tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
   });
   
-  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...options, headers })
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
   const text = await res.text()
-  const data = text ? JSON.parse(text) : {}
+  
+  console.log('📡 API Raw Response:', { path, status: res.status, ok: res.ok, textPreview: text.substring(0, 200) });
+  
+  let data = {}
+  if (text) {
+    try {
+      data = JSON.parse(text)
+    } catch (parseError) {
+      console.error('❌ JSON Parse Error:', { path, error: parseError.message, textPreview: text.substring(0, 200) });
+      if (text.trim().startsWith('<')) {
+        throw new Error(`Server returned HTML instead of JSON. This usually means the API endpoint doesn't exist or there's a server error. Response: ${text.substring(0, 100)}...`)
+      } else {
+        throw new Error(`Invalid JSON response: ${parseError.message}. Response: ${text.substring(0, 100)}...`)
+      }
+    }
+  }
   
   console.log('📡 API Response:', { path, status: res.status, ok: res.ok, data });
   
@@ -59,7 +74,9 @@ const api = {
   },
   
   async refresh() {
-    const res = await request('/auth/refresh', { method: 'POST' })
+    const res = await request('/auth/refresh', { 
+      method: 'POST'
+    })
     if (res?.data?.accessToken) window.storage.setToken(res.data.accessToken)
     return res
   },
@@ -95,6 +112,34 @@ const api = {
 
   async getClient(id) {
     const res = await request(`/clients/${id}`)
+    return res
+  },
+
+  // Leads
+  async listLeads() {
+    const res = await request('/leads')
+    return res
+  },
+
+  async createLead(leadData) {
+    console.log('🚀 API createLead called with:', leadData);
+    const res = await request('/leads', { method: 'POST', body: JSON.stringify(leadData) })
+    console.log('📡 API createLead response:', res);
+    return res
+  },
+
+  async updateLead(id, leadData) {
+    const res = await request(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify(leadData) })
+    return res
+  },
+
+  async deleteLead(id) {
+    const res = await request(`/leads/${id}`, { method: 'DELETE' })
+    return res
+  },
+
+  async getLead(id) {
+    const res = await request(`/leads/${id}`)
     return res
   },
 
@@ -153,6 +198,43 @@ const api = {
     const res = await request(`/time-entries/${id}`)
     return res
   },
+
+  // Opportunities
+  async listOpportunities() {
+    const res = await request('/opportunities')
+    return res
+  },
+  async createOpportunity(opportunityData) {
+    console.log('🚀 API createOpportunity called with:', opportunityData);
+    console.log('🔍 Opportunity data details:', {
+      title: opportunityData.title,
+      clientId: opportunityData.clientId,
+      stage: opportunityData.stage,
+      value: opportunityData.value,
+      hasTitle: !!opportunityData.title,
+      titleType: typeof opportunityData.title,
+      titleLength: opportunityData.title?.length
+    });
+    const res = await request('/opportunities', { method: 'POST', body: JSON.stringify(opportunityData) })
+    console.log('📡 API createOpportunity response:', res);
+    return res
+  },
+  async updateOpportunity(id, opportunityData) {
+    const res = await request(`/opportunities/${id}`, { method: 'PUT', body: JSON.stringify(opportunityData) })
+    return res
+  },
+  async deleteOpportunity(id) {
+    const res = await request(`/opportunities/${id}`, { method: 'DELETE' })
+    return res
+  },
+  async getOpportunity(id) {
+    const res = await request(`/opportunities/${id}`)
+    return res
+  },
+  async getOpportunitiesByClient(clientId) {
+    const res = await request(`/opportunities/client/${clientId}`)
+    return res
+  },
 }
 
 // Expose globally for prototype
@@ -164,6 +246,12 @@ window.debugAPI = () => {
     hasUpdateClient: typeof window.api.updateClient === 'function',
     hasCreateClient: typeof window.api.createClient === 'function',
     hasListClients: typeof window.api.listClients === 'function',
+    hasCreateLead: typeof window.api.createLead === 'function',
+    hasUpdateLead: typeof window.api.updateLead === 'function',
+    hasListLeads: typeof window.api.listLeads === 'function',
+    hasCreateOpportunity: typeof window.api.createOpportunity === 'function',
+    hasUpdateOpportunity: typeof window.api.updateOpportunity === 'function',
+    hasListOpportunities: typeof window.api.listOpportunities === 'function',
     apiMethods: Object.keys(window.api)
   })
 }

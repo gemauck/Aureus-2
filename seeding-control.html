@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Database Seeding Control</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { background-color: #d4edda; border: 1px solid #c3e6cb; padding: 15px; margin: 10px 0; }
+        .warning { background-color: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; margin: 10px 0; }
+        .info { background-color: #d1ecf1; border: 1px solid #bee5eb; padding: 15px; margin: 10px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        button.danger { background: #dc3545; }
+        button.danger:hover { background: #c82333; }
+        button.success { background: #28a745; }
+        button.success:hover { background: #218838; }
+    </style>
+</head>
+<body>
+    <h1>Database Seeding Control</h1>
+    
+    <div class="info">
+        <h3>Issue Fixed: Auto-Seeding Disabled</h3>
+        <p>The automatic recreation of RGN (Lead) and Exxaro (Client) has been disabled.</p>
+        <p>Now when you delete them, they will stay deleted and won't come back automatically.</p>
+    </div>
+    
+    <div class="warning">
+        <h3>What Was Happening</h3>
+        <p>The <code>database-seed-clients.js</code> script was automatically running every time you loaded the page and recreating RGN and Exxaro if they didn't exist.</p>
+        <p>This is why they kept coming back after deletion.</p>
+    </div>
+    
+    <h3>Manual Controls</h3>
+    <button onclick="checkCurrentData()">Check Current Data</button>
+    <button onclick="manuallySeedData()" class="success">Manually Seed RGN & Exxaro</button>
+    <button onclick="deleteRGNAndExxaro()" class="danger">Delete RGN & Exxaro</button>
+    <button onclick="refreshPage()">Refresh Page</button>
+    
+    <div id="results"></div>
+    
+    <script>
+        function addResult(message, type = 'info') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = type;
+            div.innerHTML = `<strong>${new Date().toLocaleTimeString()}:</strong> ${message}`;
+            results.appendChild(div);
+        }
+        
+        async function checkCurrentData() {
+            addResult('Checking current data...', 'info');
+            
+            try {
+                // Check leads
+                const leadsResponse = await fetch('http://localhost:3000/api/leads', {
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                    }
+                });
+                
+                let leads = [];
+                if (leadsResponse.ok) {
+                    const leadsData = await leadsResponse.json();
+                    leads = leadsData.data.leads || [];
+                }
+                
+                // Check clients
+                const clientsResponse = await fetch('http://localhost:3000/api/clients', {
+                    headers: { 
+                        'Authorization': `Bearer ${localStorage.getItem('abcotronics_token') || 'NO_TOKEN'}`
+                    }
+                });
+                
+                let clients = [];
+                if (clientsResponse.ok) {
+                    const clientsData = await clientsResponse.json();
+                    clients = clientsData.data.clients || [];
+                }
+                
+                const rgnExists = leads.some(l => l.name === 'RGN');
+                const exxaroExists = clients.some(c => c.name === 'Exxaro');
+                
+                addResult(`📊 Current Data Status:`, 'info');
+                addResult(`  - RGN Lead: ${rgnExists ? '✅ Exists' : '❌ Missing'}`, rgnExists ? 'success' : 'warning');
+                addResult(`  - Exxaro Client: ${exxaroExists ? '✅ Exists' : '❌ Missing'}`, exxaroExists ? 'success' : 'warning');
+                addResult(`  - Total Leads: ${leads.length}`, 'info');
+                addResult(`  - Total Clients: ${clients.length}`, 'info');
+                
+                if (leads.length > 0) {
+                    addResult(`  - Lead Names: ${leads.map(l => l.name).join(', ')}`, 'info');
+                }
+                if (clients.length > 0) {
+                    addResult(`  - Client Names: ${clients.map(c => c.name).join(', ')}`, 'info');
+                }
+                
+            } catch (error) {
+                addResult(`❌ Error checking data: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function manuallySeedData() {
+            addResult('Manually seeding RGN and Exxaro...', 'info');
+            
+            try {
+                if (window.seedClientsAndLeads) {
+                    const result = await window.seedClientsAndLeads();
+                    if (result.success) {
+                        addResult('✅ Manual seeding completed successfully!', 'success');
+                        addResult(`RGN created: ${result.rgnCreated}`, 'info');
+                        addResult(`Exxaro created: ${result.exxaroCreated}`, 'info');
+                    } else {
+                        addResult(`❌ Manual seeding failed: ${result.error}`, 'warning');
+                    }
+                } else {
+                    addResult('❌ Seeding function not available. Please refresh the page first.', 'warning');
+                }
+            } catch (error) {
+                addResult(`❌ Error during manual seeding: ${error.message}`, 'warning');
+            }
+        }
+        
+        async function deleteRGNAndExxaro() {
+            addResult('Deleting RGN and Exxaro...', 'info');
+            
+            try {
+                const token = localStorage.getItem('abcotronics_token');
+                if (!token) {
+                    addResult('❌ No authentication token found', 'warning');
+                    return;
+                }
+                
+                // Get current data
+                const leadsResponse = await fetch('http://localhost:3000/api/leads', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const clientsResponse = await fetch('http://localhost:3000/api/clients', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (leadsResponse.ok) {
+                    const leadsData = await leadsResponse.json();
+                    const leads = leadsData.data.leads || [];
+                    const rgnLead = leads.find(l => l.name === 'RGN');
+                    
+                    if (rgnLead) {
+                        const deleteResponse = await fetch(`http://localhost:3000/api/leads/${rgnLead.id}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        
+                        if (deleteResponse.ok) {
+                            addResult('✅ RGN lead deleted successfully', 'success');
+                        } else {
+                            addResult('❌ Failed to delete RGN lead', 'warning');
+                        }
+                    } else {
+                        addResult('ℹ️ RGN lead not found', 'info');
+                    }
+                }
+                
+                if (clientsResponse.ok) {
+                    const clientsData = await clientsResponse.json();
+                    const clients = clientsData.data.clients || [];
+                    const exxaroClient = clients.find(c => c.name === 'Exxaro');
+                    
+                    if (exxaroClient) {
+                        const deleteResponse = await fetch(`http://localhost:3000/api/clients/${exxaroClient.id}`, {
+                            method: 'DELETE',
+                            headers: { 'Authorization': `Bearer ${token}` }
+                        });
+                        
+                        if (deleteResponse.ok) {
+                            addResult('✅ Exxaro client deleted successfully', 'success');
+                        } else {
+                            addResult('❌ Failed to delete Exxaro client', 'warning');
+                        }
+                    } else {
+                        addResult('ℹ️ Exxaro client not found', 'info');
+                    }
+                }
+                
+                addResult('🎉 Deletion process completed! They should now stay deleted.', 'success');
+                
+            } catch (error) {
+                addResult(`❌ Error during deletion: ${error.message}`, 'warning');
+            }
+        }
+        
+        function refreshPage() {
+            addResult('Refreshing page...', 'info');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        }
+        
+        // Auto-run check on page load
+        window.addEventListener('load', () => {
+            addResult('🔧 Auto-seeding has been disabled', 'success');
+            addResult('📝 RGN and Exxaro will no longer be automatically recreated', 'info');
+            checkCurrentData();
+        });
+    </script>
+</body>
+</html>

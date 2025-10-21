@@ -12,6 +12,32 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         setActiveTab(initialTab);
     }, [initialTab]);
     
+    // Update formData when client prop changes
+    useEffect(() => {
+        if (client) {
+            const parsedClient = {
+                ...client,
+                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+                comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+                contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+                opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+                activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+                billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                    paymentTerms: 'Net 30',
+                    billingFrequency: 'Monthly',
+                    currency: 'ZAR',
+                    retainerAmount: 0,
+                    taxExempt: false,
+                    notes: ''
+                })
+            };
+            setFormData(parsedClient);
+        }
+    }, [client]);
+    
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
         setActiveTab(tab);
@@ -19,29 +45,52 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             onTabChange(tab);
         }
     };
-    const [formData, setFormData] = useState(client || {
-        name: '',
-        industry: '',
-        status: 'Active',
-        address: '',
-        website: '',
-        notes: '',
-        contacts: [],
-        followUps: [],
-        projectIds: [],
-        comments: [],
-        contracts: [],
-        sites: [],
-        opportunities: [],
-        activityLog: [],
-        billingTerms: {
-            paymentTerms: 'Net 30',
-            billingFrequency: 'Monthly',
-            currency: 'ZAR',
-            retainerAmount: 0,
-            taxExempt: false,
-            notes: ''
-        }
+    const [formData, setFormData] = useState(() => {
+        // Parse JSON strings to arrays/objects if needed
+        const parsedClient = client ? {
+            ...client,
+            contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+            followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+            projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+            comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+            contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+            sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+            opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+            activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+            billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            })
+        } : {
+            name: '',
+            industry: '',
+            status: 'Active',
+            address: '',
+            website: '',
+            notes: '',
+            contacts: [],
+            followUps: [],
+            projectIds: [],
+            comments: [],
+            contracts: [],
+            sites: [],
+            opportunities: [],
+            activityLog: [],
+            billingTerms: {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            }
+        };
+        
+        return parsedClient;
     });
     const { isDark } = window.useTheme();
     
@@ -594,116 +643,34 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 value: parseFloat(newOpportunity.value) || 0
             };
             
+            console.log('🔍 ClientDetailModal opportunity data before API call:', {
+                opportunityData,
+                newOpportunity,
+                formDataId: formData.id,
+                titleValue: newOpportunity.name,
+                titleType: typeof newOpportunity.name,
+                titleLength: newOpportunity.name?.length
+            });
+            
             const token = window.storage?.getToken?.();
-            if (token && window.api?.createOpportunity) {
-                try {
-                    console.log('🌐 Creating opportunity via API:', opportunityData);
-                    const response = await window.api.createOpportunity(opportunityData);
-                    const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
-                    
-                    if (savedOpportunity && savedOpportunity.id) {
-                        // Add to local opportunities array for immediate UI update
-                        const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-                        const updatedOpportunities = [...currentOpportunities, savedOpportunity];
-                        
-                        const newActivityLog = [...(formData.activityLog || []), {
-                            id: Date.now() + 1,
-                            type: 'Opportunity Added',
-                            description: `Added opportunity: ${newOpportunity.name}`,
-                            timestamp: new Date().toISOString(),
-                            user: 'Current User',
-                            relatedId: savedOpportunity.id
-                        }];
-                        
-                        const updatedFormData = {
-                            ...formData,
-                            opportunities: updatedOpportunities,
-                            activityLog: newActivityLog
-                        };
-                        
-                        setFormData(updatedFormData);
-                        
-                        // Save activity log changes immediately
-                        onSave(updatedFormData, true);
-                        
-                        alert('✅ Opportunity saved successfully!');
-                        
-                        // Switch to opportunities tab to show the added opportunity
-                        handleTabChange('opportunities');
-                        
-                        // Reset form
-                        setNewOpportunity({
-                            name: '',
-                            stage: 'Awareness',
-                            expectedCloseDate: '',
-                            relatedSiteId: null,
-                            notes: ''
-                        });
-                        setShowOpportunityForm(false);
-                        
-                        console.log('✅ Opportunity created and saved:', savedOpportunity.id);
-                    } else {
-                        throw new Error('No opportunity ID returned from API');
-                    }
-                } catch (apiError) {
-                    console.error('❌ API error creating opportunity:', apiError);
-                    // Fallback to local creation
-                    const localOpportunity = {
-                        id: Date.now().toString(),
-                        ...opportunityData,
-                        createdAt: new Date().toISOString()
-                    };
-                    
-                    const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-                    const updatedOpportunities = [...currentOpportunities, localOpportunity];
-                    
-                    const newActivityLog = [...(formData.activityLog || []), {
-                        id: Date.now() + 1,
-                        type: 'Opportunity Added',
-                        description: `Added opportunity: ${newOpportunity.name}`,
-                        timestamp: new Date().toISOString(),
-                        user: 'Current User',
-                        relatedId: localOpportunity.id
-                    }];
-                    
-                    const updatedFormData = {
-                        ...formData,
-                        opportunities: updatedOpportunities,
-                        activityLog: newActivityLog
-                    };
-                    
-                    setFormData(updatedFormData);
-                    
-                    // Save activity log changes immediately
-                    onSave(updatedFormData, true);
-                    
-                    alert('✅ Opportunity saved locally!');
-                    
-                    // Switch to opportunities tab to show the added opportunity
-                    handleTabChange('opportunities');
-                    
-                    // Reset form
-                    setNewOpportunity({
-                        name: '',
-                        stage: 'Awareness',
-                        expectedCloseDate: '',
-                        relatedSiteId: null,
-                        notes: ''
-                    });
-                    setShowOpportunityForm(false);
-                    
-                    console.log('✅ Opportunity created locally (API fallback)');
-                }
-            } else {
-                // No token or API, create locally only
-                const localOpportunity = {
-                    id: Date.now().toString(),
-                    ...opportunityData,
-                    createdAt: new Date().toISOString()
-                };
-                
+            if (!token) {
+                alert('❌ Please log in to save opportunities to the database');
+                return;
+            }
+            
+            if (!window.api?.createOpportunity) {
+                alert('❌ Opportunity API not available. Please refresh the page.');
+                return;
+            }
+            
+            console.log('🌐 Creating opportunity via API:', opportunityData);
+            const response = await window.api.createOpportunity(opportunityData);
+            const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+            
+            if (savedOpportunity && savedOpportunity.id) {
+                // Add to local opportunities array for immediate UI update
                 const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-                const updatedOpportunities = [...currentOpportunities, localOpportunity];
+                const updatedOpportunities = [...currentOpportunities, savedOpportunity];
                 
                 const newActivityLog = [...(formData.activityLog || []), {
                     id: Date.now() + 1,
@@ -711,7 +678,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     description: `Added opportunity: ${newOpportunity.name}`,
                     timestamp: new Date().toISOString(),
                     user: 'Current User',
-                    relatedId: localOpportunity.id
+                    relatedId: savedOpportunity.id
                 }];
                 
                 const updatedFormData = {
@@ -725,7 +692,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Save activity log changes immediately
                 onSave(updatedFormData, true);
                 
-                alert('✅ Opportunity saved locally!');
+                alert('✅ Opportunity saved to database successfully!');
                 
                 // Switch to opportunities tab to show the added opportunity
                 handleTabChange('opportunities');
@@ -740,11 +707,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowOpportunityForm(false);
                 
-                console.log('✅ Opportunity created locally (no authentication)');
+                console.log('✅ Opportunity created and saved to database:', savedOpportunity.id);
+            } else {
+                throw new Error('No opportunity ID returned from API');
             }
         } catch (error) {
             console.error('❌ Error creating opportunity:', error);
-            alert('❌ Error saving opportunity: ' + error.message);
+            alert('❌ Error saving opportunity to database: ' + error.message);
         }
     };
 
@@ -763,86 +732,31 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             };
             
             const token = window.storage?.getToken?.();
-            if (token && window.api?.updateOpportunity) {
-                try {
-                    console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
-                    const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
-                    const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
-                    
-                    if (updatedOpportunity && updatedOpportunity.id) {
-                        // Update local opportunities array
-                        const updatedOpportunities = formData.opportunities.map(o => 
-                            o.id === editingOpportunity.id ? updatedOpportunity : o
-                        );
-                        const updatedFormData = {...formData, opportunities: updatedOpportunities};
-                        setFormData(updatedFormData);
-                        
-                        logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
-                        
-                        alert('✅ Opportunity updated successfully!');
-                        
-                        setEditingOpportunity(null);
-                        setNewOpportunity({
-                            name: '',
-                            stage: 'Awareness',
-                            expectedCloseDate: '',
-                            relatedSiteId: null,
-                            notes: ''
-                        });
-                        setShowOpportunityForm(false);
-                        
-                        console.log('✅ Opportunity updated and saved:', updatedOpportunity.id);
-                    } else {
-                        throw new Error('No opportunity data returned from API');
-                    }
-                } catch (apiError) {
-                    console.error('❌ API error updating opportunity:', apiError);
-                    // Fallback to local update
-                    const localUpdatedOpportunity = {
-                        ...editingOpportunity,
-                        ...opportunityData,
-                        updatedAt: new Date().toISOString()
-                    };
-                    
-                    const updatedOpportunities = formData.opportunities.map(o => 
-                        o.id === editingOpportunity.id ? localUpdatedOpportunity : o
-                    );
-                    const updatedFormData = {...formData, opportunities: updatedOpportunities};
-                    setFormData(updatedFormData);
-                    
-                    logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
-                    
-                    alert('✅ Opportunity updated locally!');
-                    
-                    setEditingOpportunity(null);
-                    setNewOpportunity({
-                        name: '',
-                        stage: 'Awareness',
-                        expectedCloseDate: '',
-                        relatedSiteId: null,
-                        notes: ''
-                    });
-                    setShowOpportunityForm(false);
-                    
-                    console.log('✅ Opportunity updated locally (API fallback)');
-                }
-            } else {
-                // No token or API, update locally only
-                const localUpdatedOpportunity = {
-                    ...editingOpportunity,
-                    ...opportunityData,
-                    updatedAt: new Date().toISOString()
-                };
-                
+            if (!token) {
+                alert('❌ Please log in to update opportunities in the database');
+                return;
+            }
+            
+            if (!window.api?.updateOpportunity) {
+                alert('❌ Opportunity API not available. Please refresh the page.');
+                return;
+            }
+            
+            console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
+            const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
+            const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+            
+            if (updatedOpportunity && updatedOpportunity.id) {
+                // Update local opportunities array
                 const updatedOpportunities = formData.opportunities.map(o => 
-                    o.id === editingOpportunity.id ? localUpdatedOpportunity : o
+                    o.id === editingOpportunity.id ? updatedOpportunity : o
                 );
                 const updatedFormData = {...formData, opportunities: updatedOpportunities};
                 setFormData(updatedFormData);
                 
                 logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
                 
-                alert('✅ Opportunity updated locally!');
+                alert('✅ Opportunity updated in database successfully!');
                 
                 setEditingOpportunity(null);
                 setNewOpportunity({
@@ -854,11 +768,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowOpportunityForm(false);
                 
-                console.log('✅ Opportunity updated locally (no authentication)');
+                console.log('✅ Opportunity updated and saved to database:', updatedOpportunity.id);
+            } else {
+                throw new Error('No opportunity data returned from API');
             }
         } catch (error) {
             console.error('❌ Error updating opportunity:', error);
-            alert('❌ Error updating opportunity: ' + error.message);
+            alert('❌ Error updating opportunity in database: ' + error.message);
         }
     };
 
@@ -867,18 +783,18 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         if (confirm('Delete this opportunity?')) {
             try {
                 const token = window.storage?.getToken?.();
-                if (token && window.api?.deleteOpportunity) {
-                    try {
-                        console.log('🌐 Deleting opportunity via API:', opportunityId);
-                        await window.api.deleteOpportunity(opportunityId);
-                        console.log('✅ Opportunity deleted from database:', opportunityId);
-                    } catch (apiError) {
-                        console.error('❌ API error deleting opportunity:', apiError);
-                        // Continue with local deletion even if API fails
-                    }
-                } else {
-                    console.log('⚠️ No authentication token or API available, deleting locally only');
+                if (!token) {
+                    alert('❌ Please log in to delete opportunities from the database');
+                    return;
                 }
+                
+                if (!window.api?.deleteOpportunity) {
+                    alert('❌ Opportunity API not available. Please refresh the page.');
+                    return;
+                }
+                
+                console.log('🌐 Deleting opportunity via API:', opportunityId);
+                await window.api.deleteOpportunity(opportunityId);
                 
                 // Update local opportunities array
                 const updatedFormData = {
@@ -889,12 +805,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 
                 logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`);
                 
-                alert('✅ Opportunity deleted successfully!');
+                alert('✅ Opportunity deleted from database successfully!');
                 
-                console.log('✅ Opportunity deleted:', opportunityId);
+                console.log('✅ Opportunity deleted from database:', opportunityId);
             } catch (error) {
                 console.error('❌ Error deleting opportunity:', error);
-                alert('❌ Error deleting opportunity: ' + error.message);
+                alert('❌ Error deleting opportunity from database: ' + error.message);
             }
         }
     };
@@ -1802,15 +1718,6 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     </div>
                                 )}
 
-                                {/* Summary Stats */}
-                                {formData.opportunities && formData.opportunities.length > 0 && (
-                                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
-                                        <div className="text-xs font-medium text-purple-900 mb-1">Total Opportunities</div>
-                                        <div className="text-2xl font-bold text-purple-700">
-                                            {formData.opportunities.length}
-                                        </div>
-                                    </div>
-                                )}
 
                                 <div className="space-y-2">
                                     {(!formData.opportunities || formData.opportunities.length === 0) ? (
@@ -1835,7 +1742,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                         <div className="flex-1">
                                                             <div className="flex items-center gap-2 mb-2">
                                                                 <i className="fas fa-bullseye text-green-600"></i>
-                                                                <h4 className="font-semibold text-gray-900 text-sm">{opportunity.name}</h4>
+                                                                <h4 className="font-semibold text-gray-900 text-sm">{opportunity.title || opportunity.name}</h4>
                                                                 <span className={`px-2 py-0.5 text-xs rounded font-medium ${stageColor}`}>
                                                                     {opportunity.stage}
                                                                 </span>
