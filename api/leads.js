@@ -38,14 +38,27 @@ async function handler(req, res) {
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
       const body = await parseJsonBody(req)
       console.log('🔍 Received lead creation data:', body)
+      console.log('🔍 Body type:', typeof body)
+      console.log('🔍 Body keys:', Object.keys(body))
       
-      if (!body.name) return badRequest(res, 'name required')
+      if (!body.name) {
+        console.log('❌ Missing name field in request body')
+        return badRequest(res, 'name required')
+      }
 
       // Build notes with additional fields that don't exist in schema
       let notes = body.notes || '';
       if (body.source) notes += `\nSource: ${body.source}`;
       if (body.stage) notes += `\nStage: ${body.stage}`;
       if (body.firstContactDate) notes += `\nFirst Contact: ${body.firstContactDate}`;
+
+      // Ensure type column exists in database
+      try {
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+        console.log('✅ Type column ensured in database')
+      } catch (error) {
+        console.log('Type column already exists or error adding it:', error.message)
+      }
 
       // Only include fields that exist in the database schema
       const leadData = {
@@ -67,7 +80,7 @@ async function handler(req, res) {
         sites: Array.isArray(body.sites) ? body.sites : [],
         contracts: Array.isArray(body.contracts) ? body.contracts : [],
         activityLog: Array.isArray(body.activityLog) ? body.activityLog : [],
-        billingTerms: typeof body.billingTerms === 'object' ? body.billingTerms : {
+        billingTerms: typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {
           paymentTerms: 'Net 30',
           billingFrequency: 'Monthly',
           currency: 'ZAR',
@@ -77,12 +90,22 @@ async function handler(req, res) {
         }
       }
 
+      // Filter out any undefined or null values that might cause issues
+      Object.keys(leadData).forEach(key => {
+        if (leadData[key] === undefined || leadData[key] === null) {
+          delete leadData[key]
+        }
+      })
+
       // Only add ownerId if user is authenticated
       if (req.user?.sub) {
         leadData.ownerId = req.user.sub
       }
 
       console.log('🔍 Creating lead with data:', leadData)
+      console.log('🔍 Lead data keys:', Object.keys(leadData))
+      console.log('🔍 Lead data values:', Object.values(leadData))
+      
       try {
         const lead = await prisma.client.create({
           data: leadData
@@ -92,6 +115,13 @@ async function handler(req, res) {
         return created(res, { lead })
       } catch (dbError) {
         console.error('❌ Database error creating lead:', dbError)
+        console.error('❌ Database error details:', {
+          code: dbError.code,
+          meta: dbError.meta,
+          message: dbError.message,
+          stack: dbError.stack
+        })
+        console.error('❌ Lead data that failed:', leadData)
         return serverError(res, 'Failed to create lead', dbError.message)
       }
     }
