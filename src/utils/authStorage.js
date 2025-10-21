@@ -3,7 +3,7 @@ const AuthStorage = {
     // Get authentication token
     getToken: () => {
         try {
-            const token = localStorage.getItem('abcotronics_auth_token');
+            const token = localStorage.getItem('abcotronics_token');
             if (!token || token === 'undefined' || token === 'null') return null;
             return token;
         } catch (e) {
@@ -15,7 +15,7 @@ const AuthStorage = {
     // Set authentication token
     setToken: (token) => {
         try {
-            localStorage.setItem('abcotronics_auth_token', token);
+            localStorage.setItem('abcotronics_token', token);
             console.log('✅ Auth token saved');
         } catch (e) {
             console.error('Error saving auth token:', e);
@@ -25,7 +25,7 @@ const AuthStorage = {
     // Remove authentication token
     removeToken: () => {
         try {
-            localStorage.removeItem('abcotronics_auth_token');
+            localStorage.removeItem('abcotronics_token');
             console.log('✅ Auth token removed');
         } catch (e) {
             console.error('Error removing auth token:', e);

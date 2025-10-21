@@ -166,6 +166,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     // Load opportunities from database
     const loadOpportunitiesFromDatabase = async (clientId) => {
         try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No authentication token, skipping opportunity loading');
+                return;
+            }
+            
             console.log('📡 Loading opportunities from database for client:', clientId);
             const response = await window.api.getOpportunitiesByClient(clientId);
             const opportunities = response?.data?.opportunities || [];
@@ -588,14 +594,116 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 value: parseFloat(newOpportunity.value) || 0
             };
             
-            console.log('🌐 Creating opportunity via API:', opportunityData);
-            const response = await window.api.createOpportunity(opportunityData);
-            const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
-            
-            if (savedOpportunity && savedOpportunity.id) {
-                // Add to local opportunities array for immediate UI update
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.createOpportunity) {
+                try {
+                    console.log('🌐 Creating opportunity via API:', opportunityData);
+                    const response = await window.api.createOpportunity(opportunityData);
+                    const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+                    
+                    if (savedOpportunity && savedOpportunity.id) {
+                        // Add to local opportunities array for immediate UI update
+                        const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
+                        const updatedOpportunities = [...currentOpportunities, savedOpportunity];
+                        
+                        const newActivityLog = [...(formData.activityLog || []), {
+                            id: Date.now() + 1,
+                            type: 'Opportunity Added',
+                            description: `Added opportunity: ${newOpportunity.name}`,
+                            timestamp: new Date().toISOString(),
+                            user: 'Current User',
+                            relatedId: savedOpportunity.id
+                        }];
+                        
+                        const updatedFormData = {
+                            ...formData,
+                            opportunities: updatedOpportunities,
+                            activityLog: newActivityLog
+                        };
+                        
+                        setFormData(updatedFormData);
+                        
+                        // Save activity log changes immediately
+                        onSave(updatedFormData, true);
+                        
+                        alert('✅ Opportunity saved successfully!');
+                        
+                        // Switch to opportunities tab to show the added opportunity
+                        handleTabChange('opportunities');
+                        
+                        // Reset form
+                        setNewOpportunity({
+                            name: '',
+                            stage: 'Awareness',
+                            expectedCloseDate: '',
+                            relatedSiteId: null,
+                            notes: ''
+                        });
+                        setShowOpportunityForm(false);
+                        
+                        console.log('✅ Opportunity created and saved:', savedOpportunity.id);
+                    } else {
+                        throw new Error('No opportunity ID returned from API');
+                    }
+                } catch (apiError) {
+                    console.error('❌ API error creating opportunity:', apiError);
+                    // Fallback to local creation
+                    const localOpportunity = {
+                        id: Date.now().toString(),
+                        ...opportunityData,
+                        createdAt: new Date().toISOString()
+                    };
+                    
+                    const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
+                    const updatedOpportunities = [...currentOpportunities, localOpportunity];
+                    
+                    const newActivityLog = [...(formData.activityLog || []), {
+                        id: Date.now() + 1,
+                        type: 'Opportunity Added',
+                        description: `Added opportunity: ${newOpportunity.name}`,
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User',
+                        relatedId: localOpportunity.id
+                    }];
+                    
+                    const updatedFormData = {
+                        ...formData,
+                        opportunities: updatedOpportunities,
+                        activityLog: newActivityLog
+                    };
+                    
+                    setFormData(updatedFormData);
+                    
+                    // Save activity log changes immediately
+                    onSave(updatedFormData, true);
+                    
+                    alert('✅ Opportunity saved locally!');
+                    
+                    // Switch to opportunities tab to show the added opportunity
+                    handleTabChange('opportunities');
+                    
+                    // Reset form
+                    setNewOpportunity({
+                        name: '',
+                        stage: 'Awareness',
+                        expectedCloseDate: '',
+                        relatedSiteId: null,
+                        notes: ''
+                    });
+                    setShowOpportunityForm(false);
+                    
+                    console.log('✅ Opportunity created locally (API fallback)');
+                }
+            } else {
+                // No token or API, create locally only
+                const localOpportunity = {
+                    id: Date.now().toString(),
+                    ...opportunityData,
+                    createdAt: new Date().toISOString()
+                };
+                
                 const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-                const updatedOpportunities = [...currentOpportunities, savedOpportunity];
+                const updatedOpportunities = [...currentOpportunities, localOpportunity];
                 
                 const newActivityLog = [...(formData.activityLog || []), {
                     id: Date.now() + 1,
@@ -603,7 +711,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     description: `Added opportunity: ${newOpportunity.name}`,
                     timestamp: new Date().toISOString(),
                     user: 'Current User',
-                    relatedId: savedOpportunity.id
+                    relatedId: localOpportunity.id
                 }];
                 
                 const updatedFormData = {
@@ -617,7 +725,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Save activity log changes immediately
                 onSave(updatedFormData, true);
                 
-                alert('✅ Opportunity saved successfully!');
+                alert('✅ Opportunity saved locally!');
                 
                 // Switch to opportunities tab to show the added opportunity
                 handleTabChange('opportunities');
@@ -632,9 +740,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowOpportunityForm(false);
                 
-                console.log('✅ Opportunity created and saved:', savedOpportunity.id);
-            } else {
-                throw new Error('No opportunity ID returned from API');
+                console.log('✅ Opportunity created locally (no authentication)');
             }
         } catch (error) {
             console.error('❌ Error creating opportunity:', error);
@@ -656,21 +762,87 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 value: parseFloat(newOpportunity.value) || 0
             };
             
-            console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
-            const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
-            const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
-            
-            if (updatedOpportunity && updatedOpportunity.id) {
-                // Update local opportunities array
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.updateOpportunity) {
+                try {
+                    console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
+                    const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
+                    const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+                    
+                    if (updatedOpportunity && updatedOpportunity.id) {
+                        // Update local opportunities array
+                        const updatedOpportunities = formData.opportunities.map(o => 
+                            o.id === editingOpportunity.id ? updatedOpportunity : o
+                        );
+                        const updatedFormData = {...formData, opportunities: updatedOpportunities};
+                        setFormData(updatedFormData);
+                        
+                        logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
+                        
+                        alert('✅ Opportunity updated successfully!');
+                        
+                        setEditingOpportunity(null);
+                        setNewOpportunity({
+                            name: '',
+                            stage: 'Awareness',
+                            expectedCloseDate: '',
+                            relatedSiteId: null,
+                            notes: ''
+                        });
+                        setShowOpportunityForm(false);
+                        
+                        console.log('✅ Opportunity updated and saved:', updatedOpportunity.id);
+                    } else {
+                        throw new Error('No opportunity data returned from API');
+                    }
+                } catch (apiError) {
+                    console.error('❌ API error updating opportunity:', apiError);
+                    // Fallback to local update
+                    const localUpdatedOpportunity = {
+                        ...editingOpportunity,
+                        ...opportunityData,
+                        updatedAt: new Date().toISOString()
+                    };
+                    
+                    const updatedOpportunities = formData.opportunities.map(o => 
+                        o.id === editingOpportunity.id ? localUpdatedOpportunity : o
+                    );
+                    const updatedFormData = {...formData, opportunities: updatedOpportunities};
+                    setFormData(updatedFormData);
+                    
+                    logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
+                    
+                    alert('✅ Opportunity updated locally!');
+                    
+                    setEditingOpportunity(null);
+                    setNewOpportunity({
+                        name: '',
+                        stage: 'Awareness',
+                        expectedCloseDate: '',
+                        relatedSiteId: null,
+                        notes: ''
+                    });
+                    setShowOpportunityForm(false);
+                    
+                    console.log('✅ Opportunity updated locally (API fallback)');
+                }
+            } else {
+                // No token or API, update locally only
+                const localUpdatedOpportunity = {
+                    ...editingOpportunity,
+                    ...opportunityData,
+                    updatedAt: new Date().toISOString()
+                };
+                
                 const updatedOpportunities = formData.opportunities.map(o => 
-                    o.id === editingOpportunity.id ? updatedOpportunity : o
+                    o.id === editingOpportunity.id ? localUpdatedOpportunity : o
                 );
                 const updatedFormData = {...formData, opportunities: updatedOpportunities};
                 setFormData(updatedFormData);
                 
                 logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
                 
-                alert('✅ Opportunity updated successfully!');
+                alert('✅ Opportunity updated locally!');
                 
                 setEditingOpportunity(null);
                 setNewOpportunity({
@@ -682,9 +854,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowOpportunityForm(false);
                 
-                console.log('✅ Opportunity updated and saved:', updatedOpportunity.id);
-            } else {
-                throw new Error('No opportunity data returned from API');
+                console.log('✅ Opportunity updated locally (no authentication)');
             }
         } catch (error) {
             console.error('❌ Error updating opportunity:', error);
@@ -696,8 +866,19 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         const opportunity = formData.opportunities.find(o => o.id === opportunityId);
         if (confirm('Delete this opportunity?')) {
             try {
-                console.log('🌐 Deleting opportunity via API:', opportunityId);
-                await window.api.deleteOpportunity(opportunityId);
+                const token = window.storage?.getToken?.();
+                if (token && window.api?.deleteOpportunity) {
+                    try {
+                        console.log('🌐 Deleting opportunity via API:', opportunityId);
+                        await window.api.deleteOpportunity(opportunityId);
+                        console.log('✅ Opportunity deleted from database:', opportunityId);
+                    } catch (apiError) {
+                        console.error('❌ API error deleting opportunity:', apiError);
+                        // Continue with local deletion even if API fails
+                    }
+                } else {
+                    console.log('⚠️ No authentication token or API available, deleting locally only');
+                }
                 
                 // Update local opportunities array
                 const updatedFormData = {
