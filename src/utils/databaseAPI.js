@@ -349,6 +349,50 @@ const DatabaseAPI = {
         return response;
     },
 
+    // OPPORTUNITIES OPERATIONS
+    async getOpportunities() {
+        console.log('📡 Fetching opportunities from database...');
+        const response = await this.makeRequest('/api/opportunities');
+        console.log('✅ Opportunities fetched from database:', response.data?.opportunities?.length || 0);
+        return response;
+    },
+
+    async getOpportunitiesByClient(clientId) {
+        console.log(`📡 Fetching opportunities for client ${clientId} from database...`);
+        const response = await this.makeRequest(`/api/opportunities/client/${clientId}`);
+        console.log('✅ Client opportunities fetched from database:', response.data?.opportunities?.length || 0);
+        return response;
+    },
+
+    async createOpportunity(opportunityData) {
+        console.log('📡 Creating opportunity in database...');
+        const response = await this.makeRequest('/api/opportunities', {
+            method: 'POST',
+            body: JSON.stringify(opportunityData)
+        });
+        console.log('✅ Opportunity created in database');
+        return response;
+    },
+
+    async updateOpportunity(id, opportunityData) {
+        console.log(`📡 Updating opportunity ${id} in database...`);
+        const response = await this.makeRequest(`/api/opportunities/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(opportunityData)
+        });
+        console.log('✅ Opportunity updated in database');
+        return response;
+    },
+
+    async deleteOpportunity(id) {
+        console.log(`📡 Deleting opportunity ${id} from database...`);
+        const response = await this.makeRequest(`/api/opportunities/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Opportunity deleted from database');
+        return response;
+    },
+
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');
@@ -401,6 +445,13 @@ if (window.api) {
     window.api.getClientAnalytics = DatabaseAPI.getClientAnalytics.bind(DatabaseAPI);
     window.api.getLeadAnalytics = DatabaseAPI.getLeadAnalytics.bind(DatabaseAPI);
     window.api.getRevenueAnalytics = DatabaseAPI.getRevenueAnalytics.bind(DatabaseAPI);
+    
+    // Opportunities API methods
+    window.api.getOpportunities = DatabaseAPI.getOpportunities.bind(DatabaseAPI);
+    window.api.getOpportunitiesByClient = DatabaseAPI.getOpportunitiesByClient.bind(DatabaseAPI);
+    window.api.createOpportunity = DatabaseAPI.createOpportunity.bind(DatabaseAPI);
+    window.api.updateOpportunity = DatabaseAPI.updateOpportunity.bind(DatabaseAPI);
+    window.api.deleteOpportunity = DatabaseAPI.deleteOpportunity.bind(DatabaseAPI);
     
     window.api.healthCheck = DatabaseAPI.healthCheck.bind(DatabaseAPI);
 }
