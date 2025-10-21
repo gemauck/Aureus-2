@@ -37,19 +37,22 @@ async function handler(req, res) {
     // Create Lead (POST /api/leads)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
       const body = await parseJsonBody(req)
+      console.log('🔍 Received lead creation data:', body)
+      
       if (!body.name) return badRequest(res, 'name required')
 
-      // Build notes with additional fields
+      // Build notes with additional fields that don't exist in schema
       let notes = body.notes || '';
       if (body.source) notes += `\nSource: ${body.source}`;
       if (body.stage) notes += `\nStage: ${body.stage}`;
       if (body.firstContactDate) notes += `\nFirst Contact: ${body.firstContactDate}`;
 
+      // Only include fields that exist in the database schema
       const leadData = {
         name: body.name,
         type: 'lead',
         industry: body.industry || 'Other',
-        status: body.status || 'New',
+        status: body.status || 'Potential', // Use 'Potential' as default for leads
         revenue: parseFloat(body.revenue) || 0,
         value: parseFloat(body.value) || 0,
         probability: parseInt(body.probability) || 0,
@@ -71,35 +74,18 @@ async function handler(req, res) {
           retainerAmount: 0,
           taxExempt: false,
           notes: ''
-        },
-        ownerId: req.user?.sub || null
+        }
+      }
+
+      // Only add ownerId if user is authenticated
+      if (req.user?.sub) {
+        leadData.ownerId = req.user.sub
       }
 
       console.log('🔍 Creating lead with data:', leadData)
       try {
         const lead = await prisma.client.create({
-          data: {
-            name: leadData.name,
-            type: leadData.type,
-            industry: leadData.industry,
-            status: leadData.status,
-            revenue: leadData.revenue,
-            value: leadData.value,
-            probability: leadData.probability,
-            lastContact: leadData.lastContact,
-            address: leadData.address,
-            website: leadData.website,
-            notes: leadData.notes,
-            contacts: leadData.contacts,
-            followUps: leadData.followUps,
-            projectIds: leadData.projectIds,
-            comments: leadData.comments,
-            sites: leadData.sites,
-            contracts: leadData.contracts,
-            activityLog: leadData.activityLog,
-            billingTerms: leadData.billingTerms,
-            ...(leadData.ownerId && { ownerId: leadData.ownerId })
-          }
+          data: leadData
         })
         
         console.log('✅ Lead created successfully:', lead.id)

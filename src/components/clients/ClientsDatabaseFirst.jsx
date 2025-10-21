@@ -235,9 +235,8 @@ const ClientsDatabaseFirst = () => {
                 setLeads(updatedLeads);
                 setSelectedLead(updatedLead);
             } else {
-                // Create new lead
-                const newLead = {
-                    id: Math.max(100, ...leads.map(l => l.id)) + 1,
+                // Create new lead - don't include ID, let database generate it
+                const newLeadData = {
                     ...leadFormData,
                     lastContact: new Date().toISOString().split('T')[0],
                     activityLog: [{
@@ -249,10 +248,12 @@ const ClientsDatabaseFirst = () => {
                     }]
                 };
                 
-                await window.api.createLead(newLead);
+                const createdLead = await window.api.createLead(newLeadData);
                 console.log('✅ Lead created in database');
                 
-                const updatedLeads = [...leads, newLead];
+                // Use the lead returned from the API with proper database ID
+                const savedLead = createdLead?.data?.lead || createdLead?.lead || createdLead;
+                const updatedLeads = [...leads, savedLead];
                 setLeads(updatedLeads);
                 
                 // Redirect to main view

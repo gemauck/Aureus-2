@@ -146,8 +146,8 @@ const ClientsMobileOptimized = () => {
                 }
                 console.log('✅ Lead updated');
             } else {
-                // Create new lead
-                const newLead = {
+                // Create new lead - don't include ID, let database generate it
+                const newLeadData = {
                     ...leadFormData,
                     lastContact: new Date().toISOString().split('T')[0],
                     activityLog: [{
@@ -159,8 +159,8 @@ const ClientsMobileOptimized = () => {
                     }]
                 };
                 
-                console.log('🌐 Calling API to create lead:', newLead);
-                const apiResponse = await window.api.createLead(newLead);
+                console.log('🌐 Calling API to create lead:', newLeadData);
+                const apiResponse = await window.api.createLead(newLeadData);
                 const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
                 console.log('✅ Lead created in database:', savedLead);
                 
