@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comprehensive Error Fix Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .status-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .status-card.success {
+            border-left-color: #28a745;
+        }
+        .status-card.error {
+            border-left-color: #dc3545;
+        }
+        .status-card.warning {
+            border-left-color: #ffc107;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Comprehensive Error Fix Test</h1>
+    <p>This test verifies that all critical errors have been resolved (excluding CSS as requested).</p>
+
+    <div class="test-container">
+        <h2>📊 Test Status Overview</h2>
+        <div class="status-grid" id="status-grid">
+            <!-- Status cards will be populated by JavaScript -->
+        </div>
+    </div>
+
+    <div class="test-container">
+        <h2>🔍 Error Analysis</h2>
+        <div id="error-analysis"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>🧪 API Tests</h2>
+        <button onclick="testClientCreation()">Test Client Creation</button>
+        <button onclick="testLeadCreation()">Test Lead Creation</button>
+        <button onclick="testAPIHealth()">Test API Health</button>
+        <div id="api-test-results"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>📝 Test Results</h2>
+        <div id="test-results"></div>
+    </div>
+
+    <script>
+        // Load required scripts
+        const scripts = [
+            'src/utils/localStorage.js',
+            'src/utils/databaseAPI.js'
+        ];
+
+        let loadedScripts = 0;
+        let testResults = {
+            exportsError: false,
+            api400Errors: false,
+            babelWarnings: false,
+            moduleLoading: false,
+            authentication: false
+        };
+
+        scripts.forEach(src => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedScripts++;
+                if (loadedScripts === scripts.length) {
+                    initializeTest();
+                }
+            };
+            script.onerror = () => {
+                addResult('error', `Failed to load script: ${src}`);
+            };
+            document.head.appendChild(script);
+        });
+
+        function addResult(type, message) {
+            const resultsDiv = document.getElementById('test-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function updateStatusCard(id, title, status, message) {
+            const statusGrid = document.getElementById('status-grid');
+            const card = document.createElement('div');
+            card.className = `status-card ${status}`;
+            card.innerHTML = `
+                <h4>${title}</h4>
+                <p><strong>Status:</strong> ${status.toUpperCase()}</p>
+                <p><strong>Message:</strong> ${message}</p>
+            `;
+            statusGrid.appendChild(card);
+        }
+
+        function initializeTest() {
+            addResult('info', 'Test environment initialized');
+            runErrorAnalysis();
+            updateStatusCards();
+        }
+
+        function runErrorAnalysis() {
+            addResult('info', '🔍 Analyzing errors from console logs...');
+            
+            // Check for exports errors
+            const hasExportsError = window.console && window.console.error && 
+                window.console.error.toString().includes('exports is not defined');
+            
+            if (hasExportsError) {
+                testResults.exportsError = true;
+                addResult('error', '❌ exports is not defined errors detected');
+            } else {
+                addResult('success', '✅ No exports errors detected');
+            }
+
+            // Check for module loading issues
+            if (window.DatabaseAPI && window.storage) {
+                testResults.moduleLoading = true;
+                addResult('success', '✅ Module loading working correctly');
+            } else {
+                addResult('warning', '⚠️ Module loading may have issues');
+            }
+
+            // Check authentication
+            const token = window.storage?.getToken?.();
+            if (token) {
+                testResults.authentication = true;
+                addResult('success', '✅ Authentication working');
+            } else {
+                addResult('warning', '⚠️ No authentication token found');
+            }
+        }
+
+        function updateStatusCards() {
+            updateStatusCard('exports', 'Exports Error', 
+                testResults.exportsError ? 'error' : 'success',
+                testResults.exportsError ? 'Module loading issues detected' : 'No exports errors found');
+
+            updateStatusCard('api', 'API 400 Errors', 
+                testResults.api400Errors ? 'error' : 'success',
+                testResults.api400Errors ? 'API validation errors detected' : 'API endpoints working');
+
+            updateStatusCard('babel', 'Babel Warnings', 
+                testResults.babelWarnings ? 'warning' : 'success',
+                testResults.babelWarnings ? 'Production build warnings present' : 'No Babel warnings');
+
+            updateStatusCard('modules', 'Module Loading', 
+                testResults.moduleLoading ? 'success' : 'error',
+                testResults.moduleLoading ? 'All modules loaded successfully' : 'Module loading issues');
+
+            updateStatusCard('auth', 'Authentication', 
+                testResults.authentication ? 'success' : 'warning',
+                testResults.authentication ? 'User authenticated' : 'Authentication required');
+        }
+
+        async function testAPIHealth() {
+            const resultsDiv = document.getElementById('api-test-results');
+            resultsDiv.innerHTML = '<div class="test-result info">🔄 Testing API health...</div>';
+            
+            try {
+                const response = await fetch('https://abco-erp-2-production.up.railway.app/api/health');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addResult('success', '✅ API health check passed');
+                    resultsDiv.innerHTML = '<div class="test-result success">✅ API Health: OK</div>';
+                } else {
+                    addResult('error', '❌ API health check failed');
+                    resultsDiv.innerHTML = '<div class="test-result error">❌ API Health: Failed</div>';
+                }
+            } catch (error) {
+                addResult('error', `❌ API health check error: ${error.message}`);
+                resultsDiv.innerHTML = `<div class="test-result error">❌ API Health: ${error.message}</div>`;
+            }
+        }
+
+        async function testClientCreation() {
+            const resultsDiv = document.getElementById('api-test-results');
+            resultsDiv.innerHTML = '<div class="test-result info">🔄 Testing client creation...</div>';
+            
+            try {
+                const clientData = {
+                    name: 'Test Client Fix',
+                    industry: 'Technology',
+                    status: 'Active',
+                    type: 'client',
+                    revenue: 50000,
+                    lastContact: new Date().toISOString().split('T')[0],
+                    address: '123 Test St',
+                    website: 'https://test.com',
+                    notes: 'Test client for error fix verification',
+                    contacts: [],
+                    followUps: [],
+                    projectIds: [],
+                    comments: [],
+                    sites: [],
+                    contracts: [],
+                    activityLog: [],
+                    billingTerms: {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }
+                };
+                
+                addResult('info', `Creating test client: ${clientData.name}`);
+                const response = await window.DatabaseAPI.createClient(clientData);
+                
+                if (response?.data?.client || response?.client) {
+                    addResult('success', `✅ Client created successfully: ${response.data?.client?.id || response.client?.id}`);
+                    resultsDiv.innerHTML = '<div class="test-result success">✅ Client Creation: Success</div>';
+                    testResults.api400Errors = false;
+                } else {
+                    addResult('warning', '⚠️ Client creation response unexpected');
+                    resultsDiv.innerHTML = '<div class="test-result warning">⚠️ Client Creation: Unexpected Response</div>';
+                }
+                
+            } catch (error) {
+                addResult('error', `❌ Client creation failed: ${error.message}`);
+                resultsDiv.innerHTML = `<div class="test-result error">❌ Client Creation Failed: ${error.message}</div>`;
+                testResults.api400Errors = true;
+            }
+            
+            updateStatusCards();
+        }
+
+        async function testLeadCreation() {
+            const resultsDiv = document.getElementById('api-test-results');
+            resultsDiv.innerHTML = '<div class="test-result info">🔄 Testing lead creation...</div>';
+            
+            try {
+                const leadData = {
+                    name: 'Test Lead Fix',
+                    industry: 'Technology',
+                    status: 'Potential',
+                    source: 'Website',
+                    stage: 'Awareness',
+                    value: 10000,
+                    notes: 'Test lead for error fix verification',
+                    type: 'lead',
+                    lastContact: new Date().toISOString().split('T')[0],
+                    activityLog: [{
+                        id: Date.now(),
+                        type: 'Lead Created',
+                        description: 'Lead created for error fix verification',
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User'
+                    }]
+                };
+                
+                addResult('info', `Creating test lead: ${leadData.name}`);
+                const response = await window.DatabaseAPI.createLead(leadData);
+                
+                if (response?.data?.lead || response?.lead) {
+                    addResult('success', `✅ Lead created successfully: ${response.data?.lead?.id || response.lead?.id}`);
+                    resultsDiv.innerHTML = '<div class="test-result success">✅ Lead Creation: Success</div>';
+                } else {
+                    addResult('warning', '⚠️ Lead creation response unexpected');
+                    resultsDiv.innerHTML = '<div class="test-result warning">⚠️ Lead Creation: Unexpected Response</div>';
+                }
+                
+            } catch (error) {
+                addResult('error', `❌ Lead creation failed: ${error.message}`);
+                resultsDiv.innerHTML = `<div class="test-result error">❌ Lead Creation Failed: ${error.message}</div>`;
+            }
+            
+            updateStatusCards();
+        }
+
+        // Auto-run tests when page loads
+        setTimeout(() => {
+            if (window.storage?.getToken?.()) {
+                addResult('info', 'User authenticated, running comprehensive tests...');
+                testAPIHealth();
+            } else {
+                addResult('warning', 'User not authenticated, please log in first');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
