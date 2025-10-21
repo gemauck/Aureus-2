@@ -11,19 +11,24 @@ const seedClientsAndLeads = async () => {
             return;
         }
 
-        // Get existing clients to check if RGN and Exxaro already exist
+        // Get existing clients and leads to check if RGN and Exxaro already exist
         const existingClientsResponse = await window.DatabaseAPI.getClients();
         const existingClients = existingClientsResponse?.data?.clients || [];
         
+        const existingLeadsResponse = await window.DatabaseAPI.getLeads();
+        const existingLeads = existingLeadsResponse?.data?.leads || [];
+        
         console.log('📊 Existing clients in database:', existingClients.length);
         console.log('📊 Existing client names:', existingClients.map(c => c.name));
+        console.log('📊 Existing leads in database:', existingLeads.length);
+        console.log('📊 Existing lead names:', existingLeads.map(l => l.name));
 
         // Check if RGN (lead) exists
-        const rgnExists = existingClients.some(c => c.name === 'RGN' && c.type === 'lead');
+        const rgnExists = existingLeads.some(l => l.name === 'RGN');
         console.log('🔍 RGN lead exists:', rgnExists);
 
         // Check if Exxaro (client) exists
-        const exxaroExists = existingClients.some(c => c.name === 'Exxaro' && c.type === 'client');
+        const exxaroExists = existingClients.some(c => c.name === 'Exxaro');
         console.log('🔍 Exxaro client exists:', exxaroExists);
 
         // Create RGN as a lead if it doesn't exist
@@ -31,7 +36,6 @@ const seedClientsAndLeads = async () => {
             console.log('➕ Creating RGN as a lead...');
             const rgnLead = {
                 name: 'RGN',
-                type: 'lead',
                 industry: 'Mining',
                 status: 'New',
                 revenue: 0,
@@ -77,8 +81,8 @@ const seedClientsAndLeads = async () => {
             };
 
             try {
-                const rgnResponse = await window.DatabaseAPI.createClient(rgnLead);
-                console.log('✅ RGN lead created successfully:', rgnResponse?.data?.client?.id);
+                const rgnResponse = await window.DatabaseAPI.createLead(rgnLead);
+                console.log('✅ RGN lead created successfully:', rgnResponse?.data?.lead?.id);
             } catch (error) {
                 console.error('❌ Failed to create RGN lead:', error);
             }
@@ -151,13 +155,17 @@ const seedClientsAndLeads = async () => {
         const finalClientsResponse = await window.DatabaseAPI.getClients();
         const finalClients = finalClientsResponse?.data?.clients || [];
         
-        const rgnFinal = finalClients.find(c => c.name === 'RGN' && c.type === 'lead');
-        const exxaroFinal = finalClients.find(c => c.name === 'Exxaro' && c.type === 'client');
+        const finalLeadsResponse = await window.DatabaseAPI.getLeads();
+        const finalLeads = finalLeadsResponse?.data?.leads || [];
+        
+        const rgnFinal = finalLeads.find(l => l.name === 'RGN');
+        const exxaroFinal = finalClients.find(c => c.name === 'Exxaro');
         
         console.log('📊 Final verification:');
         console.log('  - RGN lead:', rgnFinal ? '✅ Found' : '❌ Missing');
         console.log('  - Exxaro client:', exxaroFinal ? '✅ Found' : '❌ Missing');
-        console.log('  - Total clients/leads:', finalClients.length);
+        console.log('  - Total clients:', finalClients.length);
+        console.log('  - Total leads:', finalLeads.length);
 
         // Clear localStorage cache to force fresh data load
         try {
@@ -208,6 +216,11 @@ window.seedClientsAndLeads = seedClientsAndLeads;
 
 // Auto-run seeding when the script loads (if user is authenticated)
 const runAutoSeeding = () => {
+    // DISABLED: Auto-seeding to prevent RGN and Exxaro from being recreated after deletion
+    console.log('🚫 Auto-seeding disabled to allow proper deletion of RGN and Exxaro');
+    console.log('💡 To manually seed data, run: window.seedClientsAndLeads()');
+    return;
+    
     if (window.storage?.getToken?.()) {
         console.log('🔑 User is authenticated, running auto-seeding...');
         seedClientsAndLeads().then(result => {
