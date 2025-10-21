@@ -1,42 +1,36 @@
 {
   "name": "abcotronics-erp-modular",
-  "private": true,
   "version": "0.1.1",
-  "type": "module",
+  "description": "Abcotronics ERP - Fuel Management Services",
+  "main": "server.js",
   "scripts": {
-    "dev": "vercel dev",
-    "build": "prisma generate && npm run build:css",
+    "start": "node server-production.js",
+    "dev": "node server-local.js",
+    "build": "echo 'Production build completed'",
     "build:css": "tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
-    "watch:css": "tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --watch",
-    "vercel-build": "prisma generate && prisma migrate deploy && npm run build:css",
-    "postinstall": "prisma generate",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:deploy": "prisma migrate deploy",
-    "migrate:production": "node migrate-production.js",
-    "seed": "node prisma/seed.js",
-    "start": "node start-production.js",
-    "railway-build": "prisma generate && npm run build:css || echo 'CSS build failed, using existing CSS'",
-    "start:local": "node server/local.js",
-    "start:railway": "node server/railway.js"
+    "railway-build": "npm run build:css && echo 'Railway build completed'"
   },
   "dependencies": {
-    "@prisma/client": "^5.18.0",
-    "@tailwindcss/cli": "^4.1.15",
-    "autoprefixer": "^10.4.21",
+    "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^4.19.2",
-    "googleapis": "^144.0.0",
-    "helmet": "^7.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
-    "nodemailer": "^6.9.8",
-    "pino": "^9.3.2",
-    "postcss": "^8.5.6",
-    "prisma": "^5.18.0",
-    "tailwindcss": "^4.1.15",
-    "zod": "^3.23.8"
+    "nodemailer": "^6.9.16",
+    "prisma": "^5.22.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "tailwindcss": "^4.1.15"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "erp",
+    "fuel-management",
+    "business-management"
+  ],
+  "author": "Abcotronics",
+  "license": "MIT"
 }

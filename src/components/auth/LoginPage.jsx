@@ -9,15 +9,7 @@ const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [showQuickSelect, setShowQuickSelect] = useState(true);
-    const [availableUsers, setAvailableUsers] = useState([]);
     const { login } = useAuth();
-
-    useEffect(() => {
-        // Load available users for quick selection
-        const users = []; // No users list needed for login
-        setAvailableUsers(users.filter(u => u.status === 'Active'));
-    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
