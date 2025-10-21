@@ -60,22 +60,27 @@ async function handler(req, res) {
 
       console.log('🔍 Creating lead with data:', leadData)
       try {
-        const result = await prisma.$queryRaw`
-          INSERT INTO "Client" (
-            "id", "name", "type", "industry", "status", "revenue", "value", "probability",
-            "lastContact", "address", "website", "notes", "contacts", "followUps",
-            "comments", "activityLog", "ownerId", "createdAt", "updatedAt"
-          ) VALUES (
-            gen_random_uuid()::text, ${leadData.name}, ${leadData.type}, ${leadData.industry},
-            ${leadData.status}, ${leadData.revenue}, ${leadData.value}, ${leadData.probability},
-            ${leadData.lastContact}, ${leadData.address}, ${leadData.website}, ${leadData.notes},
-            ${JSON.stringify(leadData.contacts)}, ${JSON.stringify(leadData.followUps)},
-            ${JSON.stringify(leadData.comments)}, ${JSON.stringify(leadData.activityLog)},
-            ${leadData.ownerId}, NOW(), NOW()
-          ) RETURNING *
-        `
+        const lead = await prisma.client.create({
+          data: {
+            name: leadData.name,
+            type: leadData.type,
+            industry: leadData.industry,
+            status: leadData.status,
+            revenue: leadData.revenue,
+            value: leadData.value,
+            probability: leadData.probability,
+            lastContact: leadData.lastContact,
+            address: leadData.address,
+            website: leadData.website,
+            notes: leadData.notes,
+            contacts: leadData.contacts,
+            followUps: leadData.followUps,
+            comments: leadData.comments,
+            activityLog: leadData.activityLog,
+            ownerId: leadData.ownerId
+          }
+        })
         
-        const lead = result[0]
         console.log('✅ Lead created successfully:', lead.id)
         return created(res, { lead })
       } catch (dbError) {
