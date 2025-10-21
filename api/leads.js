@@ -62,17 +62,17 @@ async function handler(req, res) {
 
       // Only include fields that exist in the database schema
       const leadData = {
-        name: body.name,
+        name: String(body.name).trim(),
         type: 'lead',
-        industry: body.industry || 'Other',
-        status: body.status || 'Potential', // Use 'Potential' as default for leads
+        industry: String(body.industry || 'Other').trim(),
+        status: String(body.status || 'Potential').trim(),
         revenue: parseFloat(body.revenue) || 0,
         value: parseFloat(body.value) || 0,
         probability: parseInt(body.probability) || 0,
         lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
-        address: body.address || '',
-        website: body.website || '',
-        notes: notes,
+        address: String(body.address || '').trim(),
+        website: String(body.website || '').trim(),
+        notes: String(notes).trim(),
         contacts: Array.isArray(body.contacts) ? body.contacts : [],
         followUps: Array.isArray(body.followUps) ? body.followUps : [],
         projectIds: Array.isArray(body.projectIds) ? body.projectIds : [],
@@ -89,6 +89,31 @@ async function handler(req, res) {
           notes: ''
         }
       }
+
+      // Ensure JSON fields are properly formatted
+      const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms']
+      jsonFields.forEach(field => {
+        if (leadData[field] && typeof leadData[field] === 'object') {
+          try {
+            // Ensure it's a valid JSON structure
+            JSON.stringify(leadData[field])
+          } catch (e) {
+            console.log(`⚠️ Invalid JSON for field ${field}, setting to default`)
+            if (field === 'billingTerms') {
+              leadData[field] = {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+              }
+            } else {
+              leadData[field] = []
+            }
+          }
+        }
+      })
 
       // Filter out any undefined or null values that might cause issues
       Object.keys(leadData).forEach(key => {
