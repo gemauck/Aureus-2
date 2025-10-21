@@ -1,6 +1,6 @@
 // Accept invitation API endpoint
 import { prisma } from '../_lib/prisma.js'
-import { badRequest, ok, serverError } from '../_lib/response.js'
+import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import bcrypt from 'bcryptjs'
@@ -9,21 +9,15 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
-        const { token, password, confirmPassword } = req.body || {}
+        console.log('🎯 Processing invitation acceptance...')
         
-        if (!token || !password || !confirmPassword) {
-            return badRequest(res, 'Token, password and confirmation are required')
+        const { token, password, name } = req.body || {}
+        
+        if (!token || !password || !name) {
+            return badRequest(res, 'Token, password, and name are required')
         }
 
-        if (password !== confirmPassword) {
-            return badRequest(res, 'Passwords do not match')
-        }
-
-        if (password.length < 6) {
-            return badRequest(res, 'Password must be at least 6 characters')
-        }
-
-        // Find and validate invitation
+        // Find invitation by token
         const invitation = await prisma.invitation.findUnique({
             where: { token }
         })
@@ -32,8 +26,9 @@ async function handler(req, res) {
             return badRequest(res, 'Invalid invitation token')
         }
 
+        // Check if invitation is still valid
         if (invitation.status !== 'pending') {
-            return badRequest(res, 'Invitation has already been used or cancelled')
+            return badRequest(res, 'Invitation has already been used or expired')
         }
 
         if (new Date() > invitation.expiresAt) {
@@ -41,24 +36,26 @@ async function handler(req, res) {
         }
 
         // Check if user already exists
-        const existingUser = await prisma.user.findUnique({ 
-            where: { email: invitation.email } 
+        const existingUser = await prisma.user.findUnique({
+            where: { email: invitation.email }
         })
+
         if (existingUser) {
             return badRequest(res, 'User with this email already exists')
         }
 
         // Hash password
-        const passwordHash = await bcrypt.hash(password, 12)
+        const passwordHash = await bcrypt.hash(password, 10)
 
-        // Create user
-        const user = await prisma.user.create({
+        // Create user account
+        const newUser = await prisma.user.create({
             data: {
                 email: invitation.email,
-                name: invitation.name,
-                role: invitation.role,
+                name: name || invitation.name,
                 passwordHash,
+                role: invitation.role,
                 status: 'active',
+                provider: 'local',
                 invitedBy: invitation.invitedBy
             }
         })
@@ -66,25 +63,27 @@ async function handler(req, res) {
         // Mark invitation as accepted
         await prisma.invitation.update({
             where: { id: invitation.id },
-            data: { 
+            data: {
                 status: 'accepted',
                 acceptedAt: new Date()
             }
         })
 
+        console.log('✅ User account created successfully:', newUser.id)
+
         return ok(res, {
             success: true,
             message: 'Account created successfully! You can now log in.',
             user: {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                role: user.role
+                id: newUser.id,
+                email: newUser.email,
+                name: newUser.name,
+                role: newUser.role
             }
         })
 
     } catch (error) {
-        console.error('Invitation acceptance error:', error)
+        console.error('❌ Accept invitation error:', error)
         return serverError(res, 'Failed to accept invitation', error.message)
     }
 }
