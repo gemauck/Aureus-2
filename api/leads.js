@@ -66,10 +66,27 @@ async function handler(req, res) {
         type: 'lead',
         industry: String(body.industry || 'Other').trim(),
         status: String(body.status || 'Potential').trim(),
-        revenue: parseFloat(body.revenue) || 0,
-        value: parseFloat(body.value) || 0,
-        probability: parseInt(body.probability) || 0,
-        lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
+        revenue: (() => {
+          const val = parseFloat(body.revenue)
+          return isNaN(val) ? 0 : val
+        })(),
+        value: (() => {
+          const val = parseFloat(body.value)
+          return isNaN(val) ? 0 : val
+        })(),
+        probability: (() => {
+          const val = parseInt(body.probability)
+          return isNaN(val) ? 0 : val
+        })(),
+        lastContact: body.lastContact ? (() => {
+          try {
+            const date = new Date(body.lastContact)
+            return isNaN(date.getTime()) ? new Date() : date
+          } catch (e) {
+            console.log('⚠️ Invalid date format for lastContact, using current date')
+            return new Date()
+          }
+        })() : new Date(),
         address: String(body.address || '').trim(),
         website: String(body.website || '').trim(),
         notes: String(notes).trim(),
