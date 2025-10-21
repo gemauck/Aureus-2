@@ -39,6 +39,12 @@ async function handler(req, res) {
       const body = await parseJsonBody(req)
       if (!body.name) return badRequest(res, 'name required')
 
+      // Build notes with additional fields
+      let notes = body.notes || '';
+      if (body.source) notes += `\nSource: ${body.source}`;
+      if (body.stage) notes += `\nStage: ${body.stage}`;
+      if (body.firstContactDate) notes += `\nFirst Contact: ${body.firstContactDate}`;
+
       const leadData = {
         name: body.name,
         type: 'lead',
@@ -50,11 +56,22 @@ async function handler(req, res) {
         lastContact: body.lastContact ? new Date(body.lastContact) : new Date(),
         address: body.address || '',
         website: body.website || '',
-        notes: body.notes || '',
+        notes: notes,
         contacts: Array.isArray(body.contacts) ? body.contacts : [],
         followUps: Array.isArray(body.followUps) ? body.followUps : [],
+        projectIds: Array.isArray(body.projectIds) ? body.projectIds : [],
         comments: Array.isArray(body.comments) ? body.comments : [],
+        sites: Array.isArray(body.sites) ? body.sites : [],
+        contracts: Array.isArray(body.contracts) ? body.contracts : [],
         activityLog: Array.isArray(body.activityLog) ? body.activityLog : [],
+        billingTerms: typeof body.billingTerms === 'object' ? body.billingTerms : {
+          paymentTerms: 'Net 30',
+          billingFrequency: 'Monthly',
+          currency: 'ZAR',
+          retainerAmount: 0,
+          taxExempt: false,
+          notes: ''
+        },
         ownerId: req.user?.sub || null
       }
 
@@ -75,8 +92,12 @@ async function handler(req, res) {
             notes: leadData.notes,
             contacts: leadData.contacts,
             followUps: leadData.followUps,
+            projectIds: leadData.projectIds,
             comments: leadData.comments,
+            sites: leadData.sites,
+            contracts: leadData.contracts,
             activityLog: leadData.activityLog,
+            billingTerms: leadData.billingTerms,
             ownerId: leadData.ownerId
           }
         })
