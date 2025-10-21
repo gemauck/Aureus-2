@@ -4,13 +4,13 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
-import { PERMISSIONS } from '../../src/utils/permissions.js'
+// Note: PERMISSIONS will be available globally when permissions.js is loaded
 
 async function handler(req, res) {
     if (req.method === 'GET') {
         try {
             // Check if user has permission to manage users
-            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(PERMISSIONS.MANAGE_USERS))) {
+            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(manage_users))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -54,7 +54,7 @@ async function handler(req, res) {
     if (req.method === 'POST') {
         try {
             // Check if user has permission to manage users
-            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(PERMISSIONS.MANAGE_USERS))) {
+            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(manage_users))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -105,7 +105,7 @@ async function handler(req, res) {
     if (req.method === 'PUT') {
         try {
             // Check if user has permission to manage users
-            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(PERMISSIONS.MANAGE_USERS))) {
+            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(manage_users))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
@@ -162,7 +162,7 @@ async function handler(req, res) {
     if (req.method === 'DELETE') {
         try {
             // Check if user has permission to manage users
-            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(PERMISSIONS.MANAGE_USERS))) {
+            if (!req.user || (req.user.role !== 'admin' && !req.user.permissions?.includes(manage_users))) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
