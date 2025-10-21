@@ -10,6 +10,8 @@ const ProjectsDatabaseFirst = () => {
     const [filterType, setFilterType] = useState('All Types');
     const [isLoading, setIsLoading] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
+    const [selectedProjects, setSelectedProjects] = useState([]);
+    const [showBulkActions, setShowBulkActions] = useState(false);
     const { isDark } = window.useTheme();
 
     // Load projects from database
@@ -162,6 +164,65 @@ const ProjectsDatabaseFirst = () => {
         }
     };
 
+    // Bulk delete projects
+    const handleBulkDelete = async () => {
+        if (selectedProjects.length === 0) return;
+        
+        const projectNames = selectedProjects.map(id => {
+            const project = projects.find(p => p.id === id);
+            return project ? project.name : `Project ${id}`;
+        }).join(', ');
+        
+        if (!confirm(`Are you sure you want to delete ${selectedProjects.length} project(s)?\n\nProjects: ${projectNames}\n\nThis action cannot be undone.`)) {
+            return;
+        }
+
+        console.log(`💾 Bulk deleting ${selectedProjects.length} projects from database...`);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Please log in to delete projects');
+                return;
+            }
+
+            // Delete each project
+            for (const projectId of selectedProjects) {
+                await window.api.deleteProject(projectId);
+            }
+            
+            console.log('✅ Projects deleted from database');
+            
+            // Update local state
+            setProjects(prev => prev.filter(p => !selectedProjects.includes(p.id)));
+            setSelectedProjects([]);
+            setShowBulkActions(false);
+            setRefreshKey(k => k + 1);
+            
+        } catch (error) {
+            console.error('❌ Failed to bulk delete projects from database:', error);
+            alert('Failed to delete projects from database. Please try again.');
+        }
+    };
+
+    // Toggle project selection
+    const toggleProjectSelection = (projectId) => {
+        setSelectedProjects(prev => 
+            prev.includes(projectId) 
+                ? prev.filter(id => id !== projectId)
+                : [...prev, projectId]
+        );
+    };
+
+    // Select all projects
+    const selectAllProjects = () => {
+        setSelectedProjects(filteredProjects.map(p => p.id));
+    };
+
+    // Clear selection
+    const clearSelection = () => {
+        setSelectedProjects([]);
+    };
+
     // Filter and search
     const filteredProjects = projects.filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -210,18 +271,83 @@ const ProjectsDatabaseFirst = () => {
                             <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Database-synchronized project management</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={() => {
-                            setSelectedProject(null);
-                            setShowModal(true);
-                        }}
-                        className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-all duration-200"
-                    >
-                        <i className="fas fa-plus text-xs"></i>
-                        <span>Add Project</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                        {selectedProjects.length > 0 && (
+                            <div className="flex items-center space-x-2">
+                                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                    {selectedProjects.length} selected
+                                </span>
+                                <button
+                                    onClick={handleBulkDelete}
+                                    className="bg-red-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors text-sm"
+                                >
+                                    <i className="fas fa-trash mr-1"></i>
+                                    Delete Selected
+                                </button>
+                                <button
+                                    onClick={clearSelection}
+                                    className="bg-gray-500 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-600 transition-colors text-sm"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                        )}
+                        <button
+                            onClick={() => setShowBulkActions(!showBulkActions)}
+                            className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                                showBulkActions 
+                                    ? 'bg-primary-100 text-primary-700 border border-primary-200' 
+                                    : 'bg-gray-100 text-gray-700 border border-gray-200 hover:bg-gray-200'
+                            }`}
+                        >
+                            <i className="fas fa-check-square mr-1"></i>
+                            Bulk Actions
+                        </button>
+                        <button 
+                            onClick={() => {
+                                setSelectedProject(null);
+                                setShowModal(true);
+                            }}
+                            className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 transition-all duration-200"
+                        >
+                            <i className="fas fa-plus text-xs"></i>
+                            <span>Add Project</span>
+                        </button>
+                    </div>
                 </div>
             </div>
+
+            {/* Bulk Actions Bar */}
+            {showBulkActions && (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-4`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={selectedProjects.length === filteredProjects.length && filteredProjects.length > 0}
+                                    onChange={(e) => {
+                                        if (e.target.checked) {
+                                            selectAllProjects();
+                                        } else {
+                                            clearSelection();
+                                        }
+                                    }}
+                                    className={`w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 ${
+                                        isDark ? 'bg-gray-700 border-gray-600' : ''
+                                    }`}
+                                />
+                                <span className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                    Select All ({filteredProjects.length} projects)
+                                </span>
+                            </label>
+                        </div>
+                        <div className="text-sm text-gray-500">
+                            Click "Bulk Actions" again to exit selection mode
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Search and Filters */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl p-6`}>
@@ -292,26 +418,63 @@ const ProjectsDatabaseFirst = () => {
                         {filteredProjects.map(project => (
                             <div 
                                 key={project.id}
-                                className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-xl p-6 cursor-pointer transition-all duration-200 hover:shadow-lg`}
-                                onClick={() => setSelectedProject(project)}
+                                className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-xl p-6 transition-all duration-200 hover:shadow-lg ${
+                                    showBulkActions ? 'cursor-default' : 'cursor-pointer'
+                                }`}
+                                onClick={() => {
+                                    if (!showBulkActions) {
+                                        setSelectedProject(project);
+                                    }
+                                }}
                             >
                                 <div className="flex items-start justify-between mb-4">
-                                    <div className="flex-1">
-                                        <h3 className={`font-semibold text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-1`}>
-                                            {project.name}
-                                        </h3>
-                                        <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                            {project.client}
-                                        </p>
+                                    <div className="flex items-start space-x-3 flex-1">
+                                        {showBulkActions && (
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedProjects.includes(project.id)}
+                                                onChange={(e) => {
+                                                    e.stopPropagation();
+                                                    toggleProjectSelection(project.id);
+                                                }}
+                                                className={`mt-1 w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500 ${
+                                                    isDark ? 'bg-gray-700 border-gray-600' : ''
+                                                }`}
+                                            />
+                                        )}
+                                        <div className="flex-1">
+                                            <h3 className={`font-semibold text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-1`}>
+                                                {project.name}
+                                            </h3>
+                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                                {project.client}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                                        project.status === 'Active' ? 'bg-green-100 text-green-800' : 
-                                        project.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
-                                        project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-gray-100 text-gray-800'
-                                    }`}>
-                                        {project.status}
-                                    </span>
+                                    <div className="flex items-center space-x-2">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                                            project.status === 'Active' ? 'bg-green-100 text-green-800' : 
+                                            project.status === 'Completed' ? 'bg-blue-100 text-blue-800' :
+                                            project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-gray-100 text-gray-800'
+                                        }`}>
+                                            {project.status}
+                                        </span>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteProject(project.id);
+                                            }}
+                                            className={`p-1 rounded-full transition-colors ${
+                                                isDark 
+                                                    ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' 
+                                                    : 'text-gray-500 hover:text-red-600 hover:bg-red-50'
+                                            }`}
+                                            title="Delete Project"
+                                        >
+                                            <i className="fas fa-trash text-sm"></i>
+                                        </button>
+                                    </div>
                                 </div>
                                 
                                 <div className="space-y-3">

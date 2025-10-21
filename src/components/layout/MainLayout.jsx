@@ -66,6 +66,7 @@ const MainLayout = () => {
     const Manufacturing = window.Manufacturing || (() => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>);
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
+    const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
 
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
@@ -79,6 +80,7 @@ const MainLayout = () => {
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar' },
+        { id: 'settings', label: 'Settings', icon: 'fa-cog' },
     ];
 
     const renderPage = () => {
@@ -128,6 +130,9 @@ const MainLayout = () => {
                 case 'reports': 
                     console.log('🔄 MainLayout: Rendering Reports component');
                     return <ErrorBoundary><Reports /></ErrorBoundary>;
+                case 'settings': 
+                    console.log('🔄 MainLayout: Rendering Settings component');
+                    return <ErrorBoundary><Settings /></ErrorBoundary>;
                 case 'documents': 
                     console.log('🔄 MainLayout: Rendering Documents placeholder');
                     return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
