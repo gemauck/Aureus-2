@@ -15,6 +15,7 @@ async function handler(req, res) {
     const testClient = await prisma.client.create({
       data: {
         name: 'Test Client',
+        type: 'client', // Add missing type field
         industry: 'Test',
         status: 'active',
         revenue: 0,
