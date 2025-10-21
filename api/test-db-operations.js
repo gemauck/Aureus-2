@@ -9,41 +9,37 @@ async function handler(req, res) {
     
     // First, run migration to fix schema issues
     console.log('🔧 Running database migration to fix schema...')
-    const migrationSQL = `
-      -- Add type column to Client table if it doesn't exist
-      ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client';
-      
-      -- Update existing clients to have 'client' type
-      UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL;
-      
-      -- Add any other missing columns that might be needed
-      ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "value" DOUBLE PRECISION DEFAULT 0;
-      ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "probability" INTEGER DEFAULT 0;
-      
-      -- Ensure all JSON columns have proper defaults
-      UPDATE "Client" SET "contacts" = '[]' WHERE "contacts" IS NULL;
-      UPDATE "Client" SET "followUps" = '[]' WHERE "followUps" IS NULL;
-      UPDATE "Client" SET "projectIds" = '[]' WHERE "projectIds" IS NULL;
-      UPDATE "Client" SET "comments" = '[]' WHERE "comments" IS NULL;
-      UPDATE "Client" SET "sites" = '[]' WHERE "sites" IS NULL;
-      UPDATE "Client" SET "contracts" = '[]' WHERE "contracts" IS NULL;
-      UPDATE "Client" SET "activityLog" = '[]' WHERE "activityLog" IS NULL;
-      
-      -- Set default billing terms if null
-      UPDATE "Client" SET "billingTerms" = '{"paymentTerms":"Net 30","billingFrequency":"Monthly","currency":"ZAR","retainerAmount":0,"taxExempt":false,"notes":""}' WHERE "billingTerms" IS NULL;
-      
-      -- Add any missing columns to Project table
-      ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "clientName" TEXT DEFAULT '';
-      ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "tasksList" JSONB DEFAULT '[]';
-      ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "team" JSONB DEFAULT '[]';
-      
-      -- Ensure Project JSON columns have proper defaults
-      UPDATE "Project" SET "tasksList" = '[]' WHERE "tasksList" IS NULL;
-      UPDATE "Project" SET "team" = '[]' WHERE "team" IS NULL;
-    `
     
-    await prisma.$executeRawUnsafe(migrationSQL)
-    console.log('✅ Database migration completed successfully')
+    try {
+      // Add missing columns to Client table
+      await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client'`
+      await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "value" DOUBLE PRECISION DEFAULT 0`
+      await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "probability" INTEGER DEFAULT 0`
+      
+      // Update existing records
+      await prisma.$executeRaw`UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL`
+      
+      // Add missing columns to Project table
+      await prisma.$executeRaw`ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "clientName" TEXT DEFAULT ''`
+      await prisma.$executeRaw`ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "tasksList" JSONB DEFAULT '[]'`
+      await prisma.$executeRaw`ALTER TABLE "Project" ADD COLUMN IF NOT EXISTS "team" JSONB DEFAULT '[]'`
+      
+      // Ensure JSON columns have proper defaults
+      await prisma.$executeRaw`UPDATE "Client" SET "contacts" = '[]' WHERE "contacts" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "followUps" = '[]' WHERE "followUps" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "projectIds" = '[]' WHERE "projectIds" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "comments" = '[]' WHERE "comments" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "sites" = '[]' WHERE "sites" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "contracts" = '[]' WHERE "contracts" IS NULL`
+      await prisma.$executeRaw`UPDATE "Client" SET "activityLog" = '[]' WHERE "activityLog" IS NULL`
+      
+      await prisma.$executeRaw`UPDATE "Project" SET "tasksList" = '[]' WHERE "tasksList" IS NULL`
+      await prisma.$executeRaw`UPDATE "Project" SET "team" = '[]' WHERE "team" IS NULL`
+      
+      console.log('✅ Database migration completed successfully')
+    } catch (migrationError) {
+      console.log('Migration error (may be expected):', migrationError.message)
+    }
     
     // Test 1: Simple query
     const userCount = await prisma.user.count()

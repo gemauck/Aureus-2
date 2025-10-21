@@ -1,64 +1,58 @@
+// Create initial admin user endpoint
 import { prisma } from './_lib/prisma.js'
 import bcrypt from 'bcryptjs'
-import { badRequest, ok, serverError } from './_lib/response.js'
+import { ok, serverError, badRequest } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
-import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
-  if (req.method !== 'POST') return badRequest(res, 'Invalid method')
-  
   try {
-    console.log('🔍 Creating admin user...')
+    console.log('👤 Creating initial admin user...')
     
     // Check if admin user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: 'admin@abcotronics.com' }
+    const existingAdmin = await prisma.user.findUnique({ 
+      where: { email: 'admin@example.com' } 
     })
     
-    if (existingUser) {
+    if (existingAdmin) {
       console.log('✅ Admin user already exists')
       return ok(res, { 
         message: 'Admin user already exists',
-        user: {
-          email: existingUser.email,
-          name: existingUser.name,
-          role: existingUser.role
-        }
+        user: { email: existingAdmin.email, role: existingAdmin.role }
       })
     }
     
     // Create admin user
-    const passwordHash = await bcrypt.hash('admin123', 10)
+    const passwordHash = await bcrypt.hash('password123', 10)
     
-    const user = await prisma.user.create({
+    const adminUser = await prisma.user.create({
       data: {
-        email: 'admin@abcotronics.com',
+        email: 'admin@example.com',
         name: 'Admin User',
-        passwordHash,
-        role: 'ADMIN'
+        passwordHash: passwordHash,
+        role: 'admin',
+        status: 'active',
+        provider: 'local'
       }
     })
     
-    console.log('✅ Admin user created successfully!')
+    console.log('✅ Admin user created successfully:', adminUser.id)
     
     return ok(res, { 
       message: 'Admin user created successfully',
-      credentials: {
-        email: 'admin@abcotronics.com',
-        password: 'admin123'
+      user: { 
+        email: adminUser.email, 
+        name: adminUser.name, 
+        role: adminUser.role 
       },
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role
+      credentials: {
+        email: 'admin@example.com',
+        password: 'password123'
       }
     })
-    
-  } catch (error) {
-    console.error('❌ Error creating admin user:', error)
-    return serverError(res, 'Failed to create admin user', error.message)
+  } catch (e) {
+    console.error('❌ Failed to create admin user:', e)
+    return serverError(res, 'Failed to create admin user', e.message)
   }
 }
 
-export default withHttp(withLogging(handler))
+export default withHttp(handler)

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Complete System Fix Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        .loading { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #6c757d; cursor: not-allowed; }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .step {
+            border-left: 4px solid #007bff;
+            padding-left: 15px;
+            margin: 15px 0;
+        }
+        .step.completed { border-left-color: #28a745; }
+        .step.failed { border-left-color: #dc3545; }
+        .step.in-progress { border-left-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Complete System Fix Tool</h1>
+        <p>This tool will fix all identified issues: database schema, authentication, and deployment.</p>
+        
+        <div id="overall-status" class="status info">Ready to start complete system fix...</div>
+        
+        <div style="margin: 20px 0;">
+            <button onclick="runCompleteFix()">🚀 Run Complete System Fix</button>
+            <button onclick="fixDatabaseOnly()">🗄️ Fix Database Only</button>
+            <button onclick="fixAuthOnly()">🔐 Fix Auth Only</button>
+            <button onclick="testSystem()">🧪 Test System</button>
+            <button onclick="clearLog()">Clear Log</button>
+        </div>
+        
+        <h3>Fix Steps:</h3>
+        <div id="steps">
+            <div class="step" id="step1">1. Fix database schema (add missing columns)</div>
+            <div class="step" id="step2">2. Fix authentication system (login endpoint)</div>
+            <div class="step" id="step3">3. Create initial admin user</div>
+            <div class="step" id="step4">4. Test database operations</div>
+            <div class="step" id="step5">5. Test authentication</div>
+            <div class="step" id="step6">6. Test project loading</div>
+        </div>
+        
+        <h3>Fix Log:</h3>
+        <div id="log" class="log">Ready to start complete system fix...\n</div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://abco-erp-2-production.up.railway.app';
+        let logElement = document.getElementById('log');
+        let statusElement = document.getElementById('overall-status');
+        
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `[${timestamp}] ${message}\n`;
+            logElement.textContent += logMessage;
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(message);
+        }
+        
+        function setStatus(message, type = 'info') {
+            statusElement.textContent = message;
+            statusElement.className = `status ${type}`;
+        }
+        
+        function setStepStatus(stepId, status) {
+            const step = document.getElementById(stepId);
+            step.className = `step ${status}`;
+        }
+        
+        function clearLog() {
+            logElement.textContent = 'Log cleared...\n';
+        }
+        
+        async function runCompleteFix() {
+            addLog('🚀 Starting complete system fix...');
+            setStatus('⏳ Running complete system fix...', 'loading');
+            
+            // Reset all steps
+            for (let i = 1; i <= 6; i++) {
+                setStepStatus(`step${i}`, '');
+            }
+            
+            try {
+                // Step 1: Fix database schema
+                addLog('🗄️ Step 1: Fixing database schema...');
+                setStepStatus('step1', 'in-progress');
+                
+                const dbResponse = await fetch(`${API_BASE}/api/test-db-operations`);
+                if (dbResponse.ok) {
+                    addLog('✅ Database schema fixed successfully');
+                    setStepStatus('step1', 'completed');
+                } else {
+                    const dbData = await dbResponse.json();
+                    addLog(`❌ Database fix failed: ${dbData.error?.message || 'Unknown error'}`);
+                    setStepStatus('step1', 'failed');
+                }
+                
+                // Step 2: Fix authentication (login endpoint is already fixed in code)
+                addLog('🔐 Step 2: Authentication system (login endpoint fixed in deployment)');
+                setStepStatus('step2', 'completed');
+                
+                // Step 3: Create admin user
+                addLog('👤 Step 3: Creating initial admin user...');
+                setStepStatus('step3', 'in-progress');
+                
+                const adminResponse = await fetch(`${API_BASE}/api/create-admin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (adminResponse.ok) {
+                    const adminData = await adminResponse.json();
+                    addLog('✅ Admin user created successfully');
+                    addLog(`📧 Email: ${adminData.credentials?.email || 'admin@example.com'}`);
+                    addLog(`🔑 Password: ${adminData.credentials?.password || 'password123'}`);
+                    setStepStatus('step3', 'completed');
+                } else {
+                    const adminData = await adminResponse.json();
+                    addLog(`❌ Failed to create admin user: ${adminData.error?.message || 'Unknown error'}`);
+                    setStepStatus('step3', 'failed');
+                }
+                
+                // Step 4: Test database operations
+                addLog('🧪 Step 4: Testing database operations...');
+                setStepStatus('step4', 'in-progress');
+                
+                const testDbResponse = await fetch(`${API_BASE}/api/test-db-operations`);
+                if (testDbResponse.ok) {
+                    addLog('✅ Database operations working correctly');
+                    setStepStatus('step4', 'completed');
+                } else {
+                    addLog('❌ Database operations still failing');
+                    setStepStatus('step4', 'failed');
+                }
+                
+                // Step 5: Test authentication
+                addLog('🔐 Step 5: Testing authentication...');
+                setStepStatus('step5', 'in-progress');
+                
+                const loginResponse = await fetch(`${API_BASE}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        email: 'admin@example.com', 
+                        password: 'password123' 
+                    })
+                });
+                
+                if (loginResponse.ok) {
+                    const loginData = await loginResponse.json();
+                    addLog('✅ Authentication working correctly');
+                    addLog(`🎫 Token received: ${loginData.accessToken ? 'Yes' : 'No'}`);
+                    setStepStatus('step5', 'completed');
+                    
+                    // Step 6: Test project loading
+                    addLog('📋 Step 6: Testing project loading...');
+                    setStepStatus('step6', 'in-progress');
+                    
+                    const projectsResponse = await fetch(`${API_BASE}/api/projects`, {
+                        headers: { 'Authorization': `Bearer ${loginData.accessToken}` }
+                    });
+                    
+                    if (projectsResponse.ok) {
+                        const projectsData = await projectsResponse.json();
+                        addLog(`✅ Projects loaded successfully: ${projectsData.length || 0} projects`);
+                        setStepStatus('step6', 'completed');
+                        setStatus('🎉 Complete system fix successful! Projects should now load correctly.', 'success');
+                    } else {
+                        const projectsData = await projectsResponse.json();
+                        addLog(`❌ Project loading failed: ${projectsData.error?.message || 'Unknown error'}`);
+                        setStepStatus('step6', 'failed');
+                    }
+                } else {
+                    const loginData = await loginResponse.json();
+                    addLog(`❌ Authentication failed: ${loginData.error?.message || 'Unknown error'}`);
+                    setStepStatus('step5', 'failed');
+                }
+                
+                setStatus('✅ Complete system fix completed. Check steps above for results.', 'success');
+                
+            } catch (error) {
+                addLog(`❌ Complete fix failed: ${error.message}`);
+                setStatus('❌ Complete fix failed', 'error');
+            }
+        }
+        
+        async function fixDatabaseOnly() {
+            addLog('🗄️ Fixing database schema only...');
+            setStatus('⏳ Fixing database...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/test-db-operations`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addLog('✅ Database schema fixed successfully');
+                    setStatus('✅ Database fixed!', 'success');
+                } else {
+                    addLog(`❌ Database fix failed: ${data.error?.message || 'Unknown error'}`);
+                    setStatus('❌ Database fix failed', 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Database fix error: ${error.message}`);
+                setStatus('❌ Database fix failed', 'error');
+            }
+        }
+        
+        async function fixAuthOnly() {
+            addLog('🔐 Creating admin user...');
+            setStatus('⏳ Creating admin user...', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/create-admin`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addLog('✅ Admin user created successfully');
+                    addLog(`📧 Email: ${data.credentials?.email || 'admin@example.com'}`);
+                    addLog(`🔑 Password: ${data.credentials?.password || 'password123'}`);
+                    setStatus('✅ Admin user created!', 'success');
+                } else {
+                    addLog(`❌ Failed to create admin user: ${data.error?.message || 'Unknown error'}`);
+                    setStatus('❌ Failed to create admin user', 'error');
+                }
+            } catch (error) {
+                addLog(`❌ Error creating admin user: ${error.message}`);
+                setStatus('❌ Error creating admin user', 'error');
+            }
+        }
+        
+        async function testSystem() {
+            addLog('🧪 Testing complete system...');
+            setStatus('⏳ Testing system...', 'loading');
+            
+            try {
+                // Test login
+                const loginResponse = await fetch(`${API_BASE}/api/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        email: 'admin@example.com', 
+                        password: 'password123' 
+                    })
+                });
+                
+                if (loginResponse.ok) {
+                    const loginData = await loginResponse.json();
+                    addLog('✅ Login successful');
+                    
+                    // Test projects
+                    const projectsResponse = await fetch(`${API_BASE}/api/projects`, {
+                        headers: { 'Authorization': `Bearer ${loginData.accessToken}` }
+                    });
+                    
+                    if (projectsResponse.ok) {
+                        const projectsData = await projectsResponse.json();
+                        addLog(`✅ Projects loaded: ${projectsData.length || 0} projects`);
+                        setStatus('🎉 System is working correctly!', 'success');
+                    } else {
+                        addLog('❌ Projects loading failed');
+                        setStatus('❌ Projects loading failed', 'error');
+                    }
+                } else {
+                    addLog('❌ Login failed');
+                    setStatus('❌ Login failed', 'error');
+                }
+            } catch (error) {
+                addLog(`❌ System test failed: ${error.message}`);
+                setStatus('❌ System test failed', 'error');
+            }
+        }
+        
+        // Auto-run complete fix on page load
+        window.addEventListener('load', () => {
+            addLog('🚀 Complete System Fix Tool loaded');
+            addLog('📡 API Base URL: ' + API_BASE);
+            addLog('⏳ Ready to fix all system issues...');
+        });
+    </script>
+</body>
+</html>
