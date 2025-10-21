@@ -157,8 +157,31 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 activityLog: client.activityLog || [],
                 projectIds: client.projectIds || []
             });
+            
+            // Load opportunities from database
+            loadOpportunitiesFromDatabase(client.id);
         }
     }, [client]);
+
+    // Load opportunities from database
+    const loadOpportunitiesFromDatabase = async (clientId) => {
+        try {
+            console.log('📡 Loading opportunities from database for client:', clientId);
+            const response = await window.api.getOpportunitiesByClient(clientId);
+            const opportunities = response?.data?.opportunities || [];
+            
+            console.log('✅ Loaded opportunities from database:', opportunities.length);
+            
+            // Update formData with opportunities from database
+            setFormData(prevFormData => ({
+                ...prevFormData,
+                opportunities: opportunities
+            }));
+        } catch (error) {
+            console.error('❌ Error loading opportunities from database:', error);
+            // Don't show error to user, just log it
+        }
+    };
 
 
     const handleAddContact = () => {
@@ -551,58 +574,72 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         }
     };
 
-    const handleAddOpportunity = () => {
+    const handleAddOpportunity = async () => {
         if (!newOpportunity.name || !newOpportunity.name.trim()) {
             alert('Opportunity name is required');
             return;
         }
         
-        const newOpp = {
-            ...newOpportunity,
-            id: Date.now(),
-            createdAt: new Date().toISOString()
-        };
-        
-        const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
-        const updatedOpportunities = [...currentOpportunities, newOpp];
-        
-        const newActivityLog = [...(formData.activityLog || []), {
-            id: Date.now() + 1,
-            type: 'Opportunity Added',
-            description: `Added opportunity: ${newOpportunity.name}`,
-            timestamp: new Date().toISOString(),
-            user: 'Current User',
-            relatedId: null
-        }];
-        
-        // Create completely new formData object
-        const updatedFormData = {
-            ...formData,
-            opportunities: updatedOpportunities,
-            activityLog: newActivityLog
-        };
-        
-        setFormData(updatedFormData);
-        
-        // Save opportunity changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        // Switch to opportunities tab to show the added opportunity
-        handleTabChange('opportunities');
-        
-        // Reset form
-        setNewOpportunity({
-            name: '',
-            stage: 'Awareness',
-            expectedCloseDate: '',
-            relatedSiteId: null,
-            notes: ''
-        });
-        // Close the form after adding opportunity
-        setShowOpportunityForm(false);
-        
-        // Show success message
-        // Silent save - no alert needed
+        try {
+            const opportunityData = {
+                title: newOpportunity.name,
+                clientId: formData.id,
+                stage: newOpportunity.stage || 'prospect',
+                value: parseFloat(newOpportunity.value) || 0
+            };
+            
+            console.log('🌐 Creating opportunity via API:', opportunityData);
+            const response = await window.api.createOpportunity(opportunityData);
+            const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+            
+            if (savedOpportunity && savedOpportunity.id) {
+                // Add to local opportunities array for immediate UI update
+                const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
+                const updatedOpportunities = [...currentOpportunities, savedOpportunity];
+                
+                const newActivityLog = [...(formData.activityLog || []), {
+                    id: Date.now() + 1,
+                    type: 'Opportunity Added',
+                    description: `Added opportunity: ${newOpportunity.name}`,
+                    timestamp: new Date().toISOString(),
+                    user: 'Current User',
+                    relatedId: savedOpportunity.id
+                }];
+                
+                const updatedFormData = {
+                    ...formData,
+                    opportunities: updatedOpportunities,
+                    activityLog: newActivityLog
+                };
+                
+                setFormData(updatedFormData);
+                
+                // Save activity log changes immediately
+                onSave(updatedFormData, true);
+                
+                alert('✅ Opportunity saved successfully!');
+                
+                // Switch to opportunities tab to show the added opportunity
+                handleTabChange('opportunities');
+                
+                // Reset form
+                setNewOpportunity({
+                    name: '',
+                    stage: 'Awareness',
+                    expectedCloseDate: '',
+                    relatedSiteId: null,
+                    notes: ''
+                });
+                setShowOpportunityForm(false);
+                
+                console.log('✅ Opportunity created and saved:', savedOpportunity.id);
+            } else {
+                throw new Error('No opportunity ID returned from API');
+            }
+        } catch (error) {
+            console.error('❌ Error creating opportunity:', error);
+            alert('❌ Error saving opportunity: ' + error.message);
+        }
     };
 
     const handleEditOpportunity = (opportunity) => {
@@ -611,49 +648,73 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         setShowOpportunityForm(true);
     };
 
-    const handleUpdateOpportunity = () => {
-        const updatedOpportunities = formData.opportunities.map(o => 
-            o.id === editingOpportunity.id ? {...newOpportunity, id: o.id} : o
-        );
-        const updatedFormData = {...formData, opportunities: updatedOpportunities};
-        setFormData(updatedFormData);
-        
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
-        
-        logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
-        setEditingOpportunity(null);
-        setNewOpportunity({
-            name: '',
-            stage: 'Awareness',
-            expectedCloseDate: '',
-            relatedSiteId: null,
-            notes: ''
-        });
-        setShowOpportunityForm(false);
-        
-        // Show success message
-        // Silent update - no alert needed
+    const handleUpdateOpportunity = async () => {
+        try {
+            const opportunityData = {
+                title: newOpportunity.name,
+                stage: newOpportunity.stage || 'prospect',
+                value: parseFloat(newOpportunity.value) || 0
+            };
+            
+            console.log('🌐 Updating opportunity via API:', editingOpportunity.id, opportunityData);
+            const response = await window.api.updateOpportunity(editingOpportunity.id, opportunityData);
+            const updatedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+            
+            if (updatedOpportunity && updatedOpportunity.id) {
+                // Update local opportunities array
+                const updatedOpportunities = formData.opportunities.map(o => 
+                    o.id === editingOpportunity.id ? updatedOpportunity : o
+                );
+                const updatedFormData = {...formData, opportunities: updatedOpportunities};
+                setFormData(updatedFormData);
+                
+                logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
+                
+                alert('✅ Opportunity updated successfully!');
+                
+                setEditingOpportunity(null);
+                setNewOpportunity({
+                    name: '',
+                    stage: 'Awareness',
+                    expectedCloseDate: '',
+                    relatedSiteId: null,
+                    notes: ''
+                });
+                setShowOpportunityForm(false);
+                
+                console.log('✅ Opportunity updated and saved:', updatedOpportunity.id);
+            } else {
+                throw new Error('No opportunity data returned from API');
+            }
+        } catch (error) {
+            console.error('❌ Error updating opportunity:', error);
+            alert('❌ Error updating opportunity: ' + error.message);
+        }
     };
 
-    const handleDeleteOpportunity = (opportunityId) => {
+    const handleDeleteOpportunity = async (opportunityId) => {
         const opportunity = formData.opportunities.find(o => o.id === opportunityId);
         if (confirm('Delete this opportunity?')) {
-            const updatedFormData = {
-                ...formData,
-                opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
-            };
-            setFormData(updatedFormData);
-            
-            // AUTO-SAVE: Immediately save to parent
-            // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
-            
-            logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`);
-            
-            // Show success message
-            // Silent delete - no alert needed
+            try {
+                console.log('🌐 Deleting opportunity via API:', opportunityId);
+                await window.api.deleteOpportunity(opportunityId);
+                
+                // Update local opportunities array
+                const updatedFormData = {
+                    ...formData,
+                    opportunities: formData.opportunities.filter(o => o.id !== opportunityId)
+                };
+                setFormData(updatedFormData);
+                
+                logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`);
+                
+                alert('✅ Opportunity deleted successfully!');
+                
+                console.log('✅ Opportunity deleted:', opportunityId);
+            } catch (error) {
+                console.error('❌ Error deleting opportunity:', error);
+                alert('❌ Error deleting opportunity: ' + error.message);
+            }
         }
     };
 
