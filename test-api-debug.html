@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Debug Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .debug-info {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>API Debug Test</h1>
+    <p>This test helps debug the 400 errors when creating clients and leads.</p>
+
+    <div class="test-container">
+        <h2>Debug Results</h2>
+        <div id="debug-results"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test Lead Creation</h2>
+        <button onclick="testLeadCreation()">Test Lead Creation</button>
+        <div id="lead-test-status"></div>
+    </div>
+
+    <div class="test-container">
+        <h2>Test Client Creation</h2>
+        <button onclick="testClientCreation()">Test Client Creation</button>
+        <div id="client-test-status"></div>
+    </div>
+
+    <script>
+        // Load required scripts
+        const scripts = [
+            'src/utils/localStorage.js',
+            'src/utils/databaseAPI.js'
+        ];
+
+        let loadedScripts = 0;
+        scripts.forEach(src => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => {
+                loadedScripts++;
+                if (loadedScripts === scripts.length) {
+                    initializeTest();
+                }
+            };
+            script.onerror = () => {
+                addResult('error', `Failed to load script: ${src}`);
+            };
+            document.head.appendChild(script);
+        });
+
+        function addResult(type, message) {
+            const resultsDiv = document.getElementById('debug-results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `test-result ${type}`;
+            resultDiv.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            resultsDiv.appendChild(resultDiv);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+
+        function initializeTest() {
+            addResult('info', 'Test environment initialized');
+        }
+
+        async function testLeadCreation() {
+            const statusDiv = document.getElementById('lead-test-status');
+            statusDiv.innerHTML = '<div class="test-result info">🔄 Testing lead creation...</div>';
+            
+            try {
+                const leadData = {
+                    name: 'Test Lead Debug',
+                    industry: 'Technology',
+                    status: 'Potential',
+                    source: 'Website',
+                    stage: 'Awareness',
+                    value: 10000,
+                    notes: 'Test lead for debugging',
+                    type: 'lead',
+                    lastContact: new Date().toISOString().split('T')[0],
+                    activityLog: [{
+                        id: Date.now(),
+                        type: 'Lead Created',
+                        description: 'Lead created for debugging',
+                        timestamp: new Date().toISOString(),
+                        user: 'Current User'
+                    }]
+                };
+                
+                addResult('info', `Creating lead: ${leadData.name}`);
+                console.log('Lead data to save:', leadData);
+                
+                const response = await window.DatabaseAPI.createLead(leadData);
+                console.log('Lead save response:', response);
+                
+                if (response?.data?.lead || response?.lead) {
+                    addResult('success', `Lead created successfully: ${response.data?.lead?.id || response.lead?.id}`);
+                    statusDiv.innerHTML = '<div class="test-result success">✅ Lead Creation: Success</div>';
+                } else {
+                    addResult('warning', 'Lead save response did not contain expected data structure');
+                    statusDiv.innerHTML = '<div class="test-result warning">⚠️ Lead Creation: Unexpected Response</div>';
+                }
+                
+            } catch (error) {
+                addResult('error', `Lead creation failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="test-result error">❌ Lead Creation Failed: ${error.message}</div>`;
+                console.error('Lead creation error:', error);
+                
+                // Try to get more details about the error
+                if (error.message.includes('400')) {
+                    addResult('error', '400 Bad Request - likely a validation error in the API');
+                }
+            }
+        }
+
+        async function testClientCreation() {
+            const statusDiv = document.getElementById('client-test-status');
+            statusDiv.innerHTML = '<div class="test-result info">🔄 Testing client creation...</div>';
+            
+            try {
+                const clientData = {
+                    name: 'Test Client Debug',
+                    industry: 'Technology',
+                    status: 'Active',
+                    type: 'client',
+                    revenue: 50000,
+                    lastContact: new Date().toISOString().split('T')[0],
+                    address: '123 Test St',
+                    website: 'https://test.com',
+                    notes: 'Test client for debugging',
+                    contacts: [],
+                    followUps: [],
+                    projectIds: [],
+                    comments: [],
+                    sites: [],
+                    contracts: [],
+                    activityLog: [],
+                    billingTerms: {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    }
+                };
+                
+                addResult('info', `Creating client: ${clientData.name}`);
+                console.log('Client data to save:', clientData);
+                
+                const response = await window.DatabaseAPI.createClient(clientData);
+                console.log('Client save response:', response);
+                
+                if (response?.data?.client || response?.client) {
+                    addResult('success', `Client created successfully: ${response.data?.client?.id || response.client?.id}`);
+                    statusDiv.innerHTML = '<div class="test-result success">✅ Client Creation: Success</div>';
+                } else {
+                    addResult('warning', 'Client save response did not contain expected data structure');
+                    statusDiv.innerHTML = '<div class="test-result warning">⚠️ Client Creation: Unexpected Response</div>';
+                }
+                
+            } catch (error) {
+                addResult('error', `Client creation failed: ${error.message}`);
+                statusDiv.innerHTML = `<div class="test-result error">❌ Client Creation Failed: ${error.message}</div>`;
+                console.error('Client creation error:', error);
+                
+                // Try to get more details about the error
+                if (error.message.includes('400')) {
+                    addResult('error', '400 Bad Request - likely a validation error in the API');
+                }
+            }
+        }
+
+        // Auto-test when page loads
+        setTimeout(() => {
+            if (window.storage?.getToken?.()) {
+                addResult('info', 'User authenticated, running tests...');
+                testLeadCreation();
+                testClientCreation();
+            } else {
+                addResult('warning', 'User not authenticated, please log in first');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
