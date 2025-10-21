@@ -5,6 +5,19 @@ import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
 
+// Ensure critical environment variables are set
+if (!process.env.JWT_SECRET) {
+  console.error('❌ JWT_SECRET environment variable is required')
+  process.exit(1)
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error('❌ DATABASE_URL environment variable is required')
+  process.exit(1)
+}
+
+console.log('✅ Environment variables validated')
+
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const rootDir = __dirname
@@ -68,7 +81,15 @@ async function loadHandler(handlerPath) {
     return module.default
   } catch (error) {
     console.error(`Failed to load handler ${handlerPath}:`, error)
-    return null
+    // Return a fallback handler that returns 500 error
+    return (req, res) => {
+      console.error(`Handler execution failed for ${req.method} ${req.url}`)
+      res.status(500).json({ 
+        error: 'Handler failed to load', 
+        path: req.url,
+        timestamp: new Date().toISOString()
+      })
+    }
   }
 }
 
@@ -77,6 +98,37 @@ const PORT = process.env.PORT || 3000
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
+
+// CORS middleware for local development
+app.use((req, res, next) => {
+  const origin = req.headers.origin
+  const allowedOrigins = [
+    process.env.APP_URL,
+    'http://localhost:3000',
+    'http://localhost:3001', 
+    'http://localhost:3002',
+    'http://localhost:8000',
+    'https://abco-erp-2-cnlz.vercel.app',
+    'https://abco-erp-2-production.up.railway.app'
+  ].filter(Boolean)
+  
+  // Allow localhost origins for development
+  if (origin && (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+  } else {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || '*')
+  }
+  
+  res.setHeader('Access-Control-Allow-Credentials', 'true')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end()
+  }
+  
+  next()
+})
 
 // Serve static files from root directory
 app.use(express.static(rootDir, {
@@ -107,17 +159,33 @@ app.use('/api', async (req, res) => {
     console.log(`🔍 Railway API: Handler path exists: ${fs.existsSync(handlerPath)}`)
     
     const handler = await loadHandler(handlerPath)
-    if (!handler) {
-      console.log(`❌ No handler found for: ${req.method} ${req.url}`)
-      return res.status(404).json({ error: 'API endpoint not found' })
-    }
     
     if (req.method === 'OPTIONS') {
       return res.status(204).end()
     }
     
     console.log(`✅ Executing handler for: ${req.method} ${req.url}`)
-    await handler(req, res)
+    
+    // Add timeout to prevent hanging requests
+    const timeout = setTimeout(() => {
+      if (!res.headersSent) {
+        console.error(`⏰ Request timeout for: ${req.method} ${req.url}`)
+        res.status(504).json({ 
+          error: 'Request timeout', 
+          path: req.url,
+          timestamp: new Date().toISOString()
+        })
+      }
+    }, 30000) // 30 second timeout
+    
+    try {
+      await handler(req, res)
+      clearTimeout(timeout)
+    } catch (handlerError) {
+      clearTimeout(timeout)
+      throw handlerError
+    }
+    
   } catch (error) {
     console.error('❌ Railway API Error:', {
       method: req.method,
@@ -129,11 +197,13 @@ app.use('/api', async (req, res) => {
     
     // Don't expose internal errors in production
     const isDevelopment = process.env.NODE_ENV === 'development'
-    res.status(500).json({ 
-      error: 'Internal server error', 
-      details: isDevelopment ? error.message : 'Contact support if this persists',
-      timestamp: new Date().toISOString()
-    })
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Internal server error', 
+        details: isDevelopment ? error.message : 'Contact support if this persists',
+        timestamp: new Date().toISOString()
+      })
+    }
   }
 })
 

@@ -48,9 +48,17 @@ async function handler(req, res) {
       healthData.checks.database_error = dbError.message
     }
     
-    // Run database migration if needed
+    // Run database migration if needed (SQLite compatible)
     try {
-      await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT DEFAULT 'client'`
+      // Check if column exists first
+      const tableInfo = await prisma.$queryRaw`PRAGMA table_info(Client)`
+      const hasTypeColumn = tableInfo.some(col => col.name === 'type')
+      
+      if (!hasTypeColumn) {
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "type" TEXT DEFAULT 'client'`
+        console.log('✅ Added type column to Client table')
+      }
+      
       await prisma.$executeRaw`UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL`
       console.log('✅ Database migration completed in health check')
       healthData.migration = 'completed'

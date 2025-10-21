@@ -12,18 +12,34 @@ const DatabaseAPI = {
     // Make HTTP request with proper error handling
     async makeRequest(endpoint, options = {}) {
         const url = `${this.API_BASE}/api${endpoint}`;
-        console.log('📡 Database API request:', { url, endpoint, options });
+        
+        // Get authentication token
+        const token = window.storage?.getToken?.();
+        const headers = {
+            'Content-Type': 'application/json',
+            ...options.headers
+        };
+        
+        // Add authorization header if token exists
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        console.log('📡 Database API request:', { url, endpoint, options, hasToken: !!token });
         
         try {
             const response = await fetch(url, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...options.headers
-                },
+                headers,
                 ...options
             });
 
             if (!response.ok) {
+                if (response.status === 401) {
+                    // Token expired, clear auth data
+                    if (window.storage?.removeToken) window.storage.removeToken();
+                    if (window.storage?.removeUser) window.storage.removeUser();
+                    throw new Error('Authentication expired. Please log in again.');
+                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
 
