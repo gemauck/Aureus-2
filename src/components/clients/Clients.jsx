@@ -262,9 +262,9 @@ const Clients = () => {
                         setClients(savedClients);
                         console.log('✅ Clients set from localStorage fallback');
                     } else {
-                        console.log('📁 No clients in localStorage fallback, loading initial clients data');
-                        setClients(initialClients);
-                        safeStorage.setClients(initialClients);
+                        console.log('📁 No clients in localStorage fallback, using empty array');
+                        setClients([]);
+                        safeStorage.setClients([]);
                     }
                 }
             }
@@ -276,10 +276,10 @@ const Clients = () => {
                 console.log('✅ Final fallback - setting clients from localStorage');
                 setClients(savedClients);
             } else {
-                // Fallback to initial clients data if localStorage is empty
-                console.log('📁 No saved clients, loading initial clients data');
-                setClients(initialClients);
-                safeStorage.setClients(initialClients);
+                // Fallback to empty array if localStorage is empty
+                console.log('📁 No saved clients, using empty array');
+                setClients([]);
+                safeStorage.setClients([]);
             }
         }
         // Projects are now handled by ProjectsDatabaseFirst component only
