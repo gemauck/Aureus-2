@@ -419,6 +419,7 @@ const Clients = () => {
                         // For updates, send ALL comprehensive data to API
                         const apiUpdateData = {
                             name: comprehensiveClient.name,
+                            type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
                             status: comprehensiveClient.status === 'Active' ? 'active' : 'inactive',
                             revenue: comprehensiveClient.revenue,
@@ -431,7 +432,7 @@ const Clients = () => {
                             projectIds: comprehensiveClient.projectIds,
                             comments: comprehensiveClient.comments,
                             sites: comprehensiveClient.sites,
-                            opportunities: comprehensiveClient.opportunities,
+                            // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             billingTerms: comprehensiveClient.billingTerms
@@ -443,6 +444,7 @@ const Clients = () => {
                         // For new clients, send ALL comprehensive data to API
                         const apiCreateData = {
                             name: comprehensiveClient.name,
+                            type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
                             status: comprehensiveClient.status === 'Active' ? 'active' : 'inactive',
                             revenue: comprehensiveClient.revenue,
@@ -455,7 +457,7 @@ const Clients = () => {
                             projectIds: comprehensiveClient.projectIds,
                             comments: comprehensiveClient.comments,
                             sites: comprehensiveClient.sites,
-                            opportunities: comprehensiveClient.opportunities,
+                            // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
                             billingTerms: comprehensiveClient.billingTerms

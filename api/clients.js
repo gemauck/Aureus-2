@@ -74,7 +74,7 @@ async function handler(req, res) {
           taxExempt: false,
           notes: ''
         },
-        ownerId: req.user?.sub || null
+        ...(req.user?.sub && { ownerId: req.user.sub })
       }
 
       console.log('🔍 Creating client with data:', clientData)
