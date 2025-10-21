@@ -19,8 +19,8 @@
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
           crossorigin=""/>
     
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS - Production Build -->
+    <link rel="stylesheet" href="./dist/styles.css">
     
     <!-- Mobile Optimizations CSS -->
     <link rel="stylesheet" href="mobile-optimizations.css">
@@ -31,29 +31,6 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Tailwind Config -->
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#e0f2fe',
-                            100: '#bae6fd',
-                            200: '#7dd3fc',
-                            300: '#38bdf8',
-                            400: '#0ea5e9',
-                            500: '#0284c7',
-                            600: '#0369a1',
-                            700: '#075985',
-                            800: '#0c4a6e',
-                            900: '#082f49',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
     
     <!-- Custom Primary Colors -->
     <style>
@@ -232,13 +209,28 @@
     
     <!-- Fix for exports undefined errors -->
     <script>
-        // Polyfill for CommonJS exports in browser environment
+        // Enhanced polyfill for CommonJS exports in browser environment
         if (typeof exports === 'undefined') {
             window.exports = {};
+            window.exports = window.exports || {};
         }
         if (typeof module === 'undefined') {
             window.module = { exports: {} };
+            window.module = window.module || { exports: {} };
         }
+        if (typeof require === 'undefined') {
+            window.require = function() { return {}; };
+        }
+        if (typeof global === 'undefined') {
+            window.global = window;
+        }
+        if (typeof process === 'undefined') {
+            window.process = { env: {} };
+        }
+        
+        // Prevent CommonJS modules from breaking
+        window.define = window.define || function() {};
+        window.define.amd = false;
     </script>
     
     <!-- PDF.js for PDF to Word Converter -->
