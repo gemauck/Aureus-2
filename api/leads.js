@@ -98,7 +98,7 @@ async function handler(req, res) {
             contracts: leadData.contracts,
             activityLog: leadData.activityLog,
             billingTerms: leadData.billingTerms,
-            ownerId: leadData.ownerId
+            ...(leadData.ownerId && { ownerId: leadData.ownerId })
           }
         })
         
