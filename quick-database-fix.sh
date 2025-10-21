@@ -1,3 +1,13 @@
+#!/bin/bash
+
+# Quick Database Fix for Railway Production
+echo "🔧 Quick database fix for Railway production..."
+
+# Create a temporary SQLite database for immediate testing
+echo "📊 Setting up SQLite fallback database..."
+
+# Update Prisma schema to use SQLite temporarily
+cat > prisma/schema-sqlite.prisma << 'EOF'
 generator client {
   provider = "prisma-client-js"
 }
@@ -58,14 +68,14 @@ model Client {
   address       String        @default("")
   website       String        @default("")
   notes         String        @default("")
-  contacts      String        @default("[]") // Changed from Json to String for SQLite
-  followUps     String        @default("[]") // Changed from Json to String for SQLite
-  projectIds    String        @default("[]") // Changed from Json to String for SQLite
-  comments      String        @default("[]") // Changed from Json to String for SQLite
-  sites         String        @default("[]") // Changed from Json to String for SQLite
-  contracts     String        @default("[]") // Changed from Json to String for SQLite
-  activityLog   String        @default("[]") // Changed from Json to String for SQLite
-  billingTerms  String        @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}") // Changed from Json to String for SQLite
+  contacts      Json          @default("[]")
+  followUps     Json          @default("[]")
+  projectIds    Json          @default("[]")
+  comments      Json          @default("[]")
+  sites         Json          @default("[]")
+  contracts     Json          @default("[]")
+  activityLog   Json          @default("[]")
+  billingTerms  Json          @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   ownerId       String?
   owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
   projects      Project[]
@@ -86,8 +96,8 @@ model Project {
   dueDate     DateTime?
   budget      Float       @default(0)
   priority    String      @default("Medium")
-  tasksList   String      @default("[]") // Changed from Json to String for SQLite
-  team        String      @default("[]") // Changed from Json to String for SQLite
+  tasksList   Json        @default("[]")
+  team        Json        @default("[]")
   notes       String      @default("")
   ownerId     String?
   owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
@@ -124,7 +134,7 @@ model Invoice {
   tax           Float     @default(0)
   total         Float     @default(0)
   balance       Float     @default(0)
-  items         String    @default("[]") // Changed from Json to String for SQLite
+  items         Json      @default("[]")
   notes         String    @default("")
   ownerId       String?
   client        Client?   @relation(fields: [clientId], references: [id])
@@ -172,7 +182,7 @@ model AuditLog {
   action    String
   entity    String
   entityId  String
-  diff      String?  // Changed from Json? to String? for SQLite
+  diff      Json?
   actor     User     @relation("AuditActor", fields: [actorId], references: [id])
   createdAt DateTime @default(now())
 }
@@ -200,7 +210,78 @@ model Feedback {
   message   String
   type      String   @default("feedback") // feedback | bug | idea
   severity  String   @default("medium") // low | medium | high
-  meta      String?  // Changed from Json? to String? for SQLite
+  meta      Json?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
   createdAt DateTime @default(now())
 }
+EOF
+
+# Backup original schema
+cp prisma/schema.prisma prisma/schema-postgres.prisma
+
+# Use SQLite schema temporarily
+cp prisma/schema-sqlite.prisma prisma/schema.prisma
+
+# Set up environment variables for SQLite
+cat > .env << EOF
+DATABASE_URL="file:./dev.db"
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production-$(date +%s)"
+NODE_ENV="development"
+PORT=3000
+APP_URL="http://localhost:3000"
+EOF
+
+echo "✅ Environment variables configured for SQLite"
+
+# Push database schema
+echo "📋 Pushing SQLite database schema..."
+npx prisma db push
+
+# Generate Prisma client
+echo "🔨 Generating Prisma client..."
+npx prisma generate
+
+# Create admin user
+echo "👤 Creating admin user..."
+node -e "
+const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+
+async function createAdmin() {
+  const prisma = new PrismaClient();
+  try {
+    const hashedPassword = await bcrypt.hash('admin123', 10);
+    const admin = await prisma.user.upsert({
+      where: { email: 'admin@abcotronics.com' },
+      update: { passwordHash: hashedPassword },
+      create: {
+        email: 'admin@abcotronics.com',
+        name: 'Admin User',
+        passwordHash: hashedPassword,
+        role: 'admin',
+        provider: 'local'
+      }
+    });
+    console.log('✅ Admin user created/updated:', admin.email);
+  } catch (error) {
+    console.error('❌ Error creating admin user:', error.message);
+  } finally {
+    await prisma.\$disconnect();
+  }
+}
+
+createAdmin();
+"
+
+echo ""
+echo "🎉 Quick database fix complete!"
+echo ""
+echo "📝 Login credentials:"
+echo "   Email: admin@abcotronics.com"
+echo "   Password: admin123"
+echo ""
+echo "🚀 Start the server with: npm run dev"
+echo "🌐 Access the application at: http://localhost:3000"
+echo ""
+echo "⚠️  Note: This uses SQLite for immediate testing."
+echo "   For production, restore PostgreSQL with: ./restore-postgres.sh"

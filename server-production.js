@@ -3,9 +3,6 @@ import express from 'express'
 import path from 'path'
 import fs from 'fs'
 import { fileURLToPath } from 'url'
-import { PrismaClient } from '@prisma/client'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -13,9 +10,6 @@ const rootDir = __dirname
 const apiDir = path.join(__dirname, 'api')
 const app = express()
 const PORT = process.env.PORT || 3000
-
-// Initialize Prisma
-const prisma = new PrismaClient()
 
 // Dynamic API handler loading
 function toHandlerPath(urlPath) {
@@ -105,26 +99,7 @@ app.use((req, res, next) => {
   next()
 })
 
-// JWT Secret
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
-
-// Auth middleware
-const authRequired = (req, res, next) => {
-  try {
-    const auth = req.headers['authorization'] || ''
-    const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
-    
-    if (!token) {
-      return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } })
-    }
-    
-    const payload = jwt.verify(token, JWT_SECRET)
-    req.user = payload
-    next()
-  } catch (e) {
-    return res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } })
-  }
-}
+// Note: Auth middleware is handled by individual API handlers
 
 // Dynamic API routing middleware - handles all API endpoints
 // Explicit mapping for critical endpoints to avoid resolution edge-cases
@@ -183,14 +158,12 @@ app.listen(PORT, '0.0.0.0', () => {
 })
 
 // Graceful shutdown
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
   console.log('🛑 Production server shutting down...')
-  await prisma.$disconnect()
   process.exit(0)
 })
 
-process.on('SIGINT', async () => {
+process.on('SIGINT', () => {
   console.log('🛑 Production server shutting down...')
-  await prisma.$disconnect()
   process.exit(0)
 })

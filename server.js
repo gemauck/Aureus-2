@@ -123,8 +123,21 @@ app.use('/api', async (req, res) => {
     console.log(`✅ Executing handler for: ${req.method} ${req.url}`)
     await handler(req, res)
   } catch (error) {
-    console.error('Railway API Error:', error)
-    res.status(500).json({ error: 'Internal server error', details: error.message })
+    console.error('❌ Railway API Error:', {
+      method: req.method,
+      url: req.url,
+      error: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    })
+    
+    // Don't expose internal errors in production
+    const isDevelopment = process.env.NODE_ENV === 'development'
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      details: isDevelopment ? error.message : 'Contact support if this persists',
+      timestamp: new Date().toISOString()
+    })
   }
 })
 
