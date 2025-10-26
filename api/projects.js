@@ -31,7 +31,7 @@ async function handler(req, res) {
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Projects retrieved successfully:', projects.length)
-        return ok(res, projects)
+        return ok(res, { projects })
       } catch (dbError) {
         console.error('❌ Database error listing projects:', dbError)
         return serverError(res, 'Failed to list projects', dbError.message)
@@ -41,24 +41,90 @@ async function handler(req, res) {
     // Create Project (POST /api/projects)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       const body = await parseJsonBody(req)
-      if (!body.name) return badRequest(res, 'name required')
+      console.log('🔍 POST request body:', JSON.stringify(body, null, 2))
+      if (!body.name) {
+        console.error('❌ No name provided in request body')
+        return badRequest(res, 'name required')
+      }
+
+      // Find or create client by name if clientName is provided
+      let clientId = null;
+      if (body.clientName) {
+        try {
+          let client = await prisma.client.findFirst({ 
+            where: { name: body.clientName } 
+          });
+          
+          // If client doesn't exist, create it
+          if (!client) {
+            console.log('Creating new client:', body.clientName);
+            client = await prisma.client.create({
+              data: {
+                name: body.clientName,
+                type: 'client',
+                industry: 'Other',
+                status: 'active',
+                ownerId: req.user?.sub || null
+              }
+            });
+          }
+          
+          clientId = client.id;
+        } catch (error) {
+          console.error('Error finding/creating client:', error);
+        }
+      }
+
+      // Parse dates safely
+      let startDate = new Date();
+      if (body.startDate && typeof body.startDate === 'string' && body.startDate.trim() !== '') {
+        const parsedStartDate = new Date(body.startDate);
+        if (!isNaN(parsedStartDate.getTime())) {
+          startDate = parsedStartDate;
+        }
+      }
+
+      let dueDate = null;
+      if (body.dueDate && typeof body.dueDate === 'string' && body.dueDate.trim() !== '') {
+        const parsedDueDate = new Date(body.dueDate);
+        if (!isNaN(parsedDueDate.getTime())) {
+          dueDate = parsedDueDate;
+        }
+      } else if (body.dueDate === null || body.dueDate === '') {
+        dueDate = null;
+      }
 
       const projectData = {
         name: body.name,
         description: body.description || '',
-        client: body.client || '',
+        clientName: body.clientName || body.client || '',
+        clientId: clientId || body.clientId || null,
         status: body.status || 'Planning',
-        startDate: body.startDate ? new Date(body.startDate) : new Date(),
-        dueDate: body.dueDate ? new Date(body.dueDate) : null,
+        startDate: startDate,
+        dueDate: dueDate,
         budget: parseFloat(body.budget) || 0,
         priority: body.priority || 'Medium',
-        tasks: Array.isArray(body.tasks) ? body.tasks : [],
-        team: Array.isArray(body.team) ? body.team : [],
+        tasksList: typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(Array.isArray(body.tasksList) ? body.tasksList : []),
+        taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(Array.isArray(body.taskLists) ? body.taskLists : []),
+        customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(Array.isArray(body.customFieldDefinitions) ? body.customFieldDefinitions : []),
+        team: typeof body.team === 'string' ? body.team : JSON.stringify(Array.isArray(body.team) ? body.team : []),
+        type: body.type || 'Project',
+        assignedTo: body.assignedTo || '',
         notes: body.notes || '',
         ownerId: req.user?.sub || null
       }
 
-      console.log('🔍 Creating project with data:', projectData)
+      console.log('🔍 Creating project with data:', JSON.stringify(projectData, null, 2))
+      console.log('🔍 Project data types:', {
+        name: typeof projectData.name,
+        clientName: typeof projectData.clientName,
+        clientId: projectData.clientId,
+        status: typeof projectData.status,
+        startDate: projectData.startDate instanceof Date ? 'Date' : typeof projectData.startDate,
+        dueDate: projectData.dueDate instanceof Date ? 'Date' : (projectData.dueDate ? typeof projectData.dueDate : 'null'),
+        type: typeof projectData.type
+      })
+      
       try {
         const project = await prisma.project.create({
           data: projectData
@@ -67,6 +133,11 @@ async function handler(req, res) {
         return created(res, { project })
       } catch (dbError) {
         console.error('❌ Database error creating project:', dbError)
+        console.error('❌ Error details:', {
+          message: dbError.message,
+          code: dbError.code,
+          meta: dbError.meta
+        })
         return serverError(res, 'Failed to create project', dbError.message)
       }
     }
@@ -85,18 +156,53 @@ async function handler(req, res) {
         }
       }
       if (req.method === 'PUT') {
-        const body = await parseJsonBody(req)
+        const body = req.body || {}
+        console.log('🔍 PUT request body:', body)
+        
+        // Find or create client by name if clientName is provided
+        let clientId = null;
+        if (body.clientName) {
+          try {
+            let client = await prisma.client.findFirst({ 
+              where: { name: body.clientName } 
+            });
+            
+            // If client doesn't exist, create it
+            if (!client) {
+              console.log('Creating new client:', body.clientName);
+              client = await prisma.client.create({
+                data: {
+                  name: body.clientName,
+                  type: 'client',
+                  industry: 'Other',
+                  status: 'active',
+                  ownerId: req.user?.sub || null
+                }
+              });
+            }
+            
+            clientId = client.id;
+          } catch (error) {
+            console.error('Error finding/creating client:', error);
+          }
+        }
+        
         const updateData = {
           name: body.name,
           description: body.description,
-          client: body.client,
+          clientName: body.clientName || body.client,
+          clientId: clientId || body.clientId,
           status: body.status,
-          startDate: body.startDate ? new Date(body.startDate) : undefined,
-          dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+          startDate: body.startDate && body.startDate.trim() ? new Date(body.startDate) : undefined,
+          dueDate: body.dueDate && body.dueDate.trim() ? new Date(body.dueDate) : undefined,
           budget: body.budget,
           priority: body.priority,
-          tasks: body.tasks,
-          team: body.team,
+          type: body.type,
+          assignedTo: body.assignedTo,
+          tasksList: typeof body.tasksList === 'string' ? body.tasksList : JSON.stringify(body.tasksList),
+          taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
+          customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
+          team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
           notes: body.notes
         }
         Object.keys(updateData).forEach(key => {

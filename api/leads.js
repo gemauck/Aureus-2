@@ -71,6 +71,7 @@ async function handler(req, res) {
         type: 'lead',
         industry: String(body.industry || 'Other').trim(),
         status: String(body.status || 'Potential').trim(),
+        stage: String(body.stage || 'Awareness').trim(),
         revenue: (() => {
           const val = parseFloat(body.revenue)
           return isNaN(val) ? 0 : val
@@ -153,7 +154,7 @@ async function handler(req, res) {
     if (pathSegments.length === 2 && pathSegments[0] === 'leads' && id) {
       if (req.method === 'GET') {
         try {
-          const lead = await prisma.client.findUnique({ 
+          const lead = await prisma.client.findFirst({ 
             where: { id, type: 'lead' } 
           })
           if (!lead) return notFound(res)
@@ -166,21 +167,32 @@ async function handler(req, res) {
       }
       if (req.method === 'PUT' || req.method === 'PATCH') {
         const body = req.body || {}
+        
+        // Build notes with additional fields that don't exist in schema (if provided)
+        let notes = body.notes || '';
+        if (body.source && !notes.includes('Source:')) notes += `\nSource: ${body.source}`;
+        if (body.stage && !notes.includes('Stage:')) notes += `\nStage: ${body.stage}`;
+        
         const updateData = {
           name: body.name,
           industry: body.industry,
           status: body.status,
-          revenue: body.revenue,
-          value: body.value,
-          probability: body.probability,
+          stage: body.stage, // Add stage field to update operations
+          revenue: body.revenue !== undefined ? parseFloat(body.revenue) || 0 : undefined,
+          value: body.value !== undefined ? parseFloat(body.value) || 0 : undefined,
+          probability: body.probability !== undefined ? parseInt(body.probability) || 0 : undefined,
           lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
           address: body.address,
           website: body.website,
-          notes: body.notes,
-          contacts: body.contacts,
-          followUps: body.followUps,
-          comments: body.comments,
-          activityLog: body.activityLog
+          notes: notes || undefined,
+          contacts: body.contacts !== undefined ? (typeof body.contacts === 'string' ? body.contacts : JSON.stringify(body.contacts)) : undefined,
+          followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(body.followUps)) : undefined,
+          projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(body.projectIds)) : undefined,
+          comments: body.comments !== undefined ? (typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments)) : undefined,
+          sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(body.sites)) : undefined,
+          contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(body.contracts)) : undefined,
+          activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog)) : undefined,
+          billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
@@ -189,22 +201,49 @@ async function handler(req, res) {
         })
         
         console.log('🔍 Updating lead with data:', updateData)
+        console.log('🔍 Update data contains status:', updateData.status)
+        console.log('🔍 Update data contains stage:', updateData.stage)
+        console.log('🔍 Lead ID to update:', id)
+        
         try {
+          // First verify the lead exists and is actually a lead
+          const existing = await prisma.client.findUnique({ where: { id } })
+          if (!existing) {
+            console.error('❌ Lead not found:', id)
+            return notFound(res)
+          }
+          if (existing.type !== 'lead') {
+            console.error('❌ Record is not a lead:', id, 'type:', existing.type)
+            return badRequest(res, 'Not a lead')
+          }
+          console.log('🔍 Found existing lead:', existing.id, 'current status:', existing.status)
+          
+          // Now update it
           const lead = await prisma.client.update({ 
-            where: { id, type: 'lead' }, 
+            where: { id }, 
             data: updateData 
           })
           console.log('✅ Lead updated successfully:', lead.id)
+          console.log('✅ Updated lead status:', lead.status, '(was:', existing.status, ')')
+          console.log('✅ Updated lead stage:', lead.stage)
+          console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
           return ok(res, { lead })
         } catch (dbError) {
           console.error('❌ Database error updating lead:', dbError)
+          console.error('❌ Error details:', dbError.code, dbError.meta)
           return serverError(res, 'Failed to update lead', dbError.message)
         }
       }
       if (req.method === 'DELETE') {
         try {
+          // Verify it's a lead before deleting
+          const existing = await prisma.client.findUnique({ where: { id } })
+          if (!existing || existing.type !== 'lead') {
+            return notFound(res)
+          }
+          
           await prisma.client.delete({ 
-            where: { id, type: 'lead' } 
+            where: { id } 
           })
           console.log('✅ Lead deleted successfully:', id)
           return ok(res, { deleted: true })

@@ -46,10 +46,24 @@ const Projects = () => {
 
                 console.log('🔄 Projects: Loading projects from database');
                 const response = await window.DatabaseAPI.getProjects();
-                const apiProjects = response?.data || [];
-                console.log('📡 Database returned projects:', apiProjects.length);
+                console.log('📡 Raw response from database:', response);
                 
-                setProjects(apiProjects);
+                // Handle different response structures
+                let apiProjects = [];
+                if (response?.data?.projects) {
+                    apiProjects = response.data.projects;
+                } else if (response?.projects) {
+                    apiProjects = response.projects;
+                } else if (Array.isArray(response?.data)) {
+                    apiProjects = response.data;
+                } else if (Array.isArray(response)) {
+                    apiProjects = response;
+                }
+                
+                console.log('📡 Database returned projects:', apiProjects?.length || 0, apiProjects);
+                
+                // Ensure we always set an array
+                setProjects(Array.isArray(apiProjects) ? apiProjects : []);
                 
                 // Sync existing projects with clients
                 syncProjectsWithClients(apiProjects);
@@ -181,14 +195,21 @@ const Projects = () => {
             } else {
                 // Creating new project
                 const newProject = {
-                    ...projectData,
-                    status: 'Active',
+                    name: projectData.name,
+                    clientName: projectData.client || '',
+                    description: projectData.description || '',
+                    type: projectData.type || 'Monthly Review',
+                    status: projectData.status || 'Active',
+                    startDate: projectData.startDate && projectData.startDate.trim() !== '' ? projectData.startDate : undefined,
+                    dueDate: projectData.dueDate && projectData.dueDate.trim() !== '' ? projectData.dueDate : null,
+                    assignedTo: projectData.assignedTo || '',
+                    manager: projectData.manager || '',
                     progress: 0,
-                    tasks: [], // Empty tasks for new project
-                    taskLists: [ // Default task lists
-                        { id: 1, name: 'To Do', color: 'blue' }
-                    ],
-                    customFieldDefinitions: [] // Empty custom fields
+                    priority: 'Medium',
+                    taskLists: JSON.stringify([{ id: 1, name: 'To Do', color: 'blue' }]),
+                    tasksList: JSON.stringify([]),
+                    customFieldDefinitions: JSON.stringify([]),
+                    team: JSON.stringify([])
                 };
                 
                 console.log('🌐 Creating project in database:', newProject);

@@ -108,14 +108,14 @@ async function handler(req, res) {
             address: clientData.address,
             website: clientData.website,
             notes: clientData.notes,
-            contacts: clientData.contacts,
-            followUps: clientData.followUps,
-            projectIds: clientData.projectIds,
-            comments: clientData.comments,
-            sites: clientData.sites,
-            contracts: clientData.contracts,
-            activityLog: clientData.activityLog,
-            billingTerms: clientData.billingTerms,
+            contacts: Array.isArray(clientData.contacts) ? JSON.stringify(clientData.contacts) : (typeof clientData.contacts === 'string' ? clientData.contacts : '[]'),
+            followUps: Array.isArray(clientData.followUps) ? JSON.stringify(clientData.followUps) : (typeof clientData.followUps === 'string' ? clientData.followUps : '[]'),
+            projectIds: Array.isArray(clientData.projectIds) ? JSON.stringify(clientData.projectIds) : (typeof clientData.projectIds === 'string' ? clientData.projectIds : '[]'),
+            comments: Array.isArray(clientData.comments) ? JSON.stringify(clientData.comments) : (typeof clientData.comments === 'string' ? clientData.comments : '[]'),
+            sites: Array.isArray(clientData.sites) ? JSON.stringify(clientData.sites) : (typeof clientData.sites === 'string' ? clientData.sites : '[]'),
+            contracts: Array.isArray(clientData.contracts) ? JSON.stringify(clientData.contracts) : (typeof clientData.contracts === 'string' ? clientData.contracts : '[]'),
+            activityLog: Array.isArray(clientData.activityLog) ? JSON.stringify(clientData.activityLog) : (typeof clientData.activityLog === 'string' ? clientData.activityLog : '[]'),
+            billingTerms: typeof clientData.billingTerms === 'object' ? JSON.stringify(clientData.billingTerms) : (typeof clientData.billingTerms === 'string' ? clientData.billingTerms : '{}'),
             ...(ownerId ? { ownerId } : {})
           }
         })
@@ -143,6 +143,16 @@ async function handler(req, res) {
       }
       if (req.method === 'PATCH') {
         const body = req.body || {}
+        
+        console.log('🔍 PATCH Request Body:', JSON.stringify(body, null, 2));
+        console.log('🔍 Body contacts type:', typeof body.contacts);
+        console.log('🔍 Body contacts value:', body.contacts);
+        console.log('🔍 Body contacts isArray:', Array.isArray(body.contacts));
+        console.log('🔍 Body contacts length:', Array.isArray(body.contacts) ? body.contacts.length : 'N/A');
+        if (Array.isArray(body.contacts) && body.contacts.length > 0) {
+          console.log('🔍 First contact:', JSON.stringify(body.contacts[0], null, 2));
+        }
+        
         const updateData = {
           name: body.name,
           type: body.type, // Handle type field for leads vs clients
@@ -155,14 +165,14 @@ async function handler(req, res) {
           address: body.address,
           website: body.website,
           notes: body.notes,
-          contacts: JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
-          followUps: JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
-          projectIds: JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
-          comments: JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
-          sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
-          contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
-          activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
-          billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {})
+          contacts: typeof body.contacts === 'string' ? body.contacts : JSON.stringify(Array.isArray(body.contacts) ? body.contacts : []),
+          followUps: typeof body.followUps === 'string' ? body.followUps : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : []),
+          projectIds: typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : []),
+          comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(Array.isArray(body.comments) ? body.comments : []),
+          sites: typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
+          contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
+          activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+          billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
@@ -171,9 +181,11 @@ async function handler(req, res) {
         })
         
         console.log('🔍 Updating client with data:', updateData)
+        console.log('🔍 updateData contacts:', updateData.contacts);
         try {
           const client = await prisma.client.update({ where: { id }, data: updateData })
           console.log('✅ Client updated successfully:', client.id)
+          console.log('🔍 Updated client contacts from DB:', client.contacts);
           return ok(res, { client })
         } catch (dbError) {
           console.error('❌ Database error updating client:', dbError)

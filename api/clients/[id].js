@@ -39,7 +39,15 @@ async function handler(req, res) {
 
     // Update Client (PATCH /api/clients/[id])
     if (req.method === 'PATCH') {
-      const body = await parseJsonBody(req)
+      // Express already parsed the body via express.json() middleware
+      // So use req.body instead of parseJsonBody(req)
+      const body = req.body || {}
+      
+      // Log to file for debugging
+      const fs = await import('fs')
+      const logEntry = `\n=== PATCH REQUEST ===\nTime: ${new Date().toISOString()}\nClient ID: ${id}\nBody: ${JSON.stringify(body, null, 2)}\n`
+      fs.writeFileSync('/tmp/client-update.log', logEntry, { flag: 'a' })
+      
       const updateData = {
         name: body.name,
         industry: body.industry,
@@ -49,14 +57,14 @@ async function handler(req, res) {
         address: body.address,
         website: body.website,
         notes: body.notes,
-        contacts: Array.isArray(body.contacts) ? body.contacts : undefined,
-        followUps: Array.isArray(body.followUps) ? body.followUps : undefined,
-        projectIds: Array.isArray(body.projectIds) ? body.projectIds : undefined,
-        comments: Array.isArray(body.comments) ? body.comments : undefined,
-        sites: Array.isArray(body.sites) ? body.sites : undefined,
-        contracts: Array.isArray(body.contracts) ? body.contracts : undefined,
-        activityLog: Array.isArray(body.activityLog) ? body.activityLog : undefined,
-        billingTerms: typeof body.billingTerms === 'object' ? body.billingTerms : undefined
+        contacts: Array.isArray(body.contacts) ? JSON.stringify(body.contacts) : undefined,
+        followUps: Array.isArray(body.followUps) ? JSON.stringify(body.followUps) : undefined,
+        projectIds: Array.isArray(body.projectIds) ? JSON.stringify(body.projectIds) : undefined,
+        comments: Array.isArray(body.comments) ? JSON.stringify(body.comments) : undefined,
+        sites: Array.isArray(body.sites) ? JSON.stringify(body.sites) : undefined,
+        contracts: Array.isArray(body.contracts) ? JSON.stringify(body.contracts) : undefined,
+        activityLog: Array.isArray(body.activityLog) ? JSON.stringify(body.activityLog) : undefined,
+        billingTerms: typeof body.billingTerms === 'object' ? JSON.stringify(body.billingTerms) : undefined
       }
 
       // Remove undefined values
@@ -66,13 +74,32 @@ async function handler(req, res) {
         }
       })
 
-      console.log('🔍 Updating client with data:', updateData)
+      console.log('🔍 Updating client with data:', JSON.stringify(updateData, null, 2))
+      console.log('🔍 Comments value:', updateData.comments, 'type:', typeof updateData.comments, 'length:', updateData.comments?.length)
+      console.log('🔍 FollowUps value:', updateData.followUps, 'type:', typeof updateData.followUps, 'length:', updateData.followUps?.length)
+      console.log('🔍 ActivityLog value:', updateData.activityLog, 'type:', typeof updateData.activityLog, 'length:', updateData.activityLog?.length)
+      
+      // Log the actual strings being saved
+      if (updateData.comments) {
+        console.log('🔍 Comments string preview:', updateData.comments.substring(0, 100))
+      }
+      
       try {
+        console.log('🔍 Calling Prisma update with ID:', id)
         const client = await prisma.client.update({
           where: { id },
           data: updateData
         })
         console.log('✅ Client updated successfully:', client.id)
+        console.log('🔍 Saved client comments:', client.comments)
+        console.log('🔍 Comments type after save:', typeof client.comments, 'length:', client.comments?.length)
+        console.log('🔍 Comments preview:', client.comments?.substring(0, 100))
+        
+        // Log to file
+        const fs = await import('fs')
+        const afterUpdateLog = `\n=== AFTER UPDATE ===\nClient: ${client.name}\nComments: ${client.comments}\nComments Length: ${client.comments?.length}\n`
+        fs.writeFileSync('/tmp/client-update.log', afterUpdateLog, { flag: 'a' })
+        
         return ok(res, { client })
       } catch (dbError) {
         console.error('❌ Database error updating client:', dbError)

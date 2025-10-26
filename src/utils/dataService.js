@@ -137,11 +137,28 @@ const dataService = {
 
     // Clients
     async getClients() {
-        if (isProduction && window.api?.listClients) {
+        // Always try to use API if available, regardless of environment
+        if (window.api?.listClients) {
             try {
                 console.log('🌐 Using API for clients');
                 const response = await window.api.listClients();
-                return normalizeArrayResponse(response, ['clients']);
+                console.log('🔍 Client API Response:', response);
+                console.log('🔍 Response structure:', { data: response.data, clients: response.clients, hasData: !!response.data, hasClients: !!response.clients });
+                
+                // Handle nested data structure: { data: { clients: [...] } }
+                let clients = [];
+                if (response?.data?.clients && Array.isArray(response.data.clients)) {
+                    clients = response.data.clients;
+                } else if (response?.clients && Array.isArray(response.clients)) {
+                    clients = response.clients;
+                } else if (Array.isArray(response?.data)) {
+                    clients = response.data;
+                } else if (Array.isArray(response)) {
+                    clients = response;
+                }
+                
+                console.log('📊 Clients extracted:', clients.length, clients);
+                return clients;
             } catch (error) {
                 console.warn('⚠️ API failed, falling back to localStorage:', error.message);
                 return safeStorageCall(window.storage, 'getClients', []);
@@ -153,7 +170,8 @@ const dataService = {
     },
 
     async setClients(clients) {
-        if (isProduction && window.api?.createClient) {
+        // Always try to use API if available, regardless of environment
+        if (window.api?.createClient) {
             try {
                 console.log('🌐 Syncing clients to API');
                 // For now, just store locally in production
@@ -176,7 +194,8 @@ const dataService = {
     },
 
     async createClient(clientData) {
-        if (isProduction && window.api?.createClient) {
+        // Always try to use API if available, regardless of environment
+        if (window.api?.createClient) {
             try {
                 console.log('🌐 Creating client via API');
                 const response = await window.api.createClient(clientData);

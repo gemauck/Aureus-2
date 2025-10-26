@@ -18,13 +18,16 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
     const [clients, setClients] = useState([]);
     const [showNewClientInput, setShowNewClientInput] = useState(false);
     const [newClientName, setNewClientName] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         // Load clients from dataService
         const loadClients = async () => {
             try {
                 if (window.dataService && typeof window.dataService.getClients === 'function') {
+                    console.log('🔍 ProjectModal: Loading clients from dataService');
                     const savedClients = await window.dataService.getClients() || [];
+                    console.log('📋 ProjectModal: Clients loaded:', savedClients.length, savedClients);
                     setClients(savedClients);
                 } else {
                     console.warn('DataService not available for loading clients');
@@ -38,24 +41,42 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
         loadClients();
     }, []);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // If user is entering a new client name
-        if (showNewClientInput && newClientName.trim()) {
-            onSave({...formData, client: newClientName.trim()});
-        } else {
-            onSave(formData);
+        // Prevent multiple submissions
+        if (isSaving) {
+            console.warn('⚠️ Already saving, ignoring duplicate submission');
+            return;
+        }
+        
+        setIsSaving(true);
+        console.log('💾 Saving project data:', formData);
+        
+        try {
+            // If user is entering a new client name
+            if (showNewClientInput && newClientName.trim()) {
+                await onSave({...formData, client: newClientName.trim()});
+            } else {
+                await onSave(formData);
+            }
+        } catch (error) {
+            console.error('❌ Error in handleSubmit:', error);
+            alert('Failed to save project: ' + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
     const handleClientChange = (e) => {
         const value = e.target.value;
+        console.log('🔍 Client changed:', value);
         if (value === '__new__') {
             setShowNewClientInput(true);
             setNewClientName('');
         } else {
             setShowNewClientInput(false);
+            console.log('📝 Setting formData.client to:', value);
             setFormData({...formData, client: value});
         }
     };
@@ -112,11 +133,16 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                                     required
                                 >
                                     <option value="">Select Client</option>
-                                    {clients.sort((a, b) => a.name.localeCompare(b.name)).map(client => (
-                                        <option key={client.id} value={client.name}>
-                                            {client.name}
-                                        </option>
-                                    ))}
+                                    {clients && Array.isArray(clients) && clients.length > 0 ? (
+                                        clients
+                                            .filter(client => client && client.name && client.id)
+                                            .sort((a, b) => a.name.localeCompare(b.name))
+                                            .map(client => (
+                                                <option key={client.id} value={client.name}>
+                                                    {client.name}
+                                                </option>
+                                            ))
+                                    ) : null}
                                     <option value="__new__">+ Add New Client</option>
                                 </select>
                             ) : (
@@ -142,9 +168,9 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                                     </button>
                                 </div>
                             )}
-                            {clients.length === 0 && !showNewClientInput && (
+                            {(!clients || clients.length === 0) && !showNewClientInput && (
                                 <p className="text-[10px] text-gray-500 mt-1">
-                                    No clients found. Add clients in the Clients section first, or enter a new client name.
+                                    {typeof clients === 'undefined' ? 'Loading clients...' : 'No clients found. Add clients in the Clients section first, or enter a new client name.'}
                                 </p>
                             )}
                         </div>
@@ -239,8 +265,12 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
                             <button type="button" onClick={onClose} className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium">
                                 Cancel
                             </button>
-                            <button type="submit" className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium">
-                                {project ? 'Update Project' : 'Create Project'}
+                            <button 
+                                type="submit" 
+                                disabled={isSaving}
+                                className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isSaving ? 'Saving...' : (project ? 'Update Project' : 'Create Project')}
                             </button>
                         </div>
                 </form>

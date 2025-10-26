@@ -56,10 +56,12 @@ const ProjectsDatabaseFirst = () => {
             }));
             
             setProjects(processedProjects);
+            setIsLoading(false);
             console.log('✅ Projects loaded from database');
             
         } catch (error) {
             console.error('❌ Failed to load projects from database:', error);
+            setIsLoading(false);
             if (error.message.includes('Unauthorized') || error.message.includes('401')) {
                 console.log('🔑 Authentication expired - redirecting to login');
                 window.storage.removeToken();

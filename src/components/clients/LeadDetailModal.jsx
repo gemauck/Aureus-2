@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -9,11 +9,23 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // Update formData when lead prop changes
+    // Update formData when lead prop changes - but only when lead ID changes
     useEffect(() => {
-        if (lead) {
+        // Don't reset formData if we're in the middle of auto-saving OR just finished
+        if (isAutoSavingRef.current) {
+            console.log('⚠️ Skipping formData reset - auto-save in progress');
+            return;
+        }
+        
+        // ONLY initialize formData when switching to a different lead (different ID)
+        // Do NOT reinitialize when the same lead is updated
+        if (lead && !formData.id) {
+            // First load - initialize formData
             const parsedLead = {
                 ...lead,
+                // Ensure stage and status are preserved
+                stage: lead.stage || 'Awareness',
+                status: lead.status || 'Potential',
                 contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
                 followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -21,9 +33,65 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
                 billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
             };
+            console.log('📝 Initializing formData for new lead:', parsedLead.id, parsedLead.name);
             setFormData(parsedLead);
+        } else if (lead && formData.id && lead.id !== formData.id) {
+            // Switching to a different lead - reinitialize
+            const parsedLead = {
+                ...lead,
+                stage: lead.stage || 'Awareness',
+                status: lead.status || 'Potential',
+                contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+            };
+            console.log('📝 Switching to different lead:', parsedLead.id, parsedLead.name);
+            setFormData(parsedLead);
+        } else if (lead && formData.id === lead.id) {
+            // Same lead reloaded - Merge only fields that aren't being actively edited
+            // Use the last saved data as reference
+            if (lastSavedDataRef.current) {
+                // If the current formData matches what we last saved, we can safely update from the API
+                const currentStatus = formData.status;
+                const currentStage = formData.stage;
+                const lastSavedStatus = lastSavedDataRef.current.status;
+                const lastSavedStage = lastSavedDataRef.current.stage;
+                
+                // Only update if formData still matches our last save (meaning user hasn't made new changes)
+                if (currentStatus === lastSavedStatus && currentStage === lastSavedStage) {
+                    console.log('✅ Same lead reloaded, formData matches last save, updating from API');
+                    setFormData(prev => ({
+                        ...prev,
+                        status: lead.status,
+                        stage: lead.stage
+                    }));
+                } else {
+                    console.log('⚠️ Same lead reloaded, but formData has newer changes, preserving user input');
+                }
+            } else {
+                console.log('✅ Same lead reloaded, preserving formData changes (no last saved ref)');
+            }
         }
-    }, [lead]);
+    }, [lead?.id]); // Only re-run when lead ID changes, not when lead properties change
+    
+    // DISABLED: This was causing status/stage to be overwritten from stale parent data
+    // When auto-saving changes, the parent's lead prop wasn't updated fast enough,
+    // causing this effect to revert changes back to old values
+    // useEffect(() => {
+    //     if (lead && formData.id === lead.id) {
+    //         // Only update specific fields that might change externally
+    //         if (lead.status !== formData.status || lead.stage !== formData.stage) {
+    //             setFormData(prev => ({
+    //                 ...prev,
+    //                 status: lead.status,
+    //                 stage: lead.stage
+    //             }));
+    //         }
+    //     }
+    // }, [lead?.status, lead?.stage]);
     
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
@@ -33,10 +101,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
     };
     
+    // Use ref to track latest formData for auto-save
+    const formDataRef = useRef(null);
+    const isAutoSavingRef = useRef(false);
+    const lastSavedDataRef = useRef(null); // Track last saved state
+    
     const [formData, setFormData] = useState(() => {
         // Parse JSON strings to arrays/objects if needed
         const parsedLead = lead ? {
             ...lead,
+            // Ensure stage and status are ALWAYS present with defaults
+            stage: lead.stage || 'Awareness',
+            status: lead.status || 'Potential',
             contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
             followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
             projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -59,8 +135,15 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             firstContactDate: new Date().toISOString().split('T')[0]
         };
         
+        formDataRef.current = parsedLead;
         return parsedLead;
     });
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        console.log('🔄 formData changed:', JSON.stringify({status: formData.status, stage: formData.stage, hasAllFields: !!formData.stage}));
+        formDataRef.current = formData;
+    }, [formData]);
     
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
@@ -124,12 +207,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
     const [selectedProjectIds, setSelectedProjectIds] = useState(formData.projectIds || []);
 
-    useEffect(() => {
-        if (lead) {
-            setFormData(lead);
-            setSelectedProjectIds(lead.projectIds || []);
-        }
-    }, [lead]);
+    // DISABLED: This was causing formData to be completely reset whenever lead prop changed
+    // Including when liveDataSync refetched after every save
+    // useEffect(() => {
+    //     if (lead) {
+    //         setFormData(lead);
+    //         setSelectedProjectIds(lead.projectIds || []);
+    //     }
+    // }, [lead]);
 
     const handleAddContact = () => {
         if (!newContact.name) {
@@ -227,8 +312,13 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             createdAt: new Date().toISOString()
         }];
         
-        setFormData({...formData, followUps: updatedFollowUps});
+        const updatedFormData = {...formData, followUps: updatedFollowUps};
+        setFormData(updatedFormData);
         logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`);
+        
+        // Save follow-up changes immediately - stay in edit mode
+        onSave(updatedFormData, true);
+        
         setNewFollowUp({
             date: '',
             time: '',
@@ -244,19 +334,27 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         const updatedFollowUps = followUps.map(f => 
             f.id === followUpId ? {...f, completed: !f.completed} : f
         );
-        setFormData({...formData, followUps: updatedFollowUps});
+        const updatedFormData = {...formData, followUps: updatedFollowUps};
+        setFormData(updatedFormData);
         if (followUp && !followUp.completed) {
             logActivity('Follow-up Completed', `Completed: ${followUp.description}`);
         }
+        
+        // Save follow-up toggle immediately - stay in edit mode
+        onSave(updatedFormData, true);
     };
 
     const handleDeleteFollowUp = (followUpId) => {
         if (confirm('Delete this follow-up?')) {
             const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-            setFormData({
+            const updatedFormData = {
                 ...formData,
                 followUps: followUps.filter(f => f.id !== followUpId)
-            });
+            };
+            setFormData(updatedFormData);
+            
+            // Save follow-up deletion immediately - stay in edit mode
+            onSave(updatedFormData, true);
         }
     };
 
@@ -343,10 +441,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const handleDeleteComment = (commentId) => {
         if (confirm('Delete this comment?')) {
             const comments = Array.isArray(formData.comments) ? formData.comments : [];
-            setFormData({
+            const updatedFormData = {
                 ...formData,
                 comments: comments.filter(c => c.id !== commentId)
-            });
+            };
+            setFormData(updatedFormData);
+            
+            // Save comment deletion immediately - stay in edit mode
+            onSave(updatedFormData, true);
         }
     };
 
@@ -513,14 +615,38 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             value={formData.status}
                                             onChange={(e) => {
                                                 const newStatus = e.target.value;
-                                                console.log('Status changed to:', newStatus);
-                                                const updatedFormData = {...formData, status: newStatus};
-                                                setFormData(updatedFormData);
+                                                console.log('=== STATUS CHANGE ===');
+                                                console.log('New status:', newStatus);
+                                                console.log('Current formData before update:', JSON.stringify({status: formData.status, stage: formData.stage}));
+                                                console.log('Current ref before update:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
                                                 
-                                                // Auto-save status change immediately
+                                                // Update state
+                                                setFormData(prev => {
+                                                    console.log('Inside setFormData - prev:', JSON.stringify({status: prev.status, stage: prev.stage}));
+                                                    return {...prev, status: newStatus};
+                                                });
+                                                
+                                                // Auto-save using ref to get latest data
                                                 if (lead) {
-                                                    console.log('Auto-saving status change...');
-                                                    onSave(updatedFormData, true); // true = stay in edit mode
+                                                    console.log('Scheduling auto-save for status...');
+                                                    setTimeout(() => {
+                                                        console.log('Executing auto-save for status');
+                                                        console.log('Ref at save time:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
+                                                        const latest = {...formDataRef.current, status: newStatus};
+                                                        console.log('Final save payload:', JSON.stringify({status: latest.status, stage: latest.stage}));
+                                                        
+                                                        // Save this as the last saved state
+                                                        lastSavedDataRef.current = latest;
+                                                        isAutoSavingRef.current = true;
+                                                        
+                                                        onSave(latest, true);
+                                                        
+                                                        // Clear the flag after a longer delay to allow API response to propagate
+                                                        setTimeout(() => {
+                                                            isAutoSavingRef.current = false;
+                                                            console.log('✅ Auto-save completed, re-enabling formData updates');
+                                                        }, 3000);
+                                                    }, 0);
                                                 }
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -553,14 +679,38 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             value={formData.stage}
                                             onChange={(e) => {
                                                 const newStage = e.target.value;
-                                                console.log('Stage changed to:', newStage);
-                                                const updatedFormData = {...formData, stage: newStage};
-                                                setFormData(updatedFormData);
+                                                console.log('=== STAGE CHANGE ===');
+                                                console.log('New stage:', newStage);
+                                                console.log('Current formData before update:', JSON.stringify({status: formData.status, stage: formData.stage}));
+                                                console.log('Current ref before update:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
                                                 
-                                                // Auto-save stage change immediately
+                                                // Update state
+                                                setFormData(prev => {
+                                                    console.log('Inside setFormData - prev:', JSON.stringify({status: prev.status, stage: prev.stage}));
+                                                    return {...prev, stage: newStage};
+                                                });
+                                                
+                                                // Auto-save using ref to get latest data
                                                 if (lead) {
-                                                    console.log('Auto-saving stage change...');
-                                                    onSave(updatedFormData, true); // true = stay in edit mode
+                                                    console.log('Scheduling auto-save for stage...');
+                                                    setTimeout(() => {
+                                                        console.log('Executing auto-save for stage');
+                                                        console.log('Ref at save time:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
+                                                        const latest = {...formDataRef.current, stage: newStage};
+                                                        console.log('Final save payload:', JSON.stringify({status: latest.status, stage: latest.stage}));
+                                                        
+                                                        // Save this as the last saved state
+                                                        lastSavedDataRef.current = latest;
+                                                        isAutoSavingRef.current = true;
+                                                        
+                                                        onSave(latest, true);
+                                                        
+                                                        // Clear the flag after a longer delay to allow API response to propagate
+                                                        setTimeout(() => {
+                                                            isAutoSavingRef.current = false;
+                                                            console.log('✅ Auto-save completed, re-enabling formData updates');
+                                                        }, 3000);
+                                                    }, 0);
                                                 }
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"

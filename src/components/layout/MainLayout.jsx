@@ -58,7 +58,7 @@ const MainLayout = () => {
     const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
-    const Projects = window.ProjectsDatabaseFirst || window.Projects || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
+    const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
     const Teams = window.TeamsEnhanced || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>);
     const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
