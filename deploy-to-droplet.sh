@@ -3,8 +3,8 @@
 
 DROPLET_IP="64.227.32.244"
 APP_DIR="/var/www/aureus-erp"
-GIT_REPO="git@github.com:gemauck/Abco-ERP-2.git"
-BRANCH="aureus"
+GIT_REPO="git@github.com:gemauck/Aureus-2.git"
+BRANCH="main"
 
 echo "🚀 Deploying Aureus ERP to Droplet..."
 echo "📡 Droplet IP: $DROPLET_IP"
@@ -29,13 +29,12 @@ if [ -d "/var/www/aureus-erp/.git" ]; then
     echo "📥 Updating existing repository..."
     cd /var/www/aureus-erp
     git fetch origin
-    git reset --hard origin/aureus
+    git reset --hard origin/main
 else
     echo "📥 Cloning repository..."
     cd /var/www
-    git clone git@github.com:gemauck/Abco-ERP-2.git aureus-erp
+    git clone git@github.com:gemauck/Aureus-2.git aureus-erp
     cd aureus-erp
-    git checkout aureus
 fi
 
 echo "📦 Installing dependencies..."
