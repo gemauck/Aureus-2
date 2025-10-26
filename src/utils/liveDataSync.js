@@ -2,7 +2,7 @@
 class LiveDataSync {
     constructor() {
         this.subscribers = new Map();
-        this.refreshInterval = 30000; // 30 seconds
+        this.refreshInterval = 120000; // 2 minutes (reduced frequency)
         this.isRunning = false;
         this.lastSync = null;
         this.syncInProgress = false;
@@ -76,6 +76,13 @@ class LiveDataSync {
     async sync() {
         if (this.syncInProgress) {
             console.log('⏳ Sync already in progress, skipping...');
+            return;
+        }
+        
+        // Additional check to prevent rapid sync calls
+        const now = Date.now();
+        if (this.lastSync && (now - this.lastSync.getTime()) < 10000) { // 10 seconds minimum
+            console.log('⏳ Sync too recent, skipping...');
             return;
         }
         

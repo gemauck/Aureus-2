@@ -1,40 +1,80 @@
 // Get React hooks from window
 // VERSION: Contact filter updated - removed "All Contacts" option
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
-const { useState, useEffect } = React;
+// FIX: Added useRef to prevent form reset when user is editing
+const { useState, useEffect, useRef } = React;
+const GoogleCalendarSync = window.GoogleCalendarSync;
 
 const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
+    
+    // Track if user has edited the form to prevent unwanted resets
+    const hasUserEditedForm = useRef(false);
+    const lastSavedClientId = useRef(client?.id);
+    
+    // Use ref to track latest formData for auto-save
+    const formDataRef = useRef(null);
+    const isAutoSavingRef = useRef(false);
+    const lastSavedDataRef = useRef(null); // Track last saved state
     
     // Update tab when initialTab prop changes
     useEffect(() => {
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // Update formData when client prop changes
+    // Update formData when client prop changes - but only if user hasn't edited the form
     useEffect(() => {
+        // Don't reset formData if we're in the middle of auto-saving OR just finished
+        if (isAutoSavingRef.current) {
+            console.log('⚠️ Skipping formData reset - auto-save in progress');
+            return;
+        }
+        
         if (client) {
-            const parsedClient = {
-                ...client,
-                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
-                followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
-                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
-                comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
-                contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
-                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-                opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-                billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
-                    paymentTerms: 'Net 30',
-                    billingFrequency: 'Monthly',
-                    currency: 'ZAR',
-                    retainerAmount: 0,
-                    taxExempt: false,
-                    notes: ''
-                })
-            };
-            setFormData(parsedClient);
+            // Only reset formData if:
+            // 1. Client ID changed (viewing a different client), OR
+            // 2. User hasn't edited the form yet
+            const clientIdChanged = client.id !== lastSavedClientId.current;
+            
+            if (clientIdChanged) {
+                // Reset the edit flag when switching to a different client
+                hasUserEditedForm.current = false;
+                lastSavedClientId.current = client.id;
+            }
+            
+            // Only update formData if user hasn't edited or if client changed
+            if (!hasUserEditedForm.current || clientIdChanged) {
+                const parsedClient = {
+                    ...client,
+                    contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                    followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+                    projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+                    comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+                    contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+                    sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+                    opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+                    activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+                    billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                        paymentTerms: 'Net 30',
+                        billingFrequency: 'Monthly',
+                        currency: 'ZAR',
+                        retainerAmount: 0,
+                        taxExempt: false,
+                        notes: ''
+                    })
+                };
+                console.log('🔄 Setting initial formData from client prop:', {
+                    contactsCount: parsedClient.contacts?.length,
+                    sitesCount: parsedClient.sites?.length,
+                    contractsCount: parsedClient.contracts?.length,
+                    commentsCount: parsedClient.comments?.length,
+                    hasUserEdited: hasUserEditedForm.current
+                });
+                setFormData(parsedClient);
+            } else {
+                console.log('⏭️ Skipping formData reset - user has edited the form');
+            }
         }
     }, [client]);
     
@@ -90,8 +130,14 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             }
         };
         
+        formDataRef.current = parsedClient;
         return parsedClient;
     });
+    
+    // Keep ref in sync with state
+    useEffect(() => {
+        formDataRef.current = formData;
+    }, [formData]);
     const { isDark } = window.useTheme();
     
     // GPS coordinate parsing function
@@ -172,17 +218,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     const [newComment, setNewComment] = useState('');
     const [showSiteForm, setShowSiteForm] = useState(false);
     const [editingSite, setEditingSite] = useState(null);
-        const [newSite, setNewSite] = useState({
-            name: '',
-            address: '',
-            contactPerson: '',
-            phone: '',
-            email: '',
-            notes: '',
-            latitude: '',
-            longitude: '',
-            gpsCoordinates: ''
-        });
+    const [newSite, setNewSite] = useState({
+        name: '',
+        address: '',
+        contactPerson: '',
+        phone: '',
+        email: '',
+        notes: '',
+        latitude: '',
+        longitude: '',
+        gpsCoordinates: ''
+    });
     const [showOpportunityForm, setShowOpportunityForm] = useState(false);
     const [editingOpportunity, setEditingOpportunity] = useState(null);
     const [newOpportunity, setNewOpportunity] = useState({
@@ -195,22 +241,154 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
     useEffect(() => {
         if (client) {
-            setFormData({
+            // Parse all JSON strings from API response
+            const parsedClient = {
                 ...client,
-                opportunities: client.opportunities || [],
-                sites: client.sites || [],
-                contacts: client.contacts || [],
-                followUps: client.followUps || [],
-                comments: client.comments || [],
-                contracts: client.contracts || [],
-                activityLog: client.activityLog || [],
-                projectIds: client.projectIds || []
+                opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+                comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+                contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+                activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || [])
+            };
+            
+            console.log('🔄 Initial formData from client prop:', {
+                followUps: parsedClient.followUps?.length,
+                comments: parsedClient.comments?.length,
+                contracts: parsedClient.contracts?.length,
+                contacts: parsedClient.contacts?.length,
+                sites: parsedClient.sites?.length
             });
             
-            // Load opportunities from database
+            setFormData(parsedClient);
+            
+            // Load data from database (will override initial data if logged in)
             loadOpportunitiesFromDatabase(client.id);
+            loadContactsFromDatabase(client.id);
+            loadSitesFromDatabase(client.id);
+            
+            // Reload the full client data from database to get comments, followUps, activityLog
+            loadClientFromDatabase(client.id);
         }
     }, [client]);
+    
+    // Load full client data from database to get latest comments, followUps, activityLog
+    const loadClientFromDatabase = async (clientId) => {
+        try {
+            // Don't reload if auto-saving is in progress
+            if (isAutoSavingRef.current) {
+                console.log('⚠️ Skipping client reload - auto-save in progress');
+                return;
+            }
+            
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No authentication token, skipping client data load');
+                return;
+            }
+            
+            console.log('📡 Reloading full client data from database for client:', clientId);
+            const response = await window.api.getClient(clientId);
+            const dbClient = response?.data?.client;
+            
+            if (dbClient) {
+                console.log('✅ Loaded client from database:', dbClient.name);
+                console.log('📋 Comments:', typeof dbClient.comments, Array.isArray(dbClient.comments) ? dbClient.comments.length : 'not array');
+                console.log('📋 FollowUps:', typeof dbClient.followUps, Array.isArray(dbClient.followUps) ? dbClient.followUps.length : 'not array');
+                console.log('📋 ActivityLog:', typeof dbClient.activityLog, Array.isArray(dbClient.activityLog) ? dbClient.activityLog.length : 'not array');
+                
+                // Parse JSON strings
+                const parsedClient = {
+                    ...dbClient,
+                    contacts: typeof dbClient.contacts === 'string' ? JSON.parse(dbClient.contacts || '[]') : (dbClient.contacts || []),
+                    followUps: typeof dbClient.followUps === 'string' ? JSON.parse(dbClient.followUps || '[]') : (dbClient.followUps || []),
+                    projectIds: typeof dbClient.projectIds === 'string' ? JSON.parse(dbClient.projectIds || '[]') : (dbClient.projectIds || []),
+                    comments: typeof dbClient.comments === 'string' ? JSON.parse(dbClient.comments || '[]') : (dbClient.comments || []),
+                    sites: typeof dbClient.sites === 'string' ? JSON.parse(dbClient.sites || '[]') : (dbClient.sites || []),
+                    contracts: typeof dbClient.contracts === 'string' ? JSON.parse(dbClient.contracts || '[]') : (dbClient.contracts || []),
+                    activityLog: typeof dbClient.activityLog === 'string' ? JSON.parse(dbClient.activityLog || '[]') : (dbClient.activityLog || []),
+                    billingTerms: typeof dbClient.billingTerms === 'string' ? JSON.parse(dbClient.billingTerms || '{}') : (dbClient.billingTerms || {})
+                };
+                
+                console.log('📝 Parsed client data - Comments:', parsedClient.comments?.length, 'FollowUps:', parsedClient.followUps?.length, 'ActivityLog:', parsedClient.activityLog?.length);
+                
+                // Update formData with the fresh data from database
+                setFormData(prevFormData => ({
+                    ...prevFormData,
+                    comments: parsedClient.comments,
+                    followUps: parsedClient.followUps,
+                    activityLog: parsedClient.activityLog,
+                    contracts: parsedClient.contracts
+                }));
+                
+                console.log('✅ FormData updated with fresh database data');
+            }
+        } catch (error) {
+            console.error('❌ Error loading client from database:', error);
+        }
+    };
+
+    // Load contacts from database
+    const loadContactsFromDatabase = async (clientId) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No authentication token, skipping contact loading');
+                return;
+            }
+            
+            console.log('📡 Loading contacts from database for client:', clientId);
+            const response = await window.api.getContacts(clientId);
+            const contacts = response?.data?.contacts || [];
+            
+            console.log('✅ Loaded contacts from database:', contacts.length);
+            console.log('📋 Contact data:', contacts);
+            
+            // Update formData with contacts from database - force new object reference
+            setFormData(prevFormData => {
+                const newFormData = {
+                    ...prevFormData,
+                    contacts: [...contacts] // Create new array reference
+                };
+                console.log('🔄 Updated formData with contacts:', newFormData.contacts?.length);
+                return newFormData;
+            });
+        } catch (error) {
+            console.error('❌ Error loading contacts from database:', error);
+        }
+    };
+
+    // Load sites from database
+    const loadSitesFromDatabase = async (clientId) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ No authentication token, skipping site loading');
+                return;
+            }
+            
+            console.log('📡 Loading sites from database for client:', clientId);
+            const response = await window.api.getSites(clientId);
+            const sites = response?.data?.sites || [];
+            
+            console.log('✅ Loaded sites from database:', sites.length);
+            console.log('📋 Site data:', sites);
+            
+            // Update formData with sites from database - force new object reference
+            setFormData(prevFormData => {
+                const newFormData = {
+                    ...prevFormData,
+                    sites: [...sites] // Create new array reference
+                };
+                console.log('🔄 Updated formData with sites:', newFormData.sites?.length);
+                return newFormData;
+            });
+        } catch (error) {
+            console.error('❌ Error loading sites from database:', error);
+        }
+    };
 
     // Load opportunities from database
     const loadOpportunitiesFromDatabase = async (clientId) => {
@@ -239,44 +417,71 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     };
 
 
-    const handleAddContact = () => {
+    const handleAddContact = async () => {
         if (!newContact.name) {
             alert('Name is required');
             return;
         }
         
-        const updatedContacts = [...(formData.contacts || []), {
-            ...newContact,
-            id: Date.now()
-        }];
-        
-        const updatedFormData = {...formData, contacts: updatedContacts};
-        setFormData(updatedFormData);
-        logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
-        
-        // Save contact changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        // Switch to contacts tab to show the added contact (use setTimeout to ensure it happens after re-render)
-        console.log('🔄 Setting active tab to contacts');
-        setTimeout(() => {
-            handleTabChange('contacts');
-        }, 100);
-        
-        setNewContact({
-            name: '',
-            role: '',
-            department: '',
-            email: '',
-            phone: '',
-            town: '',
-            isPrimary: false,
-            siteId: null
-        });
-        // Close the form after adding contact
-        setShowContactForm(false);
-        
-        console.log('✅ Contact added and saved:', newContact.name);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('❌ Please log in to save contacts to the database');
+                return;
+            }
+            
+            if (!window.api?.createContact) {
+                alert('❌ Contact API not available. Please refresh the page.');
+                return;
+            }
+            
+            console.log('🌐 Creating contact via API:', newContact);
+            const response = await window.api.createContact(formData.id, newContact);
+            console.log('📥 Full API response:', response);
+            console.log('🔍 Response structure:', {
+                hasData: !!response?.data,
+                hasDataContact: !!response?.data?.contact,
+                hasContact: !!response?.contact,
+                responseKeys: Object.keys(response || {}),
+                dataKeys: response?.data ? Object.keys(response.data) : 'no data'
+            });
+            
+            const savedContact = response?.data?.contact || response?.contact || response;
+            console.log('👤 Extracted contact:', savedContact);
+            
+            if (savedContact && savedContact.id) {
+                // Reload contacts from database to get fresh data
+                await loadContactsFromDatabase(formData.id);
+                
+                logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
+                
+                alert('✅ Contact saved to database successfully!');
+                
+                // Switch to contacts tab
+                setTimeout(() => {
+                    handleTabChange('contacts');
+                }, 100);
+                
+                setNewContact({
+                    name: '',
+                    role: '',
+                    department: '',
+                    email: '',
+                    phone: '',
+                    town: '',
+                    isPrimary: false,
+                    siteId: null
+                });
+                setShowContactForm(false);
+                
+                console.log('✅ Contact created and saved to database:', savedContact.id);
+            } else {
+                throw new Error('No contact ID returned from API');
+            }
+        } catch (error) {
+            console.error('❌ Error creating contact:', error);
+            alert('❌ Error saving contact to database: ' + error.message);
+        }
     };
 
     const handleEditContact = (contact) => {
@@ -367,6 +572,16 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         
         setFormData(updatedFormData);
         
+        // Save follow-up changes immediately - stay in edit mode
+        isAutoSavingRef.current = true;
+        onSave(updatedFormData, true);
+        
+        // Clear the flag after a delay to allow API response to propagate
+        setTimeout(() => {
+            isAutoSavingRef.current = false;
+            console.log('✅ Auto-save completed, re-enabling formData updates');
+        }, 3000);
+        
         setNewFollowUp({
             date: '',
             time: '',
@@ -396,14 +611,35 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         }
         
         setFormData(updatedFormData);
+        
+        // Save follow-up toggle immediately - stay in edit mode
+        isAutoSavingRef.current = true;
+        onSave(updatedFormData, true);
+        
+        // Clear the flag after a delay to allow API response to propagate
+        setTimeout(() => {
+            isAutoSavingRef.current = false;
+            console.log('✅ Auto-save completed, re-enabling formData updates');
+        }, 3000);
     };
 
     const handleDeleteFollowUp = (followUpId) => {
         if (confirm('Delete this follow-up?')) {
-            setFormData({
+            const updatedFormData = {
                 ...formData,
                 followUps: formData.followUps.filter(f => f.id !== followUpId)
-            });
+            };
+            setFormData(updatedFormData);
+            
+            // Save follow-up deletion immediately - stay in edit mode
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true);
+            
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+                console.log('✅ Auto-save completed, re-enabling formData updates');
+            }, 3000);
         }
     };
 
@@ -500,17 +736,20 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         setFormData(updatedFormData);
         logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
         
-        // Save comment changes immediately
+        // Save comment changes immediately - stay in edit mode
+        isAutoSavingRef.current = true;
         onSave(updatedFormData, true);
+        
+        // Clear the flag after a delay to allow API response to propagate
+        setTimeout(() => {
+            isAutoSavingRef.current = false;
+            console.log('✅ Auto-save completed, re-enabling formData updates');
+        }, 3000);
         
         setNewComment('');
         setNewNoteTags([]);
         setNewNoteTagsInput('');
         setNewNoteAttachments([]);
-        
-        // AUTO-SAVE: Immediately save to parent
-        // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
         
         console.log('✅ Comment added and saved:', newComment);
     };
@@ -523,54 +762,76 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             };
             setFormData(updatedFormData);
             
-            // AUTO-SAVE: Immediately save to parent
-            // Don't auto-save - just update internal state
-        // onSave(updatedFormData);
+            // Save comment deletion immediately - stay in edit mode
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true);
+            
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+                console.log('✅ Auto-save completed, re-enabling formData updates');
+            }, 3000);
             
             console.log('✅ Comment deleted and saved');
         }
     };
 
-    const handleAddSite = () => {
+    const handleAddSite = async () => {
         if (!newSite.name) {
             alert('Site name is required');
             return;
         }
         
-        const updatedSites = [...(formData.sites || []), {
-            ...newSite,
-            id: Date.now(),
-            createdAt: new Date().toISOString()
-        }];
-        
-        const updatedFormData = {...formData, sites: updatedSites};
-        setFormData(updatedFormData);
-        logActivity('Site Added', `Added site: ${newSite.name}`);
-        
-        // Save site changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        // Switch to sites tab to show the added site (use setTimeout to ensure it happens after re-render)
-        console.log('🔄 Setting active tab to sites');
-        setTimeout(() => {
-            handleTabChange('sites');
-        }, 100);
-        
-            setNewSite({
-                name: '',
-                address: '',
-                contactPerson: '',
-                phone: '',
-                email: '',
-                notes: '',
-                latitude: '',
-                longitude: '',
-                gpsCoordinates: ''
-            });
-        // Close the form after adding site
-        setShowSiteForm(false);
-        
-        console.log('✅ Site added and saved:', newSite.name);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('❌ Please log in to save sites to the database');
+                return;
+            }
+            
+            if (!window.api?.createSite) {
+                alert('❌ Site API not available. Please refresh the page.');
+                return;
+            }
+            
+            console.log('🌐 Creating site via API:', newSite);
+            const response = await window.api.createSite(formData.id, newSite);
+            const savedSite = response?.data?.site || response?.site || response;
+            
+            if (savedSite && savedSite.id) {
+                // Reload sites from database to get fresh data
+                await loadSitesFromDatabase(formData.id);
+                
+                logActivity('Site Added', `Added site: ${newSite.name}`);
+                
+                alert('✅ Site saved to database successfully!');
+                
+                // Switch to sites tab
+                setTimeout(() => {
+                    handleTabChange('sites');
+                }, 100);
+                
+                setNewSite({
+                    name: '',
+                    address: '',
+                    contactPerson: '',
+                    phone: '',
+                    email: '',
+                    notes: '',
+                    latitude: '',
+                    longitude: '',
+                    gpsCoordinates: ''
+                });
+                setShowSiteForm(false);
+                
+                console.log('✅ Site created and saved to database:', savedSite.id);
+            } else {
+                throw new Error('No site ID returned from API');
+            }
+        } catch (error) {
+            console.error('❌ Error creating site:', error);
+            alert('❌ Error saving site to database: ' + error.message);
+        }
     };
 
     const handleEditSite = (site) => {
@@ -834,6 +1095,8 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
     const handleSubmit = (e) => {
         e.preventDefault();
+        console.log('💾 Saving form data:', { notes: formData.notes });
+        hasUserEditedForm.current = false; // Reset after save
         onSave({
             ...formData,
             lastContact: new Date().toISOString().split('T')[0]
@@ -846,7 +1109,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         .filter(f => !f.completed)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-        return (
+    return (
             <div className={isFullPage ? `w-full h-full ${isDark ? 'bg-gray-900' : 'bg-gray-50'}` : "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"}>
                 <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} ${isFullPage ? 'w-full h-full rounded-none' : 'rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh]'} overflow-hidden flex flex-col`}>
                     {/* Header */}
@@ -1010,7 +1273,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">General Notes</label>
                                     <textarea 
                                         value={formData.notes}
-                                        onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                                        onChange={(e) => {
+                                            hasUserEditedForm.current = true;
+                                            setFormData({...formData, notes: e.target.value});
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         rows="3"
                                         placeholder="General information about this client..."
@@ -1171,6 +1437,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     {(() => {
                                         // Show all contacts without filtering
                                         const allContacts = formData.contacts || [];
+                                        
+                                        console.log('🖼️ RENDER: Contacts to display:', allContacts.length);
+                                        console.log('🖼️ RENDER: formData.contacts:', formData.contacts);
+                                        console.log('🖼️ RENDER: Full formData keys:', Object.keys(formData));
 
                                         return allContacts.length === 0 ? (
                                             <div className="text-center py-8 text-gray-500 text-sm">
@@ -1895,7 +2165,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                             
                                                             {/* Google Calendar Sync Component */}
                                                             <div className="mt-2">
-                                                                {window.GoogleCalendarSync && (
+                                                                {GoogleCalendarSync && (
                                                                     <GoogleCalendarSync
                                                                         followUp={followUp}
                                                                         clientName={formData.name}

@@ -53,6 +53,7 @@ model Client {
   type          String // "client" or "lead"
   industry      String        @default("Other")
   status        String        @default("active")
+  stage         String        @default("Awareness") // AIDIA stage for leads
   revenue       Float         @default(0)
   value         Float         @default(0)
   probability   Int           @default(0)
@@ -78,27 +79,62 @@ model Client {
 }
 
 model Project {
-  id          String      @id @default(cuid())
-  clientId    String?
-  name        String
-  description String      @default("")
-  clientName  String      @default("")
-  status      String      @default("Planning")
-  startDate   DateTime    @default(now())
-  dueDate     DateTime?
-  budget      Float       @default(0)
-  priority    String      @default("Medium")
-  tasksList   String      @default("[]")
-  team        String      @default("[]")
-  notes       String      @default("")
-  ownerId     String?
-  owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
-  client      Client?     @relation(fields: [clientId], references: [id])
-  tasks       Task[]
-  invoices    Invoice[]
-  timeEntries TimeEntry[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  id                     String      @id @default(cuid())
+  clientId               String?
+  name                   String
+  description            String      @default("")
+  clientName             String      @default("")
+  status                 String      @default("Planning")
+  startDate              DateTime    @default(now())
+  dueDate                DateTime?
+  budget                 Float       @default(0)
+  actualCost             Float       @default(0)
+  progress               Int         @default(0)
+  priority               String      @default("Medium")
+  type                   String      @default("Project")
+  assignedTo             String      @default("")
+  
+  // JSON fields for complex data
+  tasksList              String      @default("[]")
+  taskLists              String      @default("[]")
+  customFieldDefinitions String      @default("[]")
+  documents              String      @default("[]")
+  comments               String      @default("[]")
+  activityLog            String      @default("[]")
+  team                   String      @default("[]")
+  notes                  String      @default("")
+  
+  ownerId                String?
+  owner                  User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
+  client                 Client?     @relation(fields: [clientId], references: [id])
+  tasks                  Task[]
+  invoices               Invoice[]
+  timeEntries            TimeEntry[]
+  createdAt              DateTime    @default(now())
+  updatedAt              DateTime    @updatedAt
+}
+
+model Employee {
+  id               String   @id @default(cuid())
+  employeeNumber   String   @unique
+  name             String
+  email            String   @unique
+  phone            String   @default("")
+  position         String   @default("")
+  department       String   @default("")
+  employmentDate   DateTime @default(now())
+  idNumber         String   @default("")
+  taxNumber        String?
+  bankName         String?
+  accountNumber    String?
+  branchCode       String?
+  salary           Float    @default(0)
+  status           String   @default("Active")
+  address          String   @default("")
+  emergencyContact String   @default("")
+  ownerId          String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 }
 
 model Opportunity {

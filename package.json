@@ -4,6 +4,9 @@
   "description": "Abcotronics ERP - Fuel Management Services",
   "type": "module",
   "main": "server.js",
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",

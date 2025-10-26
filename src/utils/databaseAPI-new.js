@@ -33,6 +33,9 @@ const DatabaseAPI = {
                 ...options
             });
 
+            // Get response data
+            const responseData = await response.json();
+
             if (!response.ok) {
                 if (response.status === 401) {
                     // Token expired, clear auth data
@@ -40,10 +43,14 @@ const DatabaseAPI = {
                     if (window.storage?.removeUser) window.storage.removeUser();
                     throw new Error('Authentication expired. Please log in again.');
                 }
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                
+                // Extract error message from response
+                const errorMessage = responseData?.error?.message || responseData?.message || `HTTP ${response.status}: ${response.statusText}`;
+                console.error('❌ Error response:', responseData);
+                throw new Error(errorMessage);
             }
 
-            return await response.json();
+            return responseData;
         } catch (error) {
             console.error(`Database API request failed (${endpoint}):`, error);
             throw error;

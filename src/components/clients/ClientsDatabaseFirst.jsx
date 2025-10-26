@@ -101,7 +101,28 @@ const ClientsDatabaseFirst = () => {
             const apiLeads = await window.DatabaseAPI.getLeads();
             console.log('📡 Database returned leads:', apiLeads.length);
             
-            setLeads(apiLeads);
+            // Parse JSON fields from database
+            const parsedLeads = (apiLeads?.data?.leads || []).map(lead => {
+                console.log('🔍 Parsing lead:', lead.id, lead.name);
+                console.log('🔍 Raw contacts field:', typeof lead.contacts, lead.contacts);
+                console.log('🔍 Raw followUps field:', typeof lead.followUps, lead.followUps);
+                
+                return {
+                    ...lead,
+                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                    sites: typeof lead.sites === 'string' ? JSON.parse(lead.sites || '[]') : (lead.sites || []),
+                    contracts: typeof lead.contracts === 'string' ? JSON.parse(lead.contracts || '[]') : (lead.contracts || []),
+                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+                };
+            });
+            
+            console.log('✅ Parsed leads:', parsedLeads.length);
+            console.log('📊 Sample lead contacts:', parsedLeads[0]?.contacts);
+            setLeads(parsedLeads);
             console.log('✅ Leads loaded from database');
             
         } catch (error) {
@@ -190,7 +211,14 @@ const ClientsDatabaseFirst = () => {
                 // Update local state
                 const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                 setClients(updated);
-                setSelectedClient(comprehensiveClient);
+                
+                // Only update selectedClient if not staying in edit mode
+                // This prevents the modal from re-rendering and resetting formData
+                if (!stayInEditMode) {
+                    setSelectedClient(comprehensiveClient);
+                }
+                
+                console.log('✅ Client state updated locally');
             } else {
                 // Create new client
                 const newClient = await window.api.createClient(comprehensiveClient);
@@ -216,8 +244,9 @@ const ClientsDatabaseFirst = () => {
     };
 
     // Save lead to database
-    const handleSaveLead = async (leadFormData) => {
+    const handleSaveLead = async (leadFormData, stayInEditMode = false) => {
         console.log('💾 Saving lead to database...');
+        console.log('📦 leadFormData received:', JSON.stringify(leadFormData, null, 2));
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -226,14 +255,37 @@ const ClientsDatabaseFirst = () => {
             }
 
             if (selectedLead) {
-                // Update existing lead
-                const updatedLead = { ...selectedLead, ...leadFormData };
+                // Update existing lead - merge form data with existing lead data
+                const updatedLead = {
+                    ...selectedLead,
+                    ...leadFormData,
+                    // Ensure these fields are preserved or updated properly
+                    contacts: leadFormData.contacts || selectedLead.contacts || [],
+                    followUps: leadFormData.followUps || selectedLead.followUps || [],
+                    projectIds: leadFormData.projectIds || selectedLead.projectIds || [],
+                    comments: leadFormData.comments || selectedLead.comments || [],
+                    activityLog: leadFormData.activityLog || selectedLead.activityLog || [],
+                    // These fields might not exist in all leads
+                    sites: leadFormData.sites || selectedLead.sites || [],
+                    contracts: leadFormData.contracts || selectedLead.contracts || [],
+                    billingTerms: leadFormData.billingTerms || selectedLead.billingTerms || {}
+                };
+                
+                console.log('📦 Final updatedLead being sent to API:', JSON.stringify(updatedLead, null, 2));
+                
                 await window.api.updateLead(updatedLead.id, updatedLead);
                 console.log('✅ Lead updated in database');
                 
                 const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                 setLeads(updatedLeads);
-                setSelectedLead(updatedLead);
+                
+                // Only update selectedLead if not staying in edit mode
+                // This prevents the modal from re-rendering and resetting formData
+                if (!stayInEditMode) {
+                    setSelectedLead(updatedLead);
+                }
+                
+                console.log('✅ Lead state updated locally');
             } else {
                 // Create new lead - don't include ID, let database generate it
                 const newLeadData = {
