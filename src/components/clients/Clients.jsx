@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 const storage = window.storage || {};
 const ClientDetailModal = window.ClientDetailModal;
 const LeadDetailModal = window.LeadDetailModal;
@@ -11,6 +11,65 @@ const safeStorage = {
     getProjects: () => storage.getProjects ? storage.getProjects() : null,
     setProjects: (data) => storage.setProjects ? storage.setProjects(data) : null,
 };
+
+// Performance optimization: Memoized client data processor
+let clientDataCache = null;
+let clientDataCacheTimestamp = 0;
+const CACHE_DURATION = 5000; // 5 seconds
+
+function processClientData(rawClients, cacheKey) {
+    // Use cached processed data if available and recent
+    const now = Date.now();
+    if (clientDataCache && (now - clientDataCacheTimestamp < CACHE_DURATION)) {
+        return clientDataCache;
+    }
+    
+    // Process the data
+    const startTime = performance.now();
+    const processed = rawClients.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status === 'active' ? 'Active' : 'Inactive',
+        stage: c.stage || 'Awareness',
+        industry: c.industry || 'Other',
+        type: c.type || 'client',
+        revenue: c.revenue || 0,
+        lastContact: new Date(c.updatedAt || c.createdAt).toISOString().split('T')[0],
+        address: c.address || '',
+        website: c.website || '',
+        notes: c.notes || '',
+        contacts: Array.isArray(c.contacts) ? c.contacts : (typeof c.contacts === 'string' ? JSON.parse(c.contacts || '[]') : []),
+        followUps: Array.isArray(c.followUps) ? c.followUps : (typeof c.followUps === 'string' ? JSON.parse(c.followUps || '[]') : []),
+        projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
+        comments: Array.isArray(c.comments) ? c.comments : (typeof c.comments === 'string' ? JSON.parse(c.comments || '[]') : []),
+        sites: Array.isArray(c.sites) ? c.sites : (typeof c.sites === 'string' ? JSON.parse(c.sites || '[]') : []),
+        opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
+        contracts: Array.isArray(c.contracts) ? c.contracts : (typeof c.contracts === 'string' ? JSON.parse(c.contracts || '[]') : []),
+        activityLog: Array.isArray(c.activityLog) ? c.activityLog : (typeof c.activityLog === 'string' ? JSON.parse(c.activityLog || '[]') : []),
+        billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : (typeof c.billingTerms === 'string' ? JSON.parse(c.billingTerms || '{}') : {
+            paymentTerms: 'Net 30',
+            billingFrequency: 'Monthly',
+            currency: 'ZAR',
+            retainerAmount: 0,
+            taxExempt: false,
+            notes: ''
+        }),
+        ownerId: c.ownerId || null,
+        createdAt: c.createdAt,
+        updatedAt: c.updatedAt
+    }));
+    
+    // Cache the result
+    clientDataCache = processed;
+    clientDataCacheTimestamp = now;
+    
+    const endTime = performance.now();
+    if (endTime - startTime > 10) {
+        console.log(`⚡ Processed ${rawClients.length} clients in ${(endTime - startTime).toFixed(2)}ms`);
+    }
+    
+    return processed;
+}
 
 // No initial data - all data comes from database
 
@@ -53,8 +112,13 @@ const Clients = () => {
     
     // Load clients and leads from API immediately on mount
     useEffect(() => {
+        const startTime = performance.now();
         loadClients();
         loadLeads();
+        const endTime = performance.now();
+        if (endTime - startTime > 100) {
+            console.log(`⚡ Initial load took ${(endTime - startTime).toFixed(2)}ms`);
+        }
     }, []);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
@@ -176,38 +240,8 @@ const Clients = () => {
                         return; // Keep showing cached data
                     }
                     
-                    const processedClients = apiClients.map(c => ({
-                        id: c.id,
-                        name: c.name,
-                        status: c.status === 'active' ? 'Active' : 'Inactive',
-                        stage: c.stage || 'Awareness', // Add stage field
-                        industry: c.industry || 'Other',
-                        type: c.type || 'client', // Use the type from database
-                        revenue: c.revenue || 0,
-                        lastContact: new Date(c.updatedAt || c.createdAt).toISOString().split('T')[0],
-                        address: c.address || '', 
-                        website: c.website || '', 
-                        notes: c.notes || '', 
-                        contacts: typeof c.contacts === 'string' ? JSON.parse(c.contacts || '[]') : (Array.isArray(c.contacts) ? c.contacts : []), 
-                        followUps: typeof c.followUps === 'string' ? JSON.parse(c.followUps || '[]') : (Array.isArray(c.followUps) ? c.followUps : []), 
-                        projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
-                        comments: typeof c.comments === 'string' ? JSON.parse(c.comments || '[]') : (Array.isArray(c.comments) ? c.comments : []), 
-                        sites: typeof c.sites === 'string' ? JSON.parse(c.sites || '[]') : (Array.isArray(c.sites) ? c.sites : []), 
-                        opportunities: Array.isArray(c.opportunities) ? c.opportunities : [], 
-                        contracts: typeof c.contracts === 'string' ? JSON.parse(c.contracts || '[]') : (Array.isArray(c.contracts) ? c.contracts : []),
-                        activityLog: typeof c.activityLog === 'string' ? JSON.parse(c.activityLog || '[]') : (Array.isArray(c.activityLog) ? c.activityLog : []),
-                        billingTerms: typeof c.billingTerms === 'string' ? JSON.parse(c.billingTerms || '{}') : (typeof c.billingTerms === 'object' ? c.billingTerms : {
-                            paymentTerms: 'Net 30',
-                            billingFrequency: 'Monthly',
-                            currency: 'ZAR',
-                            retainerAmount: 0,
-                            taxExempt: false,
-                            notes: ''
-                        }),
-                        ownerId: c.ownerId || null,
-                        createdAt: c.createdAt,
-                        updatedAt: c.updatedAt
-                    }));
+                    // Use memoized data processor for better performance
+                    const processedClients = processClientData(apiClients);
                     
                     // Separate clients and leads based on type
                     const clientsOnly = processedClients.filter(c => c.type === 'client');
