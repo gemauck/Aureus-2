@@ -106,10 +106,6 @@ app.use((req, res, next) => {
   let origin = req.headers.origin
   const allowedOrigins = [
     process.env.APP_URL,
-    'http://localhost:3000',
-    'http://localhost:3001', 
-    'http://localhost:3002',
-    'http://localhost:8000',
     'https://abcoafrica.co.za',
     'http://abcoafrica.co.za',
     'https://www.abcoafrica.co.za',
@@ -118,7 +114,12 @@ app.use((req, res, next) => {
     'https://abcoafrica.co.za.',
     'http://abcoafrica.co.za.',
     'https://www.abcoafrica.co.za.',
-    'http://www.abcoafrica.co.za.'
+    'http://www.abcoafrica.co.za.',
+    // Localhost for development
+    'http://localhost:3000',
+    'http://localhost:3001', 
+    'http://localhost:3002',
+    'http://localhost:8000'
   ].filter(Boolean)
   
   // Normalize origin by removing trailing dots
@@ -142,8 +143,10 @@ app.use((req, res, next) => {
     return res.status(403).json({ error: 'CORS policy violation' })
   } else {
     // No origin header (e.g., server-to-server requests)
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0] || 'http://localhost:8000')
-    console.log(`✅ CORS: No origin header, using default: ${allowedOrigins[0] || 'http://localhost:8000'}`)
+    // Use HTTPS production URL as default
+    const defaultOrigin = process.env.APP_URL || 'https://abcoafrica.co.za'
+    res.setHeader('Access-Control-Allow-Origin', defaultOrigin)
+    console.log(`✅ CORS: No origin header, using default: ${defaultOrigin}`)
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
