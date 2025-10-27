@@ -1,5 +1,9 @@
 // Database-First API Utility - All data operations go through database
 const DatabaseAPI = {
+    // API response cache
+    cache: new Map(),
+    CACHE_DURATION: 30000, // 30 seconds
+    
     // Base configuration - Use local API for localhost, production for deployed
     API_BASE: (() => {
         const hostname = window.location.hostname;
@@ -12,6 +16,18 @@ const DatabaseAPI = {
 
     // Make HTTP request with proper error handling
     async makeRequest(endpoint, options = {}) {
+        // Check cache for GET requests only
+        const isGetRequest = !options.method || options.method === 'GET';
+        const cacheKey = endpoint;
+        
+        if (isGetRequest && this.cache.has(cacheKey)) {
+            const cached = this.cache.get(cacheKey);
+            if (Date.now() - cached.timestamp < this.CACHE_DURATION) {
+                console.log(`⚡ Using cached ${endpoint} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+                return cached.data;
+            }
+        }
+        
         const url = `${this.API_BASE}/api${endpoint}`;
         
         // Get authentication token
@@ -71,10 +87,27 @@ const DatabaseAPI = {
                 throw new Error(errorMessage);
             }
 
+            // Cache successful GET responses
+            if (isGetRequest && responseData) {
+                this.cache.set(cacheKey, {
+                    data: responseData,
+                    timestamp: Date.now()
+                });
+            }
+            
             return responseData;
         } catch (error) {
             console.error(`Database API request failed (${endpoint}):`, error);
             throw error;
+        }
+    },
+    
+    // Clear cache
+    clearCache(endpoint) {
+        if (endpoint) {
+            this.cache.delete(endpoint);
+        } else {
+            this.cache.clear();
         }
     },
 
