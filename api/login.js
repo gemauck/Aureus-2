@@ -12,7 +12,9 @@ async function handler(req, res) {
     const { email, password } = req.body || {}
     if (!email || !password) return badRequest(res, 'Email and password required')
 
+    console.log('🔐 Login attempt:', email)
     const user = await prisma.user.findUnique({ where: { email } })
+    console.log('🔐 User found:', !!user, user ? `has passwordHash: ${!!user.passwordHash}` : 'N/A')
     if (!user || !user.passwordHash) return unauthorized(res)
 
     const valid = await bcrypt.compare(password, user.passwordHash)
