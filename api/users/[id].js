@@ -62,7 +62,8 @@ async function handler(req, res) {
             }
 
             // Allow users to update their own profile or admins to update anyone
-            if (req.user.id !== userId && req.user.role !== 'admin') {
+            const currentUserId = req.user.sub || req.user.id
+            if (currentUserId !== userId && req.user.role !== 'admin') {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
@@ -132,7 +133,8 @@ async function handler(req, res) {
             }
 
             // Prevent deleting own account
-            if (req.user.id === userId) {
+            const currentUserId = req.user.sub || req.user.id
+            if (currentUserId === userId) {
                 return badRequest(res, 'Cannot delete your own account')
             }
 
