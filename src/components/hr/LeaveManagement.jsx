@@ -1,6 +1,5 @@
 // Get React hooks from window
 const { useState, useEffect } = React;
-const storage = window.storage;
 
 const LeaveManagement = () => {
     const [leaveApplications, setLeaveApplications] = useState([]);
@@ -9,6 +8,7 @@ const LeaveManagement = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterEmployee, setFilterEmployee] = useState('all');
     const [viewMode, setViewMode] = useState('list'); // list or calendar
+    const [isStorageReady, setIsStorageReady] = useState(false);
 
     // South African leave types as per BCEA
     const leaveTypes = [
@@ -37,18 +37,69 @@ const LeaveManagement = () => {
         { date: '2025-12-26', name: 'Day of Goodwill' }
     ];
 
+    // Wait for storage to be ready
     useEffect(() => {
-        loadLeaveApplications();
+        const checkStorage = () => {
+            if (window.storage && typeof window.storage.getLeaveApplications === 'function') {
+                console.log('✅ LeaveManagement: Storage is ready');
+                setIsStorageReady(true);
+                return true;
+            }
+            console.warn('⏳ LeaveManagement: Waiting for storage...');
+            return false;
+        };
+
+        // Check immediately
+        if (checkStorage()) return;
+
+        // Check periodically
+        const interval = setInterval(() => {
+            if (checkStorage()) {
+                clearInterval(interval);
+            }
+        }, 100);
+
+        // Listen for storage ready event
+        const handleStorageReady = () => {
+            console.log('📡 LeaveManagement: Received storage ready event');
+            checkStorage();
+        };
+
+        window.addEventListener('storageReady', handleStorageReady);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('storageReady', handleStorageReady);
+        };
     }, []);
 
+    // Load leave applications once storage is ready
+    useEffect(() => {
+        if (isStorageReady) {
+            loadLeaveApplications();
+        }
+    }, [isStorageReady]);
+
     const loadLeaveApplications = () => {
-        const saved = storage.getLeaveApplications() || [];
-        setLeaveApplications(saved);
+        try {
+            if (!window.storage || typeof window.storage.getLeaveApplications !== 'function') {
+                console.error('❌ Storage not ready in loadLeaveApplications');
+                return;
+            }
+            const saved = window.storage.getLeaveApplications() || [];
+            console.log('✅ Loaded leave applications:', saved.length);
+            setLeaveApplications(saved);
+        } catch (error) {
+            console.error('❌ Error loading leave applications:', error);
+            setLeaveApplications([]);
+        }
     };
 
     useEffect(() => {
-        storage.setLeaveApplications(leaveApplications);
-    }, [leaveApplications]);
+        if (isStorageReady && window.storage && typeof window.storage.setLeaveApplications === 'function') {
+            window.storage.setLeaveApplications(leaveApplications);
+        }
+    }, [leaveApplications, isStorageReady]);
 
     const handleSaveApplication = (applicationData) => {
         if (selectedApplication) {
@@ -132,6 +183,18 @@ const LeaveManagement = () => {
     const getLeaveTypeInfo = (type) => {
         return leaveTypes.find(t => t.value === type) || leaveTypes[0];
     };
+
+    // Show loading state while waiting for storage
+    if (!isStorageReady) {
+        return (
+            <div className="space-y-4">
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <i className="fas fa-spinner fa-spin text-3xl text-primary-500 mb-3"></i>
+                    <p className="text-sm text-gray-600">Loading leave management...</p>
+                </div>
+            </div>
+        );
+    }
 
     // Application Modal Component
     const ApplicationModal = () => {
@@ -459,3 +522,4 @@ const LeaveManagement = () => {
 
 // Make available globally
 window.LeaveManagement = LeaveManagement;
+console.log('✅ LeaveManagement component loaded');

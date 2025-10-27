@@ -168,10 +168,13 @@ const DashboardLive = () => {
                 const clients = allClientsFromAPI.filter(c => c.type === 'client' || !c.type); // Default to client if no type
                 const leads = allClientsFromAPI.filter(c => c.type === 'lead');
                 
-                const projects = Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
+                // Handle different API response formats
+                const projects = Array.isArray(projectsRes.data?.projects) ? projectsRes.data.projects : 
+                                Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
                 const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : cachedInvoices;
                 const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
-                const users = Array.isArray(usersRes.data) ? usersRes.data : cachedUsers;
+                const users = Array.isArray(usersRes.data?.users) ? usersRes.data.users : 
+                             Array.isArray(usersRes.data) ? usersRes.data : cachedUsers;
 
                 // Recalculate stats with fresh data
                 const freshThisMonthEntries = timeEntries.filter(entry => {
@@ -255,12 +258,19 @@ const DashboardLive = () => {
                     
                 case 'data':
                     // Update specific data type
+                    // Handle both direct arrays and API response format
+                    let normalizedData = message.data;
+                    if (message.data && typeof message.data === 'object' && message.data.data) {
+                        // API response format: {data: {projects: [...]}}
+                        normalizedData = message.data.data[message.dataType] || message.data[message.dataType] || message.data.data;
+                    }
+                    
                     setDashboardData(prev => ({
                         ...prev,
-                        [message.dataType]: message.data,
+                        [message.dataType]: normalizedData,
                         stats: calculateStats({
                             ...prev,
-                            [message.dataType]: message.data
+                            [message.dataType]: normalizedData
                         })
                     }));
                     setLastUpdated(message.timestamp);
@@ -294,11 +304,14 @@ const DashboardLive = () => {
         const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
-        const thisMonthEntries = (data.timeEntries || []).filter(entry => {
+        const timeEntriesArray = Array.isArray(data.timeEntries) ? data.timeEntries : [];
+        const invoicesArray = Array.isArray(data.invoices) ? data.invoices : [];
+        
+        const thisMonthEntries = timeEntriesArray.filter(entry => {
             const entryDate = new Date(entry.date);
             return entryDate >= thisMonth;
         });
-        const lastMonthEntries = (data.timeEntries || []).filter(entry => {
+        const lastMonthEntries = timeEntriesArray.filter(entry => {
             const entryDate = new Date(entry.date);
             return entryDate >= lastMonth && entryDate < thisMonth;
         });
@@ -306,25 +319,28 @@ const DashboardLive = () => {
         const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
         const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
-        const overdueInvoices = (data.invoices || []).filter(inv => {
+        const overdueInvoices = invoicesArray.filter(inv => {
             const dueDate = new Date(inv.dueDate);
             return inv.status === 'Unpaid' && dueDate < now;
         });
         const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
 
-        // Ensure leads is an array
+        // Ensure all data is arrays for safety
+        const clientsArray = Array.isArray(data.clients) ? data.clients : [];
         const leadsArray = Array.isArray(data.leads) ? data.leads : [];
+        const projectsArray = Array.isArray(data.projects) ? data.projects : [];
+        
         const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
         const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
 
         return {
-            totalClients: (data.clients || []).length,
+            totalClients: clientsArray.length,
             totalLeads: leadsArray.length,
-            totalProjects: (data.projects || []).length,
-            totalInvoices: (data.invoices || []).length,
-            totalRevenue: (data.invoices || []).reduce((sum, invoice) => sum + (invoice.total || 0), 0),
-            activeProjects: (data.projects || []).filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-            pendingInvoices: (data.invoices || []).filter(i => i.status === 'Pending' || i.status === 'Draft').length,
+            totalProjects: projectsArray.length,
+            totalInvoices: invoicesArray.length,
+            totalRevenue: invoicesArray.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
+            activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
+            pendingInvoices: invoicesArray.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
             overdueInvoices: overdueInvoices.length,
             overdueAmount: overdueAmount,
             hoursThisMonth: hoursThisMonth,

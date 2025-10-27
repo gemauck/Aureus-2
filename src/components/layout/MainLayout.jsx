@@ -74,13 +74,11 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog' },
-        { id: 'time', label: 'Time Tracking', icon: 'fa-clock' },
         { id: 'hr', label: 'HR', icon: 'fa-id-card' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar' },
-        { id: 'settings', label: 'Settings', icon: 'fa-cog' },
     ];
 
     const renderPage = () => {

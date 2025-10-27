@@ -1,23 +1,22 @@
-// Users management API endpoint - Direct route
-import { authRequired } from './_lib/authRequired.js'
-import { prisma } from './_lib/prisma.js'
-import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
-import { withHttp } from './_lib/withHttp.js'
-import { withLogging } from './_lib/logger.js'
+// Update individual user - /api/users/:id
+import { authRequired } from '../_lib/authRequired.js'
+import { prisma } from '../_lib/prisma.js'
+import { badRequest, ok, serverError, unauthorized, notFound } from '../_lib/response.js'
+import { withHttp } from '../_lib/withHttp.js'
+import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
+    // Extract user ID from URL
+    const userId = req.url.split('/').pop()
+
     if (req.method === 'GET') {
         try {
-            // Check if user is authenticated (req.user is set by authRequired)
             if (!req.user) {
                 return unauthorized(res, 'Authentication required')
             }
-            
-            // For now, allow all authenticated users to see basic user info
-            // TODO: Implement proper role-based access control
 
-            // Get all users with HR fields
-            const users = await prisma.user.findMany({
+            const user = await prisma.user.findUnique({
+                where: { id: userId },
                 select: {
                     id: true,
                     email: true,
@@ -27,7 +26,6 @@ async function handler(req, res) {
                     department: true,
                     jobTitle: true,
                     phone: true,
-                    // HR/Employee fields
                     employeeNumber: true,
                     position: true,
                     employmentDate: true,
@@ -41,98 +39,26 @@ async function handler(req, res) {
                     address: true,
                     emergencyContact: true,
                     createdAt: true,
-                    lastLoginAt: true,
-                    invitedBy: true
-                },
-                orderBy: { createdAt: 'desc' }
-            })
-
-            // Get all invitations
-            const invitations = await prisma.invitation.findMany({
-                orderBy: { createdAt: 'desc' }
-            })
-
-            return ok(res, {
-                users,
-                invitations
-            })
-
-        } catch (error) {
-            console.error('Get users error:', error)
-            return serverError(res, 'Failed to get users', error.message)
-        }
-    }
-
-    if (req.method === 'POST') {
-        try {
-            // Check if user is admin
-            if (!req.user || req.user.role !== 'admin') {
-                return unauthorized(res, 'Admin access required')
-            }
-
-            const { name, email, role = 'member', department = '', phone = '', status = 'active' } = req.body || {}
-            
-            if (!name || !email) {
-                return badRequest(res, 'Name and email are required')
-            }
-
-            // Check if user already exists
-            const existingUser = await prisma.user.findUnique({ where: { email } })
-            if (existingUser) {
-                return badRequest(res, 'User with this email already exists')
-            }
-
-            // Create user with a default temporary password
-            const bcrypt = await import('bcryptjs')
-            const tempPassword = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8).toUpperCase()
-            const passwordHash = await bcrypt.default.hash(tempPassword, 10)
-
-            const user = await prisma.user.create({
-                data: {
-                    name,
-                    email,
-                    passwordHash,
-                    role,
-                    department,
-                    phone,
-                    status,
-                    mustChangePassword: true,
-                    provider: 'local'
+                    lastLoginAt: true
                 }
             })
 
-            // TODO: Send email with temporary password
-            console.log('User created with temporary password:', tempPassword)
+            if (!user) {
+                return notFound(res, 'User not found')
+            }
 
-            return ok(res, {
-                success: true,
-                message: 'User created successfully',
-                user: {
-                    id: user.id,
-                    email: user.email,
-                    name: user.name,
-                    role: user.role
-                },
-                tempPassword // In production, send this via email instead
-            })
+            return ok(res, { user })
 
         } catch (error) {
-            console.error('Create user error:', error)
-            return serverError(res, 'Failed to create user', error.message)
+            console.error('Get user error:', error)
+            return serverError(res, 'Failed to get user', error.message)
         }
     }
 
     if (req.method === 'PUT') {
         try {
-            // Check if user is authenticated
             if (!req.user) {
                 return unauthorized(res, 'Authentication required')
-            }
-
-            const { userId, ...updateData } = req.body || {}
-            
-            if (!userId) {
-                return badRequest(res, 'User ID is required')
             }
 
             // Allow users to update their own profile or admins to update anyone
@@ -140,8 +66,11 @@ async function handler(req, res) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
+            const updateData = req.body || {}
+
             // Filter out fields that shouldn't be updated via this endpoint
             const {
+                id,
                 passwordHash,
                 provider,
                 mustChangePassword,
@@ -149,6 +78,8 @@ async function handler(req, res) {
                 updatedAt,
                 ...allowedUpdates
             } = updateData
+
+            console.log('📝 Updating user:', userId, 'with data:', allowedUpdates)
 
             // Update user
             const user = await prisma.user.update({
@@ -180,6 +111,8 @@ async function handler(req, res) {
                 }
             })
 
+            console.log('✅ User updated successfully:', user.id)
+
             return ok(res, {
                 success: true,
                 message: 'User updated successfully',
@@ -194,15 +127,8 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
         try {
-            // Check if user is admin (req.user is set by authRequired)
             if (!req.user || req.user.role !== 'admin') {
                 return unauthorized(res, 'Admin access required')
-            }
-
-            const { userId } = req.body || {}
-            
-            if (!userId) {
-                return badRequest(res, 'User ID is required')
             }
 
             // Prevent deleting own account
@@ -214,6 +140,8 @@ async function handler(req, res) {
             await prisma.user.delete({
                 where: { id: userId }
             })
+
+            console.log('✅ User deleted successfully:', userId)
 
             return ok(res, { success: true, message: 'User deleted successfully' })
 

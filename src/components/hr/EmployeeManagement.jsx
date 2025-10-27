@@ -1,6 +1,5 @@
 // Get React hooks from window
 const { useState, useEffect } = React;
-const storage = window.storage;
 
 const EmployeeManagement = () => {
     const [employees, setEmployees] = useState([]);
@@ -19,136 +18,140 @@ const EmployeeManagement = () => {
 
     const loadEmployees = async () => {
         try {
-            const saved = await window.dataService.getEmployees();
-            if (saved.length === 0) {
-                // Use default data if no saved employees
-                const defaultEmployees = [
-                    {
-                        id: 1,
-                        employeeNumber: 'EMP001',
-                        name: 'Gareth Mauck',
-                        email: 'gareth@abcotronics.com',
-                        phone: '+27 82 555 0001',
-                        position: 'Director',
-                        department: 'Management',
-                        employmentDate: '2020-01-15',
-                        idNumber: '8501015800081',
-                        taxNumber: 'TAX123456',
-                        bankName: 'FNB',
-                        accountNumber: '62123456789',
-                        branchCode: '250655',
-                        salary: 85000,
-                        status: 'Active',
-                        address: '123 Main Road, Johannesburg, 2001',
-                        emergencyContact: 'Jane Mauck - +27 82 555 0002'
-                    },
-                    {
-                        id: 2,
-                        employeeNumber: 'EMP002',
-                        name: 'David Buttemer',
-                        email: 'david@abcotronics.com',
-                        phone: '+27 83 555 0003',
-                        position: 'Technical Lead',
-                        department: 'Operations',
-                        employmentDate: '2021-03-01',
-                        idNumber: '9201125800082',
-                        taxNumber: 'TAX789012',
-                        bankName: 'Standard Bank',
-                        accountNumber: '02987654321',
-                        branchCode: '051001',
-                        salary: 65000,
-                        status: 'Active',
-                        address: '456 Oak Avenue, Pretoria, 0002',
-                        emergencyContact: 'Sarah Buttemer - +27 83 555 0004'
-                    }
-                ];
-                setEmployees(defaultEmployees);
-                await window.dataService.setEmployees(defaultEmployees);
+            console.log('📡 Loading employees (users) from database...');
+            // Load users - they ARE the employees
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.error('❌ No token available');
+                setEmployees([]);
+                return;
+            }
+
+            const response = await fetch('/api/users', {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            if (response.ok) {
+                const responseData = await response.json();
+                const userData = responseData.data?.users || responseData.users || [];
+                console.log('✅ Loaded employees from users:', userData.length);
+                setEmployees(userData);
             } else {
-                setEmployees(saved);
+                console.error('❌ Failed to load users:', response);
+                setEmployees([]);
             }
         } catch (error) {
             console.error('❌ EmployeeManagement: Error loading employees:', error);
+            setEmployees([]);
         }
     };
-
-    useEffect(() => {
-        const saveEmployees = async () => {
-            if (employees.length > 0) {
-                try {
-                    await window.dataService.setEmployees(employees);
-                    console.log('✅ EmployeeManagement: Saved to data service');
-                } catch (error) {
-                    console.error('❌ EmployeeManagement: Error saving employees:', error);
-                }
-            }
-        };
-        saveEmployees();
-    }, [employees]);
 
     const handleSaveEmployee = async (employeeData) => {
         const user = window.storage?.getUser();
         
-        if (selectedEmployee) {
-            const updatedEmployees = employees.map(emp =>
-                emp.id === selectedEmployee.id ? { ...employeeData, id: selectedEmployee.id } : emp
-            );
-            setEmployees(updatedEmployees);
-            
-            // Log update action
-            if (window.AuditLogger) {
-                window.AuditLogger.log('update', 'hr', {
-                    action: 'Updated employee',
-                    employeeId: selectedEmployee.id,
-                    employeeName: employeeData.name
-                }, user);
+        try {
+            if (selectedEmployee) {
+                // Update existing user/employee via API
+                console.log('📝 Updating employee (user) via API:', selectedEmployee.id);
+                const token = window.storage?.getToken?.();
+                
+                const response = await fetch('/api/users', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        userId: selectedEmployee.id,
+                        ...employeeData
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    // Update local state with server response
+                    const updatedEmployees = employees.map(emp =>
+                        emp.id === selectedEmployee.id ? (result.data?.user || { ...emp, ...employeeData }) : emp
+                    );
+                    setEmployees(updatedEmployees);
+                    
+                    // Log update action
+                    if (window.AuditLogger) {
+                        window.AuditLogger.log('update', 'hr', {
+                            action: 'Updated employee',
+                            employeeId: selectedEmployee.id,
+                            employeeName: employeeData.name
+                        }, user);
+                    }
+                    
+                    setShowEmployeeModal(false);
+                    setSelectedEmployee(null);
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to update employee');
+                }
+            } else {
+                // When creating a new employee, we should use the User invitation flow
+                console.log('✨ Creating new employee requires User invitation');
+                alert('To add a new employee, please use the User Management section to invite them. Once they accept, they will appear here as employees.');
+                return;
             }
-        } else {
-            const newEmployee = {
-                ...employeeData,
-                id: Date.now(),
-                employeeNumber: `EMP${String(employees.length + 1).padStart(3, '0')}`
-            };
-            setEmployees([...employees, newEmployee]);
-            
-            // Log create action
-            if (window.AuditLogger) {
-                window.AuditLogger.log('create', 'hr', {
-                    action: 'Created new employee',
-                    employeeId: newEmployee.id,
-                    employeeName: newEmployee.name,
-                    employeeNumber: newEmployee.employeeNumber
-                }, user);
-            }
+        } catch (error) {
+            console.error('❌ Error saving employee:', error);
+            alert(`Failed to save employee: ${error.message}`);
         }
-        setShowEmployeeModal(false);
-        setSelectedEmployee(null);
     };
 
     const handleDeleteEmployee = async (id) => {
-        if (confirm('Are you sure you want to delete this employee? This action cannot be undone.')) {
+        if (confirm('Are you sure you want to delete this employee? This will also remove their user account.')) {
             const user = window.storage?.getUser();
             const employee = employees.find(e => e.id === id);
             
-            const updatedEmployees = employees.filter(emp => emp.id !== id);
-            setEmployees(updatedEmployees);
-            
-            // Log delete action
-            if (window.AuditLogger && employee) {
-                window.AuditLogger.log('delete', 'hr', {
-                    action: 'Deleted employee',
-                    employeeId: id,
-                    employeeName: employee.name,
-                    employeeNumber: employee.employeeNumber
-                }, user);
+            try {
+                // Delete user via API
+                console.log('🗑️ Deleting employee (user) via API:', id);
+                const token = window.storage?.getToken?.();
+                
+                const response = await fetch('/api/users', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ userId: id })
+                });
+                
+                if (response.ok) {
+                    // Update local state
+                    const updatedEmployees = employees.filter(emp => emp.id !== id);
+                    setEmployees(updatedEmployees);
+                    
+                    // Log delete action
+                    if (window.AuditLogger && employee) {
+                        window.AuditLogger.log('delete', 'hr', {
+                            action: 'Deleted employee',
+                            employeeId: id,
+                            employeeName: employee.name,
+                            employeeNumber: employee.employeeNumber
+                        }, user);
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.message || 'Failed to delete employee');
+                }
+            } catch (error) {
+                console.error('❌ Error deleting employee:', error);
+                alert(`Failed to delete employee: ${error.message}`);
             }
         }
     };
 
     const filteredEmployees = employees.filter(emp => {
-        const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            emp.employeeNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            emp.email.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = (emp.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            (emp.employeeNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            (emp.email || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesDepartment = filterDepartment === 'all' || emp.department === filterDepartment;
         return matchesSearch && matchesDepartment;
     });
@@ -164,6 +167,7 @@ const EmployeeManagement = () => {
     };
 
     const calculateTenure = (employmentDate) => {
+        if (!employmentDate) return 'N/A';
         const start = new Date(employmentDate);
         const now = new Date();
         const years = now.getFullYear() - start.getFullYear();
@@ -193,7 +197,7 @@ const EmployeeManagement = () => {
             accountNumber: '',
             branchCode: '',
             salary: '',
-            status: 'Active',
+            employmentStatus: 'Active',
             address: '',
             emergencyContact: ''
         });
@@ -205,7 +209,7 @@ const EmployeeManagement = () => {
                 <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <h2 className="text-base font-semibold text-gray-900">
-                            {selectedEmployee ? 'Edit Employee' : 'Add New Employee'}
+                            {selectedEmployee ? 'Edit Employee Details' : 'Add New Employee'}
                         </h2>
                         <button 
                             onClick={() => {
@@ -217,6 +221,15 @@ const EmployeeManagement = () => {
                             <i className="fas fa-times text-sm"></i>
                         </button>
                     </div>
+
+                    {!selectedEmployee && (
+                        <div className="bg-blue-50 border-b border-blue-200 px-4 py-3">
+                            <p className="text-xs text-blue-800">
+                                <i className="fas fa-info-circle mr-1"></i>
+                                To add a new employee, please go to <strong>User Management</strong> to invite them. Once they accept the invitation, they will appear here and you can add their HR details.
+                            </p>
+                        </div>
+                    )}
 
                     {/* Tabs */}
                     <div className="flex border-b border-gray-200 px-4">
@@ -250,7 +263,7 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.name}
+                                            value={formData.name || ''}
                                             onChange={(e) => setFormData({...formData, name: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             required
@@ -263,7 +276,7 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.idNumber}
+                                            value={formData.idNumber || ''}
                                             onChange={(e) => setFormData({...formData, idNumber: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             placeholder="8501015800081"
@@ -280,11 +293,14 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="email"
-                                            value={formData.email}
+                                            value={formData.email || ''}
                                             onChange={(e) => setFormData({...formData, email: e.target.value})}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50"
                                             required
+                                            disabled
+                                            title="Email cannot be changed here. Use User Management to update."
                                         />
+                                        <p className="text-[10px] text-gray-500 mt-1">Email is managed in User Management</p>
                                     </div>
 
                                     <div>
@@ -293,7 +309,7 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="tel"
-                                            value={formData.phone}
+                                            value={formData.phone || ''}
                                             onChange={(e) => setFormData({...formData, phone: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             placeholder="+27 82 555 0000"
@@ -307,7 +323,7 @@ const EmployeeManagement = () => {
                                         Physical Address
                                     </label>
                                     <textarea
-                                        value={formData.address}
+                                        value={formData.address || ''}
                                         onChange={(e) => setFormData({...formData, address: e.target.value})}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         rows="2"
@@ -321,7 +337,7 @@ const EmployeeManagement = () => {
                                     </label>
                                     <input
                                         type="text"
-                                        value={formData.emergencyContact}
+                                        value={formData.emergencyContact || ''}
                                         onChange={(e) => setFormData({...formData, emergencyContact: e.target.value})}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         placeholder="Name - Phone number"
@@ -335,10 +351,23 @@ const EmployeeManagement = () => {
                                 <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                            Employee Number
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={formData.employeeNumber || ''}
+                                            onChange={(e) => setFormData({...formData, employeeNumber: e.target.value})}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                            placeholder="EMP001"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                             Position *
                                         </label>
                                         <select
-                                            value={formData.position}
+                                            value={formData.position || ''}
                                             onChange={(e) => setFormData({...formData, position: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             required
@@ -349,13 +378,15 @@ const EmployeeManagement = () => {
                                             ))}
                                         </select>
                                     </div>
+                                </div>
 
+                                <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                             Department *
                                         </label>
                                         <select
-                                            value={formData.department}
+                                            value={formData.department || ''}
                                             onChange={(e) => setFormData({...formData, department: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             required
@@ -366,37 +397,35 @@ const EmployeeManagement = () => {
                                             ))}
                                         </select>
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-3">
                                     <div>
                                         <label className="block text-xs font-medium text-gray-700 mb-1.5">
                                             Employment Date *
                                         </label>
                                         <input
                                             type="date"
-                                            value={formData.employmentDate}
+                                            value={formData.employmentDate ? new Date(formData.employmentDate).toISOString().split('T')[0] : ''}
                                             onChange={(e) => setFormData({...formData, employmentDate: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                             required
                                         />
                                     </div>
+                                </div>
 
-                                    <div>
-                                        <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                            Status *
-                                        </label>
-                                        <select
-                                            value={formData.status}
-                                            onChange={(e) => setFormData({...formData, status: e.target.value})}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        >
-                                            <option value="Active">Active</option>
-                                            <option value="On Leave">On Leave</option>
-                                            <option value="Suspended">Suspended</option>
-                                            <option value="Resigned">Resigned</option>
-                                        </select>
-                                    </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                        Employment Status *
+                                    </label>
+                                    <select
+                                        value={formData.employmentStatus || 'Active'}
+                                        onChange={(e) => setFormData({...formData, employmentStatus: e.target.value})}
+                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    >
+                                        <option value="Active">Active</option>
+                                        <option value="On Leave">On Leave</option>
+                                        <option value="Suspended">Suspended</option>
+                                        <option value="Resigned">Resigned</option>
+                                    </select>
                                 </div>
                             </div>
                         )}
@@ -409,7 +438,7 @@ const EmployeeManagement = () => {
                                     </label>
                                     <input
                                         type="text"
-                                        value={formData.taxNumber}
+                                        value={formData.taxNumber || ''}
                                         onChange={(e) => setFormData({...formData, taxNumber: e.target.value})}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         placeholder="TAX123456"
@@ -422,8 +451,8 @@ const EmployeeManagement = () => {
                                     </label>
                                     <input
                                         type="number"
-                                        value={formData.salary}
-                                        onChange={(e) => setFormData({...formData, salary: e.target.value})}
+                                        value={formData.salary || ''}
+                                        onChange={(e) => setFormData({...formData, salary: parseFloat(e.target.value) || 0})}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         placeholder="0.00"
                                     />
@@ -435,7 +464,7 @@ const EmployeeManagement = () => {
                                             Bank Name
                                         </label>
                                         <select
-                                            value={formData.bankName}
+                                            value={formData.bankName || ''}
                                             onChange={(e) => setFormData({...formData, bankName: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
@@ -454,7 +483,7 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.accountNumber}
+                                            value={formData.accountNumber || ''}
                                             onChange={(e) => setFormData({...formData, accountNumber: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         />
@@ -466,7 +495,7 @@ const EmployeeManagement = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            value={formData.branchCode}
+                                            value={formData.branchCode || ''}
                                             onChange={(e) => setFormData({...formData, branchCode: e.target.value})}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         />
@@ -486,14 +515,16 @@ const EmployeeManagement = () => {
                         >
                             Cancel
                         </button>
-                        <button
-                            onClick={() => handleSaveEmployee(formData)}
-                            disabled={!formData.name || !formData.email || !formData.position || !formData.department}
-                            className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <i className="fas fa-save mr-1.5"></i>
-                            Save Employee
-                        </button>
+                        {selectedEmployee && (
+                            <button
+                                onClick={() => handleSaveEmployee(formData)}
+                                disabled={!formData.name || !formData.email || !formData.position || !formData.department}
+                                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <i className="fas fa-save mr-1.5"></i>
+                                Save Changes
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -506,10 +537,10 @@ const EmployeeManagement = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h2 className="text-base font-semibold text-gray-900">Employee Management</h2>
-                    <p className="text-xs text-gray-600">Manage employee records and information</p>
+                    <p className="text-xs text-gray-600">Manage employee records and information (synced with Users)</p>
                 </div>
                 <button
-                    onClick={() => setShowEmployeeModal(true)}
+                    onClick={() => alert('To add a new employee, go to User Management and invite them. Once they accept, they will appear here.')}
                     className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
                 >
                     <i className="fas fa-user-plus mr-1.5"></i>
@@ -526,19 +557,19 @@ const EmployeeManagement = () => {
                 <div className="bg-white rounded-lg border border-gray-200 p-3">
                     <p className="text-[10px] text-gray-600 mb-0.5">Active</p>
                     <p className="text-xl font-bold text-green-600">
-                        {employees.filter(e => e.status === 'Active').length}
+                        {employees.filter(e => (e.employmentStatus || e.status) === 'Active' || e.status === 'active').length}
                     </p>
                 </div>
                 <div className="bg-white rounded-lg border border-gray-200 p-3">
                     <p className="text-[10px] text-gray-600 mb-0.5">On Leave</p>
                     <p className="text-xl font-bold text-yellow-600">
-                        {employees.filter(e => e.status === 'On Leave').length}
+                        {employees.filter(e => (e.employmentStatus || e.status) === 'On Leave').length}
                     </p>
                 </div>
                 <div className="bg-white rounded-lg border border-gray-200 p-3">
                     <p className="text-[10px] text-gray-600 mb-0.5">Departments</p>
                     <p className="text-xl font-bold text-blue-600">
-                        {new Set(employees.map(e => e.department)).size}
+                        {new Set(employees.map(e => e.department).filter(Boolean)).size}
                     </p>
                 </div>
             </div>
@@ -605,21 +636,21 @@ const EmployeeManagement = () => {
                                         <div className="flex items-center gap-2">
                                             <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
                                                 <span className="text-primary-600 font-semibold text-xs">
-                                                    {employee.name.charAt(0)}
+                                                    {(employee.name || 'U').charAt(0)}
                                                 </span>
                                             </div>
                                             <div>
-                                                <div className="text-sm font-medium text-gray-900">{employee.name}</div>
-                                                <div className="text-[10px] text-gray-500">{employee.employeeNumber}</div>
+                                                <div className="text-sm font-medium text-gray-900">{employee.name || 'Unnamed'}</div>
+                                                <div className="text-[10px] text-gray-500">{employee.employeeNumber || employee.email}</div>
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="px-3 py-2.5 text-xs text-gray-900">{employee.position}</td>
-                                    <td className="px-3 py-2.5 text-xs text-gray-900">{employee.department}</td>
+                                    <td className="px-3 py-2.5 text-xs text-gray-900">{employee.position || employee.jobTitle || 'N/A'}</td>
+                                    <td className="px-3 py-2.5 text-xs text-gray-900">{employee.department || 'N/A'}</td>
                                     <td className="px-3 py-2.5 text-xs text-gray-600">{calculateTenure(employee.employmentDate)}</td>
                                     <td className="px-3 py-2.5">
-                                        <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColor(employee.status)}`}>
-                                            {employee.status}
+                                        <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColor(employee.employmentStatus || employee.status || 'Active')}`}>
+                                            {employee.employmentStatus || employee.status || 'Active'}
                                         </span>
                                     </td>
                                     <td className="px-3 py-2.5 text-xs">
@@ -630,16 +661,9 @@ const EmployeeManagement = () => {
                                                     setShowEmployeeModal(true);
                                                 }}
                                                 className="text-primary-600 hover:text-primary-700 p-1"
-                                                title="Edit"
+                                                title="Edit HR Details"
                                             >
                                                 <i className="fas fa-edit"></i>
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteEmployee(employee.id)}
-                                                className="text-red-600 hover:text-red-700 p-1"
-                                                title="Delete"
-                                            >
-                                                <i className="fas fa-trash"></i>
                                             </button>
                                         </div>
                                     </td>
@@ -656,27 +680,27 @@ const EmployeeManagement = () => {
                                 <div className="flex items-center gap-3">
                                     <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
                                         <span className="text-primary-600 font-bold text-base">
-                                            {employee.name.charAt(0)}
+                                            {(employee.name || 'U').charAt(0)}
                                         </span>
                                     </div>
                                     <div>
-                                        <h3 className="text-sm font-semibold text-gray-900">{employee.name}</h3>
-                                        <p className="text-[10px] text-gray-500">{employee.employeeNumber}</p>
+                                        <h3 className="text-sm font-semibold text-gray-900">{employee.name || 'Unnamed'}</h3>
+                                        <p className="text-[10px] text-gray-500">{employee.employeeNumber || employee.email}</p>
                                     </div>
                                 </div>
-                                <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColor(employee.status)}`}>
-                                    {employee.status}
+                                <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${getStatusColor(employee.employmentStatus || employee.status || 'Active')}`}>
+                                    {employee.employmentStatus || employee.status || 'Active'}
                                 </span>
                             </div>
 
                             <div className="space-y-1.5 mb-3">
                                 <div className="flex items-center text-xs text-gray-600">
                                     <i className="fas fa-briefcase w-4 mr-2"></i>
-                                    {employee.position}
+                                    {employee.position || employee.jobTitle || 'N/A'}
                                 </div>
                                 <div className="flex items-center text-xs text-gray-600">
                                     <i className="fas fa-building w-4 mr-2"></i>
-                                    {employee.department}
+                                    {employee.department || 'N/A'}
                                 </div>
                                 <div className="flex items-center text-xs text-gray-600">
                                     <i className="fas fa-envelope w-4 mr-2"></i>
@@ -697,13 +721,7 @@ const EmployeeManagement = () => {
                                     className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                                 >
                                     <i className="fas fa-edit mr-1"></i>
-                                    Edit
-                                </button>
-                                <button
-                                    onClick={() => handleDeleteEmployee(employee.id)}
-                                    className="px-3 py-1.5 text-xs border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium"
-                                >
-                                    <i className="fas fa-trash"></i>
+                                    Edit HR Details
                                 </button>
                             </div>
                         </div>
@@ -714,7 +732,8 @@ const EmployeeManagement = () => {
             {filteredEmployees.length === 0 && (
                 <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
                     <i className="fas fa-users text-gray-300 text-4xl mb-3"></i>
-                    <p className="text-sm text-gray-600">No employees found</p>
+                    <p className="text-sm text-gray-600 mb-2">No employees found</p>
+                    <p className="text-xs text-gray-500">Add users in User Management to populate the employee list</p>
                 </div>
             )}
 
@@ -726,3 +745,4 @@ const EmployeeManagement = () => {
 
 // Make available globally
 window.EmployeeManagement = EmployeeManagement;
+console.log('✅ EmployeeManagement component loaded (synced with Users)');

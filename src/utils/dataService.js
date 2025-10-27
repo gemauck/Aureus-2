@@ -270,14 +270,111 @@ const dataService = {
         }
     },
 
-    // HR (localStorage only for now)
+    // HR - Employees (API with localStorage fallback)
     async getEmployees() {
-        return safeStorageCall(window.storage, 'getEmployees', []);
+        if (window.api?.getEmployees) {
+            try {
+                console.log('🌐 Using API for employees');
+                const response = await window.api.getEmployees();
+                return normalizeArrayResponse(response, ['employees']);
+            } catch (error) {
+                console.warn('⚠️ API failed, falling back to localStorage:', error.message);
+                return safeStorageCall(window.storage, 'getEmployees', []);
+            }
+        } else {
+            console.log('💾 Using localStorage for employees');
+            return safeStorageCall(window.storage, 'getEmployees', []);
+        }
     },
 
     async setEmployees(employees) {
         if (typeof window.storage?.setEmployees === 'function') {
             window.storage.setEmployees(employees);
+        }
+    },
+
+    async createEmployee(employeeData) {
+        if (window.api?.createEmployee) {
+            try {
+                console.log('🌐 Creating employee via API');
+                const response = await window.api.createEmployee(employeeData);
+                return response.employee || response;
+            } catch (error) {
+                console.warn('⚠️ API create failed, using localStorage:', error.message);
+                // Fallback to localStorage
+                const employees = await this.getEmployees();
+                const newEmployee = {
+                    id: Math.max(0, ...employees.map(e => e.id)) + 1,
+                    ...employeeData,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                employees.push(newEmployee);
+                await this.setEmployees(employees);
+                return newEmployee;
+            }
+        } else {
+            console.log('💾 Creating employee in localStorage');
+            const employees = await this.getEmployees();
+            const newEmployee = {
+                id: Math.max(0, ...employees.map(e => e.id)) + 1,
+                ...employeeData,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            employees.push(newEmployee);
+            await this.setEmployees(employees);
+            return newEmployee;
+        }
+    },
+
+    async updateEmployee(id, employeeData) {
+        if (window.api?.updateEmployee) {
+            try {
+                console.log('🌐 Updating employee via API');
+                const response = await window.api.updateEmployee(id, employeeData);
+                return response.employee || response;
+            } catch (error) {
+                console.warn('⚠️ API update failed, using localStorage:', error.message);
+                // Fallback to localStorage
+                const employees = await this.getEmployees();
+                const updatedEmployees = employees.map(emp => 
+                    emp.id === id ? { ...emp, ...employeeData, updatedAt: new Date().toISOString() } : emp
+                );
+                await this.setEmployees(updatedEmployees);
+                return updatedEmployees.find(e => e.id === id);
+            }
+        } else {
+            console.log('💾 Updating employee in localStorage');
+            const employees = await this.getEmployees();
+            const updatedEmployees = employees.map(emp => 
+                emp.id === id ? { ...emp, ...employeeData, updatedAt: new Date().toISOString() } : emp
+            );
+            await this.setEmployees(updatedEmployees);
+            return updatedEmployees.find(e => e.id === id);
+        }
+    },
+
+    async deleteEmployee(id) {
+        if (window.api?.deleteEmployee) {
+            try {
+                console.log('🌐 Deleting employee via API');
+                await window.api.deleteEmployee(id);
+                return true;
+            } catch (error) {
+                console.warn('⚠️ API delete failed, using localStorage:', error.message);
+                // Fallback to localStorage
+                const employees = await this.getEmployees();
+                const filteredEmployees = employees.filter(emp => emp.id !== id);
+                await this.setEmployees(filteredEmployees);
+                return true;
+            }
+        } else {
+            console.log('💾 Deleting employee in localStorage');
+            const employees = await this.getEmployees();
+            const filteredEmployees = employees.filter(emp => emp.id !== id);
+            await this.setEmployees(filteredEmployees);
+            return true;
         }
     },
 

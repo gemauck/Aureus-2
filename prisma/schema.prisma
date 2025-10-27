@@ -24,6 +24,21 @@ model User {
   invitedBy         String?
   mustChangePassword Boolean     @default(false)
   lastLoginAt       DateTime?
+  
+  // HR/Employee Fields
+  employeeNumber   String?       @unique
+  position         String        @default("")
+  employmentDate   DateTime?
+  idNumber         String        @default("")
+  taxNumber        String?
+  bankName         String?
+  accountNumber    String?
+  branchCode       String?
+  salary           Float         @default(0)
+  employmentStatus String        @default("Active") // Active, On Leave, Suspended, Resigned
+  address          String        @default("")
+  emergencyContact String        @default("")
+  
   memberships       Membership[]
   ownedClients      Client[]     @relation("ClientOwner")
   ownedProjects     Project[]    @relation("ProjectOwner")
@@ -121,29 +136,6 @@ model Project {
   timeEntries            TimeEntry[]
   createdAt              DateTime    @default(now())
   updatedAt              DateTime    @updatedAt
-}
-
-model Employee {
-  id               String   @id @default(cuid())
-  employeeNumber   String   @unique
-  name             String
-  email            String   @unique
-  phone            String   @default("")
-  position         String   @default("")
-  department       String   @default("")
-  employmentDate   DateTime @default(now())
-  idNumber         String   @default("")
-  taxNumber        String?
-  bankName         String?
-  accountNumber    String?
-  branchCode       String?
-  salary           Float    @default(0)
-  status           String   @default("Active")
-  address          String   @default("")
-  emergencyContact String   @default("")
-  ownerId          String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 }
 
 model Opportunity {
