@@ -118,13 +118,12 @@ const Clients = () => {
     
     // Load clients and leads from API immediately on mount
     useEffect(() => {
+        console.log('🔥 Clients component mounted - calling loadClients()');
         const startTime = performance.now();
         loadClients();
         loadLeads();
         const endTime = performance.now();
-        if (endTime - startTime > 100) {
-            console.log(`⚡ Initial load took ${(endTime - startTime).toFixed(2)}ms`);
-        }
+        console.log(`⚡ Initial load took ${(endTime - startTime).toFixed(2)}ms`);
     }, []);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
@@ -237,6 +236,7 @@ const Clients = () => {
 
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
+        console.log('🔥 loadClients() CALLED');
         const loadStartTime = performance.now();
         try {
             // IMMEDIATELY show cached data without waiting for API
