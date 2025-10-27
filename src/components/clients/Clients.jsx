@@ -79,7 +79,7 @@ function processClientData(rawClients, cacheKey) {
 
 // No initial data - all data comes from database
 
-const Clients = () => {
+const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
     const [clients, setClients] = useState([]);
 
@@ -1795,7 +1795,7 @@ const Clients = () => {
             {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>
     );
-};
+});
 
 window.Clients = Clients;
 
