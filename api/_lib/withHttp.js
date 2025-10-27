@@ -5,7 +5,11 @@ const allowedOrigins = [
   'http://localhost:3001',
   'http://localhost:3002',
   'http://localhost:8000',
-  'https://abco-erp-2-cnlz.vercel.app'
+  'https://abco-erp-2-cnlz.vercel.app',
+  'https://abcoafrica.co.za',
+  'http://abcoafrica.co.za',
+  'https://www.abcoafrica.co.za',
+  'http://www.abcoafrica.co.za'
 ].filter(Boolean)
 
 const ALLOWED_ORIGIN = (req) => {

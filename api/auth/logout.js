@@ -6,9 +6,9 @@ async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   try {
     // Clear refresh token cookie
-    res.setHeader('Set-Cookie', [
-      `refreshToken=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`]
-    )
+    const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+    const cookieValue = `refreshToken=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${isSecure ? '; Secure' : ''}`
+    res.setHeader('Set-Cookie', [cookieValue])
     return ok(res, { message: 'Logged out successfully' })
   } catch (e) {
     return serverError(res, 'Logout failed', e.message)

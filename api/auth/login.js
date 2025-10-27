@@ -93,9 +93,9 @@ async function handler(req, res) {
     })
 
     // Set refresh token cookie
-    res.setHeader('Set-Cookie', [
-      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Secure=${process.env.NODE_ENV === 'production'}`
-    ])
+    const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+    const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}`
+    res.setHeader('Set-Cookie', [cookieValue])
     
     console.log('✅ Login successful for user:', user.email)
     
