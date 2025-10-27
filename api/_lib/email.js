@@ -50,7 +50,7 @@ export const sendInvitationEmail = async (invitationData) => {
     const mailOptions = {
         from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za',
         to: email,
-        subject: 'Invitation to Join Abcotronics ERP System',
+        subject: 'Invitation to Join Abcotronics System',
         html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px; text-align: center;">
@@ -58,12 +58,12 @@ export const sendInvitationEmail = async (invitationData) => {
                 </div>
                 
                 <div style="padding: 30px; background: #f8f9fa;">
-                    <h2 style="color: #333; margin-bottom: 20px;">Welcome to Abcotronics ERP System</h2>
+                    <h2 style="color: #333; margin-bottom: 20px;">Welcome to Abcotronics</h2>
                     
                     <p style="color: #555; line-height: 1.6;">Hi ${name},</p>
                     
                     <p style="color: #555; line-height: 1.6;">
-                        You've been invited to join the Abcotronics ERP system with the role: <strong>${role}</strong>
+                        You've been invited to join the Abcotronics system with the role: <strong>${role}</strong>
                     </p>
                     
                     <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 20px; margin: 20px 0;">
@@ -101,11 +101,11 @@ export const sendInvitationEmail = async (invitationData) => {
             </div>
         `,
         text: `
-            Welcome to Abcotronics ERP System
+            Welcome to Abcotronics
             
             Hi ${name},
             
-            You've been invited to join the Abcotronics ERP system with the role: ${role}
+            You've been invited to join the Abcotronics system with the role: ${role}
             
             Your Account Details:
             - Email: ${email}
