@@ -115,7 +115,9 @@ app.use((req, res, next) => {
     'https://abco-erp-2-production.up.railway.app',
     'https://plankton-app-phlkz.ondigitalocean.app',
     'https://abcoafrica.com',
-    'https://www.abcoafrica.com'
+    'https://www.abcoafrica.com',
+    'https://abcoafrica.co.za',
+    'http://abcoafrica.co.za'
   ].filter(Boolean)
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
