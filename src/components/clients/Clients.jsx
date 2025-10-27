@@ -159,13 +159,19 @@ const Clients = () => {
         const handler = (message) => {
             if (message?.type === 'data' && Array.isArray(message.data)) {
                 if (message.dataType === 'clients') {
+                    const syncStartTime = performance.now();
                     const processed = message.data.map(mapDbClient).filter(c => (c.type || 'client') === 'client');
                     setClients(processed);
                     safeStorage.setClients(processed);
+                    const syncEndTime = performance.now();
+                    console.log(`⚡ LiveDataSync clients: ${(syncEndTime - syncStartTime).toFixed(1)}ms (${processed.length} clients)`);
                 }
                 if (message.dataType === 'leads') {
+                    const syncStartTime = performance.now();
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
                     setLeads(processedLeads);
+                    const syncEndTime = performance.now();
+                    console.log(`⚡ LiveDataSync leads: ${(syncEndTime - syncStartTime).toFixed(1)}ms (${processedLeads.length} leads)`);
                     // Leads are database-only, no localStorage sync
                 }
             }
