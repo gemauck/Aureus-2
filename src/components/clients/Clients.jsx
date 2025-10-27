@@ -281,6 +281,7 @@ const Clients = React.memo(() => {
                 const apiEndTime = performance.now();
                 console.log(`⚡ API call: ${(apiEndTime - apiStartTime).toFixed(1)}ms`);
                 const apiClients = res?.data?.clients || [];
+                console.log(`🔍 Raw API clients received: ${apiClients.length}`, apiClients);
                     
                     // If API returns no clients, use cached data
                     if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
@@ -290,16 +291,19 @@ const Clients = React.memo(() => {
                     // Use memoized data processor for better performance
                     const processStartTime = performance.now();
                     const processedClients = processClientData(apiClients);
+                    console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
                     
                     // Separate clients and leads based on type
                     const clientsOnly = processedClients.filter(c => c.type === 'client');
                     const leadsOnly = processedClients.filter(c => c.type === 'lead');
+                    console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     const processEndTime = performance.now();
                     
                     // Update state with fresh API data
                     setClients(clientsOnly);
                     setLeads(leadsOnly);
                     console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
+                    console.log(`✅ State updated: clients=${clientsOnly.length}, leads=${leadsOnly.length}`);
                     
                     // Save processed data to localStorage
                     safeStorage.setClients(clientsOnly);
