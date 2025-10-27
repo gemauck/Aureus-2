@@ -17,8 +17,12 @@ async function handler(req, res) {
     console.log('🔐 User found:', !!user, user ? `has passwordHash: ${!!user.passwordHash}` : 'N/A')
     if (!user || !user.passwordHash) return unauthorized(res)
 
+    console.log('🔐 Comparing password...')
     const valid = await bcrypt.compare(password, user.passwordHash)
+    console.log('🔐 Password valid:', valid)
     if (!valid) return unauthorized(res)
+    
+    console.log('✅ Login successful for:', email)
 
     const payload = { sub: user.id, email: user.email, role: user.role }
     const accessToken = signAccessToken(payload)
