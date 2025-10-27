@@ -190,7 +190,7 @@ const Payroll = () => {
                         <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <h3 className="text-lg font-bold text-primary-900">Abcotronics ERP</h3>
+                                    <h3 className="text-lg font-bold text-primary-900">Abcotronics</h3>
                                     <p className="text-xs text-primary-700">Fuel Management Services</p>
                                 </div>
                                 <div className="text-right">

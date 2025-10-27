@@ -272,7 +272,7 @@ const MainLayout = () => {
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
                         <div className="lg:hidden">
-                            <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Abcotronics ERP</h2>
+                            <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Abcotronics</h2>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
