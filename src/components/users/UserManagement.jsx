@@ -7,6 +7,8 @@ const UserManagement = () => {
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [showAddUserModal, setShowAddUserModal] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [passwordModalData, setPasswordModalData] = useState(null);
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
@@ -320,7 +322,9 @@ const UserManagement = () => {
                 const tempPassword = data.tempPassword || data.data?.tempPassword;
                 
                 if (tempPassword) {
-                    alert('User created successfully!\n\nTemporary password: ' + tempPassword + '\n\nPlease share this with the user securely.');
+                    const userEmail = data.user?.email || userData.email;
+                    setPasswordModalData({ email: userEmail, password: tempPassword });
+                    setShowPasswordModal(true);
                 } else {
                     alert('User created successfully!\n\nNote: Could not retrieve temporary password. Check server logs.');
                 }
@@ -809,6 +813,18 @@ const UserManagement = () => {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Password Display Modal */}
+            {showPasswordModal && passwordModalData && window.PasswordDisplayModal && (
+                <window.PasswordDisplayModal
+                    email={passwordModalData.email}
+                    password={passwordModalData.password}
+                    onClose={() => {
+                        setShowPasswordModal(false);
+                        setPasswordModalData(null);
+                    }}
+                />
             )}
         </div>
     );
