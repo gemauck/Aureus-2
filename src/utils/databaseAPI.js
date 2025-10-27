@@ -4,7 +4,8 @@ const DatabaseAPI = {
     API_BASE: (() => {
         const hostname = window.location.hostname;
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-        const apiBase = isLocalhost ? 'http://localhost:3000' : 'https://abco-erp-2-production.up.railway.app';
+        // Always use the current origin's API (works for both localhost and droplet)
+        const apiBase = window.location.origin;
         console.log('🔧 DatabaseAPI Base URL:', { hostname, isLocalhost, apiBase });
         return apiBase;
     })(),
