@@ -166,7 +166,7 @@ const MainLayout = () => {
                 <div style={{ display: isVisible('reports') }}>
                     <ErrorBoundary><Reports /></ErrorBoundary>
                 </div>
-                <div style={{ abhey: isVisible('settings') }}>
+                <div style={{ display: isVisible('settings') }}>
                     <ErrorBoundary><Settings /></ErrorBoundary>
                 </div>
                 <div style={{ display: isVisible('documents') }}>
