@@ -162,10 +162,23 @@ const Clients = () => {
         const handler = (message) => {
             if (message?.type === 'data' && Array.isArray(message.data)) {
                 if (message.dataType === 'clients') {
+                    // Check if data changed to prevent unnecessary updates
+                    const dataHash = JSON.stringify(message.data);
+                    const now = Date.now();
+                    
+                    if (dataHash === lastLiveDataClientsHash && (now - lastLiveDataSyncTime) < LIVE_SYNC_THROTTLE) {
+                        console.log(`⚡ LiveDataSync: Skipping duplicate update`);
+                        return;
+                    }
+                    
                     const syncStartTime = performance.now();
                     const processed = message.data.map(mapDbClient).filter(c => (c.type || 'client') === 'client');
                     setClients(processed);
                     safeStorage.setClients(processed);
+                    
+                    lastLiveDataClientsHash = dataHash;
+                    lastLiveDataSyncTime = now;
+                    
                     const syncEndTime = performance.now();
                     console.log(`⚡ LiveDataSync clients: ${(syncEndTime - syncStartTime).toFixed(1)}ms (${processed.length} clients)`);
                 }
