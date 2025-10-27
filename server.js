@@ -110,8 +110,10 @@ app.use((req, res, next) => {
     'http://localhost:3001', 
     'http://localhost:3002',
     'http://localhost:8000',
-    'https://abcoafrica.com',
-    'https://www.abcoafrica.com'
+    'https://abcoafrica.co.za',
+    'http://abcoafrica.co.za',
+    'https://www.abcoafrica.co.za',
+    'http://www.abcoafrica.co.za'
   ].filter(Boolean)
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
