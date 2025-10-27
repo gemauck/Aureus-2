@@ -158,13 +158,15 @@ const Pipeline = () => {
                 client.opportunities.forEach(opp => {
                     opportunityItems.push({
                         ...opp,
+                        id: opp.id,
+                        name: opp.title || opp.name || 'Untitled Opportunity', // render Opportunity.title as name
                         type: 'opportunity',
                         itemType: 'Expansion',
                         clientId: client.id,
                         clientName: client.name,
                         stage: opp.stage || 'Awareness',
                         value: opp.value || 0,
-                        createdDate: opp.createdDate || new Date().toISOString(),
+                        createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
                         expectedCloseDate: opp.expectedCloseDate || null
                     });
                 });

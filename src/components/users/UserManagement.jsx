@@ -20,8 +20,6 @@ const UserManagement = () => {
         phone: '',
         status: 'active'
     });
-    const [whatsappMessage, setWhatsappMessage] = useState('');
-    const [invitationLink, setInvitationLink] = useState('');
     const { isDark } = window.useTheme();
 
     useEffect(() => {
@@ -33,10 +31,11 @@ const UserManagement = () => {
             setLoading(true);
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.error('No token available');
+                console.error('❌ No token available');
                 return;
             }
 
+            console.log('🔄 Loading users and invitations...');
             const response = await fetch('/api/users', {
                 headers: {
                     'Authorization': `Bearer ${token}`
@@ -44,14 +43,28 @@ const UserManagement = () => {
             });
 
             if (response.ok) {
-                const data = await response.json();
-                setUsers(data.users || []);
-                setInvitations(data.invitations || []);
+                const responseData = await response.json();
+                console.log('📦 Full API response:', responseData);
+                
+                // Handle both response formats: {users, invitations} or {data: {users, invitations}}
+                const data = responseData.data || responseData;
+                console.log('📦 Extracted data:', data);
+                
+                const usersList = data.users || [];
+                const invitationsList = data.invitations || [];
+                
+                console.log('✅ Users loaded:', usersList.length);
+                console.log('✅ Invitations loaded:', invitationsList.length);
+                
+                setUsers(usersList);
+                setInvitations(invitationsList);
             } else {
-                console.error('Failed to load users');
+                console.error('❌ Failed to load users, status:', response.status);
+                const errorText = await response.text();
+                console.error('Error response:', errorText);
             }
         } catch (error) {
-            console.error('Error loading users:', error);
+            console.error('❌ Error loading users:', error);
         } finally {
             setLoading(false);
         }
@@ -65,6 +78,8 @@ const UserManagement = () => {
             return;
         }
 
+        console.log('➕ Adding new user:', newUser);
+
         try {
             const success = await handleAddUser(newUser);
             if (success) {
@@ -72,8 +87,8 @@ const UserManagement = () => {
                 setNewUser({ name: '', email: '', role: 'member', department: '', phone: '', status: 'active' });
             }
         } catch (error) {
-            console.error('Error adding user:', error);
-            alert('Failed to add user');
+            console.error('❌ Error adding user:', error);
+            alert('Failed to add user: ' + error.message);
         }
     };
 
@@ -85,8 +100,13 @@ const UserManagement = () => {
             return;
         }
 
+        console.log('📧 Sending invitation for:', newInvitation);
+
         try {
             const token = window.storage?.getToken?.();
+            const currentUser = window.storage?.getUser?.();
+            
+            console.log('📤 Making invitation API call...');
             const response = await fetch('/api/users/invite', {
                 method: 'POST',
                 headers: {
@@ -95,43 +115,58 @@ const UserManagement = () => {
                 },
                 body: JSON.stringify({
                     ...newInvitation,
-                    invitedBy: window.storage?.getUser?.()?.name || 'Admin'
+                    invitedBy: currentUser?.name || 'Admin'
                 })
             });
 
             const data = await response.json();
+            console.log('📨 Invitation API response:', data);
 
             if (response.ok) {
+                console.log('✅ Invitation created successfully');
+                
                 setShowInviteModal(false);
                 setNewInvitation({ email: '', name: '', role: 'user' });
-                loadUsers(); // Refresh the list
                 
-                // Show success message with email confirmation
-                // Handle both direct response and nested data response
-                const invitation = data.invitation || data.data?.invitation;
-                if (invitation) {
-                    showEmailSentModal(invitation);
-                } else {
-                    alert('Invitation sent successfully!');
-                }
+                // Reload users and invitations
+                await loadUsers();
+                
+                // Show success message with detailed information
+                showInvitationResultModal(data);
             } else {
+                console.error('❌ Invitation failed:', data);
                 alert(data.message || 'Failed to send invitation');
             }
         } catch (error) {
-            console.error('Error sending invitation:', error);
-            alert('Failed to send invitation');
+            console.error('❌ Error sending invitation:', error);
+            alert('Failed to send invitation: ' + error.message);
         }
     };
 
-    const showEmailSentModal = (invitation) => {
+    const showInvitationResultModal = (responseData) => {
+        const invitation = responseData.invitation || responseData.data?.invitation;
+        const invitationLink = responseData.invitationLink;
+        const debug = responseData.debug;
+        
+        console.log('🎉 Showing invitation result modal:', {
+            invitation,
+            invitationLink,
+            emailSent: debug?.emailSent,
+            emailError: debug?.emailError
+        });
+
+        const emailSent = debug?.emailSent;
+        const emailError = debug?.emailError;
+        const emailConfig = debug?.emailConfig;
+
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
         modal.innerHTML = `
-            <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto">
+            <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                        <i class="fas fa-envelope text-blue-500 mr-2"></i>
-                        Invitation Sent
+                        <i class="fas fa-envelope ${emailSent ? 'text-green-500' : 'text-yellow-500'} mr-2"></i>
+                        Invitation ${emailSent ? 'Sent' : 'Created'}
                     </h3>
                     <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="this.closest('.fixed').remove()">
                         <i class="fas fa-times"></i>
@@ -139,29 +174,110 @@ const UserManagement = () => {
                 </div>
                 
                 <div class="mb-4">
-                    <div class="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg p-4 mb-4">
-                        <div class="flex items-center">
-                            <i class="fas fa-check-circle text-green-500 mr-2"></i>
-                            <p class="text-green-800 dark:text-green-200 text-sm font-medium">
-                                Invitation email sent successfully!
+                    ${emailSent ? `
+                        <div class="bg-green-50 dark:bg-green-900 border border-green-200 dark:border-green-700 rounded-lg p-4 mb-4">
+                            <div class="flex items-center">
+                                <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                                <p class="text-green-800 dark:text-green-200 text-sm font-medium">
+                                    ✅ Invitation email sent successfully!
+                                </p>
+                            </div>
+                        </div>
+                    ` : `
+                        <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-4">
+                            <div class="flex items-start">
+                                <i class="fas fa-exclamation-triangle text-yellow-500 mr-2 mt-1"></i>
+                                <div>
+                                    <p class="text-yellow-800 dark:text-yellow-200 text-sm font-medium mb-2">
+                                        ⚠️ Invitation created but email not sent
+                                    </p>
+                                    <p class="text-yellow-700 dark:text-yellow-300 text-xs">
+                                        ${emailError || 'Email configuration not available in local development mode.'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    `}
+                    
+                    ${invitation ? `
+                        <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 mb-4">
+                            <h4 class="font-medium text-gray-900 dark:text-white mb-3">Invitation Details:</h4>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">Name:</span>
+                                    <span class="text-gray-900 dark:text-white">${invitation.name}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">Email:</span>
+                                    <span class="text-gray-900 dark:text-white">${invitation.email}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">Role:</span>
+                                    <span class="text-gray-900 dark:text-white capitalize">${invitation.role}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">Status:</span>
+                                    <span class="text-gray-900 dark:text-white">${invitation.status}</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="font-medium text-gray-700 dark:text-gray-300">Expires:</span>
+                                    <span class="text-gray-900 dark:text-white">${new Date(invitation.expiresAt).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    ${invitationLink ? `
+                        <div class="bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-4">
+                            <h4 class="font-medium text-blue-900 dark:text-blue-200 mb-2">Invitation Link:</h4>
+                            <div class="flex items-center gap-2">
+                                <input 
+                                    type="text" 
+                                    value="${invitationLink}" 
+                                    readonly 
+                                    class="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-600 rounded text-gray-900 dark:text-white"
+                                />
+                                <button 
+                                    onclick="navigator.clipboard.writeText('${invitationLink}'); this.innerHTML='<i class=\\'fas fa-check\\'></i> Copied!'; setTimeout(() => this.innerHTML='<i class=\\'fas fa-copy\\'></i> Copy', 2000)"
+                                    class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm whitespace-nowrap"
+                                >
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <p class="text-blue-700 dark:text-blue-300 text-xs mt-2">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                ${emailSent 
+                                    ? 'The user will receive this link via email.' 
+                                    : 'Share this link manually with the user via WhatsApp, email, or other communication method.'}
                             </p>
                         </div>
-                    </div>
+                    ` : ''}
                     
-                    <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                        <h4 class="font-medium text-gray-900 dark:text-white mb-2">Invitation Details:</h4>
-                        <div class="space-y-1 text-sm">
-                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Name:</span> <span class="text-gray-900 dark:text-white">${invitation.name}</span></div>
-                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Email:</span> <span class="text-gray-900 dark:text-white">${invitation.email}</span></div>
-                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Role:</span> <span class="text-gray-900 dark:text-white capitalize">${invitation.role}</span></div>
-                            <div><span class="font-medium text-gray-700 dark:text-gray-300">Expires:</span> <span class="text-gray-900 dark:text-white">${new Date(invitation.expiresAt).toLocaleDateString()}</span></div>
+                    ${!emailSent && emailConfig ? `
+                        <div class="bg-orange-50 dark:bg-orange-900 border border-orange-200 dark:border-orange-700 rounded-lg p-4 mb-4">
+                            <h4 class="font-medium text-orange-900 dark:text-orange-200 mb-2 flex items-center">
+                                <i class="fas fa-cog mr-2"></i>Email Configuration Status:
+                            </h4>
+                            <div class="space-y-1 text-xs text-orange-800 dark:text-orange-300 font-mono">
+                                <div>SMTP_HOST: ${emailConfig.SMTP_HOST}</div>
+                                <div>SMTP_PORT: ${emailConfig.SMTP_PORT}</div>
+                                <div>SMTP_USER: ${emailConfig.SMTP_USER}</div>
+                                <div>SMTP_PASS: ${emailConfig.SMTP_PASS}</div>
+                                <div>EMAIL_FROM: ${emailConfig.EMAIL_FROM}</div>
+                            </div>
+                            <p class="text-orange-700 dark:text-orange-300 text-xs mt-3">
+                                <i class="fas fa-lightbulb mr-1"></i>
+                                <strong>To enable email sending:</strong> Configure SMTP settings in your .env file and restart the server.
+                            </p>
                         </div>
-                    </div>
+                    ` : ''}
                     
-                    <div class="mt-4 p-3 bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 rounded-lg">
-                        <p class="text-blue-800 dark:text-blue-200 text-xs">
+                    <div class="bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
+                        <p class="text-gray-700 dark:text-gray-300 text-xs">
                             <i class="fas fa-info-circle mr-1"></i>
-                            The user will receive an email with instructions to accept the invitation and create their account.
+                            ${emailSent 
+                                ? 'The user will receive an email with instructions to accept the invitation and create their account.' 
+                                : 'In production, emails will be sent automatically. In local development, you may need to share the invitation link manually.'}
                         </p>
                     </div>
                 </div>
@@ -179,6 +295,9 @@ const UserManagement = () => {
     const handleAddUser = async (userData) => {
         try {
             const token = window.storage?.getToken?.();
+            console.log('➕ Creating user via API...');
+            console.log('📤 User data being sent:', userData);
+            
             const response = await fetch('/api/users', {
                 method: 'POST',
                 headers: {
@@ -188,20 +307,33 @@ const UserManagement = () => {
                 body: JSON.stringify(userData)
             });
 
+            console.log('📡 Response status:', response.status, response.statusText);
             const data = await response.json();
+            console.log('📨 Add user response:', data);
 
             if (response.ok) {
-                loadUsers();
-                alert('User created successfully');
+                console.log('✅ User created successfully');
+                console.log('📨 Full response data:', data);
+                await loadUsers();
+                
+                // Handle both response formats: {tempPassword} or {data: {tempPassword}}
+                const tempPassword = data.tempPassword || data.data?.tempPassword;
+                
+                if (tempPassword) {
+                    alert('User created successfully!\n\nTemporary password: ' + tempPassword + '\n\nPlease share this with the user securely.');
+                } else {
+                    alert('User created successfully!\n\nNote: Could not retrieve temporary password. Check server logs.');
+                }
                 return true;
             } else {
-                alert(data.message || 'Failed to create user');
+                console.error('❌ Failed to create user:', data);
+                alert(data.message || data.error?.message || 'Failed to create user');
                 return false;
             }
         } catch (error) {
-            console.error('Error creating user:', error);
-            alert('Failed to create user');
-            return false;
+            console.error('❌ Error creating user:', error);
+            alert('Failed to create user: ' + error.message);
+            throw error;
         }
     };
 
@@ -281,7 +413,8 @@ const UserManagement = () => {
         const roleClasses = {
             admin: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300',
             user: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300',
-            manager: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300'
+            manager: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300',
+            member: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
         };
         
         return (
@@ -390,38 +523,46 @@ const UserManagement = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                            {users.map((user) => (
-                                <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div className="h-10 w-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-                                                <i className="fas fa-user text-gray-600 dark:text-gray-400"></i>
-                                            </div>
-                                            <div className="ml-4">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</div>
-                                                <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {getRoleBadge(user.role)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {getStatusBadge(user.status)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                        {formatDate(user.lastLoginAt)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <button
-                                            onClick={() => handleDeleteUser(user.id, user.name)}
-                                            className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                        >
-                                            <i className="fas fa-trash"></i>
-                                        </button>
+                            {users.length === 0 ? (
+                                <tr>
+                                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                                        No users found. Add users or send invitations to get started.
                                     </td>
                                 </tr>
-                            ))}
+                            ) : (
+                                users.map((user) => (
+                                    <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="flex items-center">
+                                                <div className="h-10 w-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                                                    <i className="fas fa-user text-gray-600 dark:text-gray-400"></i>
+                                                </div>
+                                                <div className="ml-4">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</div>
+                                                    <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {getRoleBadge(user.role)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {getStatusBadge(user.status)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                                            {formatDate(user.lastLoginAt)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <button
+                                                onClick={() => handleDeleteUser(user.id, user.name)}
+                                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
                         </tbody>
                     </table>
                 </div>

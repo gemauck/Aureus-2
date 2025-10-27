@@ -24,8 +24,19 @@ async function handler(req, res) {
       try {
         // Return ALL clients for all users - this is an ERP system where all users should see all clients
         const clients = await prisma.client.findMany({ 
+          include: {
+            opportunities: true
+          },
           orderBy: { createdAt: 'desc' } 
         })
+        
+        // Log opportunities for debugging
+        clients.forEach(client => {
+          if (client.opportunities && client.opportunities.length > 0) {
+            console.log(`🔍 Client "${client.name}" has ${client.opportunities.length} opportunities:`, client.opportunities)
+          }
+        })
+        
         console.log('✅ Clients retrieved successfully:', clients.length, 'for user:', req.user?.sub, '(all clients visible)')
         return ok(res, { clients })
       } catch (dbError) {
@@ -133,7 +144,12 @@ async function handler(req, res) {
     if (pathSegments.length === 2 && pathSegments[0] === 'clients' && id) {
       if (req.method === 'GET') {
         try {
-          const client = await prisma.client.findUnique({ where: { id } })
+          const client = await prisma.client.findUnique({ 
+            where: { id },
+            include: {
+              opportunities: true
+            }
+          })
           if (!client) return notFound(res)
           console.log('✅ Client retrieved successfully:', client.id)
           return ok(res, { client })
