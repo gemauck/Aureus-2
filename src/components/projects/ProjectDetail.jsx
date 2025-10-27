@@ -1632,7 +1632,7 @@ const ProjectDetail = ({ project, onBack }) => {
                                             const clients = await window.dataService.getClients() || [];
                                             const clientsUpdated = clients.map(c => ({
                                                 ...c,
-                                                projectIds: (c.projectIds || []).filter(id => id !== projectId)
+                                                projectIds: Array.isArray(c.projectIds) ? c.projectIds.filter(id => id !== projectId) : []
                                             }));
                                             await window.dataService.setClients(clientsUpdated);
                                             window.dispatchEvent(new CustomEvent('clientsUpdated'));

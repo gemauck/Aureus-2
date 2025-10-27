@@ -301,7 +301,7 @@ const Projects = () => {
                         // Remove project from old client
                         return {
                             ...client,
-                            projectIds: (client.projectIds || []).filter(id => id !== projectId)
+                            projectIds: Array.isArray(client.projectIds) ? client.projectIds.filter(id => id !== projectId) : []
                         };
                     }
                     if (newClientName && client.name === newClientName) {
