@@ -121,6 +121,7 @@ const Account = () => {
         }
 
         try {
+            console.log('🔐 Attempting to change password...');
             const response = await fetch('/api/users/change-password', {
                 method: 'POST',
                 headers: {
@@ -133,20 +134,24 @@ const Account = () => {
                 })
             });
 
+            console.log('🔐 Password change response status:', response.status);
             const data = await response.json();
+            console.log('🔐 Password change response data:', data);
 
             if (response.ok) {
                 setSaveStatus('Password changed successfully!');
                 setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
                 setTimeout(() => setSaveStatus(''), 3000);
             } else {
-                setSaveStatus(data.message || 'Failed to change password');
-                setTimeout(() => setSaveStatus(''), 3000);
+                const errorMessage = data.error || data.message || 'Failed to change password';
+                console.error('❌ Password change failed:', errorMessage);
+                setSaveStatus(errorMessage);
+                setTimeout(() => setSaveStatus(''), 5000);
             }
         } catch (error) {
-            console.error('Error changing password:', error);
-            setSaveStatus('Error changing password');
-            setTimeout(() => setSaveStatus(''), 3000);
+            console.error('❌ Error changing password:', error);
+            setSaveStatus('Network error: ' + error.message);
+            setTimeout(() => setSaveStatus(''), 5000);
         } finally {
             setIsLoading(false);
         }

@@ -191,7 +191,8 @@ async function handler(req, res) {
             }
 
             // Prevent deleting own account
-            if (req.user.id === userId) {
+            const currentUserId = req.user.sub || req.user.id
+            if (currentUserId === userId) {
                 return badRequest(res, 'Cannot delete your own account')
             }
 

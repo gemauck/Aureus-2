@@ -10,9 +10,24 @@ async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
     
     try {
+        console.log('📥 Change password request body:', req.body)
+        console.log('📥 Change password user:', req.user)
+        
         const { currentPassword, newPassword } = req.body || {}
         
-        if (!currentPassword || !newPassword) {
+        console.log('📥 Parsed passwords:', { 
+            currentPassword: currentPassword ? '***' : 'empty', 
+            newPassword: newPassword ? '***' : 'empty',
+            currentPasswordLength: currentPassword?.length,
+            newPasswordLength: newPassword?.length
+        })
+        
+        if (!currentPassword || !newPassword || 
+            typeof currentPassword !== 'string' || 
+            typeof newPassword !== 'string' ||
+            currentPassword.trim() === '' || 
+            newPassword.trim() === '') {
+            console.log('❌ Invalid password data')
             return badRequest(res, 'Current password and new password are required')
         }
 
@@ -20,12 +35,19 @@ async function handler(req, res) {
             return badRequest(res, 'New password must be at least 8 characters long')
         }
 
-        // Get current user
+        // Get current user (use sub from JWT payload as the user ID)
+        const userId = req.user.sub || req.user.id
+        if (!userId) {
+            console.log('❌ No user ID found in token')
+            return unauthorized(res, 'Invalid user token')
+        }
+        
         const user = await prisma.user.findUnique({
-            where: { id: req.user.id }
+            where: { id: userId }
         })
 
         if (!user) {
+            console.log('❌ User not found:', userId)
             return unauthorized(res, 'User not found')
         }
 
@@ -33,6 +55,7 @@ async function handler(req, res) {
         if (user.passwordHash) {
             const valid = await bcrypt.compare(currentPassword, user.passwordHash)
             if (!valid) {
+                console.log('❌ Current password is incorrect')
                 return unauthorized(res, 'Current password is incorrect')
             }
         }
@@ -42,14 +65,14 @@ async function handler(req, res) {
 
         // Update password and clear mustChangePassword flag
         await prisma.user.update({
-            where: { id: req.user.id },
+            where: { id: userId },
             data: {
                 passwordHash,
                 mustChangePassword: false
             }
         })
 
-        console.log('✅ Password changed successfully for user:', req.user.email)
+        console.log('✅ Password changed successfully for user:', req.user.email || user.email)
 
         return ok(res, { 
             success: true, 
