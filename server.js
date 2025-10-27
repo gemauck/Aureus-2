@@ -110,14 +110,8 @@ app.use((req, res, next) => {
     'http://localhost:3001', 
     'http://localhost:3002',
     'http://localhost:8000',
-    'http://165.22.127.196:3000',
-    'https://abco-erp-2-cnlz.vercel.app',
-    'https://abco-erp-2-production.up.railway.app',
-    'https://plankton-app-phlkz.ondigitalocean.app',
     'https://abcoafrica.com',
-    'https://www.abcoafrica.com',
-    'https://abcoafrica.co.za',
-    'http://abcoafrica.co.za'
+    'https://www.abcoafrica.com'
   ].filter(Boolean)
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
