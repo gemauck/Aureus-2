@@ -336,13 +336,6 @@ const MainLayout = () => {
                                 </div>
                             )}
                         </div>
-                        <button className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
-                            <i className="fas fa-bell text-base lg:text-sm"></i>
-                            <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] lg:text-[8px] rounded-full w-4 h-4 lg:w-3.5 lg:h-3.5 flex items-center justify-center font-medium">3</span>
-                        </button>
-                        <button className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}>
-                            <i className="fas fa-cog text-base lg:text-sm"></i>
-                        </button>
                     </div>
                 </header>
 
