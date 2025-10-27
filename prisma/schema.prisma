@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
-  engineType = "binary"
+  provider      = "prisma-client-js"
+  engineType    = "binary"
   binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
 }
 
@@ -10,43 +10,43 @@ datasource db {
 }
 
 model User {
-  id                String       @id @default(cuid())
-  email             String       @unique
-  name              String?
-  passwordHash      String?
-  provider          String       @default("local")
-  role              String       @default("member")
-  status            String       @default("active") // active, suspended, inactive
-  department        String       @default("")
-  jobTitle          String       @default("")
-  phone             String       @default("")
-  avatar            String       @default("")
-  invitedBy         String?
-  mustChangePassword Boolean     @default(false)
-  lastLoginAt       DateTime?
-  
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  name               String?
+  passwordHash       String?
+  provider           String    @default("local")
+  role               String    @default("member")
+  status             String    @default("active") // active, suspended, inactive
+  department         String    @default("")
+  jobTitle           String    @default("")
+  phone              String    @default("")
+  avatar             String    @default("")
+  invitedBy          String?
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+
   // HR/Employee Fields
-  employeeNumber   String?       @unique
-  position         String        @default("")
+  employeeNumber   String?   @unique
+  position         String    @default("")
   employmentDate   DateTime?
-  idNumber         String        @default("")
+  idNumber         String    @default("")
   taxNumber        String?
   bankName         String?
   accountNumber    String?
   branchCode       String?
-  salary           Float         @default(0)
-  employmentStatus String        @default("Active") // Active, On Leave, Suspended, Resigned
-  address          String        @default("")
-  emergencyContact String        @default("")
-  
-  memberships       Membership[]
-  ownedClients      Client[]     @relation("ClientOwner")
-  ownedProjects     Project[]    @relation("ProjectOwner")
-  tasks             Task[]       @relation("TaskAssignee")
-  auditLogs         AuditLog[]   @relation("AuditActor")
-  feedback          Feedback[]   @relation("UserFeedback")
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  salary           Float     @default(0)
+  employmentStatus String    @default("Active") // Active, On Leave, Suspended, Resigned
+  address          String    @default("")
+  emergencyContact String    @default("")
+
+  memberships   Membership[]
+  ownedClients  Client[]     @relation("ClientOwner")
+  ownedProjects Project[]    @relation("ProjectOwner")
+  tasks         Task[]       @relation("TaskAssignee")
+  auditLogs     AuditLog[]   @relation("AuditActor")
+  feedback      Feedback[]   @relation("UserFeedback")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 }
 
 model Team {
@@ -96,46 +96,56 @@ model Client {
   opportunities Opportunity[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([status])
+  @@index([ownerId])
 }
 
 model Project {
-  id                     String      @id @default(cuid())
-  clientId               String?
-  name                   String
-  description            String      @default("")
-  clientName             String      @default("")
-  status                 String      @default("Planning")
-  startDate              DateTime    @default(now())
-  dueDate                DateTime?
-  budget                 Float       @default(0)
-  actualCost             Float       @default(0)
-  progress               Int         @default(0)
-  priority               String      @default("Medium")
-  type                   String      @default("Project")
-  assignedTo             String      @default("")
-  
+  id          String    @id @default(cuid())
+  clientId    String?
+  name        String
+  description String    @default("")
+  clientName  String    @default("")
+  status      String    @default("Planning")
+  startDate   DateTime  @default(now())
+  dueDate     DateTime?
+  budget      Float     @default(0)
+  actualCost  Float     @default(0)
+  progress    Int       @default(0)
+  priority    String    @default("Medium")
+  type        String    @default("Project")
+  assignedTo  String    @default("")
+
   // JSON fields for complex data
-  tasksList                  String      @default("[]")
-  taskLists                  String      @default("[]")
-  customFieldDefinitions     String      @default("[]")
-  documents                  String      @default("[]")
-  comments                   String      @default("[]")
-  activityLog                String      @default("[]")
-  team                       String      @default("[]")
-  notes                      String      @default("")
-  
+  tasksList              String @default("[]")
+  taskLists              String @default("[]")
+  customFieldDefinitions String @default("[]")
+  documents              String @default("[]")
+  comments               String @default("[]")
+  activityLog            String @default("[]")
+  team                   String @default("[]")
+  notes                  String @default("")
+
   // Document Collection Process fields
-  hasDocumentCollectionProcess Boolean   @default(false)
-  documentSections             String    @default("[]")
-  
-  ownerId                String?
-  owner                  User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
-  client                 Client?     @relation(fields: [clientId], references: [id])
-  tasks                  Task[]
-  invoices               Invoice[]
-  timeEntries            TimeEntry[]
-  createdAt              DateTime    @default(now())
-  updatedAt              DateTime    @updatedAt
+  hasDocumentCollectionProcess Boolean @default(false)
+  documentSections             String  @default("[]")
+
+  ownerId     String?
+  owner       User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
+  client      Client?     @relation(fields: [clientId], references: [id])
+  tasks       Task[]
+  invoices    Invoice[]
+  timeEntries TimeEntry[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@index([ownerId])
+  @@index([createdAt])
 }
 
 model Opportunity {
@@ -247,7 +257,7 @@ model Feedback {
 // Teams Knowledge Hub Models
 model TeamDocument {
   id          String   @id @default(cuid())
-  team        String   // Team ID (management, technical, etc.)
+  team        String // Team ID (management, technical, etc.)
   title       String
   category    String   @default("General")
   description String   @default("")
@@ -264,7 +274,7 @@ model TeamDocument {
 
 model TeamWorkflow {
   id          String   @id @default(cuid())
-  team        String   // Team ID
+  team        String // Team ID
   title       String
   description String   @default("")
   status      String   @default("Draft") // Draft, Active, Archived
@@ -277,7 +287,7 @@ model TeamWorkflow {
 
 model TeamChecklist {
   id          String   @id @default(cuid())
-  team        String   // Team ID
+  team        String // Team ID
   title       String
   description String   @default("")
   category    String   @default("General")
@@ -290,7 +300,7 @@ model TeamChecklist {
 
 model TeamNotice {
   id        String   @id @default(cuid())
-  team      String   // Team ID
+  team      String // Team ID
   title     String
   content   String
   priority  String   @default("Normal") // Low, Normal, Medium, High, Critical
@@ -302,16 +312,16 @@ model TeamNotice {
 }
 
 model WorkflowExecution {
-  id              String   @id @default(cuid())
-  workflowId      String
-  workflowTitle   String
-  team            String   // Team ID
-  completedSteps  String   @default("[]")
-  notes           String   @default("")
-  executedBy      String   @default("")
-  executionDate   DateTime @default(now())
-  status          String   @default("Completed") // In Progress, Completed, Failed
-  ownerId         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  workflowId     String
+  workflowTitle  String
+  team           String // Team ID
+  completedSteps String   @default("[]")
+  notes          String   @default("")
+  executedBy     String   @default("")
+  executionDate  DateTime @default(now())
+  status         String   @default("Completed") // In Progress, Completed, Failed
+  ownerId        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }

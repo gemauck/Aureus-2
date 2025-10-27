@@ -54,13 +54,18 @@ const NoticeModal = ({ isOpen, onClose, team, notice, onSave }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const noticeData = {
             ...formData,
             id: notice?.id || Date.now().toString(),
             team: team.id,
             date: notice?.date || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            author: 'Current User' // Would come from auth context
+            author: currentUser.name,
+            authorEmail: currentUser.email,
+            authorId: currentUser.id
         };
 
         onSave(noticeData);

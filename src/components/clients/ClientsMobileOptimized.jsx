@@ -147,6 +147,9 @@ const ClientsMobileOptimized = () => {
                 console.log('✅ Lead updated');
             } else {
                 // Create new lead - don't include ID, let database generate it
+                // Get current user info
+                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                
                 const newLeadData = {
                     ...leadFormData,
                     lastContact: new Date().toISOString().split('T')[0],
@@ -155,7 +158,9 @@ const ClientsMobileOptimized = () => {
                         type: 'Lead Created',
                         description: `Lead created: ${leadFormData.name}`,
                         timestamp: new Date().toISOString(),
-                        user: 'Current User'
+                        user: currentUser.name,
+                        userId: currentUser.id,
+                        userEmail: currentUser.email
                     }]
                 };
                 
@@ -217,7 +222,9 @@ const ClientsMobileOptimized = () => {
                 type: 'Lead Converted',
                 description: `Converted from lead: ${lead.name}`,
                 timestamp: new Date().toISOString(),
-                user: 'Current User'
+                user: (window.storage?.getUserInfo() || { name: 'System' }).name,
+                userId: (window.storage?.getUserInfo() || { id: 'system' }).id,
+                userEmail: (window.storage?.getUserInfo() || { email: 'system' }).email
             }],
             billingTerms: {
                 paymentTerms: 'Net 30',

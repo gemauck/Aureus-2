@@ -2,7 +2,6 @@ const API_BASE = (() => {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
     const apiBase = isLocalhost ? 'http://localhost:3000/api' : window.location.origin + '/api';
-    console.log('🔧 API Base URL:', { hostname, isLocalhost, apiBase });
     return apiBase;
 })()
 
@@ -14,24 +13,9 @@ async function request(path, options = {}) {
   const fullUrl = `${API_BASE}${path}`
   const requestOptions = { ...options, headers }
   
-  console.log('🌐 API Request:', { 
-    fullUrl,
-    path, 
-    method: options.method || 'GET', 
-    headers,
-    hasToken: !!token,
-    tokenPreview: token ? token.substring(0, 20) + '...' : 'none',
-    bodyPreview: options.body ? options.body.substring(0, 100) + '...' : 'none'
-  });
-  
   try {
-    console.log('🌐 About to call fetch with:', { fullUrl, method: options.method, hasBody: !!options.body });
     const res = await fetch(fullUrl, requestOptions)
-    console.log('🌐 Fetch completed, status:', res.status, 'ok:', res.ok);
-    
     const text = await res.text()
-    
-    console.log('📡 API Raw Response:', { path, status: res.status, ok: res.ok, textPreview: text.substring(0, 200) });
     
     let data = {}
     if (text) {
@@ -47,14 +31,9 @@ async function request(path, options = {}) {
       }
     }
     
-    console.log('📡 API Response:', { path, status: res.status, ok: res.ok, data });
-    
     if (!res.ok) {
-      console.error('❌ API Error:', { path, status: res.status, error: data?.error });
-      
       // Handle specific error cases
       if (res.status === 401) {
-        console.log('🔑 Unauthorized - clearing token');
         if (window.storage?.removeToken) window.storage.removeToken();
         if (window.storage?.removeUser) window.storage.removeUser();
       }
@@ -113,24 +92,12 @@ const api = {
   },
 
   async createClient(clientData) {
-    console.log('🚀 API createClient called with:', clientData);
     const res = await request('/clients', { method: 'POST', body: JSON.stringify(clientData) })
-    console.log('📡 API createClient response:', res);
     return res
   },
 
   async updateClient(id, clientData) {
-    console.log('🔧 updateClient called with:', { id, clientData: JSON.stringify(clientData, null, 2) });
-    console.log('🔍 Client data fields:', {
-      hasContacts: !!clientData.contacts,
-      hasFollowUps: !!clientData.followUps,
-      hasSites: !!clientData.sites,
-      hasComments: !!clientData.comments,
-      contactsLength: Array.isArray(clientData.contacts) ? clientData.contacts.length : 'not array',
-      contactsValue: clientData.contacts
-    });
     const res = await request(`/clients/${id}`, { method: 'PATCH', body: JSON.stringify(clientData) })
-    console.log('📥 updateClient response:', res);
     return res
   },
 
@@ -156,32 +123,12 @@ const api = {
   },
 
   async createLead(leadData) {
-    console.log('🚀 API createLead called with:', leadData);
     const res = await request('/leads', { method: 'POST', body: JSON.stringify(leadData) })
-    console.log('📡 API createLead response:', res);
     return res
   },
 
   async updateLead(id, leadData) {
-    console.log('🔧 updateLead called with:', { id, leadData: JSON.stringify(leadData, null, 2) });
-    console.log('🔍 Lead data fields:', {
-      hasContacts: !!leadData.contacts,
-      hasFollowUps: !!leadData.followUps,
-      hasProjectIds: !!leadData.projectIds,
-      hasComments: !!leadData.comments,
-      hasActivityLog: !!leadData.activityLog,
-      hasSites: !!leadData.sites,
-      hasContracts: !!leadData.contracts,
-      hasBillingTerms: !!leadData.billingTerms,
-      hasStage: !!leadData.stage,
-      hasStatus: !!leadData.status,
-      stage: leadData.stage,
-      status: leadData.status,
-      contactsLength: Array.isArray(leadData.contacts) ? leadData.contacts.length : 'not array',
-      contactsValue: leadData.contacts
-    });
     const res = await request(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify(leadData) })
-    console.log('📥 updateLead response:', res);
     return res
   },
 
@@ -207,9 +154,7 @@ const api = {
   },
 
   async createProject(projectData) {
-    console.log('🚀 API createProject called with:', projectData);
     const res = await request('/projects', { method: 'POST', body: JSON.stringify(projectData) })
-    console.log('📡 API createProject response:', res);
     return res
   },
 
@@ -240,9 +185,7 @@ const api = {
   },
 
   async createEmployee(employeeData) {
-    console.log('🚀 API createEmployee called with:', employeeData);
     const res = await request('/employees', { method: 'POST', body: JSON.stringify(employeeData) })
-    console.log('📡 API createEmployee response:', res);
     return res
   },
 
@@ -268,9 +211,7 @@ const api = {
   },
 
   async createTimeEntry(timeEntryData) {
-    console.log('🚀 API createTimeEntry called with:', timeEntryData);
     const res = await request('/time-entries', { method: 'POST', body: JSON.stringify(timeEntryData) })
-    console.log('📡 API createTimeEntry response:', res);
     return res
   },
 
@@ -295,9 +236,7 @@ const api = {
     return res
   },
   async createOpportunity(opportunityData) {
-    console.log('🚀 API createOpportunity called with:', opportunityData);
     const res = await request('/opportunities', { method: 'POST', body: JSON.stringify(opportunityData) })
-    console.log('📡 API createOpportunity response:', res);
     return res
   },
   async updateOpportunity(id, opportunityData) {
@@ -323,9 +262,7 @@ const api = {
     return res
   },
   async createContact(clientId, contactData) {
-    console.log('🚀 API createContact called with:', { clientId, contactData });
     const res = await request(`/contacts/client/${clientId}`, { method: 'POST', body: JSON.stringify(contactData) })
-    console.log('📡 API createContact response:', res);
     return res
   },
   async updateContact(clientId, contactId, contactData) {
@@ -343,9 +280,7 @@ const api = {
     return res
   },
   async createSite(clientId, siteData) {
-    console.log('🚀 API createSite called with:', { clientId, siteData });
     const res = await request(`/sites/client/${clientId}`, { method: 'POST', body: JSON.stringify(siteData) })
-    console.log('📡 API createSite response:', res);
     return res
   },
   async updateSite(clientId, siteId, siteData) {

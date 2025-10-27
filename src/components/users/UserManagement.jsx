@@ -123,7 +123,19 @@ const UserManagement = () => {
                 })
             });
 
-            const data = await response.json();
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            let data;
+            
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else {
+                // Server returned non-JSON (likely HTML error page)
+                const text = await response.text();
+                console.error('❌ Server returned non-JSON response:', text.substring(0, 200));
+                throw new Error('Server returned invalid response. Please check the server logs.');
+            }
+            
             console.log('📨 Invitation API response:', data);
 
             if (response.ok) {
@@ -139,7 +151,7 @@ const UserManagement = () => {
                 showInvitationResultModal(data);
             } else {
                 console.error('❌ Invitation failed:', data);
-                alert(data.message || 'Failed to send invitation');
+                alert(data.message || data.error || 'Failed to send invitation');
             }
         } catch (error) {
             console.error('❌ Error sending invitation:', error);

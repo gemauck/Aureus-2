@@ -7,13 +7,6 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    console.log('🔍 Clients API Debug:', {
-      method: req.method,
-      url: req.url,
-      headers: req.headers,
-      user: req.user
-    })
-    
     // Parse the URL path - strip /api/ prefix if present
     const urlPath = req.url.replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
@@ -23,21 +16,11 @@ async function handler(req, res) {
     if (req.method === 'GET' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
       try {
         // Return ALL clients for all users - this is a system where all users should see all clients
+        // Optimized: removed opportunities include and expensive logging
         const clients = await prisma.client.findMany({ 
-          include: {
-            opportunities: true
-          },
-          orderBy: { createdAt: 'desc' } 
+          orderBy: { createdAt: 'desc' }
         })
         
-        // Log opportunities for debugging
-        clients.forEach(client => {
-          if (client.opportunities && client.opportunities.length > 0) {
-            console.log(`🔍 Client "${client.name}" has ${client.opportunities.length} opportunities:`, client.opportunities)
-          }
-        })
-        
-        console.log('✅ Clients retrieved successfully:', clients.length, 'for user:', req.user?.sub, '(all clients visible)')
         return ok(res, { clients })
       } catch (dbError) {
         console.error('❌ Database error listing clients:', dbError)
@@ -53,9 +36,8 @@ async function handler(req, res) {
       // Ensure type column exists in database
       try {
         await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
-        console.log('✅ Type column ensured in database')
-      } catch (error) {
-        console.log('Type column already exists or error adding it:', error.message)
+        } catch (error) {
+        // Column may already exist
       }
 
       // Verify user exists before setting ownerId
@@ -65,12 +47,9 @@ async function handler(req, res) {
           const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
           if (user) {
             ownerId = req.user.sub;
-            console.log('✅ User verified for ownerId:', user.email);
-          } else {
-            console.log('⚠️ User not found in database, skipping ownerId');
           }
         } catch (userError) {
-          console.log('⚠️ Error verifying user, skipping ownerId:', userError.message);
+          // Skip ownerId if error
         }
       }
 
@@ -104,8 +83,6 @@ async function handler(req, res) {
         ...(ownerId ? { ownerId } : {})
       }
 
-      console.log('🔍 Creating client with data:', clientData)
-      console.log('🔍 Request body type field:', body.type)
       try {
         const client = await prisma.client.create({
           data: {
@@ -132,7 +109,6 @@ async function handler(req, res) {
           }
         })
         
-        console.log('✅ Client created successfully with Prisma ORM:', client.id, 'Type:', client.type)
         return created(res, { client })
       } catch (dbError) {
         console.error('❌ Database error creating client:', dbError)
@@ -145,13 +121,9 @@ async function handler(req, res) {
       if (req.method === 'GET') {
         try {
           const client = await prisma.client.findUnique({ 
-            where: { id },
-            include: {
-              opportunities: true
-            }
+            where: { id }
           })
           if (!client) return notFound(res)
-          console.log('✅ Client retrieved successfully:', client.id)
           return ok(res, { client })
         } catch (dbError) {
           console.error('❌ Database error getting client:', dbError)
@@ -160,15 +132,6 @@ async function handler(req, res) {
       }
       if (req.method === 'PATCH') {
         const body = req.body || {}
-        
-        console.log('🔍 PATCH Request Body:', JSON.stringify(body, null, 2));
-        console.log('🔍 Body contacts type:', typeof body.contacts);
-        console.log('🔍 Body contacts value:', body.contacts);
-        console.log('🔍 Body contacts isArray:', Array.isArray(body.contacts));
-        console.log('🔍 Body contacts length:', Array.isArray(body.contacts) ? body.contacts.length : 'N/A');
-        if (Array.isArray(body.contacts) && body.contacts.length > 0) {
-          console.log('🔍 First contact:', JSON.stringify(body.contacts[0], null, 2));
-        }
         
         const updateData = {
           name: body.name,
@@ -197,12 +160,8 @@ async function handler(req, res) {
           }
         })
         
-        console.log('🔍 Updating client with data:', updateData)
-        console.log('🔍 updateData contacts:', updateData.contacts);
         try {
           const client = await prisma.client.update({ where: { id }, data: updateData })
-          console.log('✅ Client updated successfully:', client.id)
-          console.log('🔍 Updated client contacts from DB:', client.contacts);
           return ok(res, { client })
         } catch (dbError) {
           console.error('❌ Database error updating client:', dbError)
@@ -212,30 +171,24 @@ async function handler(req, res) {
       if (req.method === 'DELETE') {
         try {
           // First, delete all related records to avoid foreign key constraints
-          console.log('🔍 Checking for related records before deleting client:', id)
-          
           // Delete opportunities
           const opportunitiesDeleted = await prisma.opportunity.deleteMany({
             where: { clientId: id }
           })
-          console.log('🗑️ Deleted opportunities:', opportunitiesDeleted.count)
           
           // Delete invoices
           const invoicesDeleted = await prisma.invoice.deleteMany({
             where: { clientId: id }
           })
-          console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
           
           // Update projects to remove client reference (set clientId to null)
           const projectsUpdated = await prisma.project.updateMany({
             where: { clientId: id },
             data: { clientId: null }
           })
-          console.log('🔄 Updated projects (removed client reference):', projectsUpdated.count)
           
           // Now delete the client
           await prisma.client.delete({ where: { id } })
-          console.log('✅ Client deleted successfully:', id)
           return ok(res, { 
             deleted: true, 
             message: `Client deleted successfully. Also deleted ${opportunitiesDeleted.count} opportunities, ${invoicesDeleted.count} invoices, and updated ${projectsUpdated.count} projects.`

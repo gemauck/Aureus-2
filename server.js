@@ -27,10 +27,8 @@ const apiDir = path.join(__dirname, 'api')
 function toHandlerPath(urlPath) {
   // Remove /api prefix and split into parts
   const parts = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
-  console.log(`🔍 Parsing URL path: "${urlPath}" -> parts: [${parts.join(', ')}]`)
   
   if (parts.length === 0) {
-    console.log(`📄 Empty path, using health handler`)
     return path.join(apiDir, 'health.js')
   }
 
@@ -40,13 +38,11 @@ function toHandlerPath(urlPath) {
   if (parts.length === 2) {
     const dynamicFile = path.join(apiDir, parts[0], '[id].js')
     candidates.push(dynamicFile)
-    console.log(`🔍 Checking dynamic file: ${dynamicFile}`)
   }
   
   // Direct file matches (e.g., /api/leads -> api/leads.js)
   const directFile = path.join(apiDir, `${parts.join('/')}.js`)
   candidates.push(directFile)
-  console.log(`🔍 Checking direct file: ${directFile}`)
   
   // Nested directory matches (e.g., /api/auth/login -> api/auth/login.js)
   if (parts.length > 1) {
@@ -54,25 +50,24 @@ function toHandlerPath(urlPath) {
     const nestedFile = path.join(apiDir, ...parts.slice(0, -1), `${parts[parts.length - 1]}.js`)
     candidates.push(nestedIndex)
     candidates.push(nestedFile)
-    console.log(`🔍 Checking nested files: ${nestedIndex}, ${nestedFile}`)
   }
   
   // Single part matches (e.g., /api/login -> api/login.js)
   if (parts.length === 1) {
     const singleFile = path.join(apiDir, `${parts[0]}.js`)
     candidates.push(singleFile)
-    console.log(`🔍 Checking single file: ${singleFile}`)
   }
   
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
-      console.log(`✅ Found handler: ${path.relative(apiDir, candidate)} for ${urlPath}`)
       return candidate
     }
   }
   
-  console.log(`❌ No handler found for: ${urlPath}`)
-  console.log(`❌ Tried candidates: ${candidates.map(c => path.relative(apiDir, c)).join(', ')}`)
+  // Only log errors in development
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`❌ No handler found for: ${urlPath}`)
+  }
   return path.join(apiDir, 'health.js')
 }
 
@@ -127,26 +122,21 @@ app.use((req, res, next) => {
     origin = origin.slice(0, -1)
   }
   
-  console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
-  
   // Always set credentials to true for authenticated requests
   res.setHeader('Access-Control-Allow-Credentials', 'true')
   
   // When credentials are included, we cannot use wildcard origin
   if (origin && (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:'))) {
     res.setHeader('Access-Control-Allow-Origin', origin)
-    console.log(`✅ CORS: Allowing origin ${origin}`)
   } else if (origin) {
     // For unknown origins, don't set Access-Control-Allow-Origin at all
     // This will cause the browser to reject the request, which is the correct behavior
-    console.log(`🚫 CORS: Rejecting origin ${origin} - not in allowed list`)
     return res.status(403).json({ error: 'CORS policy violation' })
   } else {
     // No origin header (e.g., server-to-server requests)
     // Use HTTPS production URL as default
     const defaultOrigin = process.env.APP_URL || 'https://abcoafrica.co.za'
     res.setHeader('Access-Control-Allow-Origin', defaultOrigin)
-    console.log(`✅ CORS: No origin header, using default: ${defaultOrigin}`)
   }
   
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
@@ -154,36 +144,31 @@ app.use((req, res, next) => {
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
-    console.log(`✅ CORS: Handling preflight request for ${req.url}`)
     return res.status(204).end()
   }
   
   next()
 })
 
-// Serve static files from root directory with aggressive caching
-app.use(express.static(rootDir, {
-  index: false, // Don't serve index.html automatically
-  dotfiles: 'ignore',
-  etag: true,
-  lastModified: true,
-  maxAge: '7d', // Cache for 7 days for better performance
-  redirect: false, // Disable automatic redirects for trailing slashes
-  setHeaders: (res, path) => {
-    // Cache compiled JS and CSS files more aggressively
-    if (path.endsWith('.js') || path.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 days
-    }
-  }
-}))
-
 // Explicit mapping for critical endpoints (ensure invite works even if resolution changes)
 app.all('/api/users/invite', async (req, res, next) => {
   try {
     const handler = await loadHandler(path.join(apiDir, 'users', 'invite.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Invite handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Error in invite handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
@@ -224,7 +209,6 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
 // Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
 app.all('/api/projects/:id', async (req, res, next) => {
   try {
-    console.log(`🎯 Explicit route hit: ${req.method} /api/projects/${req.params.id}`)
     const handler = await loadHandler(path.join(apiDir, 'projects.js'))
     if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
     return handler(req, res)
@@ -239,23 +223,12 @@ app.all('/api/projects/:id', async (req, res, next) => {
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
   try {
-    console.log(`🔍 Railway API: Incoming request - Method: ${req.method}, URL: ${req.url}`)
-    console.log(`🔍 Railway API: req.body type: ${typeof req.body}, has body: ${!!req.body}, keys: ${Object.keys(req.body || {}).join(', ')}`)
-    if (req.body && Object.keys(req.body).length > 0) {
-      console.log(`🔍 Railway API: Request body:`, JSON.stringify(req.body, null, 2))
-    }
-    
     const handlerPath = toHandlerPath(req.url)
-    console.log(`🔍 Railway API: ${req.method} ${req.url} -> ${path.relative(rootDir, handlerPath)}`)
-    console.log(`🔍 Railway API: Handler path exists: ${fs.existsSync(handlerPath)}`)
-    
     const handler = await loadHandler(handlerPath)
     
     if (req.method === 'OPTIONS') {
       return res.status(204).end()
     }
-    
-    console.log(`✅ Executing handler for: ${req.method} ${req.url}`)
     
     // Add timeout to prevent hanging requests
     const timeout = setTimeout(() => {
@@ -307,17 +280,55 @@ app.get('/health', (req, res) => {
   })
 })
 
+// Global error handler middleware - must be after all routes but before static files
+app.use((err, req, res, next) => {
+  console.error('❌ Express Error Handler:', {
+    method: req.method,
+    url: req.url,
+    error: err.message,
+    stack: err.stack
+  })
+  
+  // Always return JSON for API routes
+  if (req.url.startsWith('/api/')) {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'Internal server error',
+        message: err.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+  } else {
+    next(err)
+  }
+})
+
+// Serve static files from root directory with aggressive caching
+// MUST be after API routes to avoid serving HTML for API endpoints
+app.use(express.static(rootDir, {
+  index: false, // Don't serve index.html automatically
+  dotfiles: 'ignore',
+  etag: true,
+  lastModified: true,
+  maxAge: '7d', // Cache for 7 days for better performance
+  redirect: false, // Disable automatic redirects for trailing slashes
+  setHeaders: (res, path) => {
+    // Cache compiled JS and CSS files more aggressively
+    if (path.endsWith('.js') || path.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 days
+    }
+  }
+}))
+
 // Catch-all route for static files - must come last
 // Only serve index.html for non-API routes
 app.get('*', (req, res) => {
   // Skip API routes - they should have been handled by the API middleware above
   if (req.url.startsWith('/api/')) {
-    console.log(`❌ API route not handled: ${req.method} ${req.url}`)
     return res.status(404).json({ error: 'API endpoint not found' })
   }
   
   // Serve index.html for all other routes (SPA routing)
-  console.log(`📄 Serving index.html for: ${req.url}`)
   res.sendFile(path.join(rootDir, 'index.html'))
 })
 

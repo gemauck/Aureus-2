@@ -10,7 +10,9 @@ const WorkflowExecutionModal = ({ isOpen, onClose, workflow, onComplete }) => {
     const [startTime, setStartTime] = useState(null);
     const [stepStartTime, setStepStartTime] = useState(null);
     const [executionData, setExecutionData] = useState({
-        executedBy: 'Current User',
+        executedBy: (window.storage?.getUserInfo() || { name: 'System' }).name,
+        executedById: (window.storage?.getUserInfo() || { id: 'system' }).id,
+        executedByEmail: (window.storage?.getUserInfo() || { email: 'system' }).email,
         startedAt: null,
         completedAt: null,
         totalDuration: 0,

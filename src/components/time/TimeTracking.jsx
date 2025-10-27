@@ -80,11 +80,16 @@ const TimeTracking = () => {
             ));
         } else {
             // Adding new entry
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+            
             const newEntry = {
                 id: Math.max(0, ...timeEntries.map(e => e.id)) + 1,
                 ...entryData,
                 hours: parseFloat(entryData.hours),
-                employee: 'Current User',
+                employee: currentUser.name,
+                employeeId: currentUser.id,
+                employeeEmail: currentUser.email,
                 client: projects.find(p => p.name === entryData.project)?.client || 'N/A'
             };
             setTimeEntries([newEntry, ...timeEntries]);
