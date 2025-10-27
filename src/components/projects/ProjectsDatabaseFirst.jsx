@@ -502,7 +502,7 @@ const ProjectsDatabaseFirst = () => {
                                     </div>
                                     
                                     <div className="flex justify-between text-sm">
-                                        <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}> primary-600'>Due:</span>
+                                        <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Due:</span>
                                         <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                             {project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}
                                         </span>

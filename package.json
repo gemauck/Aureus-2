@@ -10,7 +10,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "build": "npm run build:css && npx prisma generate",
+    "build": "npm run build:jsx && npm run build:css && npx prisma generate",
+    "build:jsx": "node build-jsx.js",
     "build:css": "npx tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
     "railway-build": "npm run build:css && npx prisma generate && echo 'Railway build completed'",
     "railway-start": "./deploy-railway-fixes.sh",
@@ -34,6 +35,8 @@
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.11",
+    "glob": "^11.0.3",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.0"
   },
