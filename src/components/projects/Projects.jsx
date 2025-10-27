@@ -36,6 +36,12 @@ const Projects = () => {
     // Load projects from data service on mount
     useEffect(() => {
         const loadProjects = async () => {
+            // Skip if we already have projects (component staying mounted)
+            if (projects.length > 0) {
+                console.log(`⚡ Projects: Skipping load - already have ${projects.length} projects`);
+                return;
+            }
+            
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {
@@ -94,7 +100,7 @@ const Projects = () => {
         };
 
         loadProjects();
-    }, []);
+    }, []); // Only run once on initial mount
 
     // Helper function to sync existing projects with clients
     const syncProjectsWithClients = async (projectsList) => {
