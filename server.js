@@ -114,6 +114,7 @@ app.use((req, res, next) => {
     'https://abco-erp-2-cnlz.vercel.app',
     'https://abco-erp-2-production.up.railway.app',
     'https://plankton-app-phlkz.ondigitalocean.app'
+    // Add your custom domain here after HTTPS setup (e.g., 'https://yourdomain.com')
   ].filter(Boolean)
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
