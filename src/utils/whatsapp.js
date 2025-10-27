@@ -4,11 +4,11 @@ const WhatsAppUtils = {
     generateInvitationMessage(invitationData) {
         const { name, role, invitationLink, companyName = 'Abcotronics' } = invitationData;
         
-        return `🎉 You've been invited to join ${companyName} ERP!
+        return `🎉 You've been invited to join ${companyName}!
 
 👋 Hi ${name},
 
-You've been invited to join our ERP system with the role: ${role}
+You've been invited to join our system with the role: ${role}
 
 📱 To accept your invitation, click this link:
 ${invitationLink}
