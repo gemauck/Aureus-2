@@ -6,8 +6,15 @@ const MainLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showThemeMenu, setShowThemeMenu] = useState(false);
+    const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
+
+    // Setup password change modal trigger
+    React.useEffect(() => {
+        window.triggerPasswordChangeModal = () => setShowPasswordChangeModal(true);
+        window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
+    }, []);
 
     // Auto-close sidebar on mobile when page changes
     React.useEffect(() => {
@@ -61,6 +68,7 @@ const MainLayout = () => {
     const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
     const Teams = window.TeamsEnhanced || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module - Coming soon!</div>);
     const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
+    const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
     const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
     const Manufacturing = window.Manufacturing || (() => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>);
@@ -344,6 +352,9 @@ const MainLayout = () => {
                 </main>
                 {/* Global Feedback Widget */}
                 {window.FeedbackWidget ? <window.FeedbackWidget /> : null}
+                
+                {/* Password Change Modal */}
+                {PasswordChangeModal && showPasswordChangeModal ? <PasswordChangeModal /> : null}
             </div>
         </div>
     );

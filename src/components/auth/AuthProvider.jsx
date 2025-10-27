@@ -58,7 +58,18 @@ const AuthProvider = ({ children }) => {
             }
             
             console.log('🎉 Login flow completed successfully');
-            return me;
+            
+            // Check if password change is required
+            if (loginResult.mustChangePassword) {
+                // Trigger password change modal
+                setTimeout(() => {
+                    if (window.triggerPasswordChangeModal) {
+                        window.triggerPasswordChangeModal();
+                    }
+                }, 500);
+            }
+            
+            return { user: me, mustChangePassword: loginResult.mustChangePassword || false };
         } catch (err) {
             console.error('❌ Login error details:', {
                 message: err.message,

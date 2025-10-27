@@ -38,7 +38,8 @@ async function handler(req, res) {
         name: true,
         passwordHash: true,
         role: true,
-        status: true
+        status: true,
+        mustChangePassword: true
       }
     })
     
@@ -105,7 +106,8 @@ async function handler(req, res) {
         email: user.email,
         name: user.name,
         role: user.role
-      }
+      },
+      mustChangePassword: user.mustChangePassword || false
     })
     
   } catch (e) {
