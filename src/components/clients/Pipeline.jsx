@@ -326,16 +326,27 @@ const Pipeline = () => {
             setClients(updatedClients);
             storage.setClients(updatedClients);
             
-            // Update client in API if authenticated
+            // Update opportunity directly in API if authenticated
             const token = storage.getToken();
-            if (token && window.DatabaseAPI) {
+            if (token && window.api?.updateOpportunity) {
+                try {
+                    // Update the opportunity's stage in the database
+                    await window.api.updateOpportunity(draggedItem.id, { 
+                        stage: targetStage 
+                    });
+                    console.log('✅ Pipeline: Opportunity stage updated in API:', targetStage);
+                } catch (error) {
+                    console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
+                }
+            } else if (token && window.DatabaseAPI) {
+                // Fallback to old method if new API not available
                 try {
                     const clientToUpdate = updatedClients.find(c => c.id === draggedItem.clientId);
                     if (clientToUpdate) {
                         await window.DatabaseAPI.updateClient(draggedItem.clientId, { 
                             opportunities: clientToUpdate.opportunities 
                         });
-                        console.log('✅ Pipeline: Client opportunities updated in API');
+                        console.log('✅ Pipeline: Client opportunities updated via fallback');
                     }
                 } catch (error) {
                     console.warn('⚠️ Pipeline: Failed to update client opportunities in API:', error);
