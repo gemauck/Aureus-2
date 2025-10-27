@@ -125,81 +125,55 @@ const MainLayout = () => {
     ];
 
     const renderPage = () => {
-        console.log('🔄 MainLayout: Rendering page:', currentPage);
-        console.log('🔄 MainLayout: Available components:', {
-            Dashboard: !!Dashboard,
-            Clients: !!Clients,
-            Projects: !!Projects,
-            Teams: !!Teams,
-            Users: !!Users,
-            TimeTracking: !!TimeTracking,
-            HR: !!HR,
-            Manufacturing: !!Manufacturing,
-            Tools: !!Tools,
-            Reports: !!Reports
-        });
+        console.log('🔄 MainLayout: Showing page:', currentPage);
         
-        try {
-            switch(currentPage) {
-                case 'dashboard': 
-                    console.log('🔄 MainLayout: Rendering Dashboard component');
-                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
-                case 'clients': 
-                    console.log('🔄 MainLayout: Rendering Clients component');
-                    return <ErrorBoundary><Clients /></ErrorBoundary>;
-                case 'projects': 
-                    console.log('🔄 MainLayout: Rendering Projects component');
-                    return <ErrorBoundary><Projects /></ErrorBoundary>;
-                case 'teams': 
-                    console.log('🔄 MainLayout: Rendering Teams component');
-                    return <ErrorBoundary><Teams /></ErrorBoundary>;
-                case 'users': 
-                    console.log('🔄 MainLayout: Rendering Users component');
-                    return <ErrorBoundary><Users /></ErrorBoundary>;
-                case 'account': 
-                    console.log('🔄 MainLayout: Rendering Account component');
-                    return <ErrorBoundary><Account /></ErrorBoundary>;
-                case 'time': 
-                    console.log('🔄 MainLayout: Rendering TimeTracking component');
-                    return <ErrorBoundary><TimeTracking /></ErrorBoundary>;
-                case 'hr': 
-                    console.log('🔄 MainLayout: Rendering HR component');
-                    return <ErrorBoundary><HR /></ErrorBoundary>;
-                case 'manufacturing': 
-                    console.log('🔄 MainLayout: Rendering Manufacturing component');
-                    return <ErrorBoundary><Manufacturing /></ErrorBoundary>;
-                case 'tools': 
-                    console.log('🔄 MainLayout: Rendering Tools component');
-                    return <ErrorBoundary><Tools /></ErrorBoundary>;
-                case 'reports': 
-                    console.log('🔄 MainLayout: Rendering Reports component');
-                    return <ErrorBoundary><Reports /></ErrorBoundary>;
-                case 'settings': 
-                    console.log('🔄 MainLayout: Rendering Settings component');
-                    return <ErrorBoundary><Settings /></ErrorBoundary>;
-                case 'documents': 
-                    console.log('🔄 MainLayout: Rendering Documents placeholder');
-                    return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
-                default: 
-                    console.log('🔄 MainLayout: Rendering default Dashboard component');
-                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
-            }
-        } catch (error) {
-            console.error('❌ MainLayout: Error rendering page:', error);
-            return (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-                    <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Page</h2>
-                    <p className="text-sm text-red-600 mb-3">There was an error loading the {currentPage} page.</p>
-                    <p className="text-xs text-red-500 mb-4">Error: {error.message}</p>
-                    <button 
-                        onClick={() => window.location.reload()}
-                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
-                    >
-                        Reload Page
-                    </button>
+        // Keep all components mounted but show/hide them - prevents remount and data reload
+        const isVisible = (pageId) => currentPage === pageId ? 'block' : 'none';
+        
+        return (
+            <>
+                {/* Keep all components mounted - just hide/show */}
+                <div style={{ display: isVisible('dashboard') }}>
+                    <ErrorBoundary><Dashboard /></ErrorBoundary>
                 </div>
-            );
-        }
+                <div style={{ display: isVisible('clients') }}>
+                    <ErrorBoundary><Clients /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('projects') }}>
+                    <ErrorBoundary><Projects /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('teams') }}>
+                    <ErrorBoundary><Teams /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('users') }}>
+                    <ErrorBoundary><Users /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('account') }}>
+                    <ErrorBoundary><Account /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('time') }}>
+                    <ErrorBoundary><TimeTracking /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('hr') }}>
+                    <ErrorBoundary><HR /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('manufacturing') }}>
+                    <ErrorBoundary><Manufacturing /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('tools') }}>
+                    <ErrorBoundary><Tools /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('reports') }}>
+                    <ErrorBoundary><Reports /></ErrorBoundary>
+                </div>
+                <div style={{ abhey: isVisible('settings') }}>
+                    <ErrorBoundary><Settings /></ErrorBoundary>
+                </div>
+                <div style={{ display: isVisible('documents') }}>
+                    <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>
+                </div>
+            </>
+        );
     };
 
     return (
