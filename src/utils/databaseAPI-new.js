@@ -40,11 +40,22 @@ const DatabaseAPI = {
                 endpoint 
             });
 
-            // Get response data
-            const responseData = await response.json();
+            // Get response text first to check content type
+            const responseText = await response.text();
             
-            console.log('📡 Database API response data:', responseData);
-            console.log('📡 Full error details:', JSON.stringify(responseData, null, 2));
+            // Try to parse as JSON if it looks like JSON
+            let responseData;
+            try {
+                responseData = JSON.parse(responseText);
+                console.log('📡 Database API response data:', responseData);
+            } catch (parseError) {
+                console.error('❌ Failed to parse response as JSON. Response text:', responseText.substring(0, 200));
+                if (!response.ok) {
+                    throw new Error(`Server returned ${response.status}: ${response.statusText}. Response: ${responseText.substring(0, 100)}...`);
+                }
+                // If OK but not JSON, return the text
+                responseData = { message: responseText };
+            }
 
             if (!response.ok) {
                 if (response.status === 401) {

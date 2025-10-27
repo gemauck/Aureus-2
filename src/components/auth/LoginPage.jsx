@@ -42,7 +42,7 @@ const LoginPage = () => {
                     {/* Right Side - Login */}
                     <div className="p-8">
                         <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome Back</h2>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome</h2>
                             <p className="text-sm text-gray-600">Sign in to access your dashboard</p>
                         </div>
 

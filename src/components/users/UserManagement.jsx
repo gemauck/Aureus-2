@@ -7,6 +7,8 @@ const UserManagement = () => {
     const [loading, setLoading] = useState(true);
     const [showInviteModal, setShowInviteModal] = useState(false);
     const [showAddUserModal, setShowAddUserModal] = useState(false);
+    const [showEditInvitationModal, setShowEditInvitationModal] = useState(false);
+    const [editingInvitation, setEditingInvitation] = useState(null);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordModalData, setPasswordModalData] = useState(null);
     const [newInvitation, setNewInvitation] = useState({
@@ -399,6 +401,96 @@ const UserManagement = () => {
         }
     };
 
+    const handleEditInvitation = (invitation) => {
+        setEditingInvitation(invitation);
+        setShowEditInvitationModal(true);
+    };
+
+    const handleUpdateInvitation = async () => {
+        if (!editingInvitation) return;
+        
+        try {
+            const token = window.storage?.getToken?.();
+            const response = await fetch(`/api/users/invitation/${editingInvitation.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: editingInvitation.name,
+                    role: editingInvitation.role
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert('Invitation updated successfully');
+                setShowEditInvitationModal(false);
+                setEditingInvitation(null);
+                loadUsers();
+            } else {
+                alert(data.message || 'Failed to update invitation');
+            }
+        } catch (error) {
+            console.error('Error updating invitation:', error);
+            alert('Failed to update invitation');
+        }
+    };
+
+    const handleResendInvitation = async (invitationId) => {
+        try {
+            const token = window.storage?.getToken?.();
+            const response = await fetch(`/api/users/invitation/${invitationId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert(data.message || 'Invitation resent successfully');
+                loadUsers();
+            } else {
+                alert(data.message || 'Failed to resend invitation');
+            }
+        } catch (error) {
+            console.error('Error resending invitation:', error);
+            alert('Failed to resend invitation');
+        }
+    };
+
+    const handleDeleteInvitation = async (invitationId, email) => {
+        if (!confirm(`Are you sure you want to delete the invitation for ${email}?`)) {
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            const response = await fetch(`/api/users/invitation/${invitationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                alert('Invitation deleted successfully');
+                loadUsers();
+            } else {
+                alert(data.message || 'Failed to delete invitation');
+            }
+        } catch (error) {
+            console.error('Error deleting invitation:', error);
+            alert('Failed to delete invitation');
+        }
+    };
+
     const getStatusBadge = (status) => {
         const statusClasses = {
             active: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300',
@@ -586,6 +678,7 @@ const UserManagement = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Name</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Expires</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
@@ -603,10 +696,115 @@ const UserManagement = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                                             {formatDate(invitation.expiresAt)}
                                         </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleEditInvitation(invitation)}
+                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    title="Edit"
+                                                >
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleResendInvitation(invitation.id)}
+                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                                    title="Resend"
+                                                >
+                                                    <i className="fas fa-paper-plane"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteInvitation(invitation.id, invitation.email)}
+                                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                                    title="Delete"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Invitation Modal */}
+            {showEditInvitationModal && editingInvitation && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className={`rounded-xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <i className="fas fa-edit mr-2 text-blue-600"></i>
+                                Edit Invitation
+                            </h3>
+                            <button
+                                onClick={() => setShowEditInvitationModal(false)}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Email
+                                </label>
+                                <input
+                                    type="email"
+                                    value={editingInvitation.email}
+                                    disabled
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editingInvitation.name}
+                                    onChange={(e) => setEditingInvitation({...editingInvitation, name: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Role
+                                </label>
+                                <select
+                                    value={editingInvitation.role}
+                                    onChange={(e) => setEditingInvitation({...editingInvitation, role: e.target.value})}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="member">Member</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-6">
+                            <button
+                                onClick={() => {
+                                    setShowEditInvitationModal(false);
+                                    setEditingInvitation(null);
+                                }}
+                                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateInvitation}
+                                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                Save Changes
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
