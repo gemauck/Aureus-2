@@ -113,8 +113,9 @@ app.use((req, res, next) => {
     'http://165.22.127.196:3000',
     'https://abco-erp-2-cnlz.vercel.app',
     'https://abco-erp-2-production.up.railway.app',
-    'https://plankton-app-phlkz.ondigitalocean.app'
-    // Add your custom domain here after HTTPS setup (e.g., 'https://yourdomain.com')
+    'https://plankton-app-phlkz.ondigitalocean.app',
+    'https://abcoafrica.com',
+    'https://www.abcoafrica.com'
   ].filter(Boolean)
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
