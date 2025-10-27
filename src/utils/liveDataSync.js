@@ -10,6 +10,9 @@ class LiveDataSync {
         this.errorCount = 0;
         this.maxErrors = 3;
         
+        // Cache for each data type
+        this.dataCache = new Map();
+        
         // Bind methods
         this.start = this.start.bind(this);
         this.stop = this.stop.bind(this);
@@ -81,8 +84,8 @@ class LiveDataSync {
         
         // Additional check to prevent rapid sync calls
         const now = Date.now();
-        if (this.lastSync && (now - this.lastSync.getTime()) < 10000) { // 10 seconds minimum
-            console.log('⏳ Sync too recent, skipping...');
+        if (this.lastSync && (now - this.lastSync.getTime()) < 60000) { // 60 seconds minimum
+            console.log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
             return;
         }
         
