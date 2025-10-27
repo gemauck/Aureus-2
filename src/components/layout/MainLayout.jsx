@@ -2,13 +2,46 @@
 const { useState } = React;
 
 const MainLayout = () => {
-    const [currentPage, setCurrentPage] = useState('dashboard');
+    // Initialize currentPage from URL on first load
+    const getPageFromURL = () => {
+        const path = window.location.pathname;
+        if (path.startsWith('/') && path.length > 1) {
+            return path.substring(1); // Remove leading '/'
+        }
+        return 'dashboard';
+    };
+
+    const [currentPage, setCurrentPage] = useState(getPageFromURL());
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
+
+    // Update URL when page changes
+    const navigateToPage = (page) => {
+        console.log('🔄 MainLayout: Navigating to page:', page);
+        setCurrentPage(page);
+        const newUrl = page === 'dashboard' ? '/' : `/${page}`;
+        window.history.pushState({ page }, '', newUrl);
+    };
+
+    // Handle browser back/forward buttons
+    React.useEffect(() => {
+        const handlePopState = (event) => {
+            console.log('🔄 MainLayout: Browser navigation:', event.state);
+            if (event.state && event.state.page) {
+                setCurrentPage(event.state.page);
+            } else {
+                const page = getPageFromURL();
+                setCurrentPage(page);
+            }
+        };
+
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
 
     // Setup password change modal trigger
     React.useEffect(() => {
@@ -40,7 +73,7 @@ const MainLayout = () => {
     React.useEffect(() => {
         const handleNavigate = (event) => {
             if (event.detail && event.detail.page) {
-                setCurrentPage(event.detail.page);
+                navigateToPage(event.detail.page);
             }
         };
         
@@ -211,7 +244,7 @@ const MainLayout = () => {
                             key={item.id}
                             onClick={() => {
                                 console.log('🔄 MainLayout: Navigation clicked:', item.id);
-                                setCurrentPage(item.id);
+                                navigateToPage(item.id);
                             }}
                             className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-sm lg:text-xs touch-target ${
                                 currentPage === item.id 

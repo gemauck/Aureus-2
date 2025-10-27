@@ -314,6 +314,9 @@ const ProjectDetail = ({ project, onBack }) => {
                                 input.type = 'file';
                                 input.multiple = true;
                                 input.onchange = (e) => {
+                                    // Get current user info
+                                    const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                                    
                                     const files = Array.from(e.target.files);
                                     const newDocs = files.map(file => ({
                                         id: Date.now() + Math.random(),
@@ -321,7 +324,9 @@ const ProjectDetail = ({ project, onBack }) => {
                                         size: file.size,
                                         type: file.type,
                                         uploadedAt: new Date().toISOString(),
-                                        uploadedBy: 'Current User'
+                                        uploadedBy: currentUser.name,
+                                        uploadedByEmail: currentUser.email,
+                                        uploadedById: currentUser.id
                                     }));
                                     setDocuments(prev => [...prev, ...newDocs]);
                                 };
@@ -344,6 +349,9 @@ const ProjectDetail = ({ project, onBack }) => {
                                     input.type = 'file';
                                     input.multiple = true;
                                     input.onchange = (e) => {
+                                        // Get current user info
+                                        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                                        
                                         const files = Array.from(e.target.files);
                                         const newDocs = files.map(file => ({
                                             id: Date.now() + Math.random(),
@@ -351,7 +359,9 @@ const ProjectDetail = ({ project, onBack }) => {
                                             size: file.size,
                                             type: file.type,
                                             uploadedAt: new Date().toISOString(),
-                                            uploadedBy: 'Current User'
+                                            uploadedBy: currentUser.name,
+                                            uploadedByEmail: currentUser.email,
+                                            uploadedById: currentUser.id
                                         }));
                                         setDocuments(prev => [...prev, ...newDocs]);
                                     };
@@ -518,10 +528,15 @@ const ProjectDetail = ({ project, onBack }) => {
 
     // Comment handling function
     const handleAddComment = (taskId, commentText, isSubtask, parentId) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const newComment = {
             id: Date.now(),
             text: commentText,
-            author: 'Current User',
+            author: currentUser.name,
+            authorEmail: currentUser.email,
+            authorId: currentUser.id,
             timestamp: new Date().toISOString(),
             date: new Date().toLocaleString()
         };

@@ -49,19 +49,7 @@ const Clients = () => {
     const [sortDirection, setSortDirection] = useState('asc');
     const { isDark } = window.useTheme();
     
-    // Add comprehensive state tracking
-    useEffect(() => {
-        console.log('🔄 Clients state changed:', {
-            count: clients.length,
-            clients: clients.map(c => ({ id: c.id, name: c.name }))
-        });
-    }, [clients]);
-    
-    // Track localStorage changes
-    useEffect(() => {
-        const savedClients = safeStorage.getClients();
-        console.log('💾 localStorage clients:', savedClients ? savedClients.length : 'none');
-    }, [refreshKey]);
+    // Removed expensive state tracking logging
     
     // Load clients and leads from API immediately on mount
     useEffect(() => {
@@ -160,40 +148,32 @@ const Clients = () => {
 
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
-        console.log('🔄 loadClients called');
         try {
-            // Check if user is logged in first
+            // IMMEDIATELY show cached data without waiting for API
+            const cachedClients = safeStorage.getClients();
+            if (cachedClients && cachedClients.length > 0) {
+                setClients(cachedClients);
+            }
+            
+            // Check if user is logged in
             const token = window.storage?.getToken?.() || null;
-            console.log('🔑 Token status:', token ? 'present' : 'none');
             
             if (!token) {
-                console.log('No auth token, loading clients from localStorage only');
-                const savedClients = safeStorage.getClients();
-                console.log('📁 Saved clients from localStorage:', savedClients ? savedClients.length : 'none');
-        if (savedClients && savedClients.length > 0) {
-                    console.log('✅ Setting clients from localStorage');
-                    setClients(savedClients);
-                } else {
-                    console.log('📁 No saved clients, using empty array');
+                if (!cachedClients || cachedClients.length === 0) {
                     setClients([]);
                     safeStorage.setClients([]);
                 }
-            } else {
-                try {
-                    console.log('🌐 Calling API to list clients');
-                    const res = await window.api.listClients();
-                    const apiClients = res?.data?.clients || [];
-                    console.log('📡 API returned clients:', apiClients.length);
+                return;
+            }
+            
+            // API call happens in background after showing cached data
+            try {
+                const res = await window.api.listClients();
+                const apiClients = res?.data?.clients || [];
                     
-                    // Get localStorage clients to merge projectIds
-                    const savedClients = storage.getClients ? safeStorage.getClients() || [] : [];
-                    console.log('📁 Saved clients for merge:', savedClients.length);
-                    
-                    // If API returns no clients, use localStorage clients
-                    if (apiClients.length === 0 && savedClients.length > 0) {
-                        console.log('✅ No API clients, using localStorage clients');
-                        setClients(savedClients);
-                        return;
+                    // If API returns no clients, use cached data
+                    if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
+                        return; // Keep showing cached data
                     }
                     
                     const processedClients = apiClients.map(c => ({
@@ -233,57 +213,24 @@ const Clients = () => {
                     const clientsOnly = processedClients.filter(c => c.type === 'client');
                     const leadsOnly = processedClients.filter(c => c.type === 'lead');
                     
-                    console.log('✅ Processed clients:', clientsOnly.length);
-                    console.log('✅ Processed leads:', leadsOnly.length);
-                    
-                    // Always prioritize API data - only use localStorage if API completely fails
+                    // Update state with fresh API data
                     setClients(clientsOnly);
                     setLeads(leadsOnly);
-                    console.log('✅ Clients and leads set from API');
                     
-                    // Save processed data to localStorage for offline access (leads are database-only)
-                    // This ensures all users have the same data cached
+                    // Save processed data to localStorage
                     safeStorage.setClients(clientsOnly);
-                    // Leads are database-only, no localStorage sync
-                    console.log('✅ Clients saved to localStorage for consistency');
-                    
-                    // Log the separation for debugging
-                    console.log('📊 Data separation summary:');
-                    console.log('  - Clients (type: client):', clientsOnly.length, clientsOnly.map(c => c.name));
-                    console.log('  - Leads (type: lead):', leadsOnly.length, leadsOnly.map(l => l.name));
-                } catch (apiError) {
-                    console.error('❌ API error loading clients:', apiError);
-                    if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
-                        console.log('🔑 Token expired, clearing and using localStorage');
-                        window.storage?.removeToken?.();
-                        window.storage?.removeUser?.();
-                    }
-                    // Always fall back to localStorage on any API error
-                    const savedClients = safeStorage.getClients();
-                    console.log('📁 API error occurred, checking localStorage:', savedClients ? savedClients.length : 'no clients');
-                    if (savedClients && savedClients.length > 0) {
-                        console.log('✅ Falling back to localStorage clients:', savedClients.length);
-                        setClients(savedClients);
-                        console.log('✅ Clients set from localStorage fallback');
-                    } else {
-                        console.log('📁 No clients in localStorage fallback, using empty array');
-                        setClients([]);
-                        safeStorage.setClients([]);
-                    }
+            } catch (apiError) {
+                // On API error, just keep showing cached data
+                if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
+                    window.storage?.removeToken?.();
+                    window.storage?.removeUser?.();
                 }
             }
         } catch (e) {
-            console.error('❌ Failed to load clients:', e);
-            const savedClients = safeStorage.getClients();
-            console.log('📁 Final fallback - saved clients:', savedClients ? savedClients.length : 'none');
-            if (savedClients && savedClients.length > 0) {
-                console.log('✅ Final fallback - setting clients from localStorage');
-                setClients(savedClients);
-            } else {
-                // Fallback to empty array if localStorage is empty
-                console.log('📁 No saved clients, using empty array');
-                setClients([]);
-                safeStorage.setClients([]);
+            // On error, show cached data if available
+            const fallbackClients = safeStorage.getClients();
+            if (fallbackClients && fallbackClients.length > 0) {
+                setClients(fallbackClients);
             }
         }
         // Projects are now handled by ProjectsDatabaseFirst component only
@@ -296,24 +243,16 @@ const Clients = () => {
             const token = window.storage?.getToken?.();
             const hasApi = window.api && typeof window.api.getLeads === 'function';
             
-            // Skip if not authenticated or API not ready - will retry when available
+            // Skip if not authenticated or API not ready
             if (!token || !hasApi) {
-                console.log('ℹ️ Skipping leads load - waiting for authentication');
                 return;
             }
             
-            console.log('🔄 Loading leads from database...');
-                const apiResponse = await window.api.getLeads();
-                const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
-                console.log('📡 Database returned leads:', rawLeads.length);
-                
-                // Map database fields to UI expected format with JSON parsing
-                const mappedLeads = rawLeads.map(lead => {
-                    console.log('🔍 Parsing lead:', lead.id, lead.name);
-                    console.log('🔍 Raw contacts field:', typeof lead.contacts, lead.contacts);
-                    console.log('🔍 Raw followUps field:', typeof lead.followUps, lead.followUps);
-                    console.log('🔍 Raw status field:', lead.status);
-                    console.log('🔍 Raw stage field:', lead.stage);
+            const apiResponse = await window.api.getLeads();
+            const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+            
+            // Map database fields to UI expected format with JSON parsing
+            const mappedLeads = rawLeads.map(lead => {
                     
                     return {
                         id: lead.id,
@@ -351,11 +290,8 @@ const Clients = () => {
                     };
                 });
                 
-            console.log('🔄 Mapped leads:', mappedLeads.map(l => ({ id: l.id, name: l.name, status: l.status })));
             setLeads(mappedLeads);
-            console.log('✅ Leads loaded and mapped from database');
         } catch (error) {
-            console.error('❌ Error loading leads from database:', error);
             // Keep existing leads on error, don't clear them
         }
     };
@@ -677,6 +613,9 @@ const Clients = () => {
                 console.log('✅ Lead updated');
             } else {
                 // Create new lead
+                // Get current user info
+                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                
                 const newLead = {
                     ...leadFormData,
                     id: Date.now().toString(), // Generate local ID
@@ -687,7 +626,9 @@ const Clients = () => {
                         type: 'Lead Created',
                         description: `Lead created: ${leadFormData.name}`,
                         timestamp: new Date().toISOString(),
-                        user: 'Current User'
+                        user: currentUser.name,
+                        userId: currentUser.id,
+                        userEmail: currentUser.email
                     }]
                 };
                 
@@ -933,7 +874,9 @@ const Clients = () => {
                 type: 'Lead Converted',
                 description: `Converted from lead to client`,
                 timestamp: new Date().toISOString(),
-                user: 'Current User'
+                user: (window.storage?.getUserInfo() || { name: 'System' }).name,
+                userId: (window.storage?.getUserInfo() || { id: 'system' }).id,
+                userEmail: (window.storage?.getUserInfo() || { email: 'system' }).email
             }]
         };
         setClients([...clients, newClient]);

@@ -66,13 +66,18 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const documentData = {
             ...formData,
             id: document?.id || Date.now().toString(),
             team: team.id,
             createdAt: document?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            createdBy: 'Current User' // Would come from auth context
+            createdBy: currentUser.name,
+            createdByEmail: currentUser.email,
+            createdById: currentUser.id
         };
 
         // Simulate file attachment

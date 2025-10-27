@@ -105,13 +105,18 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
             return;
         }
 
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const checklistData = {
             ...formData,
             id: checklist?.id || Date.now().toString(),
             team: team.id,
             createdAt: checklist?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
-            createdBy: 'Current User' // Would come from auth context
+            createdBy: currentUser.name,
+            createdByEmail: currentUser.email,
+            createdById: currentUser.id
         };
 
         onSave(checklistData);

@@ -112,7 +112,9 @@ const LeaveManagement = () => {
                 ...applicationData,
                 status: 'pending',
                 appliedDate: new Date().toISOString().split('T')[0],
-                appliedBy: 'Current User' // In real app, get from auth
+                appliedBy: (window.storage?.getUserInfo() || { name: 'System' }).name,
+                appliedById: (window.storage?.getUserInfo() || { id: 'system' }).id,
+                appliedByEmail: (window.storage?.getUserInfo() || { email: 'system' }).email
             };
             setLeaveApplications([...leaveApplications, newApplication]);
         }

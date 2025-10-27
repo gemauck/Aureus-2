@@ -405,6 +405,12 @@
     <!-- User Management -->
     <script type="text/babel" src="./src/components/users/UserManagement.jsx"></script>
     
+    <!-- Account Component -->
+    <script type="text/babel" src="./src/components/account/Account.jsx"></script>
+    
+    <!-- Settings Component -->
+    <script type="text/babel" src="./src/components/settings/Settings.jsx"></script>
+    
     <!-- Permission System -->
     <script type="text/babel" src="./src/utils/permissions.js"></script>
     
@@ -476,7 +482,7 @@
         const requiredComponents = [
             'DashboardSimple', 'DashboardLive', 'DashboardFallback',
             'Clients', 'Projects', 'Teams', 'TimeTracking', 'HR',
-            'AuthProvider', 'ThemeProvider', 'MainLayout'
+            'AuthProvider', 'ThemeProvider', 'MainLayout', 'Account', 'Settings'
         ];
         
         const missingComponents = requiredComponents.filter(comp => !window[comp]);

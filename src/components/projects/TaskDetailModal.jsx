@@ -64,10 +64,15 @@ const TaskDetailModal = ({
 
     const handleAddComment = () => {
         if (newComment.trim()) {
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+            
             const comment = {
                 id: Date.now(),
                 text: newComment,
-                author: 'Current User',
+                author: currentUser.name,
+                authorEmail: currentUser.email,
+                authorId: currentUser.id,
                 timestamp: new Date().toISOString(),
                 date: new Date().toLocaleString()
             };

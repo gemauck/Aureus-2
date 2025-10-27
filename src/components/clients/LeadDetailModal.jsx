@@ -401,13 +401,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {
             id: Date.now(),
             text: newComment,
             tags: Array.isArray(newNoteTags) ? newNoteTags : [],
             attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
             createdAt: new Date().toISOString(),
-            createdBy: 'Current User' // In real app, get from auth
+            createdBy: currentUser.name,
+            createdByEmail: currentUser.email,
+            createdById: currentUser.id
         }];
         
         const updatedFormData = {...formData, comments: updatedComments};
@@ -424,12 +429,17 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const logActivity = (type, description, relatedId = null) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const activity = {
             id: Date.now(),
             type,
             description,
             timestamp: new Date().toISOString(),
-            user: 'Current User', // In real app, get from auth
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
             relatedId
         };
         setFormData({

@@ -555,12 +555,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         const currentFollowUps = Array.isArray(formData.followUps) ? formData.followUps : [];
         const updatedFollowUps = [...currentFollowUps, newFollowUpItem];
         
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const newActivityLog = [...(formData.activityLog || []), {
             id: Date.now() + 1,
             type: 'Follow-up Added',
             description: `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`,
             timestamp: new Date().toISOString(),
-            user: 'Current User',
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
             relatedId: null
         }];
         
@@ -600,12 +605,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         const updatedFormData = {...formData, followUps: updatedFollowUps};
         
         if (followUp && !followUp.completed) {
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+            
             updatedFormData.activityLog = [...(formData.activityLog || []), {
                 id: Date.now(),
                 type: 'Follow-up Completed',
                 description: `Completed: ${followUp.description}`,
                 timestamp: new Date().toISOString(),
-                user: 'Current User',
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
                 relatedId: null
             }];
         }
@@ -723,13 +733,18 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const updatedComments = [...(formData.comments || []), {
             id: Date.now(),
             text: newComment,
             tags: Array.isArray(newNoteTags) ? newNoteTags : [],
             attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
             createdAt: new Date().toISOString(),
-            createdBy: 'Current User' // In real app, get from auth
+            createdBy: currentUser.name,
+            createdByEmail: currentUser.email,
+            createdById: currentUser.id
         }];
         
         const updatedFormData = {...formData, comments: updatedComments};
@@ -929,6 +944,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
             
             if (savedOpportunity && savedOpportunity.id) {
+                // Get current user info
+                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                
                 // Add to local opportunities array for immediate UI update
                 const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
                 const updatedOpportunities = [...currentOpportunities, savedOpportunity];
@@ -938,7 +956,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     type: 'Opportunity Added',
                     description: `Added opportunity: ${newOpportunity.name}`,
                     timestamp: new Date().toISOString(),
-                    user: 'Current User',
+                    user: currentUser.name,
+                    userId: currentUser.id,
+                    userEmail: currentUser.email,
                     relatedId: savedOpportunity.id
                 }];
                 
@@ -1077,12 +1097,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     };
 
     const logActivity = (type, description, relatedId = null) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
         const activity = {
             id: Date.now(),
             type,
             description,
             timestamp: new Date().toISOString(),
-            user: 'Current User', // In real app, get from auth
+            user: currentUser.name,
+            userId: currentUser.id,
+            userEmail: currentUser.email,
             relatedId
         };
         setFormData({

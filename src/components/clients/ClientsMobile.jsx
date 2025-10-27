@@ -533,6 +533,9 @@ const ClientsMobile = () => {
                                         }
                                     } else {
                                         // Create new lead
+                                        // Get current user info
+                                        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                                        
                                         const newLead = {
                                             ...leadData,
                                             type: 'lead',
@@ -542,7 +545,9 @@ const ClientsMobile = () => {
                                                 type: 'Lead Created',
                                                 description: `Lead created: ${leadData.name}`,
                                                 timestamp: new Date().toISOString(),
-                                                user: 'Current User'
+                                                user: currentUser.name,
+                                                userId: currentUser.id,
+                                                userEmail: currentUser.email
                                             }]
                                         };
                                         
