@@ -3,16 +3,32 @@ const { useState, useEffect } = React;
 const storage = window.storage;
 
 const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
-    const [formData, setFormData] = useState(project || {
-        name: '',
-        client: '',
-        type: 'Monthly Review',
-        startDate: '',
-        dueDate: '',
-        assignedTo: '',
-        description: '',
-        status: 'Active',
-        manager: ''
+    const [formData, setFormData] = useState(() => {
+        if (project) {
+            // Ensure all values are strings, not null
+            return {
+                name: project.name || '',
+                client: project.client || '',
+                type: project.type || 'Monthly Review',
+                startDate: project.startDate || '',
+                dueDate: project.dueDate || '',
+                assignedTo: project.assignedTo || '',
+                description: project.description || '',
+                status: project.status || 'Active',
+                manager: project.manager || ''
+            };
+        }
+        return {
+            name: '',
+            client: '',
+            type: 'Monthly Review',
+            startDate: '',
+            dueDate: '',
+            assignedTo: '',
+            description: '',
+            status: 'Active',
+            manager: ''
+        };
     });
 
     const [clients, setClients] = useState([]);
