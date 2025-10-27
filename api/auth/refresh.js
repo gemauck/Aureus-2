@@ -20,9 +20,9 @@ async function handler(req, res) {
     const accessToken = signAccessToken(newPayload)
     const newRefreshToken = signRefreshToken(newPayload)
 
-    res.setHeader('Set-Cookie', [
-      `refreshToken=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax`]
-    )
+    const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+    const cookieValue = `refreshToken=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}`
+    res.setHeader('Set-Cookie', [cookieValue])
     return ok(res, { data: { accessToken } })
   } catch (e) {
     return serverError(res, 'Refresh failed', e.message)
