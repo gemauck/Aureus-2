@@ -148,14 +148,20 @@ app.use((req, res, next) => {
   next()
 })
 
-// Serve static files from root directory
+// Serve static files from root directory with aggressive caching
 app.use(express.static(rootDir, {
   index: false, // Don't serve index.html automatically
   dotfiles: 'ignore',
   etag: true,
   lastModified: true,
-  maxAge: '1d',
-  redirect: false // Disable automatic redirects for trailing slashes
+  maxAge: '7d', // Cache for 7 days for better performance
+  redirect: false, // Disable automatic redirects for trailing slashes
+  setHeaders: (res, path) => {
+    // Cache compiled JS and CSS files more aggressively
+    if (path.endsWith('.js') || path.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 days
+    }
+  }
 }))
 
 // Explicit mapping for critical endpoints (ensure invite works even if resolution changes)
