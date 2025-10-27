@@ -262,11 +262,11 @@ const Clients = React.memo(() => {
                 return;
             }
             
-            // Skip API call if we recently called it
+            // Skip API call if we recently called it AND we have data
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
-            if (timeSinceLastCall < API_CALL_INTERVAL) {
+            if (timeSinceLastCall < API_CALL_INTERVAL && clients.length > 0) {
                 console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call) - Total: ${((performance.now() - loadStartTime).toFixed(1))}ms`);
                 return; // Use cached data, skip API call
             }
@@ -331,11 +331,11 @@ const Clients = React.memo(() => {
     // Load leads from database only
     const loadLeads = async () => {
         try {
-            // Skip API call if we recently called it
+            // Skip API call if we recently called it AND we have data
             const now = Date.now();
             const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
             
-            if (timeSinceLastCall < API_CALL_INTERVAL) {
+            if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
                 console.log(`⚡ Skipping Leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
                 return; // Use cached data, skip API call
             }
