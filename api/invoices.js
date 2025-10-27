@@ -15,8 +15,9 @@ async function handler(req, res) {
       user: req.user
     })
     
-    // Parse the URL path (already has /api/ stripped by server)
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Parse the URL path - strip /api/ prefix if present
+    const urlPath = req.url.replace(/^\/api\//, '/')
+    const pathSegments = urlPath.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Invoices (GET /api/invoices)

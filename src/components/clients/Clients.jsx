@@ -200,6 +200,7 @@ const Clients = () => {
                         id: c.id,
                         name: c.name,
                         status: c.status === 'active' ? 'Active' : 'Inactive',
+                        stage: c.stage || 'Awareness', // Add stage field
                         industry: c.industry || 'Other',
                         type: c.type || 'client', // Use the type from database
                         revenue: c.revenue || 0,
@@ -222,7 +223,10 @@ const Clients = () => {
                             retainerAmount: 0,
                             taxExempt: false,
                             notes: ''
-                        })
+                        }),
+                        ownerId: c.ownerId || null,
+                        createdAt: c.createdAt,
+                        updatedAt: c.updatedAt
                     }));
                     
                     // Separate clients and leads based on type
@@ -1005,7 +1009,14 @@ const Clients = () => {
                     lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
                 );
                 setLeads(updatedLeads);
-                // Leads are database-only, no localStorage sync
+                
+                // Save to API
+                const token = window.storage?.getToken?.();
+                if (token && window.DatabaseAPI) {
+                    window.DatabaseAPI.updateLead(draggedItem.id, { stage: targetStage })
+                        .then(() => console.log('✅ Lead stage updated:', targetStage))
+                        .catch(err => console.error('❌ Failed to update lead stage:', err));
+                }
             } else if (draggedType === 'opportunity') {
                 const updatedClients = clients.map(client => {
                     if (client.id === draggedItem.clientId) {
@@ -1018,11 +1029,19 @@ const Clients = () => {
                 });
                 setClients(updatedClients);
                 safeStorage.setClients(updatedClients);
+                
+                // Save opportunity update to API if opportunity has an ID
+                const token = window.storage?.getToken?.();
+                if (token && window.DatabaseAPI && draggedItem.id) {
+                    window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: targetStage })
+                        .then(() => console.log('✅ Opportunity stage updated:', targetStage))
+                        .catch(err => console.error('❌ Failed to update opportunity stage:', err));
+                }
             }
 
             setDraggedItem(null);
             setDraggedType(null);
-            setRefreshKey(k => k + 1);
+            // No need to trigger full reload - state already updated and API call made
         };
 
         const handleDragEnd = () => {
