@@ -166,11 +166,34 @@ class LiveDataSync {
         }
     }
 
-    // Sync individual data type
+    // Sync individual data type with caching
     async syncData(dataType, fetchFunction) {
         try {
+            // Check if we recently synced this data type
+            const cacheEntry = this.dataCache.get(dataType);
+            const now = Date.now();
+            const CACHE_DURATION = 30000; // 30 seconds per data type
+            
+            if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
+                console.log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
+                // Send cached data to subscribers
+                this.notifySubscribers({ 
+                    type: 'data', 
+                    dataType, 
+                    data: cacheEntry.data,
+                    timestamp: cacheEntry.timestamp
+                });
+                return { dataType, data: cacheEntry.data, success: true, cached: true };
+            }
+            
             const response = await fetchFunction();
             const data = response.data || response;
+            
+            // Cache the data
+            this.dataCache.set(dataType, {
+                data,
+                timestamp: now
+            });
             
             // Notify subscribers of data update
             this.notifySubscribers({ 
@@ -180,7 +203,7 @@ class LiveDataSync {
                 timestamp: new Date()
             });
             
-            return { dataType, data, success: true };
+            return { dataType, data, success: true, cached: false };
         } catch (error) {
             console.error(`❌ Failed to sync ${dataType}:`, error);
             throw error;
