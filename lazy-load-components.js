@@ -1,26 +1,10 @@
 // Lazy loading script to defer non-critical component loading
 (function() {
+    // Note: Components already loaded in index.html are not included here to avoid duplicate loading
+    // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
     const componentFiles = [
-        './src/components/clients/Clients.jsx',
-        './src/components/clients/ClientsDatabaseFirst.jsx',
-        './src/components/clients/ClientDetailModal.jsx',
-        './src/components/clients/ClientModal.jsx',
-        './src/components/clients/LeadDetailModal.jsx',
-        './src/components/clients/Pipeline.jsx',
-        './src/components/clients/BulkOperations.jsx',
-        './src/components/projects/ProjectDetail.jsx',
-        './src/components/projects/Projects.jsx',
-        './src/components/projects/ProjectModal.jsx',
-        './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
-        './src/components/teams/TeamsEnhanced.jsx',
-        './src/components/teams/Teams.jsx',
-        './src/components/users/Users.jsx',
-        './src/components/hr/HR.jsx',
-        './src/components/invoicing/InvoicingDatabaseFirst.jsx',
-        './src/components/time/TimeTracking.jsx',
-        './src/components/reports/Reports.jsx',
-        './src/components/tools/Tools.jsx',
-        './src/components/manufacturing/Manufacturing.jsx'
+        // Add any truly non-critical components here that should be lazy-loaded
+        // Most components are already loaded synchronously in index.html for reliability
     ];
     
     let loadedComponents = 0;

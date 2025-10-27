@@ -21,7 +21,16 @@ async function handler(req, res) {
           orderBy: { createdAt: 'desc' }
         })
         
-        return ok(res, { clients })
+        console.log('📊 Clients fetched from DB:', clients.length)
+        console.log('📊 Client keys:', clients.length > 0 ? Object.keys(clients[0]) : 'No clients')
+        if (clients.length > 0) {
+          console.log('📊 First client sample (raw):', clients[0])
+          console.log('📊 First client sample (stringified):', JSON.stringify(clients[0], null, 2))
+        }
+        
+        const responseData = { clients }
+        console.log('📊 Preparing response with clients:', responseData)
+        return ok(res, responseData)
       } catch (dbError) {
         console.error('❌ Database error listing clients:', dbError)
         return serverError(res, 'Failed to list clients', dbError.message)

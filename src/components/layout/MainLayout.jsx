@@ -21,7 +21,6 @@ const MainLayout = () => {
 
     // Update URL when page changes
     const navigateToPage = (page) => {
-        console.log('🔄 MainLayout: Navigating to page:', page);
         setCurrentPage(page);
         const newUrl = page === 'dashboard' ? '/' : `/${page}`;
         window.history.pushState({ page }, '', newUrl);
@@ -124,7 +123,8 @@ const MainLayout = () => {
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar' },
     ];
 
-    const renderPage = () => {
+    // Memoize the render function to prevent unnecessary re-renders
+    const renderPage = React.useMemo(() => {
         try {
             switch(currentPage) {
                 case 'dashboard': 
@@ -172,7 +172,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    };
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary]);
 
     return (
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -214,10 +214,7 @@ const MainLayout = () => {
                     {menuItems.map(item => (
                         <button
                             key={item.id}
-                            onClick={() => {
-                                console.log('🔄 MainLayout: Navigation clicked:', item.id);
-                                navigateToPage(item.id);
-                            }}
+                            onClick={() => navigateToPage(item.id)}
                             className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-sm lg:text-xs touch-target ${
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 

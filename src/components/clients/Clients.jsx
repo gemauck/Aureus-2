@@ -1,8 +1,8 @@
 // Get dependencies from window
 const { useState, useEffect, useMemo, useCallback } = React;
 const storage = window.storage || {};
-const ClientDetailModal = window.ClientDetailModal;
-const LeadDetailModal = window.LeadDetailModal;
+// Don't access these at module level - they might not be loaded yet
+// Access them at runtime inside functions
 
 // Safe storage helper functions
 const safeStorage = {
@@ -1536,31 +1536,34 @@ const Clients = React.memo(() => {
 
             {/* Full-page client detail content */}
             <div className="p-6">
-                {ClientDetailModal ? (
-                    <ClientDetailModal
-                    client={selectedClient}
-                    onSave={handleSaveClient}
-                    onUpdate={handleUpdateClient}
-                    onClose={() => {
-                        setViewMode('clients');
-                        setSelectedClient(null);
-                        setCurrentTab('overview');
-                    }}
-                    onDelete={handleDeleteClient}
-                    allProjects={projects}
-                    onNavigateToProject={handleNavigateToProject}
-                    isFullPage={true}
-                    isEditing={true}
-                    hideSearchFilters={true}
-                    initialTab={currentTab}
-                    onTabChange={setCurrentTab}
-                />
-                ) : (
-                    <div className="text-center py-8 text-gray-500">
-                        <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                        <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
-                    </div>
-                )}
+                {(() => {
+                    const Modal = window.ClientDetailModal;
+                    return Modal ? (
+                        <Modal
+                        client={selectedClient}
+                        onSave={handleSaveClient}
+                        onUpdate={handleUpdateClient}
+                        onClose={() => {
+                            setViewMode('clients');
+                            setSelectedClient(null);
+                            setCurrentTab('overview');
+                        }}
+                        onDelete={handleDeleteClient}
+                        allProjects={projects}
+                        onNavigateToProject={handleNavigateToProject}
+                        isFullPage={true}
+                        isEditing={true}
+                        hideSearchFilters={true}
+                        initialTab={currentTab}
+                        onTabChange={setCurrentTab}
+                    />
+                    ) : (
+                        <div className="text-center py-8 text-gray-500">
+                            <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                            <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
@@ -1595,31 +1598,34 @@ const Clients = React.memo(() => {
 
             {/* Full-page lead detail content */}
             <div className="p-6">
-                {LeadDetailModal ? (
-                    <LeadDetailModal
-                    key={selectedLead?.id || 'new-lead'}
-                    lead={selectedLead}
-                    onSave={handleSaveLead}
-                    onClose={() => {
-                        setViewMode('leads');
-                        setSelectedLead(null);
-                        setCurrentLeadTab('overview');
-                    }}
-                    onDelete={handleDeleteLead}
-                    onConvertToClient={convertLeadToClient}
-                    allProjects={projects}
-                    isFullPage={true}
-                    isEditing={true}
-                    hideSearchFilters={true}
-                    initialTab={currentLeadTab}
-                    onTabChange={setCurrentLeadTab}
-                />
-                ) : (
-                    <div className="text-center py-8 text-gray-500">
-                        <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                        <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
-                    </div>
-                )}
+                {(() => {
+                    const Modal = window.LeadDetailModal;
+                    return Modal ? (
+                        <Modal
+                        key={selectedLead?.id || 'new-lead'}
+                        lead={selectedLead}
+                        onSave={handleSaveLead}
+                        onClose={() => {
+                            setViewMode('leads');
+                            setSelectedLead(null);
+                            setCurrentLeadTab('overview');
+                        }}
+                        onDelete={handleDeleteLead}
+                        onConvertToClient={convertLeadToClient}
+                        allProjects={projects}
+                        isFullPage={true}
+                        isEditing={true}
+                        hideSearchFilters={true}
+                        initialTab={currentLeadTab}
+                        onTabChange={setCurrentLeadTab}
+                    />
+                    ) : (
+                        <div className="text-center py-8 text-gray-500">
+                            <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                            <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
+                        </div>
+                    );
+                })()}
             </div>
         </div>
     );
