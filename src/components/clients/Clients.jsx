@@ -17,8 +17,11 @@ let clientDataCache = null;
 let clientDataCacheTimestamp = 0;
 let lastApiCallTimestamp = 0;
 let lastLeadsApiCallTimestamp = 0;
+let lastLiveDataSyncTime = 0;
+let lastLiveDataClientsHash = null;
 const CACHE_DURATION = 60000; // 60 seconds
 const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max
+const LIVE_SYNC_THROTTLE = 2000; // Skip LiveDataSync updates if data hasn't changed in 2 seconds
 
 function processClientData(rawClients, cacheKey) {
     // Use cached processed data if available and recent
