@@ -220,13 +220,10 @@ model Invitation {
   id         String    @id @default(cuid())
   email      String    @unique
   name       String
-  role       String    @default("member") // admin, manager, member, viewer
-  department String    @default("")
-  jobTitle   String    @default("")
+  role       String    @default("user") // admin, manager, member, viewer
   token      String    @unique
   status     String    @default("pending") // pending, accepted, expired, cancelled
   invitedBy  String?
-  inviterName String   @default("")
   expiresAt  DateTime
   acceptedAt DateTime?
   createdAt  DateTime  @default(now())
