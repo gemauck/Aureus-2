@@ -83,6 +83,7 @@ const api = {
   // Clients
   async listClients() {
     const res = await request('/clients')
+    console.log('🔍 listClients response:', JSON.stringify(res, null, 2))
     return res
   },
 
@@ -92,7 +93,9 @@ const api = {
   },
 
   async createClient(clientData) {
+    console.log('🔍 Creating client with data:', clientData)
     const res = await request('/clients', { method: 'POST', body: JSON.stringify(clientData) })
+    console.log('🔍 createClient response:', JSON.stringify(res, null, 2))
     return res
   },
 

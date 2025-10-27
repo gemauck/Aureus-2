@@ -1,13 +1,27 @@
 export function ok(res, data) {
   res.setHeader('Content-Type', 'application/json')
   res.statusCode = 200
-  res.end(JSON.stringify({ data }))
+  // Serialize Dates to ISO strings and handle undefined values
+  const serialized = JSON.stringify({ data }, (key, value) => {
+    if (value instanceof Date) {
+      return value.toISOString()
+    }
+    return value
+  })
+  console.log('📤 ok() response:', serialized.substring(0, 150))
+  res.end(serialized)
 }
 
 export function created(res, data) {
   res.setHeader('Content-Type', 'application/json')
   res.statusCode = 201
-  res.end(JSON.stringify({ data }))
+  // Serialize Dates to ISO strings and handle undefined values
+  res.end(JSON.stringify({ data }, (key, value) => {
+    if (value instanceof Date) {
+      return value.toISOString()
+    }
+    return value
+  }))
 }
 
 export function badRequest(res, message, details) {

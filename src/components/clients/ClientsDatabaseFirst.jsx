@@ -750,22 +750,32 @@ const ClientsDatabaseFirst = () => {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto">
-                        <ClientDetailModal
-                            client={selectedClient}
-                            onSave={handleSaveClient}
-                            onClose={() => {
-                                setViewMode('clients');
-                                setSelectedClient(null);
-                                setCurrentTab('overview');
-                            }}
-                            allProjects={projects}
-                            onNavigateToProject={() => {}}
-                            isFullPage={true}
-                            isEditing={true}
-                            hideSearchFilters={true}
-                            initialTab={currentTab}
-                            onTabChange={setCurrentTab}
-                        />
+                        {(() => {
+                            const Modal = window.ClientDetailModal;
+                            return Modal ? (
+                                <Modal
+                                    client={selectedClient}
+                                    onSave={handleSaveClient}
+                                    onClose={() => {
+                                        setViewMode('clients');
+                                        setSelectedClient(null);
+                                        setCurrentTab('overview');
+                                    }}
+                                    allProjects={projects}
+                                    onNavigateToProject={() => {}}
+                                    isFullPage={true}
+                                    isEditing={true}
+                                    hideSearchFilters={true}
+                                    initialTab={currentTab}
+                                    onTabChange={setCurrentTab}
+                                />
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                    <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                                    <p>ClientDetailModal not loaded. Please refresh.</p>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}
@@ -797,22 +807,32 @@ const ClientsDatabaseFirst = () => {
                     </div>
                     
                     <div className="flex-1 overflow-y-auto">
-                        <LeadDetailModal
-                            lead={selectedLead}
-                            onSave={handleSaveLead}
-                            onClose={() => {
-                                setViewMode('leads');
-                                setSelectedLead(null);
-                                setCurrentLeadTab('overview');
-                            }}
-                            onConvertToClient={convertLeadToClient}
-                            allProjects={projects}
-                            isFullPage={true}
-                            isEditing={true}
-                            hideSearchFilters={true}
-                            initialTab={currentLeadTab}
-                            onTabChange={setCurrentLeadTab}
-                        />
+                        {(() => {
+                            const Modal = window.LeadDetailModal;
+                            return Modal ? (
+                                <Modal
+                                    lead={selectedLead}
+                                    onSave={handleSaveLead}
+                                    onClose={() => {
+                                        setViewMode('leads');
+                                        setSelectedLead(null);
+                                        setCurrentLeadTab('overview');
+                                    }}
+                                    onConvertToClient={convertLeadToClient}
+                                    allProjects={projects}
+                                    isFullPage={true}
+                                    isEditing={true}
+                                    hideSearchFilters={true}
+                                    initialTab={currentLeadTab}
+                                    onTabChange={setCurrentLeadTab}
+                                />
+                            ) : (
+                                <div className="text-center py-8 text-gray-500">
+                                    <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                                    <p>LeadDetailModal not loaded. Please refresh.</p>
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}

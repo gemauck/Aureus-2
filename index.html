@@ -312,6 +312,9 @@
     <script type="text/babel" src="./src/components/common/LoadingState.jsx"></script>
     <script type="text/babel" src="./src/components/common/QuickFallback.jsx"></script>
     <script type="text/babel" src="./src/components/dashboard/DashboardDatabaseFirst.jsx"></script>
+    <!-- Load Client modals BEFORE Clients component to avoid race condition -->
+    <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
+    <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
     <script type="text/babel" src="./src/components/clients/Clients.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectsDatabaseFirst.jsx"></script>
