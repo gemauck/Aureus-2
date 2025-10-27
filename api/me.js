@@ -15,7 +15,11 @@ async function handler(req, res) {
         name: true,
         role: true,
         provider: true,
-        lastLoginAt: true
+        lastLoginAt: true,
+        mustChangePassword: true,
+        phone: true,
+        department: true,
+        jobTitle: true
       }
     })
     if (!user) return unauthorized(res, 'User not found')
