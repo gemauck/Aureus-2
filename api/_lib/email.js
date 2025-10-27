@@ -23,7 +23,11 @@ function createTransporterFromEnv() {
         host,
         port,
         secure,
-        auth: user && pass ? { user, pass } : undefined
+        auth: user && pass ? { user, pass } : undefined,
+        tls: {
+            // Do not fail on invalid certs for development
+            rejectUnauthorized: false
+        }
     });
 }
 
@@ -49,6 +53,7 @@ export const sendInvitationEmail = async (invitationData) => {
     
     const mailOptions = {
         from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za',
+        replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
         to: email,
         subject: 'Invitation to Join Abcotronics System',
         html: `

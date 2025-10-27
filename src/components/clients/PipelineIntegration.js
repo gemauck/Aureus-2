@@ -104,11 +104,16 @@ window.navigateToPipeline = navigateToPipeline;
 
 // Auto-initialize on load with dependency wait
 function waitForDependencies(fn, tries = 40) {
-    if (window.Pipeline && window.storage && window.React) {
+    // Check if Pipeline component exists - if not, just skip initialization
+    if (window.storage && window.React) {
+        if (!window.Pipeline) {
+            console.warn('⚠️ Pipeline component not loaded, skipping integration');
+            return false;
+        }
         return fn();
     }
     if (tries <= 0) {
-        console.error('Pipeline dependencies still missing after wait');
+        console.warn('⚠️ Pipeline integration dependencies still missing after wait - skipping');
         return false;
     }
     setTimeout(() => waitForDependencies(fn, tries - 1), 250);
