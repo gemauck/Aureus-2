@@ -318,15 +318,12 @@
     <script type="text/babel" src="./src/components/invoicing/InvoicingDatabaseFirst.jsx"></script>
     <script type="text/babel" src="./src/components/time/TimeTrackingDatabaseFirst.jsx"></script>
     
-    <!-- Load other components -->
+    <!-- Load other components (some moved to lazy load) -->
     <script type="text/babel" src="./src/components/dashboard/DashboardEnhanced.jsx"></script>
-    <script type="text/babel" src="./src/components/clients/ClientModal.jsx"></script>
-    <script type="text/babel" src="./src/components/clients/ClientDetailModal.jsx"></script>
+    <!-- Client modals moved to lazy load -->
     <script type="text/babel" src="./src/components/clients/ClientDetailModalMobile.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsMobile.jsx"></script>
     <script type="text/babel" src="./src/components/clients/ClientsMobileOptimized.jsx"></script>
-    <script type="text/babel" src="./src/components/clients/LeadDetailModal.jsx"></script>
-    <script type="text/babel" src="./src/components/clients/Pipeline.jsx"></script>
     <script type="text/babel" src="./src/components/common/AdvancedSearch.jsx"></script>
     <script type="text/babel" src="./src/components/clients/BulkOperations.jsx"></script>
     <script type="text/babel" src="./src/components/invoicing/RecurringInvoices.jsx"></script>
@@ -423,6 +420,9 @@
     
     <!-- Database Seeding Script -->
     <script type="text/babel" src="./database-seed-clients.js"></script>
+    
+    <!-- Lazy Load Non-Critical Components -->
+    <script src="./lazy-load-components.js"></script>
     
     <!-- App Entry Point -->
     <script type="text/babel" src="./src/App.jsx"></script>
