@@ -15,7 +15,10 @@ const safeStorage = {
 // Performance optimization: Memoized client data processor
 let clientDataCache = null;
 let clientDataCacheTimestamp = 0;
-const CACHE_DURATION = 5000; // 5 seconds
+let lastApiCallTimestamp = 0;
+let lastLeadsApiCallTimestamp = 0;
+const CACHE_DURATION = 60000; // 60 seconds
+const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max
 
 function processClientData(rawClients, cacheKey) {
     // Use cached processed data if available and recent
@@ -230,6 +233,18 @@ const Clients = () => {
                 return;
             }
             
+            // Skip API call if we recently called it
+            const now = Date.now();
+            const timeSinceLastCall = now - lastApiCallTimestamp;
+            
+            if (timeSinceLastCall < API_CALL_INTERVAL) {
+                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+                return; // Use cached data, skip API call
+            }
+            
+            // Update last API call timestamp
+            lastApiCallTimestamp = now;
+            
             // API call happens in background after showing cached data
             try {
                 const res = await window.api.listClients();
@@ -274,6 +289,15 @@ const Clients = () => {
     // Load leads from database only
     const loadLeads = async () => {
         try {
+            // Skip API call if we recently called it
+            const now = Date.now();
+            const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
+            
+            if (timeSinceLastCall < API_CALL_INTERVAL) {
+                console.log(`⚡ Skipping Leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+                return; // Use cached data, skip API call
+            }
+            
             const token = window.storage?.getToken?.();
             const hasApi = window.api && typeof window.api.getLeads === 'function';
             
@@ -281,6 +305,9 @@ const Clients = () => {
             if (!token || !hasApi) {
                 return;
             }
+            
+            // Update last API call timestamp
+            lastLeadsApiCallTimestamp = now;
             
             const apiResponse = await window.api.getLeads();
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
@@ -1733,4 +1760,5 @@ const Clients = () => {
 };
 
 window.Clients = Clients;
+
 
