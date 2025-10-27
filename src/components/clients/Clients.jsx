@@ -299,14 +299,37 @@ const Clients = React.memo(() => {
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     const processEndTime = performance.now();
                     
-                    // Update state with fresh API data
-                    setClients(clientsOnly);
-                    setLeads(leadsOnly);
-                    console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
-                    console.log(`✅ State updated: clients=${clientsOnly.length}, leads=${leadsOnly.length}`);
-                    
-                    // Save processed data to localStorage
-                    safeStorage.setClients(clientsOnly);
+                    // Load opportunities for each client
+                    if (window.api?.getOpportunitiesByClient) {
+                        const clientsWithOpportunities = await Promise.all(clientsOnly.map(async (client) => {
+                            try {
+                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                const opportunities = oppResponse?.data?.opportunities || [];
+                                return { ...client, opportunities };
+                            } catch (error) {
+                                console.warn(`⚠️ Failed to load opportunities for client ${client.id}:`, error);
+                                return { ...client, opportunities: [] };
+                            }
+                        }));
+                        
+                        // Update state with clients that have opportunities
+                        setClients(clientsWithOpportunities);
+                        setLeads(leadsOnly);
+                        console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
+                        console.log(`✅ State updated: clients=${clientsWithOpportunities.length}, leads=${leadsOnly.length}`);
+                        
+                        // Save processed data to localStorage
+                        safeStorage.setClients(clientsWithOpportunities);
+                    } else {
+                        // Update state with fresh API data
+                        setClients(clientsOnly);
+                        setLeads(leadsOnly);
+                        console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
+                        console.log(`✅ State updated: clients=${clientsOnly.length}, leads=${leadsOnly.length}`);
+                        
+                        // Save processed data to localStorage
+                        safeStorage.setClients(clientsOnly);
+                    }
                     
                     const loadEndTime = performance.now();
                     console.log(`⚡ TOTAL loadClients: ${(loadEndTime - loadStartTime).toFixed(1)}ms`);
