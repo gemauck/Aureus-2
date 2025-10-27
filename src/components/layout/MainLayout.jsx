@@ -187,7 +187,6 @@ const MainLayout = () => {
                     {sidebarOpen ? (
                         <div className="flex-1">
                             <h1 className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
-                            <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>ERP</p>
                         </div>
                     ) : (
                         <div className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>

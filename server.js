@@ -1,4 +1,4 @@
-// Railway ERP Server Entry Point
+// Railway Server Entry Point
 import 'dotenv/config'
 import express from 'express'
 import cookieParser from 'cookie-parser'
@@ -313,7 +313,7 @@ app.get('*', (req, res) => {
 })
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Railway ERP Server running on port ${PORT}`)
+  console.log(`🚀 Railway Server running on port ${PORT}`)
   console.log(`📁 Serving from: ${rootDir}`)
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'production'}`)
   console.log(`📂 API directory: ${apiDir}`)

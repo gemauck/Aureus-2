@@ -101,7 +101,7 @@ const Payroll = () => {
             netSalary: netSalary.toFixed(2),
             paymentDate: new Date().toISOString().split('T')[0],
             status: 'Pending',
-            source: 'ERP', // ERP or QuickBooks
+            source: 'System', // System or QuickBooks
             qbSynced: false
         };
 

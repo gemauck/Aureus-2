@@ -363,7 +363,7 @@ const Settings = () => {
                     Data Import
                 </h3>
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-4`}>
-                    Import data from CSV files or other ERP systems.
+                    Import data from CSV files or other systems.
                 </p>
                 <button
                     onClick={handleDataImport}

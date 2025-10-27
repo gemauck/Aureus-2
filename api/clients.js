@@ -22,7 +22,7 @@ async function handler(req, res) {
     // List Clients (GET /api/clients)
     if (req.method === 'GET' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
       try {
-        // Return ALL clients for all users - this is an ERP system where all users should see all clients
+        // Return ALL clients for all users - this is a system where all users should see all clients
         const clients = await prisma.client.findMany({ 
           include: {
             opportunities: true

@@ -138,7 +138,7 @@ const QuickBooksPayrollSync = ({ onClose }) => {
         
         // TODO: Actual API calls
         // 1. GET paychecks for each employee
-        // 2. Transform to ERP format
+        // 2. Transform to system format
         // 3. Save to localStorage
         
         setTimeout(() => {
@@ -328,7 +328,7 @@ const QuickBooksPayrollSync = ({ onClose }) => {
                             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                                 <p className="text-xs text-blue-900">
                                     <i className="fas fa-info-circle mr-1.5"></i>
-                                    Map your ERP employees to QuickBooks employees to enable payroll sync.
+                                    Map your employees to QuickBooks employees to enable payroll sync.
                                 </p>
                             </div>
 
