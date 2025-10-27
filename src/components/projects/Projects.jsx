@@ -62,8 +62,16 @@ const Projects = () => {
                 
                 console.log('📡 Database returned projects:', apiProjects?.length || 0, apiProjects);
                 
+                // Normalize projects: map clientName to client for frontend compatibility
+                const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
+                    ...p,
+                    client: p.clientName || p.client || ''
+                }));
+                
+                console.log('📡 Normalized projects:', normalizedProjects?.length || 0);
+                
                 // Ensure we always set an array
-                setProjects(Array.isArray(apiProjects) ? apiProjects : []);
+                setProjects(normalizedProjects);
                 
                 // Sync existing projects with clients
                 syncProjectsWithClients(apiProjects);
@@ -154,7 +162,19 @@ const Projects = () => {
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!ProjectDetail);
         try {
-            setViewingProject(project);
+            // Parse JSON string fields from database before passing to ProjectDetail
+            const normalizedProject = {
+                ...project,
+                taskLists: typeof project.taskLists === 'string' ? JSON.parse(project.taskLists || '[]') : (project.taskLists || []),
+                tasks: typeof project.tasksList === 'string' ? JSON.parse(project.tasksList || '[]') : (project.tasks || project.tasksList || []),
+                customFieldDefinitions: typeof project.customFieldDefinitions === 'string' ? JSON.parse(project.customFieldDefinitions || '[]') : (project.customFieldDefinitions || []),
+                documents: typeof project.documents === 'string' ? JSON.parse(project.documents || '[]') : (project.documents || []),
+                comments: typeof project.comments === 'string' ? JSON.parse(project.comments || '[]') : (project.comments || []),
+                activityLog: typeof project.activityLog === 'string' ? JSON.parse(project.activityLog || '[]') : (project.activityLog || []),
+                team: typeof project.team === 'string' ? JSON.parse(project.team || '[]') : (project.team || [])
+            };
+            console.log('Normalized project for ProjectDetail:', normalizedProject);
+            setViewingProject(normalizedProject);
         } catch (error) {
             console.error('Error setting viewingProject:', error);
             alert('Error opening project: ' + error.message);
@@ -162,6 +182,18 @@ const Projects = () => {
     };
 
     const handleSaveProject = async (projectData) => {
+        console.log('💾 handleSaveProject called:');
+        console.log('  - projectData.name:', projectData?.name);
+        console.log('  - projectData.client:', projectData?.client);
+        console.log('  - full projectData:', JSON.stringify(projectData, null, 2));
+        
+        // Validate required fields
+        if (!projectData || !projectData.name || projectData.name.trim() === '') {
+            console.error('❌ Invalid project data:', projectData);
+            alert('Project name is required');
+            return;
+        }
+        
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
@@ -174,14 +206,23 @@ const Projects = () => {
                 console.log('🌐 Updating project in database:', selectedProject.id);
                 const updatedProject = { ...selectedProject, ...projectData };
                 const apiResponse = await window.DatabaseAPI.updateProject(selectedProject.id, updatedProject);
-                const updatedProjectFromAPI = apiResponse?.data || apiResponse;
+                console.log('📥 Update API Response:', apiResponse);
+                
+                // Extract the project from the response structure { data: { project: {...} } }
+                const updatedProjectFromAPI = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
                 
                 if (updatedProjectFromAPI && updatedProjectFromAPI.id) {
+                    // Normalize: map clientName to client for frontend compatibility
+                    const normalizedProject = {
+                        ...updatedProjectFromAPI,
+                        client: updatedProjectFromAPI.clientName || updatedProjectFromAPI.client || ''
+                    };
                     const updatedProjects = projects.map(p => 
-                        p.id === selectedProject.id ? updatedProjectFromAPI : p
+                        p.id === selectedProject.id ? normalizedProject : p
                     );
                     setProjects(updatedProjects);
                 } else {
+                    console.error('❌ API did not return updated project, using local update');
                     const updatedProjects = projects.map(p => 
                         p.id === selectedProject.id ? updatedProject : p
                     );
@@ -200,40 +241,46 @@ const Projects = () => {
                     description: projectData.description || '',
                     type: projectData.type || 'Monthly Review',
                     status: projectData.status || 'Active',
-                    startDate: projectData.startDate && projectData.startDate.trim() !== '' ? projectData.startDate : undefined,
+                    startDate: projectData.startDate && projectData.startDate.trim() !== '' ? projectData.startDate : new Date().toISOString(),
                     dueDate: projectData.dueDate && projectData.dueDate.trim() !== '' ? projectData.dueDate : null,
                     assignedTo: projectData.assignedTo || '',
-                    manager: projectData.manager || '',
-                    progress: 0,
+                    budget: 0,
                     priority: 'Medium',
                     taskLists: JSON.stringify([{ id: 1, name: 'To Do', color: 'blue' }]),
                     tasksList: JSON.stringify([]),
                     customFieldDefinitions: JSON.stringify([]),
-                    team: JSON.stringify([])
+                    team: JSON.stringify([]),
+                    notes: ''
                 };
                 
-                console.log('🌐 Creating project in database:', newProject);
+                console.log('🌐 Creating project in database:');
+                console.log('  - name:', newProject.name);
+                console.log('  - clientName:', newProject.clientName);
+                console.log('  - type:', newProject.type);
+                console.log('  - full project data:', JSON.stringify(newProject, null, 2));
+                
                 const apiResponse = await window.DatabaseAPI.createProject(newProject);
-                const savedProject = apiResponse?.data || apiResponse;
+                console.log('📥 API Response:', apiResponse);
+                
+                // Extract the project from the response structure { data: { project: {...} } }
+                const savedProject = apiResponse?.data?.project || apiResponse?.project || apiResponse?.data;
+                console.log('📥 Extracted project:', savedProject);
                 
                 if (savedProject && savedProject.id) {
-                    setProjects([...projects, savedProject]);
+                    // Normalize: map clientName to client for frontend compatibility
+                    const normalizedProject = {
+                        ...savedProject,
+                        client: savedProject.clientName || savedProject.client || ''
+                    };
+                    setProjects([...projects, normalizedProject]);
                     
                     // Update client's projectIds for new project
                     if (projectData.client) {
                         updateClientProjectIds(null, projectData.client, savedProject.id);
                     }
                 } else {
-                    // Fallback to local state if API doesn't return the project
-                    const fallbackProject = {
-                        id: Math.max(0, ...projects.map(p => p.id)) + 1,
-                        ...newProject
-                    };
-                    setProjects([...projects, fallbackProject]);
-                    
-                    if (projectData.client) {
-                        updateClientProjectIds(null, projectData.client, fallbackProject.id);
-                    }
+                    console.error('❌ API did not return a valid project with id:', savedProject);
+                    alert('Project created but failed to retrieve. Please refresh the page.');
                 }
             }
             setShowModal(false);

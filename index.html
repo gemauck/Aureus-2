@@ -340,6 +340,19 @@
     <script type="text/babel" src="./src/components/projects/ProjectModal.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectProgressTracker.jsx"></script>
     <script type="text/babel" src="./src/components/projects/MonthlyDocumentCollectionTracker.jsx"></script>
+    <script>
+        // Diagnostic: Check if MonthlyDocumentCollectionTracker loaded
+        setTimeout(() => {
+            if (typeof window.MonthlyDocumentCollectionTracker === 'undefined') {
+                console.error('❌ CRITICAL: MonthlyDocumentCollectionTracker failed to load!');
+                console.error('   This usually means a Babel transpilation error.');
+                console.error('   Check the Network tab for 404 errors on the .jsx file.');
+                console.error('   Check console for any red Babel errors.');
+            } else {
+                console.log('✅ MonthlyDocumentCollectionTracker is available on window');
+            }
+        }, 2000);
+    </script>
     <script type="text/babel" src="./src/components/projects/CommentsPopup.jsx"></script>
     <script type="text/babel" src="./src/components/projects/DocumentCollectionModal.jsx"></script>
     <script type="text/babel" src="./src/components/projects/ProjectDetail.jsx"></script>

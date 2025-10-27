@@ -134,7 +134,7 @@ app.use((req, res, next) => {
     console.log(`✅ CORS: No origin header, using default: ${allowedOrigins[0] || 'http://localhost:8000'}`)
   }
   
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
   
   // Handle preflight requests
@@ -200,12 +200,30 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
+app.all('/api/projects/:id', async (req, res, next) => {
+  try {
+    console.log(`🎯 Explicit route hit: ${req.method} /api/projects/${req.params.id}`)
+    const handler = await loadHandler(path.join(apiDir, 'projects.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for individual opportunity operations (GET, PUT, DELETE /api/opportunities/[id])
 // This route is handled by the dynamic route resolution below
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
   try {
+    console.log(`🔍 Railway API: Incoming request - Method: ${req.method}, URL: ${req.url}`)
+    console.log(`🔍 Railway API: req.body type: ${typeof req.body}, has body: ${!!req.body}, keys: ${Object.keys(req.body || {}).join(', ')}`)
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`🔍 Railway API: Request body:`, JSON.stringify(req.body, null, 2))
+    }
+    
     const handlerPath = toHandlerPath(req.url)
     console.log(`🔍 Railway API: ${req.method} ${req.url} -> ${path.relative(rootDir, handlerPath)}`)
     console.log(`🔍 Railway API: Handler path exists: ${fs.existsSync(handlerPath)}`)

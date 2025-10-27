@@ -59,21 +59,21 @@ const DatabaseAPI = {
     // CLIENT OPERATIONS
     async getClients() {
         console.log('📡 Fetching clients from database...');
-        const response = await this.makeRequest('/api/clients');
+        const response = await this.makeRequest('/clients');
         console.log('✅ Clients fetched from database:', response.data?.clients?.length || 0);
         return response;
     },
 
     async getClient(id) {
         console.log(`📡 Fetching client ${id} from database...`);
-        const response = await this.makeRequest(`/api/clients/${id}`);
+        const response = await this.makeRequest(`/clients/${id}`);
         console.log('✅ Client fetched from database');
         return response;
     },
 
     async createClient(clientData) {
         console.log('📡 Creating client in database...');
-        const response = await this.makeRequest('/api/clients', {
+        const response = await this.makeRequest('/clients', {
             method: 'POST',
             body: JSON.stringify(clientData)
         });
@@ -83,7 +83,7 @@ const DatabaseAPI = {
 
     async updateClient(id, clientData) {
         console.log(`📡 Updating client ${id} in database...`);
-        const response = await this.makeRequest(`/api/clients/${id}`, {
+        const response = await this.makeRequest(`/clients/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(clientData)
         });
@@ -93,7 +93,7 @@ const DatabaseAPI = {
 
     async deleteClient(id) {
         console.log(`📡 Deleting client ${id} from database...`);
-        const response = await this.makeRequest(`/api/clients/${id}`, {
+        const response = await this.makeRequest(`/clients/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Client deleted from database');
@@ -103,7 +103,7 @@ const DatabaseAPI = {
     // LEAD OPERATIONS
     async getLeads() {
         console.log('📡 Fetching leads from database...');
-        const raw = await this.makeRequest('/api/leads');
+        const raw = await this.makeRequest('/leads');
         // Normalize payload to { data: { leads: [...] } } for downstream consumers
         const normalized = {
             data: {
@@ -120,14 +120,14 @@ const DatabaseAPI = {
 
     async getLead(id) {
         console.log(`📡 Fetching lead ${id} from database...`);
-        const response = await this.makeRequest(`/api/leads/${id}`);
+        const response = await this.makeRequest(`/leads/${id}`);
         console.log('✅ Lead fetched from database');
         return response;
     },
 
     async createLead(leadData) {
         console.log('📡 Creating lead in database...');
-        const response = await this.makeRequest('/api/leads', {
+        const response = await this.makeRequest('/leads', {
             method: 'POST',
             body: JSON.stringify(leadData)
         });
@@ -137,7 +137,7 @@ const DatabaseAPI = {
 
     async updateLead(id, leadData) {
         console.log(`📡 Updating lead ${id} in database...`);
-        const response = await this.makeRequest(`/api/leads/${id}`, {
+        const response = await this.makeRequest(`/leads/${id}`, {
             method: 'PUT',
             body: JSON.stringify(leadData)
         });
@@ -147,7 +147,7 @@ const DatabaseAPI = {
 
     async deleteLead(id) {
         console.log(`📡 Deleting lead ${id} from database...`);
-        const response = await this.makeRequest(`/api/leads/${id}`, {
+        const response = await this.makeRequest(`/leads/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Lead deleted from database');
@@ -157,21 +157,21 @@ const DatabaseAPI = {
     // PROJECT OPERATIONS
     async getProjects() {
         console.log('📡 Fetching projects from database...');
-        const response = await this.makeRequest('/api/projects');
+        const response = await this.makeRequest('/projects');
         console.log('✅ Projects fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async getProject(id) {
         console.log(`📡 Fetching project ${id} from database...`);
-        const response = await this.makeRequest(`/api/projects/${id}`);
+        const response = await this.makeRequest(`/projects/${id}`);
         console.log('✅ Project fetched from database');
         return response;
     },
 
     async createProject(projectData) {
         console.log('📡 Creating project in database...');
-        const response = await this.makeRequest('/api/projects', {
+        const response = await this.makeRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
         });
@@ -181,7 +181,7 @@ const DatabaseAPI = {
 
     async updateProject(id, projectData) {
         console.log(`📡 Updating project ${id} in database...`);
-        const response = await this.makeRequest(`/api/projects/${id}`, {
+        const response = await this.makeRequest(`/projects/${id}`, {
             method: 'PUT',
             body: JSON.stringify(projectData)
         });
@@ -191,7 +191,7 @@ const DatabaseAPI = {
 
     async deleteProject(id) {
         console.log(`📡 Deleting project ${id} from database...`);
-        const response = await this.makeRequest(`/api/projects/${id}`, {
+        const response = await this.makeRequest(`/projects/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Project deleted from database');
@@ -201,21 +201,21 @@ const DatabaseAPI = {
     // INVOICE OPERATIONS
     async getInvoices() {
         console.log('📡 Fetching invoices from database...');
-        const response = await this.makeRequest('/api/invoices');
+        const response = await this.makeRequest('/invoices');
         console.log('✅ Invoices fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async getInvoice(id) {
         console.log(`📡 Fetching invoice ${id} from database...`);
-        const response = await this.makeRequest(`/api/invoices/${id}`);
+        const response = await this.makeRequest(`/invoices/${id}`);
         console.log('✅ Invoice fetched from database');
         return response;
     },
 
     async createInvoice(invoiceData) {
         console.log('📡 Creating invoice in database...');
-        const response = await this.makeRequest('/api/invoices', {
+        const response = await this.makeRequest('/invoices', {
             method: 'POST',
             body: JSON.stringify(invoiceData)
         });
@@ -225,7 +225,7 @@ const DatabaseAPI = {
 
     async updateInvoice(id, invoiceData) {
         console.log(`📡 Updating invoice ${id} in database...`);
-        const response = await this.makeRequest(`/api/invoices/${id}`, {
+        const response = await this.makeRequest(`/invoices/${id}`, {
             method: 'PUT',
             body: JSON.stringify(invoiceData)
         });
@@ -235,7 +235,7 @@ const DatabaseAPI = {
 
     async deleteInvoice(id) {
         console.log(`📡 Deleting invoice ${id} from database...`);
-        const response = await this.makeRequest(`/api/invoices/${id}`, {
+        const response = await this.makeRequest(`/invoices/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Invoice deleted from database');
@@ -245,14 +245,14 @@ const DatabaseAPI = {
     // TIME TRACKING OPERATIONS
     async getTimeEntries() {
         console.log('📡 Fetching time entries from database...');
-        const response = await this.makeRequest('/api/time-entries');
+        const response = await this.makeRequest('/time-entries');
         console.log('✅ Time entries fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async createTimeEntry(timeEntryData) {
         console.log('📡 Creating time entry in database...');
-        const response = await this.makeRequest('/api/time-entries', {
+        const response = await this.makeRequest('/time-entries', {
             method: 'POST',
             body: JSON.stringify(timeEntryData)
         });
@@ -262,7 +262,7 @@ const DatabaseAPI = {
 
     async updateTimeEntry(id, timeEntryData) {
         console.log(`📡 Updating time entry ${id} in database...`);
-        const response = await this.makeRequest(`/api/time-entries/${id}`, {
+        const response = await this.makeRequest(`/time-entries/${id}`, {
             method: 'PUT',
             body: JSON.stringify(timeEntryData)
         });
@@ -272,7 +272,7 @@ const DatabaseAPI = {
 
     async deleteTimeEntry(id) {
         console.log(`📡 Deleting time entry ${id} from database...`);
-        const response = await this.makeRequest(`/api/time-entries/${id}`, {
+        const response = await this.makeRequest(`/time-entries/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Time entry deleted from database');
@@ -282,14 +282,14 @@ const DatabaseAPI = {
     // USER OPERATIONS
     async getUsers() {
         console.log('📡 Fetching users from database...');
-        const response = await this.makeRequest('/api/users');
+        const response = await this.makeRequest('/users');
         console.log('✅ Users fetched from database:', response.data?.length || 0);
         return response;
     },
 
     async inviteUser(userData) {
         console.log('📡 Inviting user via database...');
-        const response = await this.makeRequest('/api/users/invite', {
+        const response = await this.makeRequest('/users/invite', {
             method: 'POST',
             body: JSON.stringify(userData)
         });
@@ -300,7 +300,7 @@ const DatabaseAPI = {
     // BULK OPERATIONS
     async bulkUpdateClients(clientsData) {
         console.log('📡 Bulk updating clients in database...');
-        const response = await this.makeRequest('/api/clients/bulk', {
+        const response = await this.makeRequest('/clients/bulk', {
             method: 'PUT',
             body: JSON.stringify({ clients: clientsData })
         });
@@ -310,7 +310,7 @@ const DatabaseAPI = {
 
     async bulkDeleteClients(clientIds) {
         console.log('📡 Bulk deleting clients from database...');
-        const response = await this.makeRequest('/api/clients/bulk', {
+        const response = await this.makeRequest('/clients/bulk', {
             method: 'DELETE',
             body: JSON.stringify({ ids: clientIds })
         });
@@ -321,14 +321,14 @@ const DatabaseAPI = {
     // SEARCH OPERATIONS
     async searchClients(query) {
         console.log('📡 Searching clients in database...');
-        const response = await this.makeRequest(`/api/clients/search?q=${encodeURIComponent(query)}`);
+        const response = await this.makeRequest(`/clients/search?q=${encodeURIComponent(query)}`);
         console.log('✅ Client search completed in database');
         return response;
     },
 
     async searchLeads(query) {
         console.log('📡 Searching leads in database...');
-        const response = await this.makeRequest(`/api/leads/search?q=${encodeURIComponent(query)}`);
+        const response = await this.makeRequest(`/leads/search?q=${encodeURIComponent(query)}`);
         console.log('✅ Lead search completed in database');
         return response;
     },
@@ -336,21 +336,21 @@ const DatabaseAPI = {
     // ANALYTICS OPERATIONS
     async getClientAnalytics() {
         console.log('📡 Fetching client analytics from database...');
-        const response = await this.makeRequest('/api/analytics/clients');
+        const response = await this.makeRequest('/analytics/clients');
         console.log('✅ Client analytics fetched from database');
         return response;
     },
 
     async getLeadAnalytics() {
         console.log('📡 Fetching lead analytics from database...');
-        const response = await this.makeRequest('/api/analytics/leads');
+        const response = await this.makeRequest('/analytics/leads');
         console.log('✅ Lead analytics fetched from database');
         return response;
     },
 
     async getRevenueAnalytics() {
         console.log('📡 Fetching revenue analytics from database...');
-        const response = await this.makeRequest('/api/analytics/revenue');
+        const response = await this.makeRequest('/analytics/revenue');
         console.log('✅ Revenue analytics fetched from database');
         return response;
     },
@@ -358,21 +358,21 @@ const DatabaseAPI = {
     // OPPORTUNITIES OPERATIONS
     async getOpportunities() {
         console.log('📡 Fetching opportunities from database...');
-        const response = await this.makeRequest('/api/opportunities');
+        const response = await this.makeRequest('/opportunities');
         console.log('✅ Opportunities fetched from database:', response.data?.opportunities?.length || 0);
         return response;
     },
 
     async getOpportunitiesByClient(clientId) {
         console.log(`📡 Fetching opportunities for client ${clientId} from database...`);
-        const response = await this.makeRequest(`/api/opportunities/client/${clientId}`);
+        const response = await this.makeRequest(`/opportunities/client/${clientId}`);
         console.log('✅ Client opportunities fetched from database:', response.data?.opportunities?.length || 0);
         return response;
     },
 
     async createOpportunity(opportunityData) {
         console.log('📡 Creating opportunity in database...');
-        const response = await this.makeRequest('/api/opportunities', {
+        const response = await this.makeRequest('/opportunities', {
             method: 'POST',
             body: JSON.stringify(opportunityData)
         });
@@ -382,7 +382,7 @@ const DatabaseAPI = {
 
     async updateOpportunity(id, opportunityData) {
         console.log(`📡 Updating opportunity ${id} in database...`);
-        const response = await this.makeRequest(`/api/opportunities/${id}`, {
+        const response = await this.makeRequest(`/opportunities/${id}`, {
             method: 'PUT',
             body: JSON.stringify(opportunityData)
         });
@@ -392,7 +392,7 @@ const DatabaseAPI = {
 
     async deleteOpportunity(id) {
         console.log(`📡 Deleting opportunity ${id} from database...`);
-        const response = await this.makeRequest(`/api/opportunities/${id}`, {
+        const response = await this.makeRequest(`/opportunities/${id}`, {
             method: 'DELETE'
         });
         console.log('✅ Opportunity deleted from database');
@@ -402,7 +402,7 @@ const DatabaseAPI = {
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');
-        const response = await this.makeRequest('/api/health');
+        const response = await this.makeRequest('/health');
         console.log('✅ Database health check completed');
         return response;
     }

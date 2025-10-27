@@ -10,23 +10,28 @@ datasource db {
 }
 
 model User {
-  id            String       @id @default(cuid())
-  email         String       @unique
-  name          String?
-  passwordHash  String?
-  provider      String       @default("local")
-  role          String       @default("member")
-  status        String       @default("active")
-  invitedBy     String?
-  lastLoginAt   DateTime?
-  memberships   Membership[]
-  ownedClients  Client[]     @relation("ClientOwner")
-  ownedProjects Project[]    @relation("ProjectOwner")
-  tasks         Task[]       @relation("TaskAssignee")
-  auditLogs     AuditLog[]   @relation("AuditActor")
-  feedback      Feedback[]   @relation("UserFeedback")
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  email             String       @unique
+  name              String?
+  passwordHash      String?
+  provider          String       @default("local")
+  role              String       @default("member")
+  status            String       @default("active") // active, suspended, inactive
+  department        String       @default("")
+  jobTitle          String       @default("")
+  phone             String       @default("")
+  avatar            String       @default("")
+  invitedBy         String?
+  mustChangePassword Boolean     @default(false)
+  lastLoginAt       DateTime?
+  memberships       Membership[]
+  ownedClients      Client[]     @relation("ClientOwner")
+  ownedProjects     Project[]    @relation("ProjectOwner")
+  tasks             Task[]       @relation("TaskAssignee")
+  auditLogs         AuditLog[]   @relation("AuditActor")
+  feedback          Feedback[]   @relation("UserFeedback")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 }
 
 model Team {
@@ -95,14 +100,18 @@ model Project {
   assignedTo             String      @default("")
   
   // JSON fields for complex data
-  tasksList              String      @default("[]")
-  taskLists              String      @default("[]")
-  customFieldDefinitions String      @default("[]")
-  documents              String      @default("[]")
-  comments               String      @default("[]")
-  activityLog            String      @default("[]")
-  team                   String      @default("[]")
-  notes                  String      @default("")
+  tasksList                  String      @default("[]")
+  taskLists                  String      @default("[]")
+  customFieldDefinitions     String      @default("[]")
+  documents                  String      @default("[]")
+  comments                   String      @default("[]")
+  activityLog                String      @default("[]")
+  team                       String      @default("[]")
+  notes                      String      @default("")
+  
+  // Document Collection Process fields
+  hasDocumentCollectionProcess Boolean   @default(false)
+  documentSections             String    @default("[]")
   
   ownerId                String?
   owner                  User?       @relation("ProjectOwner", fields: [ownerId], references: [id])
@@ -219,10 +228,13 @@ model Invitation {
   id         String    @id @default(cuid())
   email      String    @unique
   name       String
-  role       String    @default("user")
+  role       String    @default("member") // admin, manager, member, viewer
+  department String    @default("")
+  jobTitle   String    @default("")
   token      String    @unique
   status     String    @default("pending") // pending, accepted, expired, cancelled
   invitedBy  String?
+  inviterName String   @default("")
   expiresAt  DateTime
   acceptedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -241,4 +253,76 @@ model Feedback {
   meta      String?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
   createdAt DateTime @default(now())
+}
+
+// Teams Knowledge Hub Models
+model TeamDocument {
+  id          String   @id @default(cuid())
+  team        String   // Team ID (management, technical, etc.)
+  title       String
+  category    String   @default("General")
+  description String   @default("")
+  content     String   @default("")
+  version     String   @default("1.0")
+  status      String   @default("Draft") // Draft, Published, Archived
+  tags        String   @default("[]")
+  attachments String   @default("[]")
+  createdBy   String   @default("")
+  ownerId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TeamWorkflow {
+  id          String   @id @default(cuid())
+  team        String   // Team ID
+  title       String
+  description String   @default("")
+  status      String   @default("Draft") // Draft, Active, Archived
+  steps       String   @default("[]")
+  tags        String   @default("[]")
+  ownerId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TeamChecklist {
+  id          String   @id @default(cuid())
+  team        String   // Team ID
+  title       String
+  description String   @default("")
+  category    String   @default("General")
+  frequency   String   @default("One-time") // One-time, Daily, Weekly, Monthly
+  items       String   @default("[]")
+  ownerId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model TeamNotice {
+  id        String   @id @default(cuid())
+  team      String   // Team ID
+  title     String
+  content   String
+  priority  String   @default("Normal") // Low, Normal, Medium, High, Critical
+  author    String   @default("")
+  date      DateTime @default(now())
+  ownerId   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WorkflowExecution {
+  id              String   @id @default(cuid())
+  workflowId      String
+  workflowTitle   String
+  team            String   // Team ID
+  completedSteps  String   @default("[]")
+  notes           String   @default("")
+  executedBy      String   @default("")
+  executionDate   DateTime @default(now())
+  status          String   @default("Completed") // In Progress, Completed, Failed
+  ownerId         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }

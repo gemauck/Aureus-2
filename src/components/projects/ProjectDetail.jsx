@@ -12,8 +12,48 @@ const DocumentCollectionModal = window.DocumentCollectionModal;
 const ProjectDetail = ({ project, onBack }) => {
     console.log('ProjectDetail rendering with project:', project);
     
-    // Tab navigation state
-    const [activeSection, setActiveSection] = useState('overview'); // 'overview', 'tasks', 'documentCollection'
+    // Check if required components are loaded
+    const requiredComponents = {
+        ListModal: window.ListModal,
+        ProjectModal: window.ProjectModal,
+        CustomFieldModal: window.CustomFieldModal,
+        TaskDetailModal: window.TaskDetailModal,
+        KanbanView: window.KanbanView,
+        CommentsPopup: window.CommentsPopup,
+        DocumentCollectionModal: window.DocumentCollectionModal,
+        MonthlyDocumentCollectionTracker: window.MonthlyDocumentCollectionTracker
+    };
+    
+    const missingComponents = Object.entries(requiredComponents)
+        .filter(([name, component]) => !component)
+        .map(([name]) => name);
+    
+    if (missingComponents.length > 0) {
+        console.error('❌ ProjectDetail: Missing required components:', missingComponents);
+        console.error('🔍 Available window components:', Object.keys(window).filter(key => 
+            key.includes('Modal') || key.includes('View') || key.includes('Tracker') || key.includes('Popup')
+        ));
+    } else {
+        console.log('✅ ProjectDetail: All required components loaded');
+    }
+    
+    // Tab navigation state - persist across re-renders
+    const [activeSection, setActiveSection] = useState(() => {
+        // Check if we should default to documentCollection
+        if (project.hasDocumentCollectionProcess) {
+            const savedSection = sessionStorage.getItem(`project-${project.id}-activeSection`);
+            if (savedSection === 'documentCollection') {
+                return 'documentCollection';
+            }
+        }
+        return 'overview';
+    });
+    
+    // Persist activeSection to sessionStorage
+    useEffect(() => {
+        sessionStorage.setItem(`project-${project.id}-activeSection`, activeSection);
+        console.log('🟢 Active section changed to:', activeSection);
+    }, [activeSection, project.id]);
     
     // Track if document collection process exists
     const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(project.hasDocumentCollectionProcess || false);
@@ -63,6 +103,28 @@ const ProjectDetail = ({ project, onBack }) => {
     useEffect(() => {
         const saveProjectData = async () => {
             try {
+                console.log('💾 ProjectDetail: Saving project data changes...');
+                console.log('  - Project ID:', project.id);
+                console.log('  - Tasks count:', tasks.length);
+                console.log('  - Task lists count:', taskLists.length);
+                
+                // Prepare the update payload with JSON stringified fields
+                const updatePayload = {
+                    taskLists: JSON.stringify(taskLists),
+                    tasksList: JSON.stringify(tasks),  // Note: backend uses 'tasksList' not 'tasks'
+                    customFieldDefinitions: JSON.stringify(customFieldDefinitions),
+                    documents: JSON.stringify(documents),
+                    hasDocumentCollectionProcess: hasDocumentCollectionProcess,
+                    documentSections: JSON.stringify(project.documentSections || [])
+                };
+                
+                console.log('📡 Sending update to database:', updatePayload);
+                
+                // Save to database first (server-first approach)
+                const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ Database save successful:', apiResponse);
+                
+                // Then update localStorage for consistency
                 if (window.dataService && typeof window.dataService.getProjects === 'function') {
                     const savedProjects = await window.dataService.getProjects();
                     if (savedProjects) {
@@ -74,26 +136,29 @@ const ProjectDetail = ({ project, onBack }) => {
                                 customFieldDefinitions, 
                                 documents, 
                                 hasDocumentCollectionProcess,
-                                // Preserve documentSections from the project to avoid data loss
                                 documentSections: p.documentSections || project.documentSections || []
                             } : p
                         );
                         if (window.dataService && typeof window.dataService.setProjects === 'function') {
                             await window.dataService.setProjects(updatedProjects);
-                        } else {
-                            console.warn('DataService not available or setProjects method not found');
+                            console.log('✅ localStorage updated for consistency');
                         }
                     }
-                } else {
-                    console.warn('DataService not available or getProjects method not found');
                 }
             } catch (error) {
-                console.error('Error saving project data:', error);
+                console.error('❌ Error saving project data:', error);
+                // Show user-friendly error
+                alert('Failed to save project changes: ' + error.message);
             }
         };
         
-        saveProjectData();
-    }, [tasks, taskLists, customFieldDefinitions, documents, project.id, hasDocumentCollectionProcess]);
+        // Only save if we have actual changes (not on initial render)
+        const timeoutId = setTimeout(() => {
+            saveProjectData();
+        }, 1000); // Debounce saves by 1 second to avoid excessive API calls
+        
+        return () => clearTimeout(timeoutId);
+    }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]); // Removed project.id from dependencies
 
     // Get document status color
     const getDocumentStatusColor = (status) => {
@@ -364,7 +429,44 @@ const ProjectDetail = ({ project, onBack }) => {
 
     // Document Collection Section (for Document Collection Process)
     const DocumentCollectionProcessSection = () => {
+        console.log('🔵 DocumentCollectionProcessSection rendering...');
+        console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
+        console.log('  - activeSection:', activeSection);
+        
         const MonthlyDocumentCollectionTracker = window.MonthlyDocumentCollectionTracker;
+        console.log('  - MonthlyDocumentCollectionTracker:', typeof MonthlyDocumentCollectionTracker);
+        
+        // Check if component is loaded
+        if (!MonthlyDocumentCollectionTracker) {
+            return (
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                    <i className="fas fa-exclamation-triangle text-3xl text-yellow-500 mb-3"></i>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Component Not Loaded</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                        The Monthly Document Collection Tracker component is still loading or failed to load.
+                    </p>
+                    <div className="flex gap-2 justify-center">
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm font-medium"
+                        >
+                            <i className="fas fa-sync-alt mr-2"></i>
+                            Reload Page
+                        </button>
+                        <button
+                            onClick={() => setActiveSection('overview')}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                        >
+                            <i className="fas fa-arrow-left mr-2"></i>
+                            Back to Overview
+                        </button>
+                    </div>
+                    <div className="mt-4 text-xs text-gray-500">
+                        <p>Debug Info: window.MonthlyDocumentCollectionTracker = {String(typeof MonthlyDocumentCollectionTracker)}</p>
+                    </div>
+                </div>
+            );
+        }
         
         return (
             <MonthlyDocumentCollectionTracker
@@ -609,9 +711,16 @@ const ProjectDetail = ({ project, onBack }) => {
     };
 
     const handleAddDocumentCollectionProcess = () => {
+        console.log('🔄 Adding Document Collection Process...');
+        console.log('  - MonthlyDocumentCollectionTracker loaded:', typeof window.MonthlyDocumentCollectionTracker);
+        console.log('  - Project ID:', project.id);
+        console.log('  - Current hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
+        
         setHasDocumentCollectionProcess(true);
         setActiveSection('documentCollection');
         setShowDocumentProcessDropdown(false);
+        
+        console.log('✅ Document Collection Process setup complete');
     };
 
     const handleAddMonthlyDataProcess = () => {
@@ -1238,6 +1347,12 @@ const ProjectDetail = ({ project, onBack }) => {
             </div>
 
             {/* Section Content */}
+            {(() => {
+                console.log('🟢 Rendering section content. activeSection:', activeSection);
+                console.log('  - hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
+                return null;
+            })()}
+            
             {activeSection === 'overview' && <OverviewSection />}
             
             {activeSection === 'tasks' && (

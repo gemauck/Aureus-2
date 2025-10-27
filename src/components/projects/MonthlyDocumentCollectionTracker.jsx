@@ -15,7 +15,40 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     ];
 
     const [selectedYear, setSelectedYear] = useState(currentYear);
-    const [sections, setSections] = useState(project.documentSections || []);
+    
+    // Parse documentSections safely - handle various formats
+    const parseSections = (data) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        
+        try {
+            // Handle stringified data
+            if (typeof data === 'string') {
+                // Remove extra quotes and escaping
+                let cleaned = data.trim();
+                // Remove outer quotes if present
+                if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                    cleaned = cleaned.slice(1, -1);
+                }
+                // Handle escaped quotes
+                cleaned = cleaned.replace(/\\"/g, '"');
+                // Parse JSON
+                const parsed = JSON.parse(cleaned);
+                return Array.isArray(parsed) ? parsed : [];
+            }
+        } catch (e) {
+            console.warn('Failed to parse documentSections:', e);
+            return [];
+        }
+        return [];
+    };
+    
+    const [sections, setSections] = useState(() => {
+        console.log('📋 Initializing sections from project.documentSections:', project.documentSections);
+        const parsed = parseSections(project.documentSections);
+        console.log('📋 Parsed sections:', parsed);
+        return parsed;
+    });
     const [showSectionModal, setShowSectionModal] = useState(false);
     const [showDocumentModal, setShowDocumentModal] = useState(false);
     const [editingSection, setEditingSection] = useState(null);
@@ -46,6 +79,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Save sections to project whenever they change
         const saveProjectData = async () => {
             try {
+                console.log('💾 MonthlyDocumentCollectionTracker: Saving sections...');
+                console.log('  - Project ID:', project.id);
+                console.log('  - Sections count:', sections.length);
+                
+                // Prepare the update payload
+                const updatePayload = {
+                    documentSections: JSON.stringify(sections)
+                };
+                
+                console.log('📡 Sending sections update to database');
+                
+                // Save to database first (server-first approach)
+                const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ Database save successful for document sections:', apiResponse);
+                
+                // Then update localStorage for consistency
                 if (window.dataService && typeof window.dataService.getProjects === 'function') {
                     const savedProjects = await window.dataService.getProjects();
                     if (savedProjects) {
@@ -58,20 +107,22 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         });
                         if (window.dataService && typeof window.dataService.setProjects === 'function') {
                             await window.dataService.setProjects(updatedProjects);
-                        } else {
-                            console.warn('DataService not available or setProjects method not found');
+                            console.log('✅ localStorage updated for document sections');
                         }
-                        console.log(`Saved ${sections.length} sections for project ${project.id}`);
                     }
-                } else {
-                    console.warn('DataService not available or getProjects method not found');
                 }
             } catch (error) {
-                console.error('Error saving project data:', error);
+                console.error('❌ Error saving document sections:', error);
+                alert('Failed to save document collection changes: ' + error.message);
             }
         };
         
-        saveProjectData();
+        // Debounce saves
+        const timeoutId = setTimeout(() => {
+            saveProjectData();
+        }, 1000);
+        
+        return () => clearTimeout(timeoutId);
     }, [sections, project.id]);
 
     // Close comment popup on click outside
@@ -97,8 +148,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleAddSection = () => {
+        console.log('🔵 Add Section button clicked');
+        console.log('  - Current sections:', sections.length);
         setEditingSection(null);
         setShowSectionModal(true);
+        console.log('  - showSectionModal set to:', true);
     };
 
     const handleEditSection = (section) => {
@@ -958,3 +1012,4 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
 // Make available globally
 window.MonthlyDocumentCollectionTracker = MonthlyDocumentCollectionTracker;
+console.log('✅ MonthlyDocumentCollectionTracker component loaded and registered globally');

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Creation Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .log {
+            margin-top: 10px;
+            padding: 10px;
+            background: #f5f5f5;
+            border-radius: 3px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Creation Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Check Authentication</h2>
+        <button onclick="checkAuth()">Check Token</button>
+        <div id="auth-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: List Existing Projects</h2>
+        <button onclick="listProjects()">List Projects</button>
+        <div id="projects-list"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Create New Project</h2>
+        <button onclick="createProject()">Create Test Project</button>
+        <div id="create-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Console Log</h2>
+        <div id="console-log" class="log"></div>
+    </div>
+
+    <script>
+        // Override console.log to display in UI
+        const originalLog = console.log;
+        const originalError = console.error;
+        const logElement = document.getElementById('console-log');
+        
+        function addLog(message, type = 'log') {
+            const time = new Date().toLocaleTimeString();
+            const color = type === 'error' ? 'red' : 'black';
+            logElement.innerHTML += `<div style="color: ${color}">[${time}] ${message}</div>`;
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addLog(args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 'error');
+        };
+        
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            const resultDiv = document.getElementById('auth-result');
+            
+            if (token) {
+                resultDiv.innerHTML = `<p class="success">✓ Token found (length: ${token.length})</p>`;
+            } else {
+                resultDiv.innerHTML = '<p class="error">✗ No token found. Please log in first.</p>';
+            }
+        }
+        
+        async function listProjects() {
+            const resultDiv = document.getElementById('projects-list');
+            resultDiv.innerHTML = '<p>Loading projects...</p>';
+            
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    resultDiv.innerHTML = '<p class="error">Please log in first</p>';
+                    return;
+                }
+                
+                const response = await fetch('/api/projects', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                const projects = data.data?.projects || data.projects || [];
+                
+                console.log('Projects response:', data);
+                console.log('Projects array:', projects);
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✓ Found ${projects.length} projects</p>
+                    <pre>${JSON.stringify(projects, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('Error listing projects:', error);
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        }
+        
+        async function createProject() {
+            const resultDiv = document.getElementById('create-result');
+            resultDiv.innerHTML = '<p>Creating project...</p>';
+            
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    resultDiv.innerHTML = '<p class="error">Please log in first</p>';
+                    return;
+                }
+                
+                const projectData = {
+                    name: 'Test Project ' + Date.now(),
+                    clientName: 'Test Client',
+                    description: 'This is a test project',
+                    type: 'Monthly Review',
+                    status: 'Active',
+                    startDate: new Date().toISOString().split('T')[0],
+                    priority: 'Medium'
+                };
+                
+                console.log('Creating project with data:', projectData);
+                
+                const response = await fetch('/api/projects', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(projectData)
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('Project created response:', data);
+                
+                resultDiv.innerHTML = `
+                    <p class="success">✓ Project created successfully!</p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+            } catch (error) {
+                console.error('Error creating project:', error);
+                resultDiv.innerHTML = `<p class="error">Error: ${error.message}</p>`;
+            }
+        }
+        
+        // Auto-check auth on load
+        window.onload = checkAuth;
+    </script>
+</body>
+</html>

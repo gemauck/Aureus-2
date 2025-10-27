@@ -50,14 +50,30 @@ const ProjectModal = ({ project, onSave, onClose, onDelete }) => {
             return;
         }
         
+        // Validate name field
+        if (!formData.name || formData.name.trim() === '') {
+            console.error('❌ Project name is required but empty');
+            alert('Please enter a project name');
+            return;
+        }
+        
         setIsSaving(true);
-        console.log('💾 Saving project data:', formData);
+        console.log('💾 Saving project data:');
+        console.log('  - name:', formData.name);
+        console.log('  - client:', formData.client);
+        console.log('  - type:', formData.type);
+        console.log('  - hasName:', !!formData.name);
+        console.log('  - nameLength:', formData.name?.length);
+        console.log('  - full formData:', JSON.stringify(formData, null, 2));
         
         try {
             // If user is entering a new client name
             if (showNewClientInput && newClientName.trim()) {
-                await onSave({...formData, client: newClientName.trim()});
+                const dataToSave = {...formData, client: newClientName.trim()};
+                console.log('💾 Saving with new client:', dataToSave);
+                await onSave(dataToSave);
             } else {
+                console.log('💾 Saving with existing client:', formData);
                 await onSave(formData);
             }
         } catch (error) {

@@ -8,6 +8,14 @@ const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
 
 const Teams = () => {
+    // Check if modal components are loaded
+    console.log('🔍 Teams: Checking modal components...');
+    console.log('  - DocumentModal:', typeof window.DocumentModal);
+    console.log('  - WorkflowModal:', typeof window.WorkflowModal);
+    console.log('  - ChecklistModal:', typeof window.ChecklistModal);
+    console.log('  - NoticeModal:', typeof window.NoticeModal);
+    console.log('  - WorkflowExecutionModal:', typeof window.WorkflowExecutionModal);
+    
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedTeam, setSelectedTeam] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -551,8 +559,12 @@ const Teams = () => {
                     <div className="flex gap-2">
                         <button
                             onClick={() => {
+                                console.log('🟢 Add Document button clicked');
+                                console.log('  - DocumentModal available:', typeof window.DocumentModal);
+                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingDocument(null);
                                 setShowDocumentModal(true);
+                                console.log('  - showDocumentModal set to: true');
                             }}
                             className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-xs font-medium"
                         >
@@ -561,8 +573,12 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
+                                console.log('🟢 Create Workflow button clicked');
+                                console.log('  - WorkflowModal available:', typeof window.WorkflowModal);
+                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingWorkflow(null);
                                 setShowWorkflowModal(true);
+                                console.log('  - showWorkflowModal set to: true');
                             }}
                             className="flex-1 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-xs font-medium"
                         >
@@ -571,8 +587,12 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
+                                console.log('🟢 New Checklist button clicked');
+                                console.log('  - ChecklistModal available:', typeof window.ChecklistModal);
+                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingChecklist(null);
                                 setShowChecklistModal(true);
+                                console.log('  - showChecklistModal set to: true');
                             }}
                             className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-xs font-medium"
                         >
@@ -581,8 +601,12 @@ const Teams = () => {
                         </button>
                         <button
                             onClick={() => {
+                                console.log('🟢 Post Notice button clicked');
+                                console.log('  - NoticeModal available:', typeof window.NoticeModal);
+                                console.log('  - selectedTeam:', selectedTeam?.name);
                                 setEditingNotice(null);
                                 setShowNoticeModal(true);
+                                console.log('  - showNoticeModal set to: true');
                             }}
                             className="flex-1 px-3 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-xs font-medium"
                         >

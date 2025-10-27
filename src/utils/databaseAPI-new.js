@@ -33,8 +33,17 @@ const DatabaseAPI = {
                 ...options
             });
 
+            console.log('📡 Database API response:', { 
+                status: response.status, 
+                ok: response.ok, 
+                endpoint 
+            });
+
             // Get response data
             const responseData = await response.json();
+            
+            console.log('📡 Database API response data:', responseData);
+            console.log('📡 Full error details:', JSON.stringify(responseData, null, 2));
 
             if (!response.ok) {
                 if (response.status === 401) {
@@ -116,6 +125,10 @@ const DatabaseAPI = {
     },
 
     async createProject(projectData) {
+        console.log('📤 createProject API call:');
+        console.log('  - name:', projectData?.name);
+        console.log('  - clientName:', projectData?.clientName);
+        console.log('  - full payload:', JSON.stringify(projectData, null, 2));
         return this.makeRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
@@ -123,8 +136,9 @@ const DatabaseAPI = {
     },
 
     async updateProject(id, projectData) {
+        console.log('📤 updateProject API call:', { id, projectData });
         return this.makeRequest(`/projects/${id}`, {
-            method: 'PATCH',
+            method: 'PUT',
             body: JSON.stringify(projectData)
         });
     },

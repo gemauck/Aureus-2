@@ -19,10 +19,16 @@ async function handler(req, res) {
     console.log('🔍 Projects API: Starting handler execution')
     console.log('🔍 Projects API: Request method:', req.method)
     console.log('🔍 Projects API: Request URL:', req.url)
+    console.log('🔍 Projects API: Full request path:', req.path)
+    console.log('🔍 Projects API: Original URL:', req.originalUrl)
     
-    // Parse the URL path (already has /api/ stripped by server)
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Parse the URL path - strip /api/ prefix if present
+    const urlPath = req.url.replace(/^\/api\//, '/')
+    const pathSegments = urlPath.split('/').filter(Boolean)
+    console.log('🔍 Projects API: Path segments:', pathSegments)
     const id = pathSegments[pathSegments.length - 1]
+    console.log('🔍 Projects API: Extracted ID:', id)
+    console.log('🔍 Projects API: Path segments length:', pathSegments.length)
 
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
@@ -40,10 +46,22 @@ async function handler(req, res) {
 
     // Create Project (POST /api/projects)
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
-      const body = await parseJsonBody(req)
+      const body = req.body || {}
       console.log('🔍 POST request body:', JSON.stringify(body, null, 2))
+      console.log('🔍 req.body type:', typeof req.body)
+      console.log('🔍 req.body is null:', req.body === null)
+      console.log('🔍 req.body is undefined:', req.body === undefined)
+      console.log('🔍 req.body keys:', Object.keys(req.body || {}))
+      console.log('🔍 body.name value:', body.name)
+      console.log('🔍 body.name type:', typeof body.name)
       if (!body.name) {
         console.error('❌ No name provided in request body')
+        console.error('❌ Full request details:', {
+          method: req.method,
+          url: req.url,
+          headers: req.headers,
+          bodyKeys: Object.keys(body)
+        })
         return badRequest(res, 'name required')
       }
 
@@ -203,7 +221,12 @@ async function handler(req, res) {
           taskLists: typeof body.taskLists === 'string' ? body.taskLists : JSON.stringify(body.taskLists),
           customFieldDefinitions: typeof body.customFieldDefinitions === 'string' ? body.customFieldDefinitions : JSON.stringify(body.customFieldDefinitions),
           team: typeof body.team === 'string' ? body.team : JSON.stringify(body.team),
-          notes: body.notes
+          documents: typeof body.documents === 'string' ? body.documents : JSON.stringify(body.documents),
+          comments: typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments),
+          activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog),
+          notes: body.notes,
+          hasDocumentCollectionProcess: body.hasDocumentCollectionProcess !== undefined ? body.hasDocumentCollectionProcess : undefined,
+          documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
         }
         Object.keys(updateData).forEach(key => {
           if (updateData[key] === undefined) {
