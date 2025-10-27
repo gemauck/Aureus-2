@@ -125,59 +125,53 @@ const MainLayout = () => {
     ];
 
     const renderPage = () => {
-        const renderStart = performance.now();
-        console.log(`🔄 MainLayout: Showing page: ${currentPage} at ${renderStart.toFixed(1)}ms`);
-        
-        // Keep all components mounted but show/hide them - prevents remount and data reload
-        const isVisible = (pageId) => currentPage === pageId ? 'block' : 'none';
-        
-        const renderEnd = performance.now();
-        console.log(`⚡ MainLayout: renderPage took ${(renderEnd - renderStart).toFixed(1)}ms`);
-        
-        return (
-            <>
-                {/* Keep all components mounted - just hide/show */}
-                <div style={{ display: isVisible('dashboard') }}>
-                    <ErrorBoundary><Dashboard /></ErrorBoundary>
+        try {
+            switch(currentPage) {
+                case 'dashboard': 
+                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+                case 'clients': 
+                    return <ErrorBoundary><Clients /></ErrorBoundary>;
+                case 'projects': 
+                    return <ErrorBoundary><Projects /></ErrorBoundary>;
+                case 'teams': 
+                    return <ErrorBoundary><Teams /></ErrorBoundary>;
+                case 'users': 
+                    return <ErrorBoundary><Users /></ErrorBoundary>;
+                case 'account': 
+                    return <ErrorBoundary><Account /></ErrorBoundary>;
+                case 'time': 
+                    return <ErrorBoundary><TimeTracking /></ErrorBoundary>;
+                case 'hr': 
+                    return <ErrorBoundary><HR /></ErrorBoundary>;
+                case 'manufacturing': 
+                    return <ErrorBoundary><Manufacturing /></ErrorBoundary>;
+                case 'tools': 
+                    return <ErrorBoundary><Tools /></ErrorBoundary>;
+                case 'reports': 
+                    return <ErrorBoundary><Reports /></ErrorBoundary>;
+                case 'settings': 
+                    return <ErrorBoundary><Settings /></ErrorBoundary>;
+                case 'documents': 
+                    return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
+                default: 
+                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+            }
+        } catch (error) {
+            console.error('❌ MainLayout: Error rendering page:', error);
+            return (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Page</h2>
+                    <p className="text-sm text-red-600 mb-3">There was an error loading the {currentPage} page.</p>
+                    <p className="text-xs text-red-500 mb-4">Error: {error.message}</p>
+                    <button 
+                        onClick={() => window.location.reload()}
+                        className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
+                    >
+                        Reload Page
+                    </button>
                 </div>
-                <div style={{ display: isVisible('clients') }}>
-                    <ErrorBoundary><Clients /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('projects') }}>
-                    <ErrorBoundary><Projects /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('teams') }}>
-                    <ErrorBoundary><Teams /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('users') }}>
-                    <ErrorBoundary><Users /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('account') }}>
-                    <ErrorBoundary><Account /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('time') }}>
-                    <ErrorBoundary><TimeTracking /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('hr') }}>
-                    <ErrorBoundary><HR /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('manufacturing') }}>
-                    <ErrorBoundary><Manufacturing /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('tools') }}>
-                    <ErrorBoundary><Tools /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('reports') }}>
-                    <ErrorBoundary><Reports /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('settings') }}>
-                    <ErrorBoundary><Settings /></ErrorBoundary>
-                </div>
-                <div style={{ display: isVisible('documents') }}>
-                    <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>
-                </div>
-            </>
-        );
+            );
+        }
     };
 
     return (
