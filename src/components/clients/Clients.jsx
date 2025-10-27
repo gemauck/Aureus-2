@@ -215,11 +215,18 @@ const Clients = () => {
 
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
+        const loadStartTime = performance.now();
         try {
             // IMMEDIATELY show cached data without waiting for API
+            const cacheStartTime = performance.now();
             const cachedClients = safeStorage.getClients();
+            const cacheEndTime = performance.now();
+            
             if (cachedClients && cachedClients.length > 0) {
+                const renderStartTime = performance.now();
                 setClients(cachedClients);
+                const renderEndTime = performance.now();
+                console.log(`⚡ Cache display: ${(renderEndTime - cacheStartTime).toFixed(1)}ms (${cachedClients.length} clients)`);
             }
             
             // Check if user is logged in
@@ -238,7 +245,7 @@ const Clients = () => {
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
             if (timeSinceLastCall < API_CALL_INTERVAL) {
-                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call) - Total: ${((performance.now() - loadStartTime).toFixed(1))}ms`);
                 return; // Use cached data, skip API call
             }
             
@@ -247,7 +254,10 @@ const Clients = () => {
             
             // API call happens in background after showing cached data
             try {
+                const apiStartTime = performance.now();
                 const res = await window.api.listClients();
+                const apiEndTime = performance.now();
+                console.log(`⚡ API call: ${(apiEndTime - apiStartTime).toFixed(1)}ms`);
                 const apiClients = res?.data?.clients || [];
                     
                     // If API returns no clients, use cached data
@@ -256,18 +266,24 @@ const Clients = () => {
                     }
                     
                     // Use memoized data processor for better performance
+                    const processStartTime = performance.now();
                     const processedClients = processClientData(apiClients);
                     
                     // Separate clients and leads based on type
                     const clientsOnly = processedClients.filter(c => c.type === 'client');
                     const leadsOnly = processedClients.filter(c => c.type === 'lead');
+                    const processEndTime = performance.now();
                     
                     // Update state with fresh API data
                     setClients(clientsOnly);
                     setLeads(leadsOnly);
+                    console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
                     
                     // Save processed data to localStorage
                     safeStorage.setClients(clientsOnly);
+                    
+                    const loadEndTime = performance.now();
+                    console.log(`⚡ TOTAL loadClients: ${(loadEndTime - loadStartTime).toFixed(1)}ms`);
             } catch (apiError) {
                 // On API error, just keep showing cached data
                 if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
