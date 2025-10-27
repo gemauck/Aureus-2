@@ -15,6 +15,7 @@
         './src/components/teams/TeamsEnhanced.jsx',
         './src/components/teams/Teams.jsx',
         './src/components/users/Users.jsx',
+        './src/components/account/Account.jsx',
         './src/components/hr/HR.jsx',
         './src/components/invoicing/InvoicingDatabaseFirst.jsx',
         './src/components/time/TimeTracking.jsx',

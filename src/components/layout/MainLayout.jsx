@@ -75,6 +75,7 @@ const MainLayout = () => {
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
+    const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
 
     const menuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
@@ -82,6 +83,7 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog' },
+        { id: 'account', label: 'Account', icon: 'fa-user-circle' },
         { id: 'hr', label: 'HR', icon: 'fa-id-card' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
@@ -121,6 +123,9 @@ const MainLayout = () => {
                 case 'users': 
                     console.log('🔄 MainLayout: Rendering Users component');
                     return <ErrorBoundary><Users /></ErrorBoundary>;
+                case 'account': 
+                    console.log('🔄 MainLayout: Rendering Account component');
+                    return <ErrorBoundary><Account /></ErrorBoundary>;
                 case 'time': 
                     console.log('🔄 MainLayout: Rendering TimeTracking component');
                     return <ErrorBoundary><TimeTracking /></ErrorBoundary>;
