@@ -125,10 +125,14 @@ const MainLayout = () => {
     ];
 
     const renderPage = () => {
-        console.log('🔄 MainLayout: Showing page:', currentPage);
+        const renderStart = performance.now();
+        console.log(`🔄 MainLayout: Showing page: ${currentPage} at ${renderStart.toFixed(1)}ms`);
         
         // Keep all components mounted but show/hide them - prevents remount and data reload
         const isVisible = (pageId) => currentPage === pageId ? 'block' : 'none';
+        
+        const renderEnd = performance.now();
+        console.log(`⚡ MainLayout: renderPage took ${(renderEnd - renderStart).toFixed(1)}ms`);
         
         return (
             <>
