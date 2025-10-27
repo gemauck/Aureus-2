@@ -103,7 +103,7 @@ app.use(cookieParser())
 
 // CORS middleware for local development
 app.use((req, res, next) => {
-  const origin = req.headers.origin
+  let origin = req.headers.origin
   const allowedOrigins = [
     process.env.APP_URL,
     'http://localhost:3000',
@@ -113,8 +113,18 @@ app.use((req, res, next) => {
     'https://abcoafrica.co.za',
     'http://abcoafrica.co.za',
     'https://www.abcoafrica.co.za',
-    'http://www.abcoafrica.co.za'
+    'http://www.abcoafrica.co.za',
+    // Also include versions with trailing dots (some browsers add these)
+    'https://abcoafrica.co.za.',
+    'http://abcoafrica.co.za.',
+    'https://www.abcoafrica.co.za.',
+    'http://www.abcoafrica.co.za.'
   ].filter(Boolean)
+  
+  // Normalize origin by removing trailing dots
+  if (origin && origin.endsWith('.')) {
+    origin = origin.slice(0, -1)
+  }
   
   console.log(`🔍 CORS Request: ${req.method} ${req.url} from origin: ${origin}`)
   

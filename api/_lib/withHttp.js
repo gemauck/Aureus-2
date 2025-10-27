@@ -9,11 +9,22 @@ const allowedOrigins = [
   'https://abcoafrica.co.za',
   'http://abcoafrica.co.za',
   'https://www.abcoafrica.co.za',
-  'http://www.abcoafrica.co.za'
+  'http://www.abcoafrica.co.za',
+  // Also include versions with trailing dots (some browsers add these)
+  'https://abcoafrica.co.za.',
+  'http://abcoafrica.co.za.',
+  'https://www.abcoafrica.co.za.',
+  'http://www.abcoafrica.co.za.'
 ].filter(Boolean)
 
 const ALLOWED_ORIGIN = (req) => {
-  const origin = req.headers.origin
+  let origin = req.headers.origin
+  
+  // Normalize origin by removing trailing dots
+  if (origin && origin.endsWith('.')) {
+    origin = origin.slice(0, -1)
+  }
+  
   if (allowedOrigins.includes(origin)) {
     return origin
   }
