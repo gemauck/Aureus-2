@@ -129,23 +129,33 @@ const DatabaseAPI = {
     },
 
     async createClient(clientData) {
-        return this.makeRequest('/clients', {
+        const result = await this.makeRequest('/clients', {
             method: 'POST',
             body: JSON.stringify(clientData)
         });
+        // Clear clients cache after creation to ensure fresh data on next fetch
+        this.clearCache('/clients');
+        return result;
     },
 
     async updateClient(id, clientData) {
-        return this.makeRequest(`/clients/${id}`, {
+        const result = await this.makeRequest(`/clients/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(clientData)
         });
+        // Clear clients cache after update to ensure fresh data on next fetch
+        this.clearCache('/clients');
+        console.log('✅ Client cache cleared after update');
+        return result;
     },
 
     async deleteClient(id) {
-        return this.makeRequest(`/clients/${id}`, {
+        const result = await this.makeRequest(`/clients/${id}`, {
             method: 'DELETE'
         });
+        // Clear clients cache after deletion to ensure fresh data on next fetch
+        this.clearCache('/clients');
+        return result;
     },
 
     // Lead operations
@@ -160,23 +170,33 @@ const DatabaseAPI = {
     },
 
     async createLead(leadData) {
-        return this.makeRequest('/leads', {
+        const result = await this.makeRequest('/leads', {
             method: 'POST',
             body: JSON.stringify(leadData)
         });
+        // Clear leads cache after creation to ensure fresh data on next fetch
+        this.clearCache('/leads');
+        return result;
     },
 
     async updateLead(id, leadData) {
-        return this.makeRequest(`/leads/${id}`, {
+        const result = await this.makeRequest(`/leads/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(leadData)
         });
+        // Clear leads cache after update to ensure fresh data on next fetch
+        this.clearCache('/leads');
+        console.log('✅ Lead cache cleared after update');
+        return result;
     },
 
     async deleteLead(id) {
-        return this.makeRequest(`/leads/${id}`, {
+        const result = await this.makeRequest(`/leads/${id}`, {
             method: 'DELETE'
         });
+        // Clear leads cache after deletion to ensure fresh data on next fetch
+        this.clearCache('/leads');
+        return result;
     },
 
     // Project operations
@@ -190,18 +210,25 @@ const DatabaseAPI = {
         console.log('  - name:', projectData?.name);
         console.log('  - clientName:', projectData?.clientName);
         console.log('  - full payload:', JSON.stringify(projectData, null, 2));
-        return this.makeRequest('/projects', {
+        const result = await this.makeRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
         });
+        // Clear projects cache after creation to ensure fresh data on next fetch
+        this.clearCache('/projects');
+        return result;
     },
 
     async updateProject(id, projectData) {
         console.log('📤 updateProject API call:', { id, projectData });
-        return this.makeRequest(`/projects/${id}`, {
+        const result = await this.makeRequest(`/projects/${id}`, {
             method: 'PUT',
             body: JSON.stringify(projectData)
         });
+        // Clear projects cache after update to ensure fresh data on next fetch
+        this.clearCache('/projects');
+        console.log('✅ Project cache cleared after update');
+        return result;
     },
 
     async deleteProject(id) {
@@ -222,23 +249,33 @@ const DatabaseAPI = {
     },
 
     async createInvoice(invoiceData) {
-        return this.makeRequest('/invoices', {
+        const result = await this.makeRequest('/invoices', {
             method: 'POST',
             body: JSON.stringify(invoiceData)
         });
+        // Clear invoices cache after creation to ensure fresh data on next fetch
+        this.clearCache('/invoices');
+        return result;
     },
 
     async updateInvoice(id, invoiceData) {
-        return this.makeRequest(`/invoices/${id}`, {
+        const result = await this.makeRequest(`/invoices/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(invoiceData)
         });
+        // Clear invoices cache after update to ensure fresh data on next fetch
+        this.clearCache('/invoices');
+        console.log('✅ Invoice cache cleared after update');
+        return result;
     },
 
     async deleteInvoice(id) {
-        return this.makeRequest(`/invoices/${id}`, {
+        const result = await this.makeRequest(`/invoices/${id}`, {
             method: 'DELETE'
         });
+        // Clear invoices cache after deletion to ensure fresh data on next fetch
+        this.clearCache('/invoices');
+        return result;
     },
 
     // Time entry operations
@@ -248,23 +285,33 @@ const DatabaseAPI = {
     },
 
     async createTimeEntry(timeEntryData) {
-        return this.makeRequest('/time-entries', {
+        const result = await this.makeRequest('/time-entries', {
             method: 'POST',
             body: JSON.stringify(timeEntryData)
         });
+        // Clear time entries cache after creation to ensure fresh data on next fetch
+        this.clearCache('/time-entries');
+        return result;
     },
 
     async updateTimeEntry(id, timeEntryData) {
-        return this.makeRequest(`/time-entries/${id}`, {
+        const result = await this.makeRequest(`/time-entries/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(timeEntryData)
         });
+        // Clear time entries cache after update to ensure fresh data on next fetch
+        this.clearCache('/time-entries');
+        console.log('✅ Time entry cache cleared after update');
+        return result;
     },
 
     async deleteTimeEntry(id) {
-        return this.makeRequest(`/time-entries/${id}`, {
+        const result = await this.makeRequest(`/time-entries/${id}`, {
             method: 'DELETE'
         });
+        // Clear time entries cache after deletion to ensure fresh data on next fetch
+        this.clearCache('/time-entries');
+        return result;
     },
 
     // User operations
@@ -274,23 +321,33 @@ const DatabaseAPI = {
     },
 
     async createUser(userData) {
-        return this.makeRequest('/users', {
+        const result = await this.makeRequest('/users', {
             method: 'POST',
             body: JSON.stringify(userData)
         });
+        // Clear users cache after creation to ensure fresh data on next fetch
+        this.clearCache('/users');
+        return result;
     },
 
     async updateUser(id, userData) {
-        return this.makeRequest(`/users/${id}`, {
+        const result = await this.makeRequest(`/users/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(userData)
         });
+        // Clear users cache after update to ensure fresh data on next fetch
+        this.clearCache('/users');
+        console.log('✅ User cache cleared after update');
+        return result;
     },
 
     async deleteUser(id) {
-        return this.makeRequest(`/users/${id}`, {
+        const result = await this.makeRequest(`/users/${id}`, {
             method: 'DELETE'
         });
+        // Clear users cache after deletion to ensure fresh data on next fetch
+        this.clearCache('/users');
+        return result;
     }
 };
 
