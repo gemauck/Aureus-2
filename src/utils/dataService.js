@@ -7,8 +7,9 @@ const { isProduction, isLocalhost } = (() => {
     return { isProduction, isLocalhost };
 })();
 
-console.log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
-console.log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
+const log = window.debug?.log || (() => {});
+log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
+log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
 
 // Helpers to normalize API/local responses to arrays and safely access storage methods
 function normalizeArrayResponse(response, preferredKeys = []) {
@@ -34,7 +35,8 @@ const dataService = {
     // Projects - API Only
     async getProjects() {
         try {
-            console.log('🌐 Using API for projects (API-only mode)');
+            const log = window.debug?.log || (() => {});
+            log('🌐 Using API for projects (API-only mode)');
             const response = await window.api.getProjects();
             return normalizeArrayResponse(response, ['projects']);
         } catch (error) {
@@ -44,8 +46,9 @@ const dataService = {
     },
 
     async setProjects(projects) {
-        console.log('📡 Projects should be saved individually via API (no bulk operations)');
-        console.log('💡 Use window.api.createProject() or window.api.updateProject() for individual projects');
+        const log = window.debug?.log || (() => {});
+        log('📡 Projects should be saved individually via API (no bulk operations)');
+        log('💡 Use window.api.createProject() or window.api.updateProject() for individual projects');
         return projects;
     },
 
@@ -435,4 +438,5 @@ window.debugDataService = () => {
     });
 };
 
-console.log('✅ Data Service loaded - Environment:', isProduction ? 'Production' : 'Development');
+const finalLog = window.debug?.log || (() => {});
+finalLog('✅ Data Service loaded - Environment:', isProduction ? 'Production' : 'Development');

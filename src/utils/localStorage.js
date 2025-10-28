@@ -363,7 +363,8 @@ if (typeof window !== 'undefined') {
         globalThis.storage = storage;
     }
     
-    console.log('✅ Storage utilities loaded');
+    const log = window.debug?.log || (() => {});
+    log('✅ Storage utilities loaded');
     
     // Dispatch event to notify components that storage is ready
     // Use setTimeout to ensure all components are loaded
@@ -374,7 +375,7 @@ if (typeof window !== 'undefined') {
                 methods: Object.keys(storage)
             }
         }));
-        console.log('📡 Storage ready event dispatched');
+        log('📡 Storage ready event dispatched');
     }, 50);
     
     // Also set up a global check function

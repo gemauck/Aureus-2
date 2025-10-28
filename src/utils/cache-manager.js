@@ -59,6 +59,7 @@ window.checkCacheState = function() {
     console.log('\n\ud83d\udca1 To clear all caches, run: clearAllCaches()');
 };
 
-console.log('\u2705 Cache management utilities loaded:');
-console.log('  - clearAllCaches() - Clear all caches');
-console.log('  - checkCacheState() - View current cache state');
+const cacheLog = window.debug?.log || (() => {});
+cacheLog('✅ Cache management utilities loaded:');
+cacheLog('  - clearAllCaches() - Clear all caches');
+cacheLog('  - checkCacheState() - View current cache state');
