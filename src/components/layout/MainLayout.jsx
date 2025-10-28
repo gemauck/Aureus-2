@@ -1,4 +1,5 @@
 // Use React from window
+console.log('🔍 MainLayout.jsx: Script is executing...');
 const { useState } = React;
 
 const MainLayout = () => {
@@ -374,5 +375,9 @@ const MainLayout = () => {
 };
 
 // Make available globally
-window.MainLayout = MainLayout;
-console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout');
+try {
+    window.MainLayout = MainLayout;
+    console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout');
+} catch (error) {
+    console.error('❌ MainLayout.jsx: Error registering component:', error);
+}
