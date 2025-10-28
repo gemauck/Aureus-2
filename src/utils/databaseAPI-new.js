@@ -165,6 +165,8 @@ const DatabaseAPI = {
             // Clear the cache before making the request
             this.clearCache('/leads');
             console.log('🗑️ Lead cache cleared before force refresh');
+            // Add timestamp to bypass any other caches
+            return this.makeRequest(`/leads?_t=${Date.now()}`, { forceRefresh: true });
         }
         return this.makeRequest('/leads', { forceRefresh });
     },
@@ -180,13 +182,15 @@ const DatabaseAPI = {
     },
 
     async updateLead(id, leadData) {
+        console.log('📤 Updating lead:', { id, status: leadData.status, stage: leadData.stage });
         const result = await this.makeRequest(`/leads/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(leadData)
         });
-        // Clear leads cache after update to ensure fresh data on next fetch
+        // Clear ALL related caches after update
         this.clearCache('/leads');
-        console.log('✅ Lead cache cleared after update');
+        this.cache.clear(); // Clear entire cache to ensure no stale data
+        console.log('✅ All caches cleared after lead update');
         return result;
     },
 
