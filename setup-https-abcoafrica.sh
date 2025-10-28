@@ -91,10 +91,11 @@ server {
     # Large file uploads
     client_max_body_size 50M;
     
-    # HTTP/2 optimizations
+    # HTTP/2 optimizations (prevents protocol errors)
     http2_max_field_size 16k;
     http2_max_header_size 32k;
-    http2_push_preload on;
+    http2_max_requests 1000;
+    http2_recv_buffer_size 256k;
 
     # Proxy to Node.js app
     location / {
@@ -137,6 +138,30 @@ server {
         proxy_set_header Host \$host;
         expires 30d;
         add_header Cache-Control "public, immutable";
+        
+        # Proper buffering for static files
+        proxy_buffering on;
+        proxy_buffer_size 8k;
+        proxy_buffers 16 8k;
+    }
+    
+    # Special handling for JSX files (no caching, proper buffering)
+    location ~* \.jsx$ {
+        proxy_pass http://localhost:$APP_PORT;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # No cache for dynamic JSX files
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        expires 0;
+        
+        # Proper buffering
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
     }
 }
 EOF
