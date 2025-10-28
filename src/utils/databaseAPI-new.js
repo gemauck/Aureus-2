@@ -187,10 +187,10 @@ const DatabaseAPI = {
             method: 'PATCH',
             body: JSON.stringify(leadData)
         });
-        // Clear ALL related caches after update
+        // Clear BOTH /leads AND /clients caches since leads appear in both endpoints
         this.clearCache('/leads');
-        this.cache.clear(); // Clear entire cache to ensure no stale data
-        console.log('✅ All caches cleared after lead update');
+        this.clearCache('/clients'); // ← THIS IS CRITICAL - leads are in clients list too!
+        console.log('✅ Lead and client caches cleared after lead update');
         return result;
     },
 
