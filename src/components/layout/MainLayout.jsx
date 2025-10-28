@@ -16,6 +16,7 @@ const MainLayout = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
+    const [showSettingsPortal, setShowSettingsPortal] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
 
@@ -115,7 +116,6 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog' },
-        { id: 'account', label: 'Account', icon: 'fa-user-circle' },
         { id: 'hr', label: 'HR', icon: 'fa-id-card' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
@@ -282,6 +282,15 @@ const MainLayout = () => {
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
+                        {/* Settings Button */}
+                        <button 
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'}`}
+                            title="Settings"
+                            onClick={() => setShowSettingsPortal(true)}
+                        >
+                            <i className="fas fa-cog text-sm"></i>
+                        </button>
+                        
                         {/* Theme Selector Dropdown */}
                         <div className="relative theme-selector">
                             <button 
@@ -354,6 +363,11 @@ const MainLayout = () => {
                 
                 {/* Password Change Modal */}
                 {PasswordChangeModal && showPasswordChangeModal ? <PasswordChangeModal /> : null}
+                
+                {/* Settings Portal */}
+                {window.SettingsPortal && showSettingsPortal ? (
+                    <window.SettingsPortal isOpen={showSettingsPortal} onClose={() => setShowSettingsPortal(false)} />
+                ) : null}
             </div>
         </div>
     );
