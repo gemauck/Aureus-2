@@ -93,7 +93,7 @@ async function handler(req, res) {
       const opportunityData = {
         title: body.title,
         clientId: body.clientId,
-        stage: body.stage || 'prospect',
+        stage: body.stage || 'Awareness', // Use AIDA pipeline stage instead of 'prospect'
         value: parseFloat(body.value) || 0,
         ownerId: req.user?.sub || null
       }
