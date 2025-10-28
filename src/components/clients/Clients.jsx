@@ -493,7 +493,12 @@ const Clients = React.memo(() => {
             setLeads(mappedLeads);
             
             if (forceRefresh) {
-                console.log(`✅ Force refresh complete: ${mappedLeads.length} Active leads found`);
+                // Count leads by status for accurate reporting
+                const statusCounts = mappedLeads.reduce((acc, lead) => {
+                    acc[lead.status] = (acc[lead.status] || 0) + 1;
+                    return acc;
+                }, {});
+                console.log(`✅ Force refresh complete: ${mappedLeads.length} total leads (${Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(', ')})`);
             }
         } catch (error) {
             // Keep existing leads on error, don't clear them
