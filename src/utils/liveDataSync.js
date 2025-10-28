@@ -26,7 +26,8 @@ class LiveDataSync {
     start() {
         if (this.isRunning) return;
         
-        const log = window.debug?.log || (() => {});
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         log('🔄 Starting live data synchronization...');
         this.isRunning = true;
         this.connectionStatus = 'connecting';
@@ -64,7 +65,8 @@ class LiveDataSync {
     stop() {
         if (!this.isRunning) return;
         
-        const log = window.debug?.log || (() => {});
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         log('⏹️ Stopping live data synchronization...');
         this.isRunning = false;
         this.connectionStatus = 'disconnected';
@@ -79,7 +81,9 @@ class LiveDataSync {
 
     // Perform data synchronization
     async sync() {
-        const log = window.debug?.log || (() => {});
+        // Define log function at the top and ensure it's always available
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         
         if (this.syncInProgress) {
             log('⏳ Sync already in progress, skipping...');
@@ -194,7 +198,8 @@ class LiveDataSync {
             const CACHE_DURATION = 30000; // 30 seconds per data type
             
             if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
-                const log = window.debug?.log || (() => {});
+                const getLog = () => window.debug?.log || (() => {});
+                const log = getLog();
                 log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
                 // Send cached data to subscribers
                 this.notifySubscribers({ 
@@ -227,7 +232,8 @@ class LiveDataSync {
         } catch (error) {
             // Don't throw errors for network failures - just log and return failure
             // This allows the app to continue working even if API is temporarily unavailable
-            const log = window.debug?.log || (() => {});
+            const getLog = () => window.debug?.log || (() => {});
+            const log = getLog();
             const errorMessage = error.message || String(error);
             
             // Check if it's a network error (Failed to fetch)
@@ -254,7 +260,8 @@ class LiveDataSync {
         }
         
         this.subscribers.set(id, callback);
-        const log = window.debug?.log || (() => {});
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         log(`📡 Subscribed to live updates: ${id}`);
         
         // Send current status to new subscriber
@@ -269,7 +276,8 @@ class LiveDataSync {
     // Unsubscribe from live updates
     unsubscribe(id) {
         const removed = this.subscribers.delete(id);
-        const log = window.debug?.log || (() => {});
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         log(`📡 Unsubscribed from live updates: ${id}`);
         return removed;
     }
@@ -309,7 +317,8 @@ class LiveDataSync {
 
     // Force immediate sync
     async forceSync() {
-        const log = window.debug?.log || (() => {});
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
         log('🔄 Force sync requested...');
         await this.sync();
     }
@@ -320,7 +329,8 @@ window.LiveDataSync = new LiveDataSync();
 
 // Auto-start if token exists and user data is available
 if (window.storage?.getToken?.() && window.storage?.getUser?.()) {
-    const autoStartLog = window.debug?.log || (() => {});
+    const getAutoStartLog = () => window.debug?.log || (() => {});
+    const autoStartLog = getAutoStartLog();
     autoStartLog('🚀 Auto-starting live data sync...');
     window.LiveDataSync.start();
 } else if (window.storage?.getToken?.() && !window.storage?.getUser?.()) {
