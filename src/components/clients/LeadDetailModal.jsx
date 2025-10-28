@@ -25,7 +25,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 ...lead,
                 // Ensure stage and status are preserved
                 stage: lead.stage || 'Awareness',
-                status: lead.status || 'Potential',
+                status: 'active', // Status is hardcoded as 'active'
                 contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
                 followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -112,7 +112,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             ...lead,
             // Ensure stage and status are ALWAYS present with defaults
             stage: lead.stage || 'Awareness',
-            status: lead.status || 'Potential',
+            status: 'active', // Status is hardcoded as 'active'
             contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
             followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
             projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -122,7 +122,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         } : {
             name: '',
             industry: '',
-            status: 'Potential',
+            status: 'active', // Status is hardcoded as 'active'
             source: 'Website',
             stage: 'Awareness',
             value: 0,
@@ -621,50 +621,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-                                        <select 
-                                            value={formData.status}
-                                            onChange={(e) => {
-                                                const newStatus = e.target.value;
-                                                console.log('=== STATUS CHANGE ===');
-                                                console.log('New status:', newStatus);
-                                                console.log('Current formData before update:', JSON.stringify({status: formData.status, stage: formData.stage}));
-                                                console.log('Current ref before update:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
-                                                
-                                                // Update state
-                                                setFormData(prev => {
-                                                    console.log('Inside setFormData - prev:', JSON.stringify({status: prev.status, stage: prev.stage}));
-                                                    return {...prev, status: newStatus};
-                                                });
-                                                
-                                                // Auto-save using ref to get latest data
-                                                if (lead) {
-                                                    console.log('Scheduling auto-save for status...');
-                                                    setTimeout(() => {
-                                                        console.log('Executing auto-save for status');
-                                                        console.log('Ref at save time:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
-                                                        const latest = {...formDataRef.current, status: newStatus};
-                                                        console.log('Final save payload:', JSON.stringify({status: latest.status, stage: latest.stage}));
-                                                        
-                                                        // Save this as the last saved state
-                                                        lastSavedDataRef.current = latest;
-                                                        isAutoSavingRef.current = true;
-                                                        
-                                                        onSave(latest, true);
-                                                        
-                                                        // Clear the flag after a longer delay to allow API response to propagate
-                                                        setTimeout(() => {
-                                                            isAutoSavingRef.current = false;
-                                                            console.log('✅ Auto-save completed, re-enabling formData updates');
-                                                        }, 3000);
-                                                    }, 0);
-                                                }
-                                            }}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        >
-                                            <option value="Potential">Potential</option>
-                                            <option value="Active">Active</option>
-                                            <option value="Disinterested">Disinterested</option>
-                                        </select>
+                                        <div className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
+                                            Active
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
@@ -1578,15 +1537,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                                 Status
                                             </label>
-                                            <select
-                                                value={formData.status}
-                                                onChange={(e) => setFormData({...formData, status: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            >
-                                                <option value="Potential">Potential</option>
-                                                <option value="Active">Active</option>
-                                                <option value="Disinterested">Disinterested</option>
-                                            </select>
+                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
+                                                Active
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-700 mb-2">

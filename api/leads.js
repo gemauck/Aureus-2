@@ -71,7 +71,7 @@ async function handler(req, res) {
         name: String(body.name).trim(),
         type: 'lead',
         industry: String(body.industry || 'Other').trim(),
-        status: String(body.status || 'Potential').trim(),
+        status: 'active',
         stage: String(body.stage || 'Awareness').trim(),
         revenue: (() => {
           const val = parseFloat(body.revenue)
@@ -177,8 +177,8 @@ async function handler(req, res) {
         const updateData = {
           name: body.name,
           industry: body.industry,
-          status: body.status,
-          stage: body.stage, // Add stage field to update operations
+          status: 'active', // Status is always 'active', hardcoded
+          stage: body.stage, // Stage IS in database schema
           revenue: body.revenue !== undefined ? parseFloat(body.revenue) || 0 : undefined,
           value: body.value !== undefined ? parseFloat(body.value) || 0 : undefined,
           probability: body.probability !== undefined ? parseInt(body.probability) || 0 : undefined,
@@ -221,14 +221,23 @@ async function handler(req, res) {
           
           // Now update it
           const lead = await prisma.client.update({ 
-            where: { id }, 
-            data: updateData 
+          where: { id }, 
+          data: updateData 
           })
           console.log('✅ Lead updated successfully:', lead.id)
           console.log('✅ Updated lead status:', lead.status, '(was:', existing.status, ')')
           console.log('✅ Updated lead stage:', lead.stage)
           console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
-          return ok(res, { lead })
+          
+        // CRITICAL DEBUG: Immediately re-query database to verify persistence
+        const verifyLead = await prisma.client.findUnique({ where: { id } })
+        console.log('🔍 VERIFY: Re-queried lead from DB:', verifyLead.id, 'status:', verifyLead.status, 'stage:', verifyLead.stage)
+        if (verifyLead.status !== updateData.status) {
+          console.error('❌ CRITICAL: Database did not persist status change!')
+          console.error('   Expected:', updateData.status, 'Got:', verifyLead.status)
+        }
+        
+        return ok(res, { lead })
         } catch (dbError) {
           console.error('❌ Database error updating lead:', dbError)
           console.error('❌ Error details:', dbError.code, dbError.meta)
