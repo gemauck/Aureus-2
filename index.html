@@ -659,27 +659,51 @@
             setTimeout(checkAndMount, 2000);
         }
         
-        // Also add a manual check after longer delay
-        setTimeout(() => {
-            if (!mounted && !window.App) {
-                console.error('❌ App.jsx still not loaded after 10 seconds');
-                console.log('Checking window.App:', typeof window.App, window.App);
-                console.log('Checking window.MainLayout:', typeof window.MainLayout, window.MainLayout);
+        // Manual fallback: Load App and MainLayout if Babel fails
+        setTimeout(async () => {
+            if (!mounted && (!window.App || !window.MainLayout)) {
+                console.warn('⚠️ Babel failed to load App/MainLayout, trying manual load...');
                 
-                // Try to manually check if files loaded
-                const scripts = Array.from(document.scripts).filter(s => 
-                    s.src && (s.src.includes('App.jsx') || s.src.includes('MainLayout.jsx'))
-                );
-                console.log('Scripts found:', scripts.map(s => s.src));
-                scripts.forEach(script => {
-                    console.log(`Script ${script.src}:`, {
-                        complete: script.complete,
-                        readyState: script.readyState,
-                        loaded: script.hasAttribute('data-loaded')
-                    });
-                });
+                try {
+                    // Try to manually fetch and execute MainLayout first
+                    if (!window.MainLayout) {
+                        console.log('🔧 Manually loading MainLayout.jsx...');
+                        const mainLayoutResponse = await fetch('./src/components/layout/MainLayout.jsx');
+                        const mainLayoutCode = await mainLayoutResponse.text();
+                        // Transform with Babel inline
+                        const transformed = Babel.transform(mainLayoutCode, { 
+                            presets: ['react'],
+                            filename: 'MainLayout.jsx'
+                        }).code;
+                        eval(transformed);
+                        console.log('✅ MainLayout manually loaded');
+                    }
+                    
+                    // Then load App
+                    if (!window.App) {
+                        console.log('🔧 Manually loading App.jsx...');
+                        const appResponse = await fetch('./src/App.jsx');
+                        const appCode = await appResponse.text();
+                        const transformed = Babel.transform(appCode, { 
+                            presets: ['react'],
+                            filename: 'App.jsx'
+                        }).code;
+                        eval(transformed);
+                        console.log('✅ App manually loaded');
+                    }
+                    
+                    // Try mounting again
+                    if (window.App && window.MainLayout) {
+                        console.log('🔄 Retrying mount after manual load...');
+                        mounted = false;
+                        retryCount = 0;
+                        checkAndMount();
+                    }
+                } catch (error) {
+                    console.error('❌ Manual load failed:', error);
+                }
             }
-        }, 10000);
+        }, 8000);
     </script>
 </body>
 </html>
