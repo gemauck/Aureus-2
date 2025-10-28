@@ -558,7 +558,7 @@
     <script>
         // Simple mount script that waits for dependencies and mounts
         let retryCount = 0;
-        const MAX_RETRIES = 30;
+        const MAX_RETRIES = 50; // Increased to 10 seconds (50 * 200ms)
         let mounted = false;
         
         const checkAndMount = () => {
@@ -640,14 +640,46 @@
             }
         };
         
+        // Check for Babel transformation errors
+        window.addEventListener('error', (event) => {
+            if (event.filename && (event.filename.includes('App.jsx') || event.filename.includes('MainLayout.jsx'))) {
+                console.error('❌ Error in component:', event.filename, event.message);
+            }
+        }, true);
+        
         // Start checking when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                setTimeout(checkAndMount, 1000);
+                console.log('🔍 DOM loaded, waiting for components...');
+                // Wait longer for Babel to transform all scripts
+                setTimeout(checkAndMount, 2000);
             });
         } else {
-            setTimeout(checkAndMount, 1000);
+            console.log('🔍 DOM already loaded, waiting for components...');
+            setTimeout(checkAndMount, 2000);
         }
+        
+        // Also add a manual check after longer delay
+        setTimeout(() => {
+            if (!mounted && !window.App) {
+                console.error('❌ App.jsx still not loaded after 10 seconds');
+                console.log('Checking window.App:', typeof window.App, window.App);
+                console.log('Checking window.MainLayout:', typeof window.MainLayout, window.MainLayout);
+                
+                // Try to manually check if files loaded
+                const scripts = Array.from(document.scripts).filter(s => 
+                    s.src && (s.src.includes('App.jsx') || s.src.includes('MainLayout.jsx'))
+                );
+                console.log('Scripts found:', scripts.map(s => s.src));
+                scripts.forEach(script => {
+                    console.log(`Script ${script.src}:`, {
+                        complete: script.complete,
+                        readyState: script.readyState,
+                        loaded: script.hasAttribute('data-loaded')
+                    });
+                });
+            }
+        }, 10000);
     </script>
 </body>
 </html>
