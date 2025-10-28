@@ -1069,7 +1069,8 @@ const Clients = React.memo(() => {
             (lead.contacts?.[0]?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
         
         const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
-        const matchesStatus = filterStatus === 'All Status' || lead.status === filterStatus;
+        // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
+        const matchesStatus = true;
         
         return matchesSearch && matchesIndustry && matchesStatus;
     });
@@ -1510,110 +1511,7 @@ const Clients = React.memo(() => {
     );
 
     // Leads List View
-    const handleLeadStatusChange = async (leadId, newStatus) => {
-        console.log('🔄 handleLeadStatusChange called:', { leadId, newStatus });
-        
-        try {
-            const leadToUpdate = leads.find(l => l.id === leadId);
-            
-            if (!leadToUpdate) {
-                console.error('❌ Lead not found for status update:', leadId);
-                return;
-            }
-
-            // Update local state FIRST for immediate UI feedback
-            // IMPORTANT: Preserve ALL fields including stage when updating status
-            const updatedLead = { 
-                ...leadToUpdate, 
-                status: newStatus,
-                // Explicitly preserve stage to ensure it's not lost
-                stage: leadToUpdate.stage || 'Awareness'
-            };
-            setLeads(leads.map(l => l.id === leadId ? updatedLead : l));
-            
-            // If we have a selected lead, update it too
-            if (selectedLead && selectedLead.id === leadId) {
-                setSelectedLead(updatedLead);
-            }
-            
-            console.log('✅ Local state updated immediately');
-
-            // Persist to database via API
-            const token = window.storage?.getToken?.();
-            if (!token || !window.api?.updateLead) {
-                console.log('⚠️ No auth token or API, keeping local change only');
-                return;
-            }
-            
-            try {
-                console.log('🌐 Calling API to update lead status:', leadId, newStatus);
-                
-                // IMPORTANT: Send ONLY the fields we want to update to avoid overwriting other fields
-                const updatePayload = {
-                    status: newStatus,
-                    stage: updatedLead.stage
-                };
-                console.log('🌐 Sending lead data:', updatePayload);
-                
-                // Clear cache BEFORE updating to ensure fresh data
-                if (window.DatabaseAPI?.clearCache) {
-                    window.DatabaseAPI.clearCache('/leads');
-                    window.DatabaseAPI.clearCache('/clients'); // Also clear clients cache since it contains leads
-                    console.log('🗑️ Lead and client caches cleared before API update');
-                }
-                
-                // CRITICAL: Reset the API call timestamp to force fresh data load
-                lastApiCallTimestamp = 0;
-                lastLeadsApiCallTimestamp = 0;
-                console.log('🔄 API call timestamps reset to force fresh data');
-                
-                const apiResponse = await window.api.updateLead(leadId, updatePayload);
-                console.log('✅ Lead status updated in database');
-                console.log('✅ API response:', apiResponse);
-                
-                // Extract the updated lead from the API response
-                const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
-                console.log('✅ Updated lead from API:', updatedLeadFromAPI);
-                
-                // Update local state immediately with API response to prevent stale data
-                if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
-                    console.log('✅ Updating local state with API response');
-                    const apiUpdatedStatus = updatedLeadFromAPI.status || newStatus;
-                    console.log('✅ API returned status:', apiUpdatedStatus);
-                    
-                    setLeads(leads.map(l => l.id === leadId ? updatedLeadFromAPI : l));
-                    
-                    if (selectedLead && selectedLead.id === leadId) {
-                        setSelectedLead(updatedLeadFromAPI);
-                    }
-                }
-                
-                // Clear cache again AFTER successful update
-                if (window.DatabaseAPI?.clearCache) {
-                    window.DatabaseAPI.clearCache('/leads');
-                    window.DatabaseAPI.clearCache('/clients'); // Also clear clients cache since it contains leads
-                    console.log('🗑️ Lead and client caches cleared after API update');
-                }
-                
-                // Reload from database to ensure consistency (with longer delay to ensure DB transaction committed)
-                setTimeout(async () => {
-                    console.log('🔄 Force refreshing leads from database...');
-                    await loadLeads(true);
-                    console.log('✅ Leads reloaded from database after status change');
-                }, 500);
-            } catch (apiError) {
-                console.error('❌ API error updating lead status:', apiError);
-                alert('❌ Error saving status to database: ' + apiError.message);
-                // Revert local change on error
-                setLeads(leads.map(l => l.id === leadId ? leadToUpdate : l));
-                if (selectedLead && selectedLead.id === leadId) {
-                    setSelectedLead(leadToUpdate);
-                }
-            }
-        } catch (error) {
-            console.error('❌ Error updating lead status:', error);
-        }
-    };
+    // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
 
     const LeadsListView = () => (
         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border`}>
@@ -1665,20 +1563,10 @@ const Clients = React.memo(() => {
                                             {lead.stage}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                                        <select
-                                            value={lead.status}
-                                            onChange={async (e) => {
-                                                e.stopPropagation();
-                                                await handleLeadStatusChange(lead.id, e.target.value);
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-gray-700 text-gray-100 border-gray-600' : 'bg-white text-gray-900 border-gray-300'} border`}
-                                        >
-                                            <option>Potential</option>
-                                            <option>Active</option>
-                                            <option>Disinterested</option>
-                                        </select>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <span className={`px-2 py-1 text-xs font-medium rounded ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'}`}>
+                                            Active
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
