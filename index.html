@@ -422,6 +422,9 @@
     <!-- Settings Component -->
     <script type="text/babel" src="./src/components/settings/Settings.jsx"></script>
     
+    <!-- Settings Portal Component -->
+    <script type="text/babel" src="./src/components/settings/SettingsPortal.jsx"></script>
+    
     <!-- Permission System -->
     <script type="text/babel" src="./src/utils/permissions.js"></script>
     
@@ -520,8 +523,39 @@
     
     <!-- Mount App -->
     <script type="text/babel">
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        // Wait for App component to be ready before mounting
+        const mountApp = () => {
+            if (typeof window.App === 'undefined') {
+                console.warn('⏳ App component not ready yet, retrying in 100ms...');
+                setTimeout(mountApp, 100);
+                return;
+            }
+            
+            try {
+                console.log('🚀 Mounting App component...');
+                const root = ReactDOM.createRoot(document.getElementById('root'));
+                root.render(React.createElement(window.App));
+                console.log('✅ App mounted successfully');
+            } catch (error) {
+                console.error('❌ Failed to mount App:', error);
+                document.getElementById('root').innerHTML = `
+                    <div style="padding: 20px; color: red;">
+                        <h2>Failed to load application</h2>
+                        <p>Error: ${error.message}</p>
+                        <button onclick="window.location.reload()" style="margin-top: 10px; padding: 10px;">Reload Page</button>
+                    </div>
+                `;
+            }
+        };
+        
+        // Start mounting after a brief delay to ensure all components are loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(mountApp, 500);
+            });
+        } else {
+            setTimeout(mountApp, 500);
+        }
     </script>
 </body>
 </html>
