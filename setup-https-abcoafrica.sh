@@ -1,16 +1,16 @@
 #!/bin/bash
-# HTTPS Setup Script for abcoafrica.com
+# HTTPS Setup Script for abcoafrica.co.za
 # Run this on your DigitalOcean droplet
 
 set -e  # Exit on error
 
-DOMAIN="abcoafrica.com"
+DOMAIN="abcoafrica.co.za"
 APP_NAME="abcotronics-erp"
 APP_DIR="/var/www/abcotronics-erp"
 APP_PORT="3000"
-DROPLET_IP="138.68.167.88"
+DROPLET_IP="165.22.127.196"
 
-echo "🔒 HTTPS Setup for abcoafrica.com"
+echo "🔒 HTTPS Setup for abcoafrica.co.za"
 echo "=================================="
 echo ""
 
@@ -26,11 +26,13 @@ echo "   Droplet IP: $DROPLET_IP"
 echo "   App Port: $APP_PORT"
 echo ""
 
-read -p "Have you configured DNS A records to point $DOMAIN to $DROPLET_IP? (y/n): " -n 1 -r
+read -p "Have you configured DNS A records at domains.co.za to point $DOMAIN to $DROPLET_IP? (y/n): " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "❌ Please configure DNS first at domains.co.za"
-    echo "   Create A records pointing to $DROPLET_IP"
+    echo "   Create A records:"
+    echo "     @ → $DROPLET_IP"
+    echo "     www → $DROPLET_IP"
     exit 1
 fi
 
@@ -43,7 +45,7 @@ echo "🔧 Step 2: Installing Nginx..."
 apt-get install -y nginx
 
 echo ""
-echo "🔧 Step 3: Creating Nginx configuration for abcoafrica.com..."
+echo "🔧 Step 3: Creating Nginx configuration for abcoafrica.co.za..."
 cat > /etc/nginx/sites-available/$APP_NAME <<EOF
 # HTTP server - redirect to HTTPS
 server {
@@ -64,8 +66,9 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name $DOMAIN www.$DOMAIN;
 
     # SSL certificates (will be added by certbot)
@@ -88,11 +91,10 @@ server {
     # Large file uploads
     client_max_body_size 50M;
     
-    # Increase buffer sizes to handle large responses (prevents HTTP/2 protocol errors)
-    proxy_buffer_size 128k;
-    proxy_buffers 4 256k;
-    proxy_busy_buffers_size 256k;
-    proxy_temp_file_write_size 256k;
+    # HTTP/2 optimizations
+    http2_max_field_size 16k;
+    http2_max_header_size 32k;
+    http2_push_preload on;
 
     # Proxy to Node.js app
     location / {
@@ -114,9 +116,15 @@ server {
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
         
-        # Disable buffering for streaming responses (prevents HTTP/2 errors)
-        proxy_buffering off;
-        proxy_request_buffering off;
+        # Enable buffering with proper sizes for HTTP/2 (fixes protocol errors)
+        proxy_buffering on;
+        proxy_buffer_size 4k;
+        proxy_buffers 8 4k;
+        proxy_busy_buffers_size 8k;
+        proxy_temp_file_write_size 16k;
+        
+        # Ensure complete responses
+        proxy_request_buffering on;
         
         # Disable caching for dynamic content
         proxy_cache_bypass \$http_upgrade;
@@ -156,22 +164,22 @@ echo ""
 echo "🔧 Step 8: Obtaining SSL certificate for abcoafrica.com..."
 echo "   This may take a minute..."
 
-# Try to get certificate
-if certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --redirect --register-unsafely-without-email; then
+# Try to get certificate (use --expand to update existing certificate if needed)
+if certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --redirect --register-unsafely-without-email --expand; then
     echo "   ✅ SSL certificate obtained successfully"
 else
     echo "   ⚠️  Failed to obtain certificate. This usually means DNS isn't propagated yet."
     echo "   Waiting 30 seconds and trying again..."
     sleep 30
     
-    if certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --redirect --register-unsafely-without-email; then
+    if certbot --nginx -d $DOMAIN -d www.$DOMAIN --non-interactive --agree-tos --redirect --register-unsafely-without-email --expand; then
         echo "   ✅ SSL certificate obtained successfully"
     else
         echo "   ❌ Could not obtain certificate"
         echo "   Please check:"
         echo "   - DNS A records are pointing to $DROPLET_IP"
         echo "   - DNS has propagated (can take up to 48 hours)"
-        echo "   Run this command manually later: certbot --nginx -d $DOMAIN -d www.$DOMAIN"
+        echo "   Run this command manually later: certbot --nginx -d $DOMAIN -d www.$DOMAIN --expand"
     fi
 fi
 
@@ -217,13 +225,13 @@ echo "   ✅ HTTP to HTTPS redirect active"
 echo "   ✅ App restarted"
 echo ""
 echo "🔍 Test your setup:"
-echo "   1. Visit: https://abcoafrica.com"
-echo "   2. Check SSL: https://www.ssllabs.com/ssltest/analyze.html?d=abcoafrica.com"
+echo "   1. Visit: https://abcoafrica.co.za"
+echo "   2. Check SSL: https://www.ssllabs.com/ssltest/analyze.html?d=abcoafrica.co.za"
 echo ""
 echo "📝 Next Steps:"
 echo "   1. Add these lines to server.js in allowedOrigins array:"
-echo "      'https://abcoafrica.com',"
-echo "      'https://www.abcoafrica.com'"
+echo "      'https://abcoafrica.co.za',"
+echo "      'https://www.abcoafrica.co.za'"
 echo "   2. Commit and push: git push origin main"
 echo "   3. Pull on droplet: cd $APP_DIR && git pull"
 echo "   4. Restart: pm2 restart $APP_NAME"

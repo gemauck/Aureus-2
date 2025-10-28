@@ -1,39 +1,51 @@
 // API-Only Data Service - Always uses database API, no localStorage fallback
-const { isProduction, isLocalhost } = (() => {
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const isProduction = !isLocalhost && window.location.protocol === 'https:';
-    
-    return { isProduction, isLocalhost };
-})();
+// Wrap entire file in IIFE to prevent variable redeclaration when Babel transforms multiple times
+(() => {
+    // Get environment from window (set by debug.js) or determine locally
+    const { isProduction, isLocalhost } = (() => {
+        // Use window values if available (from debug.js)
+        if (typeof window.isProduction !== 'undefined' && typeof window.isLocalhost !== 'undefined') {
+            return { 
+                isProduction: window.isProduction, 
+                isLocalhost: window.isLocalhost 
+            };
+        }
+        
+        // Otherwise, determine locally
+        const hostname = window.location.hostname;
+        const isLocalhostValue = hostname === 'localhost' || hostname === '127.0.0.1';
+        const isProductionValue = !isLocalhostValue && window.location.protocol === 'https:';
+        
+        return { isProduction: isProductionValue, isLocalhost: isLocalhostValue };
+    })();
 
-const log = window.debug?.log || (() => {});
-log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
-log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
+    const log = window.debug?.log || (() => {});
+    log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
+    log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
 
-// Helpers to normalize API/local responses to arrays and safely access storage methods
-function normalizeArrayResponse(response, preferredKeys = []) {
-    // Try preferred keys first (e.g., ['projects'] or ['clients'])
-    for (const key of preferredKeys) {
-        const value = response?.[key];
-        if (Array.isArray(value)) return value;
+    // Helpers to normalize API/local responses to arrays and safely access storage methods
+    function normalizeArrayResponse(response, preferredKeys = []) {
+        // Try preferred keys first (e.g., ['projects'] or ['clients'])
+        for (const key of preferredKeys) {
+            const value = response?.[key];
+            if (Array.isArray(value)) return value;
+        }
+        // Common data wrapper { data: [...] }
+        if (Array.isArray(response?.data)) return response.data;
+        // Direct array
+        if (Array.isArray(response)) return response;
+        // Unknown shape -> empty array
+        return [];
     }
-    // Common data wrapper { data: [...] }
-    if (Array.isArray(response?.data)) return response.data;
-    // Direct array
-    if (Array.isArray(response)) return response;
-    // Unknown shape -> empty array
-    return [];
-}
 
-function safeStorageCall(obj, methodName, fallback = []) {
-    const fn = obj && obj[methodName];
-    return typeof fn === 'function' ? fn.call(obj) : fallback;
-}
+    function safeStorageCall(obj, methodName, fallback = []) {
+        const fn = obj && obj[methodName];
+        return typeof fn === 'function' ? fn.call(obj) : fallback;
+    }
 
-const dataService = {
-    // Projects - API Only
-    async getProjects() {
+    const dataService = {
+        // Projects - API Only
+        async getProjects() {
         try {
             const log = window.debug?.log || (() => {});
             log('🌐 Using API for projects (API-only mode)');
@@ -422,21 +434,22 @@ const dataService = {
     }
 };
 
-// Make available globally
-window.dataService = dataService;
+    // Make available globally
+    window.dataService = dataService;
 
-// Debug function
-window.debugDataService = () => {
-    console.log('🔍 Data Service Debug:', {
-        isProduction,
-        isLocalhost,
-        hasAPI: !!window.api,
-        hasStorage: !!window.storage,
-        apiMethods: Object.keys(window.api || {}),
-        storageMethods: Object.keys(window.storage || {}),
-        dataServiceMethods: Object.keys(dataService)
-    });
-};
+    // Debug function
+    window.debugDataService = () => {
+        console.log('🔍 Data Service Debug:', {
+            isProduction,
+            isLocalhost,
+            hasAPI: !!window.api,
+            hasStorage: !!window.storage,
+            apiMethods: Object.keys(window.api || {}),
+            storageMethods: Object.keys(window.storage || {}),
+            dataServiceMethods: Object.keys(dataService)
+        });
+    };
 
-const finalLog = window.debug?.log || (() => {});
-finalLog('✅ Data Service loaded - Environment:', isProduction ? 'Production' : 'Development');
+    const finalLog = window.debug?.log || (() => {});
+    finalLog('✅ Data Service loaded - Environment:', isProduction ? 'Production' : 'Development');
+})(); // End IIFE - prevents variable redeclaration errors
