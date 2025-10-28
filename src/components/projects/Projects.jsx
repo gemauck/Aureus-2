@@ -14,6 +14,8 @@ const Projects = () => {
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
+    const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
     
     // Ensure storage is available
     useEffect(() => {
@@ -39,31 +41,68 @@ const Projects = () => {
             // Skip if we already have projects (component staying mounted)
             if (projects.length > 0) {
                 console.log(`⚡ Projects: Skipping load - already have ${projects.length} projects`);
+                setIsLoading(false);
                 return;
             }
+            
+            setIsLoading(true);
+            setLoadError(null);
             
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {
                     console.warn('⚠️ Projects: No authentication token found');
                     setProjects([]);
+                    setIsLoading(false);
                     return;
                 }
 
                 console.log('🔄 Projects: Loading projects from database');
+                
+                if (!window.DatabaseAPI) {
+                    console.error('❌ Projects: DatabaseAPI not available on window object');
+                    setProjects([]);
+                    setLoadError('Database API not available. Please refresh the page.');
+                    setIsLoading(false);
+                    return;
+                }
+                
+                if (!window.DatabaseAPI.getProjects) {
+                    console.error('❌ Projects: DatabaseAPI.getProjects method not available');
+                    setProjects([]);
+                    setLoadError('Projects API method not available. Please refresh the page.');
+                    setIsLoading(false);
+                    return;
+                }
+                
                 const response = await window.DatabaseAPI.getProjects();
                 console.log('📡 Raw response from database:', response);
+                console.log('📡 Response structure check:', {
+                    hasData: !!response?.data,
+                    hasProjects: !!response?.data?.projects,
+                    isProjectsArray: Array.isArray(response?.data?.projects),
+                    projectsLength: response?.data?.projects?.length || 0,
+                    dataKeys: response?.data ? Object.keys(response.data) : [],
+                    responseKeys: Object.keys(response || {})
+                });
                 
                 // Handle different response structures
                 let apiProjects = [];
-                if (response?.data?.projects) {
+                if (response?.data?.projects && Array.isArray(response.data.projects)) {
                     apiProjects = response.data.projects;
-                } else if (response?.projects) {
+                    console.log('✅ Using response.data.projects');
+                } else if (response?.projects && Array.isArray(response.projects)) {
                     apiProjects = response.projects;
+                    console.log('✅ Using response.projects');
                 } else if (Array.isArray(response?.data)) {
                     apiProjects = response.data;
+                    console.log('✅ Using response.data as array');
                 } else if (Array.isArray(response)) {
                     apiProjects = response;
+                    console.log('✅ Using response as array');
+                } else {
+                    console.warn('⚠️ No projects found in response. Response:', response);
+                    apiProjects = [];
                 }
                 
                 console.log('📡 Database returned projects:', apiProjects?.length || 0, apiProjects);
@@ -78,6 +117,7 @@ const Projects = () => {
                 
                 // Ensure we always set an array
                 setProjects(normalizedProjects);
+                setIsLoading(false);
                 
                 // Sync existing projects with clients
                 syncProjectsWithClients(apiProjects);
@@ -95,7 +135,31 @@ const Projects = () => {
                 }
             } catch (error) {
                 console.error('❌ Projects: Error loading projects from database:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response,
+                    status: error.status
+                });
                 setProjects([]);
+                setIsLoading(false);
+                
+                // Set user-friendly error message
+                if (error.message.includes('401') || error.message.includes('Authentication')) {
+                    console.warn('⚠️ Authentication error - redirecting to login');
+                    setLoadError('Authentication expired. Redirecting to login...');
+                    setTimeout(() => {
+                        window.location.hash = '#/login';
+                    }, 1500);
+                } else if (error.message.includes('404')) {
+                    setLoadError('Projects API endpoint not found. Please contact support.');
+                } else if (error.message.includes('500') || error.message.includes('Server')) {
+                    setLoadError('Server error loading projects. Please try again later.');
+                } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+                    setLoadError('Network error. Please check your connection and try again.');
+                } else {
+                    setLoadError(`Failed to load projects: ${error.message}`);
+                }
             }
         };
 
@@ -521,31 +585,64 @@ const Projects = () => {
                 </div>
             </div>
 
-            {/* Project Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredProjects.length === 0 ? (
-                    <div className="col-span-full text-center py-12">
-                        <i className="fas fa-filter text-4xl text-gray-300 mb-3"></i>
-                        <p className="text-gray-500 text-sm mb-2">
-                            {projects.length === 0 
-                                ? 'No projects yet. Create your first project!' 
-                                : 'No projects match your filters'}
-                        </p>
-                        {(searchTerm !== '' || selectedClient !== 'all' || filterStatus !== 'all') && (
+            {/* Loading State */}
+            {isLoading && (
+                <div className="col-span-full text-center py-12">
+                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mb-3"></div>
+                    <p className="text-gray-500 text-sm">Loading projects...</p>
+                </div>
+            )}
+
+            {/* Error State */}
+            {loadError && !isLoading && (
+                <div className="col-span-full bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                        <i className="fas fa-exclamation-circle text-red-600 mt-0.5 mr-3"></i>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-red-800 mb-1">Error Loading Projects</h3>
+                            <p className="text-sm text-red-700 mb-3">{loadError}</p>
                             <button
                                 onClick={() => {
-                                    setSearchTerm('');
-                                    setSelectedClient('all');
-                                    setFilterStatus('all');
+                                    setLoadError(null);
+                                    setIsLoading(true);
+                                    window.location.reload();
                                 }}
-                                className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-medium"
                             >
                                 <i className="fas fa-redo mr-1.5"></i>
-                                Clear all filters
+                                Retry
                             </button>
-                        )}
+                        </div>
                     </div>
-                ) : null}
+                </div>
+            )}
+
+            {/* Project Cards */}
+            {!isLoading && !loadError && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {filteredProjects.length === 0 ? (
+                        <div className="col-span-full text-center py-12">
+                            <i className="fas fa-filter text-4xl text-gray-300 mb-3"></i>
+                            <p className="text-gray-500 text-sm mb-2">
+                                {projects.length === 0 
+                                    ? 'No projects yet. Create your first project!' 
+                                    : 'No projects match your filters'}
+                            </p>
+                            {(searchTerm !== '' || selectedClient !== 'all' || filterStatus !== 'all') && (
+                                <button
+                                    onClick={() => {
+                                        setSearchTerm('');
+                                        setSelectedClient('all');
+                                        setFilterStatus('all');
+                                    }}
+                                    className="mt-3 px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-xs font-medium"
+                                >
+                                    <i className="fas fa-redo mr-1.5"></i>
+                                    Clear all filters
+                                </button>
+                            )}
+                        </div>
+                    ) : null}
                 {filteredProjects.map((project, index) => (
                     <div 
                         key={project.id}
@@ -621,7 +718,8 @@ const Projects = () => {
 
                     </div>
                 ))}
-            </div>
+                </div>
+            )}
 
             {/* Add/Edit Modal */}
             {showModal && (
@@ -657,4 +755,9 @@ const Projects = () => {
 };
 
 // Make available globally
-window.Projects = Projects;
+try {
+    window.Projects = Projects;
+    console.log('✅ Projects component registered on window.Projects');
+} catch (error) {
+    console.error('❌ Error registering Projects component:', error);
+}
