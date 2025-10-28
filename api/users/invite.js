@@ -3,6 +3,7 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { authRequired } from '../_lib/authRequired.js'
 import { sendInvitationEmail } from '../_lib/email.js'
 import crypto from 'crypto'
 
@@ -27,7 +28,9 @@ async function handler(req, res) {
         }
 
         const { email, name, role = 'user', invitedBy } = req.body || {}
-        console.log('📝 Processing invitation for:', { email, name, role, invitedBy })
+        // Use authenticated user's ID as the inviter, fallback to body or 'system'
+        const inviterId = req.user?.sub || invitedBy || 'system'
+        console.log('📝 Processing invitation for:', { email, name, role, invitedBy: inviterId })
         
         if (!email || !name) {
             console.log('❌ Missing required fields:', { email: !!email, name: !!name })
@@ -63,7 +66,7 @@ async function handler(req, res) {
                         data: {
                             token: invitationToken,
                             expiresAt,
-                            invitedBy: invitedBy || existingInvitation.invitedBy || 'system',
+                            invitedBy: inviterId || existingInvitation.invitedBy || 'system',
                             updatedAt: new Date()
                         }
                     })
@@ -78,7 +81,7 @@ async function handler(req, res) {
                             token: invitationToken,
                             status: 'pending',
                             expiresAt,
-                            invitedBy: invitedBy || 'system',
+                            invitedBy: inviterId || 'system',
                             acceptedAt: null,
                             updatedAt: new Date()
                         }
@@ -93,7 +96,7 @@ async function handler(req, res) {
                         role,
                         token: invitationToken,
                         expiresAt,
-                        invitedBy: invitedBy || 'system',
+                        invitedBy: inviterId || 'system',
                         status: 'pending'
                     }
                 })
@@ -194,4 +197,4 @@ async function handler(req, res) {
     }
 }
 
-export default withHttp(withLogging(handler))
+export default withHttp(withLogging(authRequired(handler)))

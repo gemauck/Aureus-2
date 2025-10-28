@@ -148,13 +148,22 @@ const UserManagement = () => {
                 await loadUsers();
                 
                 // Show success message with detailed information
-                showInvitationResultModal(data);
+                // Handle both {data: {...}} and direct response formats
+                const responseData = data.data || data;
+                showInvitationResultModal(responseData);
             } else {
                 console.error('❌ Invitation failed:', data);
-                alert(data.message || data.error || 'Failed to send invitation');
+                // Extract error message from { error: { code, message, details } } structure
+                const errorMessage = data.error?.message || data.message || data.error || 'Failed to send invitation';
+                alert(errorMessage);
             }
         } catch (error) {
             console.error('❌ Error sending invitation:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
             alert('Failed to send invitation: ' + error.message);
         }
     };
