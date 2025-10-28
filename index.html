@@ -323,7 +323,9 @@
             
             const allReady = Object.values(deps).every(v => v);
             
+            // Safely check for performance mode
             const performanceMode = window.debug && window.debug.performanceMode;
+            const isPerformanceMode = performanceMode || false;
             
             if (!allReady) {
                 if (!isPerformanceMode) {
@@ -333,7 +335,7 @@
                 return false;
             }
             
-            if (!performanceMode) {
+            if (!isPerformanceMode) {
                 console.log('✅ All critical dependencies ready');
             }
             return true;
@@ -627,13 +629,17 @@
     <!-- App Entry Point - Load AFTER setup -->
     <script type="text/babel" src="./src/App.jsx"></script>
     
-    <!-- Mount App - Wait for all scripts to load -->
+    <!-- Mount App - Fast loader for immediate mounting -->
+    <script src="./fast-loader.js"></script>
+    
+    <!-- Fallback mount script with better error handling and Babel support -->
     <script>
-        // Enhanced mount script with better error handling and Babel support
-        let retryCount = 0;
-        const MAX_RETRIES = 100; // Increased to 20 seconds (100 * 200ms)
-        let mounted = false;
-        let manualLoadAttempted = false;
+        // Only use this as fallback if fast-loader fails
+        if (!window.__appMounted) {
+            let retryCount = 0;
+            const MAX_RETRIES = 50; // Reduced to 10 seconds (50 * 200ms)
+            let mounted = false;
+            let manualLoadAttempted = false;
         
         // Helper to manually load and transform a component
         const manuallyLoadComponent = async (filePath, windowName) => {
@@ -747,7 +753,7 @@
                 
                 // Log missing components every 5 retries (and not in performance mode)
                 const isPerformanceMode = window.debug && window.debug.performanceMode;
-                if (retryCount % 5 === 0 && !performanceMode) {
+                if (retryCount % 5 === 0 && !isPerformanceMode) {
                     const missing = Object.entries(components)
                         .filter(([k, v]) => !v)
                         .map(([k]) => k);
@@ -848,23 +854,22 @@
             }
         }, true);
         
-        // Start checking when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', () => {
-                const isPerformanceMode = window.debug && window.debug.performanceMode;
-                if (!isPerformanceMode) {
-                    console.log('🔍 DOM loaded, waiting for components...');
+        // Only use fallback if fast-loader didn't mount
+        const fallbackCheck = () => {
+            if (!window.__appMounted) {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        setTimeout(checkAndMount, 500);
+                    });
+                } else {
+                    setTimeout(checkAndMount, 500);
                 }
-                // Wait longer for Babel to transform all scripts
-                setTimeout(checkAndMount, 1000);
-            });
-        } else {
-            const isCheckPerformanceMode = window.debug && window.debug.performanceMode;
-            if (!isCheckPerformanceMode) {
-                console.log('🔍 DOM already loaded, waiting for components...');
             }
-            setTimeout(checkAndMount, 1000);
-        }
+        };
+        
+        // Wait a bit to see if fast-loader succeeds
+        setTimeout(fallbackCheck, 2000);
+        } // Close if (!window.__appMounted) block
     </script>
 </body>
 </html>
