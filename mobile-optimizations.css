@@ -63,22 +63,131 @@
     box-shadow: 0 1px 4px rgba(59, 130, 246, 0.4);
   }
   
-  /* Enhanced form inputs */
-  input, textarea, select {
-    min-height: 48px;
-    padding: 14px 18px;
-    font-size: 16px; /* Prevents zoom on iOS */
+  /* Enhanced form inputs - OVERRIDE ALL FORM ELEMENTS */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="search"],
+  textarea,
+  select {
+    min-height: 48px !important;
+    padding: 14px 18px !important;
+    font-size: 16px !important; /* Prevents zoom on iOS */
     border-radius: 12px;
-    border: 2px solid #e5e7eb;
+    border: 2px solid #e5e7eb !important;
     transition: all 0.2s ease;
-    width: 100%;
+    width: 100% !important;
     box-sizing: border-box;
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: white;
+  }
+  
+  /* Special handling for textareas */
+  textarea {
+    min-height: 120px !important;
+    resize: vertical;
+    font-family: inherit;
+  }
+  
+  /* Select dropdown styling */
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 18px center;
+    background-size: 12px;
+    padding-right: 48px !important;
   }
   
   input:focus, textarea:focus, select:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  /* Fix for date/time inputs on iOS */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    position: relative;
+  }
+  
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator,
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    position: absolute;
+    right: 18px;
+    width: 24px;
+    height: 24px;
+    opacity: 1;
+    cursor: pointer;
+  }
+  
+  /* Label improvements */
+  label {
+    display: block !important;
+    margin-bottom: 10px !important;
+    font-weight: 600;
+    font-size: 15px !important;
+    color: #374151;
+    line-height: 1.4;
+  }
+  
+  /* Form group spacing */
+  .form-group,
+  div[class*="space-y"] > div,
+  form > div {
+    margin-bottom: 20px !important;
+  }
+  
+  /* Grid form fixes - stack on mobile */
+  .grid.grid-cols-2,
+  .grid.grid-cols-3,
+  .grid.grid-cols-4 {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  /* Override specific small text sizes in forms */
+  input.text-xs,
+  select.text-xs,
+  textarea.text-xs {
+    font-size: 16px !important;
+    padding: 14px 18px !important;
+  }
+  
+  input.text-sm,
+  select.text-sm,
+  textarea.text-sm {
+    font-size: 16px !important;
+    padding: 14px 18px !important;
+  }
+  
+  /* Override small padding */
+  input[class*="py-1"],
+  input[class*="py-1.5"],
+  input[class*="py-2"] {
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+  }
+  
+  select[class*="py-1"],
+  select[class*="py-1.5"],
+  select[class*="py-2"] {
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
+  }
+  
+  textarea[class*="py-1"],
+  textarea[class*="py-1.5"],
+  textarea[class*="py-2"] {
+    padding-top: 14px !important;
+    padding-bottom: 14px !important;
   }
   
   /* Enhanced card styles */
@@ -322,6 +431,29 @@
     visibility: visible;
   }
   
+  /* Sidebar scroll improvements */
+  nav.overflow-y-auto,
+  .sidebar-scrollbar,
+  aside[class*="overflow"] {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+    overscroll-behavior: contain;
+  }
+  
+  /* Menu button touch targets */
+  nav button,
+  nav a,
+  .menu-item {
+    min-height: 56px !important;
+    padding: 16px !important;
+    font-size: 16px !important;
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+  }
+  
   /* Header optimizations */
   .header-mobile {
     height: 56px;
@@ -333,77 +465,175 @@
   }
   
   /* Modal optimizations */
-  .modal {
-    margin: 0;
-    max-height: 100vh;
-    border-radius: 0;
+  .modal,
+  [class*="modal"],
+  [role="dialog"] {
+    margin: 0 !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 1000;
   }
   
-  .modal-dialog {
-    margin: 0;
-    max-width: 100%;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
+  .modal-dialog,
+  [class*="modal-dialog"] {
+    margin: 0 !important;
+    max-width: 100% !important;
+    height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
   
-  .modal-content {
-    flex: 1;
-    border-radius: 0;
-    border: none;
-    overflow-y: auto;
+  .modal-content,
+  [class*="modal-content"] {
+    flex: 1 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    display: flex !important;
+    flex-direction: column !important;
+    max-height: 100vh !important;
   }
   
-  .modal-header {
-    padding: 16px;
+  .modal-header,
+  [class*="modal-header"] {
+    padding: 20px 16px !important;
     border-bottom: 1px solid #e5e7eb;
-    position: sticky;
-    top: 0;
+    position: sticky !important;
+    top: 0 !important;
     background: white;
     z-index: 10;
+    flex-shrink: 0;
   }
   
-  .modal-body {
-    padding: 16px;
+  .modal-body,
+  [class*="modal-body"],
+  form {
+    padding: 20px 16px !important;
     flex: 1;
-    overflow-y: auto;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
   
-  .modal-footer {
-    padding: 16px;
+  .modal-footer,
+  [class*="modal-footer"] {
+    padding: 20px 16px !important;
     border-top: 1px solid #e5e7eb;
-    position: sticky;
-    bottom: 0;
+    position: sticky !important;
+    bottom: 0 !important;
     background: white;
     z-index: 10;
+    flex-shrink: 0;
+    display: flex;
+    gap: 12px;
   }
   
-  /* Form optimizations */
+  /* Modal form button improvements */
+  .modal-footer button,
+  [class*="modal-footer"] button,
+  form button[type="submit"] {
+    flex: 1;
+    min-height: 52px !important;
+    font-size: 16px !important;
+    font-weight: 600;
+  }
+  
+  /* Ensure modals are scrollable */
+  [class*="fixed"][class*="inset"] {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Dropdown menus - fix positioning on mobile */
+  .relative > div[class*="absolute"]:not([class*="tooltip"]),
+  div[class*="dropdown"]:not([class*="tooltip"]),
+  div[class*="menu"]:not(nav):not([class*="nav"]) {
+    position: fixed !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    z-index: 2000;
+    width: calc(100vw - 32px) !important;
+    left: 16px !important;
+    right: 16px !important;
+    transform: none !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+    border-radius: 12px !important;
+    background: white !important;
+  }
+  
+  /* Prevent dropdown from going off screen */
+  div[class*="absolute"][style*="top"] {
+    max-height: calc(100vh - 120px) !important;
+  }
+  
+  /* Select dropdown options */
+  select option {
+    padding: 14px 18px !important;
+    font-size: 16px !important;
+    min-height: 48px;
+  }
+  
+  /* Form optimizations - already covered above but keep for specificity */
   .form-group {
-    margin-bottom: 20px;
+    margin-bottom: 24px !important;
   }
   
   .form-label {
-    display: block;
-    margin-bottom: 8px;
+    display: block !important;
+    margin-bottom: 10px !important;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 15px !important;
   }
   
   .form-control {
-    width: 100%;
-    min-height: 44px;
-    padding: 12px 16px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 16px;
+    width: 100% !important;
+    min-height: 48px !important;
+    padding: 14px 18px !important;
+    border: 2px solid #d1d5db !important;
+    border-radius: 12px;
+    font-size: 16px !important;
     background: white;
   }
   
   .form-control:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  /* Scrollable areas in forms */
+  [class*="overflow-y-auto"],
+  [class*="overflow-auto"],
+  div[style*="overflow"] {
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  
+  /* Better scrollbars for mobile */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
   }
   
   /* Grid system for mobile */
@@ -415,8 +645,30 @@
   
   .grid-mobile-2 {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  /* Force single column on mobile for FORM grids only */
+  form .grid[class*="grid-cols-2"],
+  form .grid[class*="grid-cols-3"],
+  form .grid[class*="grid-cols-4"],
+  .modal .grid[class*="grid-cols-2"],
+  .modal .grid[class*="grid-cols-3"],
+  .modal .grid[class*="grid-cols-4"],
+  [class*="modal"] .grid[class*="grid-cols-2"],
+  [class*="modal"] .grid[class*="grid-cols-3"],
+  [class*="modal"] .grid[class*="grid-cols-4"] {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  /* Exception: Keep 2 columns for stats and dashboard cards */
+  .grid[class*="stats"],
+  .grid[class*="summary"],
+  .grid[class*="dashboard"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
   }
   
   /* Card optimizations */
@@ -594,9 +846,22 @@
   }
   
   /* Touch-friendly interactions */
-  .touch-target {
-    min-height: 44px;
-    min-width: 44px;
+  .touch-target,
+  button,
+  a.button,
+  [role="button"] {
+    min-height: 48px !important;
+    min-width: 48px !important;
+    padding: 14px 18px !important;
+    font-size: 16px !important;
+  }
+  
+  /* Small action buttons (icons only) */
+  button[class*="p-1"],
+  button[class*="p-1.5"],
+  button[class*="p-2"] {
+    min-height: 44px !important;
+    min-width: 44px !important;
   }
   
   /* Swipe gestures */
@@ -630,6 +895,79 @@
   
   .pull-to-refresh.active {
     top: 20px;
+  }
+  
+  /* Additional scrollable menu fixes */
+  [class*="sidebar"] nav,
+  aside nav,
+  [class*="menu-list"],
+  [class*="nav-menu"] {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    scrollbar-width: thin;
+  }
+  
+  /* Prevent horizontal scroll on forms */
+  form,
+  .modal-body,
+  [class*="modal-body"] {
+    overflow-x: hidden !important;
+    word-wrap: break-word;
+  }
+  
+  /* Better spacing in tight forms */
+  form > * + * {
+    margin-top: 20px !important;
+  }
+  
+  /* Fix for select dropdowns that might be cut off */
+  select {
+    max-width: 100% !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  /* Ensure checkboxes and radios are touch-friendly */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 24px !important;
+    height: 24px !important;
+    min-width: 24px !important;
+    min-height: 24px !important;
+    margin-right: 12px;
+    cursor: pointer;
+  }
+  
+  label:has(input[type="checkbox"]),
+  label:has(input[type="radio"]) {
+    display: flex !important;
+    align-items: center;
+    cursor: pointer;
+    padding: 12px 0;
+  }
+  
+  /* Fix for very small screens */
+  @media (max-width: 375px) {
+    input, textarea, select {
+      padding: 12px 16px !important;
+      font-size: 16px !important;
+    }
+    
+    label {
+      font-size: 14px !important;
+    }
+    
+    button {
+      padding: 12px 16px !important;
+      font-size: 15px !important;
+    }
+  }
+  
+  /* Prevent zoom on input focus for iOS (already at 16px but ensure it) */
+  @supports (-webkit-touch-callout: none) {
+    input, textarea, select {
+      font-size: 16px !important;
+    }
   }
 }
 

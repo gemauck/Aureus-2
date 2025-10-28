@@ -206,6 +206,17 @@ app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for project list operations (GET, POST /api/projects)
+app.all('/api/projects', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'projects.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for project operations with ID (GET, PUT, DELETE /api/projects/[id])
 app.all('/api/projects/:id', async (req, res, next) => {
   try {

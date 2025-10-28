@@ -1031,13 +1031,17 @@ const Clients = React.memo(() => {
     };
 
     // Filter clients - explicitly exclude leads and records without proper type
+    // Use multiple checks to ensure leads never appear in clients list
     const filteredClients = clients.filter(client => {
-        // Exclude leads - only show actual clients
-        if (client.type === 'lead') {
-            return false;
+        // STRICT: Only include if type is explicitly 'client'
+        if (client.type !== 'client') {
+            return false; // Exclude leads, null types, undefined, or any other value
         }
-        // Exclude records without a proper type (null, undefined, or invalid values)
-        if (!client.type || client.type !== 'client') {
+        
+        // Additional safeguard: exclude records with status='Potential' (always a lead)
+        // This catches leads that might have been incorrectly saved with type='client'
+        if (client.status === 'Potential') {
+            console.warn(`⚠️ Filtering out lead with status='Potential' from clients: ${client.name}`);
             return false;
         }
         
@@ -1487,7 +1491,10 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            sortedClients.map(client => (
+                            sortedClients.filter(client => {
+                                // Final render-time safety check: ensure type is 'client' and not 'Potential' status
+                                return client.type === 'client' && client.status !== 'Potential';
+                            }).map(client => (
                                 <tr 
                                     key={client.id} 
                                     onClick={() => handleOpenClient(client)}

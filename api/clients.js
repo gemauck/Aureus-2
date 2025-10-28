@@ -89,6 +89,37 @@ async function handler(req, res) {
           console.warn(`⚠️ Found ${recordsWithNullType.length} Client records with invalid type:`, recordsWithNullType)
         }
         
+        // Check for records with status='Potential' that might be leads incorrectly marked as clients
+        const potentialLeadsMisclassified = await prisma.client.findMany({
+          where: {
+            AND: [
+              { type: 'client' },
+              { status: 'Potential' }
+            ]
+          },
+          select: { id: true, name: true, type: true, status: true }
+        })
+        if (potentialLeadsMisclassified.length > 0) {
+          console.warn(`⚠️ Found ${potentialLeadsMisclassified.length} records with status='Potential' but type='client' (likely leads):`, potentialLeadsMisclassified)
+          // Auto-fix: update these to be leads
+          for (const record of potentialLeadsMisclassified) {
+            await prisma.client.update({
+              where: { id: record.id },
+              data: { type: 'lead' }
+            })
+            console.log(`✅ Auto-fixed: ${record.name} set to type='lead'`)
+          }
+          // Re-fetch clients after fixing
+          const fixedClients = await prisma.client.findMany({ 
+            where: {
+              type: 'client'
+            },
+            orderBy: { createdAt: 'desc' }
+          })
+          const filteredFixed = fixedClients.filter(client => client.type === 'client')
+          return ok(res, { clients: filteredFixed.map(parseClientJsonFields) })
+        }
+        
         console.log('📊 Clients fetched from DB (before filter):', allClients.length)
         console.log('📊 Clients after filtering:', clients.length)
         console.log('📊 Client keys:', clients.length > 0 ? Object.keys(clients[0]) : 'No clients')

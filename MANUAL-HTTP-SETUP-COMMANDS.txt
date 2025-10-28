@@ -1,0 +1,43 @@
+═══════════════════════════════════════════════════════════════
+ HTTPS Setup - Run These Commands Manually
+═══════════════════════════════════════════════════════════════
+
+STEP 1: Upload the script to your server
+─────────────────────────────────────────
+Run this from your local machine:
+
+  scp setup-https-abcoafrica.sh root@138.68.167.88:/root/
+
+
+STEP 2: SSH into your server and run the script
+────────────────────────────────────────────────
+  ssh root@138.68.167.88
+  
+  Then once connected:
+  chmod +x setup-https-abcoafrica.sh
+  ./setup-https-abcoafrica.sh
+
+
+Or as a single command (after uploading):
+─────────────────────────────────────────
+  ssh root@138.68.167.88 'chmod +x setup-https-abcoafrica.sh && ./setup-https-abcoafrica.sh'
+
+
+IMPORTANT: Before running, make sure:
+✓ DNS A records point abcoafrica.com to 138.68.167.88
+✓ You have root/SSH access to the server
+✓ You have your SSH password or key configured
+
+
+What the script will do:
+✓ Install Nginx
+✓ Configure SSL with Let's Encrypt (free certificates)
+✓ Enable HTTP/2 for better performance
+✓ Set up HTTPS redirect
+✓ Configure security headers
+✓ Update your app configuration
+✓ Restart your application
+
+
+═══════════════════════════════════════════════════════════════
+

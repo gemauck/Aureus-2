@@ -50,6 +50,16 @@ const DatabaseAPI = {
             }
 
             const data = await response.json();
+            console.log(`📥 API Response for ${endpoint}:`, {
+                status: response.status,
+                hasData: !!data,
+                dataKeys: Object.keys(data || {}),
+                dataStructure: endpoint === '/projects' ? {
+                    hasProjects: !!(data?.data?.projects),
+                    projectsCount: data?.data?.projects?.length || 0,
+                    rawData: data
+                } : 'other endpoint'
+            });
             return data;
         } catch (error) {
             console.error(`Database API request failed (${endpoint}):`, error);
@@ -163,7 +173,8 @@ const DatabaseAPI = {
     async getProjects() {
         console.log('📡 Fetching projects from database...');
         const response = await this.makeRequest('/projects');
-        console.log('✅ Projects fetched from database:', response.data?.length || 0);
+        const projectsCount = response?.data?.projects?.length || response?.data?.length || response?.projects?.length || 0;
+        console.log('✅ Projects fetched from database:', projectsCount);
         return response;
     },
 

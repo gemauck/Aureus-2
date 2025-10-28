@@ -326,7 +326,7 @@
             const performanceMode = window.debug && window.debug.performanceMode;
             
             if (!allReady) {
-                if (!performanceMode) {
+                if (!isPerformanceMode) {
                     const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k]) => k);
                     console.warn('⚠️ Dependencies not ready:', missing);
                 }
@@ -374,10 +374,10 @@
     <!-- Wait for storage to be ready before loading auth components -->
     <script type="text/babel">
         // Ensure storage is ready before loading auth components
-        const performanceMode = window.debug && window.debug.performanceMode;
+        const isStoragePerformanceMode = window.debug && window.debug.performanceMode;
         if (typeof window.storage === 'undefined') {
             console.error('❌ Storage not loaded before auth components');
-        } else if (!performanceMode) {
+        } else if (!isStoragePerformanceMode) {
             console.log('✅ Storage ready, loading auth components');
         }
     </script>
@@ -411,14 +411,14 @@
         // Set to false to revert to old behavior instantly
         window.USE_LOAD_ONCE_ARCHITECTURE = true;
         
-        const performanceMode = window.debug && window.debug.performanceMode;
-        if (window.USE_LOAD_ONCE_ARCHITECTURE && !performanceMode) {
+        const isArchPerformanceMode = window.debug && window.debug.performanceMode;
+        if (window.USE_LOAD_ONCE_ARCHITECTURE && !isArchPerformanceMode) {
             console.log('🚀 Load-Once Architecture ENABLED');
             console.log('   ✅ Data loads once, cached in memory');
             console.log('   ✅ Instant navigation (< 100ms)');
             console.log('   ✅ No race conditions');
             console.log('   ✅ Optimistic updates');
-        } else if (!window.USE_LOAD_ONCE_ARCHITECTURE && !performanceMode) {
+        } else if (!window.USE_LOAD_ONCE_ARCHITECTURE && !isArchPerformanceMode) {
             console.log('⚠️ Using Legacy Architecture');
         }
     </script>
@@ -638,8 +638,8 @@
         // Helper to manually load and transform a component
         const manuallyLoadComponent = async (filePath, windowName) => {
             try {
-                const performanceMode = window.debug && window.debug.performanceMode;
-                if (!performanceMode) {
+                const isPerformanceMode = window.debug && window.debug.performanceMode;
+                if (!isPerformanceMode) {
                     console.log(`🔧 Manually loading ${windowName} from ${filePath}...`);
                 }
                 const response = await fetch(filePath);
@@ -647,38 +647,48 @@
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 const code = await response.text();
-                if (!performanceMode) {
+                if (!isPerformanceMode) {
                     console.log(`📄 ${windowName} code fetched, length:`, code.length);
                 }
                 
                 // Transform with Babel
-                if (!performanceMode) {
+                if (!isPerformanceMode) {
                     console.log(`🔄 Transforming ${windowName} with Babel...`);
                 }
                 const transformed = Babel.transform(code, { 
                     presets: ['react'],
                     filename: filePath.split('/').pop()
                 }).code;
-                if (!performanceMode) {
+                if (!isPerformanceMode) {
                     console.log(`✅ ${windowName} transformed, length:`, transformed.length);
                 }
                 
-                // Execute the transformed code
-                eval(transformed);
+                // Execute the transformed code with error handling
+                try {
+                    eval(transformed);
+                } catch (evalError) {
+                    console.error(`❌ Error executing ${windowName} code:`, evalError);
+                    console.error('Transformed code preview (first 500 chars):', transformed.substring(0, 500));
+                    throw evalError;
+                }
                 
                 // Check if component was registered
                 if (window[windowName]) {
-                    if (!performanceMode) {
+                    if (!isPerformanceMode) {
                         console.log(`✅ ${windowName} successfully loaded and registered`);
                     }
                     return true;
                 } else {
                     console.warn(`⚠️ ${windowName} code executed but not registered on window`);
+                    console.warn(`🔍 Checking available window properties:`, Object.keys(window).filter(k => k.includes(windowName) || k.includes('App') || k.includes('Layout')));
                     return false;
                 }
             } catch (error) {
                 console.error(`❌ ${windowName} manual load error:`, error);
+                console.error('Error message:', error.message);
                 console.error('Stack:', error.stack);
+                console.error(`🔍 Attempted to load: ${filePath}`);
+                console.error(`🔍 Expected window property: window.${windowName}`);
                 return false;
             }
         };
@@ -703,8 +713,8 @@
             if (allLoaded) {
                 try {
                     mounted = true;
-                    const performanceMode = window.debug && window.debug.performanceMode;
-                    if (!performanceMode) {
+                    const isPerformanceMode = window.debug && window.debug.performanceMode;
+                    if (!isPerformanceMode) {
                         console.log('✅ All components loaded, mounting app...', components);
                     }
                     const root = document.getElementById('root');
@@ -717,12 +727,12 @@
                     if (window.ReactDOM.createRoot) {
                         const reactRoot = window.ReactDOM.createRoot(root);
                         reactRoot.render(window.React.createElement(window.App));
-                        if (!performanceMode) {
+                        if (!isPerformanceMode) {
                             console.log('✅ App mounted successfully using React 18');
                         }
                     } else if (window.ReactDOM.render) {
                         window.ReactDOM.render(window.React.createElement(window.App), root);
-                        if (!performanceMode) {
+                        if (!isPerformanceMode) {
                             console.log('✅ App mounted successfully using React 17');
                         }
                     } else {
@@ -736,7 +746,7 @@
                 retryCount++;
                 
                 // Log missing components every 5 retries (and not in performance mode)
-                const performanceMode = window.debug && window.debug.performanceMode;
+                const isPerformanceMode = window.debug && window.debug.performanceMode;
                 if (retryCount % 5 === 0 && !performanceMode) {
                     const missing = Object.entries(components)
                         .filter(([k, v]) => !v)
@@ -747,8 +757,8 @@
                 // Attempt manual load after 10 seconds if still missing critical components
                 if (retryCount === 50 && !manualLoadAttempted && typeof Babel !== 'undefined') {
                     manualLoadAttempted = true;
-                    const performanceMode = window.debug && window.debug.performanceMode;
-                    if (!performanceMode) {
+                    const isPerformanceMode = window.debug && window.debug.performanceMode;
+                    if (!isPerformanceMode) {
                         console.warn('⚠️ Components still missing after 10s, attempting manual load...');
                     }
                     
@@ -756,21 +766,40 @@
                         .filter(([k, v]) => !v)
                         .map(([k]) => k);
                     
-                    // Manual load in dependency order
-                    if (missing.includes('ThemeProvider')) {
-                        await manuallyLoadComponent('./src/components/theme/ThemeProvider.jsx', 'ThemeProvider');
-                    }
-                    if (missing.includes('DataProvider')) {
-                        await manuallyLoadComponent('./src/components/common/DataContext.jsx', 'DataProvider');
-                    }
-                    if (missing.includes('AuthProvider')) {
-                        await manuallyLoadComponent('./src/components/auth/AuthProvider.jsx', 'AuthProvider');
-                    }
-                    if (missing.includes('MainLayout')) {
-                        await manuallyLoadComponent('./src/components/layout/MainLayout.jsx', 'MainLayout');
-                    }
-                    if (missing.includes('App')) {
-                        await manuallyLoadComponent('./src/App.jsx', 'App');
+                    // Manual load in dependency order - wait for each to complete
+                    try {
+                        if (missing.includes('ThemeProvider')) {
+                            const loaded = await manuallyLoadComponent('./src/components/theme/ThemeProvider.jsx', 'ThemeProvider');
+                            if (!loaded) console.error('❌ Failed to manually load ThemeProvider');
+                        }
+                        if (missing.includes('DataProvider')) {
+                            const loaded = await manuallyLoadComponent('./src/components/common/DataContext.jsx', 'DataProvider');
+                            if (!loaded) console.error('❌ Failed to manually load DataProvider');
+                        }
+                        if (missing.includes('AuthProvider')) {
+                            const loaded = await manuallyLoadComponent('./src/components/auth/AuthProvider.jsx', 'AuthProvider');
+                            if (!loaded) console.error('❌ Failed to manually load AuthProvider');
+                        }
+                        if (missing.includes('MainLayout')) {
+                            // Ensure dependencies are loaded first
+                            if (!window.useAuth || !window.useTheme) {
+                                console.warn('⚠️ MainLayout dependencies not ready, waiting...');
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                            const loaded = await manuallyLoadComponent('./src/components/layout/MainLayout.jsx', 'MainLayout');
+                            if (!loaded) console.error('❌ Failed to manually load MainLayout');
+                        }
+                        if (missing.includes('App')) {
+                            // Ensure all dependencies are loaded first
+                            if (!window.ThemeProvider || !window.AuthProvider || !window.DataProvider || !window.MainLayout) {
+                                console.warn('⚠️ App dependencies not ready, waiting...');
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                            const loaded = await manuallyLoadComponent('./src/App.jsx', 'App');
+                            if (!loaded) console.error('❌ Failed to manually load App');
+                        }
+                    } catch (manualLoadError) {
+                        console.error('❌ Manual load error:', manualLoadError);
                     }
                     
                     // Reset retry count to give manual load a chance
@@ -822,16 +851,16 @@
         // Start checking when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                const performanceMode = window.debug && window.debug.performanceMode;
-                if (!performanceMode) {
+                const isPerformanceMode = window.debug && window.debug.performanceMode;
+                if (!isPerformanceMode) {
                     console.log('🔍 DOM loaded, waiting for components...');
                 }
                 // Wait longer for Babel to transform all scripts
                 setTimeout(checkAndMount, 1000);
             });
         } else {
-            const performanceMode = window.debug && window.debug.performanceMode;
-            if (!performanceMode) {
+            const isCheckPerformanceMode = window.debug && window.debug.performanceMode;
+            if (!isCheckPerformanceMode) {
                 console.log('🔍 DOM already loaded, waiting for components...');
             }
             setTimeout(checkAndMount, 1000);
