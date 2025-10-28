@@ -566,12 +566,22 @@
             if (mounted) return;
             
             // Check if all required components are loaded
-            if (window.React && window.ReactDOM && window.App && 
-                window.ThemeProvider && window.AuthProvider && 
-                window.MainLayout && window.DataProvider) {
-                
+            const components = {
+                React: !!window.React,
+                ReactDOM: !!window.ReactDOM,
+                App: !!window.App,
+                ThemeProvider: !!window.ThemeProvider,
+                AuthProvider: !!window.AuthProvider,
+                MainLayout: !!window.MainLayout,
+                DataProvider: !!window.DataProvider
+            };
+            
+            const allLoaded = Object.values(components).every(v => v === true);
+            
+            if (allLoaded) {
                 try {
                     mounted = true;
+                    console.log('✅ All components loaded, mounting app...', components);
                     const root = document.getElementById('root');
                     if (!root) {
                         console.error('❌ Root element not found');
@@ -582,38 +592,45 @@
                     if (window.ReactDOM.createRoot) {
                         const reactRoot = window.ReactDOM.createRoot(root);
                         reactRoot.render(window.React.createElement(window.App));
+                        console.log('✅ App mounted successfully using React 18');
                     } else if (window.ReactDOM.render) {
                         window.ReactDOM.render(window.React.createElement(window.App), root);
+                        console.log('✅ App mounted successfully using React 17');
                     } else {
                         throw new Error('ReactDOM not available');
                     }
-                    
-                    console.log('✅ App mounted successfully');
                 } catch (error) {
-                    console.error('❌ Mount error:', error);
+                    console.error('❌ Mount error:', error, error.stack);
                     mounted = false;
                 }
             } else {
                 retryCount++;
+                
+                // Log missing components every 5 retries
+                if (retryCount % 5 === 0) {
+                    const missing = Object.entries(components)
+                        .filter(([k, v]) => !v)
+                        .map(([k]) => k);
+                    console.log(`⏳ Waiting for components... (${retryCount}/${MAX_RETRIES}) Missing:`, missing);
+                }
                 
                 if (retryCount < MAX_RETRIES) {
                     // Retry every 200ms
                     setTimeout(checkAndMount, 200);
                 } else {
                     // Show error after max retries
-                    const missing = [];
-                    if (!window.React) missing.push('React');
-                    if (!window.ReactDOM) missing.push('ReactDOM');
-                    if (!window.App) missing.push('App');
-                    if (!window.ThemeProvider) missing.push('ThemeProvider');
-                    if (!window.AuthProvider) missing.push('AuthProvider');
-                    if (!window.MainLayout) missing.push('MainLayout');
-                    if (!window.DataProvider) missing.push('DataProvider');
+                    const missing = Object.entries(components)
+                        .filter(([k, v]) => !v)
+                        .map(([k]) => k);
+                    
+                    console.error('❌ Failed to load components after', MAX_RETRIES, 'retries');
+                    console.error('Missing:', missing);
                     
                     document.getElementById('root').innerHTML = `
                         <div style="padding: 40px; text-align: center; font-family: system-ui;">
                             <h2 style="color: #dc2626;">Failed to load application</h2>
                             <p style="color: #d97706; margin: 20px 0;">Missing: ${missing.join(', ')}</p>
+                            <p style="color: #666; margin: 10px 0; font-size: 14px;">Check browser console for details</p>
                             <button onclick="location.reload()" style="padding: 12px 24px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px;">
                                 Reload Page
                             </button>
