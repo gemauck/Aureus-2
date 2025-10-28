@@ -106,32 +106,62 @@ const Pipeline = () => {
                 }
                 
                 // Load opportunities for each client
-                const clientsWithOpportunities = await Promise.all(apiClients.map(async (client) => {
+                const clientsWithOpportunities = await Promise.allSettled(apiClients.map(async (client) => {
                     try {
                         if (window.api?.getOpportunitiesByClient) {
+                            console.log(`📡 Pipeline: Fetching opportunities for client ${client.name} (${client.id})...`);
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            const opportunities = oppResponse?.data?.opportunities || [];
+                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
                             if (opportunities.length > 0) {
                                 console.log(`✅ Pipeline: Loaded ${opportunities.length} opportunities for client ${client.name} (${client.id})`, opportunities);
+                            } else {
+                                console.log(`📭 Pipeline: No opportunities found for client ${client.name} (${client.id})`);
                             }
                             return { ...client, opportunities };
+                        } else {
+                            console.warn(`⚠️ Pipeline: getOpportunitiesByClient API method not available`);
+                            return { ...client, opportunities: [] };
                         }
-                        return { ...client, opportunities: [] };
                     } catch (error) {
-                        console.warn(`⚠️ Pipeline: Failed to load opportunities for client ${client.id}:`, error);
+                        console.error(`❌ Pipeline: Failed to load opportunities for client ${client.name} (${client.id}):`, error);
+                        // Return client with empty opportunities array so it still appears
                         return { ...client, opportunities: [] };
                     }
                 }));
                 
-                // Log total opportunities found
-                const totalOpportunities = clientsWithOpportunities.reduce((sum, client) => sum + (client.opportunities?.length || 0), 0);
-                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
+                // Process settled promises - handle both fulfilled and rejected
+                const processedClients = clientsWithOpportunities.map((result, index) => {
+                    if (result.status === 'fulfilled') {
+                        return result.value;
+                    } else {
+                        console.error(`❌ Pipeline: Promise rejected for client ${apiClients[index]?.name}:`, result.reason);
+                        return { ...apiClients[index], opportunities: [] };
+                    }
+                });
                 
-                setClients(clientsWithOpportunities);
+                // Log total opportunities found
+                const totalOpportunities = processedClients.reduce((sum, client) => sum + (client.opportunities?.length || 0), 0);
+                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${processedClients.length} clients`);
+                
+                // Log detailed breakdown
+                processedClients.forEach(client => {
+                    const oppCount = client.opportunities?.length || 0;
+                    if (oppCount > 0) {
+                        console.log(`   📊 ${client.name}: ${oppCount} opportunities`, 
+                            client.opportunities.map(opp => ({ 
+                                title: opp.title, 
+                                stage: opp.stage, 
+                                value: opp.value 
+                            }))
+                        );
+                    }
+                });
+                
+                setClients(processedClients);
                 setLeads(apiLeads);
                 
                 // Update localStorage for clients only (leads are database-only)
-                storage.setClients(clientsWithOpportunities);
+                storage.setClients(processedClients);
                 
                 console.log('✅ Pipeline: API data loaded and cached with opportunities');
                 return;
@@ -201,11 +231,23 @@ const Pipeline = () => {
                         expectedCloseDate: opp.expectedCloseDate || null
                     });
                 });
+            } else {
+                // Debug: log when client has no opportunities array
+                if (client.opportunities !== undefined && !Array.isArray(client.opportunities)) {
+                    console.warn(`⚠️ Pipeline: Client ${client.name} has non-array opportunities:`, client.opportunities);
+                }
             }
         });
         
         if (opportunityItems.length > 0) {
-            console.log(`✅ Pipeline: Processed ${opportunityItems.length} opportunity items for display`, opportunityItems);
+            console.log(`✅ Pipeline: Processed ${opportunityItems.length} opportunity items for display:`, opportunityItems.map(opp => ({
+                name: opp.name,
+                stage: opp.stage,
+                value: opp.value,
+                clientName: opp.clientName
+            })));
+        } else {
+            console.log(`📭 Pipeline: No opportunity items to display. Total clients: ${clients.length}, Clients with opportunities: ${clients.filter(c => c.opportunities?.length > 0).length}`);
         }
 
         return [...leadItems, ...opportunityItems];
