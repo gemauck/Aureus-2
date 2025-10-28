@@ -1528,6 +1528,11 @@ const Clients = React.memo(() => {
                     console.log('🗑️ Lead and client caches cleared before API update');
                 }
                 
+                // CRITICAL: Reset the API call timestamp to force fresh data load
+                lastApiCallTimestamp = 0;
+                lastLeadsApiCallTimestamp = 0;
+                console.log('🔄 API call timestamps reset to force fresh data');
+                
                 const apiResponse = await window.api.updateLead(leadId, updatePayload);
                 console.log('✅ Lead status updated in database');
                 console.log('✅ API response:', apiResponse);
