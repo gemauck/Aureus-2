@@ -313,9 +313,18 @@ app.use(express.static(rootDir, {
   maxAge: '7d', // Cache for 7 days for better performance
   redirect: false, // Disable automatic redirects for trailing slashes
   setHeaders: (res, path) => {
-    // Cache compiled JS and CSS files more aggressively
-    if (path.endsWith('.js') || path.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable'); // 30 days
+    // Set proper MIME types for JSX files to prevent HTTP2 errors
+    if (path.endsWith('.jsx')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=3600') // 1 hour for JSX files
+    } else if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=utf-8')
+      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
+    } else if (path.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8')
     }
   }
 }))

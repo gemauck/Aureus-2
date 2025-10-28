@@ -1,0 +1,4 @@
+COPY AND PASTE THIS COMMAND ON YOUR SERVER:
+
+bash -c 'cp /etc/nginx/sites-available/abcotronics-erp /etc/nginx/sites-available/abcotronics-erp.backup && sed -i "s/listen 443 ssl http2;/listen 443 ssl;/g" /etc/nginx/sites-available/abcotronics-erp && sed -i "s/listen \[::\]:443 ssl http2;/listen [::]:443 ssl;/g" /etc/nginx/sites-available/abcotronics-erp && grep -q "proxy_buffer_size" /etc/nginx/sites-available/abcotronics-erp || sed -i "/client_max_body_size/a\\n    proxy_buffer_size 128k;\n    proxy_buffers 4 256k;\n    proxy_busy_buffers_size 256k;\n    proxy_temp_file_write_size 256k;" /etc/nginx/sites-available/abcotronics-erp && grep -q "proxy_buffering off" /etc/nginx/sites-available/abcotronics-erp || sed -i "/proxy_read_timeout/a\\n        proxy_buffering off;\n        proxy_request_buffering off;" /etc/nginx/sites-available/abcotronics-erp && nginx -t && systemctl reload nginx && echo "✅ HTTP/2 fix applied successfully!"'
+
