@@ -22,9 +22,10 @@ const AuthProvider = ({ children }) => {
                 }
                 
                 const storedUser = storage.getUser();
+                const log = window.debug?.log || (() => {});
                 if (storedUser) {
                     setUser(storedUser);
-                    console.log('✅ User restored from storage');
+                    log('✅ User restored from storage');
                 }
                 
                 // Try refresh + me if token not present but refresh cookie exists
@@ -57,7 +58,8 @@ const AuthProvider = ({ children }) => {
                             if (me) {
                                 storage.setUser(me);
                                 setUser(me);
-                                console.log('✅ User loaded from API');
+                                const log = window.debug?.log || (() => {});
+                                log('✅ User loaded from API');
                             }
                         } catch (err) {
                             console.warn('Me API failed or timed out:', err.message);
@@ -68,7 +70,8 @@ const AuthProvider = ({ children }) => {
                 console.error('❌ Auth initialization error:', error);
             } finally {
                 setLoading(false);
-                console.log('✅ Auth initialization complete');
+                const log = window.debug?.log || (() => {});
+                log('✅ Auth initialization complete');
             }
         };
         init();

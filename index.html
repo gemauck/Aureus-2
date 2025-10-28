@@ -243,29 +243,38 @@
     <!-- Tesseract.js for OCR (Handwriting Recognition) -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     
+    <!-- Debug Utility - Must load before React check -->
+    <script src="./src/utils/debug.js"></script>
+    
     <!-- Verify React loaded and expose globally -->
     <script>
         if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
             console.error('React failed to load!');
             document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: React failed to load. Please refresh the page.</div>';
         } else {
-            console.log('React loaded successfully:', React.version);
+            // Only log in development - React DevTools message already warns about production build
+            if (window.debug && window.debug.enabled) {
+                console.log('React loaded successfully:', React.version);
+            }
             // Ensure React is on window
             window.React = React;
             window.ReactDOM = ReactDOM;
         }
     </script>
-
+    
     <!-- Debug Script Loading -->
     <script>
-        console.log('🔍 Debug: Current URL:', window.location.href);
-        console.log('🔍 Debug: Base URL:', window.location.origin);
-        console.log('🔍 Debug: Pathname:', window.location.pathname);
-        
-        // Test if we can access the localStorage utility
-        window.addEventListener('DOMContentLoaded', () => {
-            console.log('🔍 Debug: DOM Content Loaded');
-        });
+        // Only log in development
+        if (window.debug && window.debug.enabled) {
+            window.debug.log('🔍 Debug: Current URL:', window.location.href);
+            window.debug.log('🔍 Debug: Base URL:', window.location.origin);
+            window.debug.log('🔍 Debug: Pathname:', window.location.pathname);
+            
+            // Test if we can access the localStorage utility
+            window.addEventListener('DOMContentLoaded', () => {
+                window.debug.log('🔍 Debug: DOM Content Loaded');
+            });
+        }
     </script>
 
     <!-- Map Component -->

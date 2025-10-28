@@ -26,7 +26,8 @@ class LiveDataSync {
     start() {
         if (this.isRunning) return;
         
-        console.log('🔄 Starting live data synchronization...');
+        const log = window.debug?.log || (() => {});
+        log('🔄 Starting live data synchronization...');
         this.isRunning = true;
         this.connectionStatus = 'connecting';
         
@@ -41,19 +42,19 @@ class LiveDataSync {
         // Listen for visibility changes to sync when tab becomes active
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.isRunning) {
-                console.log('👁️ Tab became visible, syncing data...');
+                log('👁️ Tab became visible, syncing data...');
                 this.sync();
             }
         });
         
         // Listen for online/offline events
         window.addEventListener('online', () => {
-            console.log('🌐 Network online, syncing data...');
+            log('🌐 Network online, syncing data...');
             this.sync();
         });
         
         window.addEventListener('offline', () => {
-            console.log('📴 Network offline');
+            log('📴 Network offline');
             this.connectionStatus = 'offline';
             this.notifySubscribers({ type: 'connection', status: 'offline' });
         });
@@ -63,7 +64,8 @@ class LiveDataSync {
     stop() {
         if (!this.isRunning) return;
         
-        console.log('⏹️ Stopping live data synchronization...');
+        const log = window.debug?.log || (() => {});
+        log('⏹️ Stopping live data synchronization...');
         this.isRunning = false;
         this.connectionStatus = 'disconnected';
         
@@ -77,15 +79,17 @@ class LiveDataSync {
 
     // Perform data synchronization
     async sync() {
+        const log = window.debug?.log || (() => {});
+        
         if (this.syncInProgress) {
-            console.log('⏳ Sync already in progress, skipping...');
+            log('⏳ Sync already in progress, skipping...');
             return;
         }
         
         // Additional check to prevent rapid sync calls
         const now = Date.now();
         if (this.lastSync && (now - this.lastSync.getTime()) < 60000) { // 60 seconds minimum
-            console.log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
+            log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
             return;
         }
         
@@ -96,7 +100,7 @@ class LiveDataSync {
             // Check authentication
             const token = window.storage?.getToken?.();
             if (!token) {
-                console.log('⚠️ No authentication token, skipping sync');
+                log('⚠️ No authentication token, skipping sync');
                 this.connectionStatus = 'disconnected';
                 this.notifySubscribers({ type: 'connection', status: 'disconnected' });
                 return;
@@ -107,7 +111,7 @@ class LiveDataSync {
                 throw new Error('Database API not available');
             }
 
-            console.log('🔄 Syncing live data...');
+            log('🔄 Syncing live data...');
             
             // Sync all data types
             const syncPromises = [
@@ -141,7 +145,7 @@ class LiveDataSync {
                 errorCount: failures.length
             });
             
-            console.log('✅ Live data sync completed successfully');
+            log('✅ Live data sync completed successfully');
 
         } catch (error) {
             console.error('❌ Live data sync failed:', error);
@@ -217,7 +221,8 @@ class LiveDataSync {
         }
         
         this.subscribers.set(id, callback);
-        console.log(`📡 Subscribed to live updates: ${id}`);
+        const log = window.debug?.log || (() => {});
+        log(`📡 Subscribed to live updates: ${id}`);
         
         // Send current status to new subscriber
         callback({
@@ -231,7 +236,8 @@ class LiveDataSync {
     // Unsubscribe from live updates
     unsubscribe(id) {
         const removed = this.subscribers.delete(id);
-        console.log(`📡 Unsubscribed from live updates: ${id}`);
+        const log = window.debug?.log || (() => {});
+        log(`📡 Unsubscribed from live updates: ${id}`);
         return removed;
     }
 
@@ -270,7 +276,8 @@ class LiveDataSync {
 
     // Force immediate sync
     async forceSync() {
-        console.log('🔄 Force sync requested...');
+        const log = window.debug?.log || (() => {});
+        log('🔄 Force sync requested...');
         await this.sync();
     }
 }
@@ -280,7 +287,8 @@ window.LiveDataSync = new LiveDataSync();
 
 // Auto-start if token exists and user data is available
 if (window.storage?.getToken?.() && window.storage?.getUser?.()) {
-    console.log('🚀 Auto-starting live data sync...');
+    const autoStartLog = window.debug?.log || (() => {});
+    autoStartLog('🚀 Auto-starting live data sync...');
     window.LiveDataSync.start();
 } else if (window.storage?.getToken?.() && !window.storage?.getUser?.()) {
     console.log('⚠️ Token exists but no user data, clearing token');

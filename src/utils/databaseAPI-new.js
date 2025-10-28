@@ -10,7 +10,8 @@ const DatabaseAPI = {
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
         // Always use the current origin's API (works for both localhost and droplet)
         const apiBase = window.location.origin;
-        console.log('🔧 DatabaseAPI Base URL:', { hostname, isLocalhost, apiBase });
+        const log = window.debug?.log || (() => {});
+        log('🔧 DatabaseAPI Base URL:', { hostname, isLocalhost, apiBase });
         return apiBase;
     })(),
 
@@ -23,15 +24,17 @@ const DatabaseAPI = {
         const cacheKey = endpoint.split('?')[0];
         const forceRefresh = options.forceRefresh === true || endpoint.includes('?_t=');
         
+        const log = window.debug?.log || (() => {});
+        
         // Handle force refresh FIRST - clear cache and skip check
         if (forceRefresh) {
-            console.log(`🔄 Force refresh: clearing cache and bypassing for ${cacheKey}`);
+            log(`🔄 Force refresh: clearing cache and bypassing for ${cacheKey}`);
             this.cache.delete(cacheKey);
         } else if (isGetRequest && this.cache.has(cacheKey)) {
             // Only check cache if NOT force refresh
             const cached = this.cache.get(cacheKey);
             if (Date.now() - cached.timestamp < this.CACHE_DURATION) {
-                console.log(`⚡ Using cached ${cacheKey} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+                log(`⚡ Using cached ${cacheKey} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
                 return cached.data;
             }
         }
@@ -50,7 +53,7 @@ const DatabaseAPI = {
             headers['Authorization'] = `Bearer ${token}`;
         }
         
-        console.log('📡 Database API request:', { url, endpoint, options, hasToken: !!token });
+        log('📡 Database API request:', { url, endpoint, options, hasToken: !!token });
         
         try {
             const response = await fetch(url, {
@@ -58,7 +61,7 @@ const DatabaseAPI = {
                 ...options
             });
 
-            console.log('📡 Database API response:', { 
+            log('📡 Database API response:', { 
                 status: response.status, 
                 ok: response.ok, 
                 endpoint 
@@ -71,7 +74,7 @@ const DatabaseAPI = {
             let responseData;
             try {
                 responseData = JSON.parse(responseText);
-                console.log('📡 Database API response data:', responseData);
+                log('📡 Database API response data:', responseData);
             } catch (parseError) {
                 console.error('❌ Failed to parse response as JSON. Response text:', responseText.substring(0, 200));
                 if (!response.ok) {
@@ -102,7 +105,8 @@ const DatabaseAPI = {
                     timestamp: Date.now()
                 });
                 if (forceRefresh) {
-                    console.log(`✅ Fresh data fetched and cached for ${cacheKey}`);
+                    const log = window.debug?.log || (() => {});
+                    log(`✅ Fresh data fetched and cached for ${cacheKey}`);
                 }
             }
             
@@ -124,7 +128,8 @@ const DatabaseAPI = {
 
     // Client operations
     async getClients() {
-        console.log('📡 Fetching clients from database...');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching clients from database...');
         return this.makeRequest('/clients');
     },
 
@@ -145,7 +150,8 @@ const DatabaseAPI = {
         });
         // Clear clients cache after update to ensure fresh data on next fetch
         this.clearCache('/clients');
-        console.log('✅ Client cache cleared after update');
+        const log = window.debug?.log || (() => {});
+        log('✅ Client cache cleared after update');
         return result;
     },
 
@@ -160,11 +166,12 @@ const DatabaseAPI = {
 
     // Lead operations
     async getLeads(forceRefresh = false) {
-        console.log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
         if (forceRefresh) {
             // Clear the cache before making the request
             this.clearCache('/leads');
-            console.log('🗑️ Lead cache cleared before force refresh');
+            log('🗑️ Lead cache cleared before force refresh');
             // Add timestamp to bypass any other caches
             return this.makeRequest(`/leads?_t=${Date.now()}`, { forceRefresh: true });
         }
@@ -182,7 +189,8 @@ const DatabaseAPI = {
     },
 
     async updateLead(id, leadData) {
-        console.log('📤 Updating lead:', { id, status: leadData.status, stage: leadData.stage });
+        const log = window.debug?.log || (() => {});
+        log('📤 Updating lead:', { id, status: leadData.status, stage: leadData.stage });
         const result = await this.makeRequest(`/leads/${id}`, {
             method: 'PATCH',
             body: JSON.stringify(leadData)
@@ -190,7 +198,7 @@ const DatabaseAPI = {
         // Clear BOTH /leads AND /clients caches since leads appear in both endpoints
         this.clearCache('/leads');
         this.clearCache('/clients'); // ← THIS IS CRITICAL - leads are in clients list too!
-        console.log('✅ Lead and client caches cleared after lead update');
+        log('✅ Lead and client caches cleared after lead update');
         return result;
     },
 
@@ -205,15 +213,17 @@ const DatabaseAPI = {
 
     // Project operations
     async getProjects() {
-        console.log('📡 Fetching projects from database...');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching projects from database...');
         return this.makeRequest('/projects');
     },
 
     async createProject(projectData) {
-        console.log('📤 createProject API call:');
-        console.log('  - name:', projectData?.name);
-        console.log('  - clientName:', projectData?.clientName);
-        console.log('  - full payload:', JSON.stringify(projectData, null, 2));
+        const log = window.debug?.log || (() => {});
+        log('📤 createProject API call:');
+        log('  - name:', projectData?.name);
+        log('  - clientName:', projectData?.clientName);
+        log('  - full payload:', JSON.stringify(projectData, null, 2));
         const result = await this.makeRequest('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
@@ -224,31 +234,34 @@ const DatabaseAPI = {
     },
 
     async updateProject(id, projectData) {
-        console.log('📤 updateProject API call:', { id, projectData });
+        const log = window.debug?.log || (() => {});
+        log('📤 updateProject API call:', { id, projectData });
         const result = await this.makeRequest(`/projects/${id}`, {
             method: 'PUT',
             body: JSON.stringify(projectData)
         });
         // Clear projects cache after update to ensure fresh data on next fetch
         this.clearCache('/projects');
-        console.log('✅ Project cache cleared after update');
+        log('✅ Project cache cleared after update');
         return result;
     },
 
     async deleteProject(id) {
-        console.log(`🗑️ Deleting project ${id} from database...`);
+        const log = window.debug?.log || (() => {});
+        log(`🗑️ Deleting project ${id} from database...`);
         const result = await this.makeRequest(`/projects/${id}`, {
             method: 'DELETE'
         });
         // Clear projects cache after deletion
         this.clearCache('/projects');
-        console.log(`✅ Project ${id} deleted successfully`);
+        log(`✅ Project ${id} deleted successfully`);
         return result;
     },
 
     // Invoice operations
     async getInvoices() {
-        console.log('📡 Fetching invoices from database...');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching invoices from database...');
         return this.makeRequest('/invoices');
     },
 
@@ -269,7 +282,8 @@ const DatabaseAPI = {
         });
         // Clear invoices cache after update to ensure fresh data on next fetch
         this.clearCache('/invoices');
-        console.log('✅ Invoice cache cleared after update');
+        const log = window.debug?.log || (() => {});
+        log('✅ Invoice cache cleared after update');
         return result;
     },
 
@@ -284,7 +298,8 @@ const DatabaseAPI = {
 
     // Time entry operations
     async getTimeEntries() {
-        console.log('📡 Fetching time entries from database...');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching time entries from database...');
         return this.makeRequest('/time-entries');
     },
 
@@ -305,7 +320,8 @@ const DatabaseAPI = {
         });
         // Clear time entries cache after update to ensure fresh data on next fetch
         this.clearCache('/time-entries');
-        console.log('✅ Time entry cache cleared after update');
+        const log = window.debug?.log || (() => {});
+        log('✅ Time entry cache cleared after update');
         return result;
     },
 
@@ -320,7 +336,8 @@ const DatabaseAPI = {
 
     // User operations
     async getUsers() {
-        console.log('📡 Fetching users from database...');
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching users from database...');
         return this.makeRequest('/users');
     },
 
@@ -341,7 +358,8 @@ const DatabaseAPI = {
         });
         // Clear users cache after update to ensure fresh data on next fetch
         this.clearCache('/users');
-        console.log('✅ User cache cleared after update');
+        const log = window.debug?.log || (() => {});
+        log('✅ User cache cleared after update');
         return result;
     },
 
