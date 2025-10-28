@@ -136,7 +136,6 @@ class LiveDataSync {
             });
             
             const successful = results.length - failures.length;
-            const log = window.debug?.log || (() => {});
             
             if (failures.length > 0) {
                 if (successful > 0) {
