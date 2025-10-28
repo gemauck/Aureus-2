@@ -5,16 +5,20 @@ if (window.debug && !window.debug.performanceMode) {
 const { useState } = React;
 
 const MainLayout = () => {
-    // Initialize currentPage from URL on first load
+    // Initialize currentPage to dashboard on refresh
     const getPageFromURL = () => {
-        const path = window.location.pathname;
-        if (path.startsWith('/') && path.length > 1) {
-            return path.substring(1); // Remove leading '/'
-        }
+        // Always return dashboard on refresh/initial load
         return 'dashboard';
     };
 
     const [currentPage, setCurrentPage] = useState(getPageFromURL());
+    
+    // Update URL to root on initial load to ensure refresh always goes to dashboard
+    React.useEffect(() => {
+        if (window.location.pathname !== '/') {
+            window.history.replaceState({ page: 'dashboard' }, '', '/');
+        }
+    }, []);
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showThemeMenu, setShowThemeMenu] = useState(false);
