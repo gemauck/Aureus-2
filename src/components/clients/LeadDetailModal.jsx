@@ -13,7 +13,6 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     useEffect(() => {
         // Don't reset formData if we're in the middle of auto-saving OR just finished
         if (isAutoSavingRef.current) {
-            console.log('⚠️ Skipping formData reset - auto-save in progress');
             return;
         }
         
@@ -33,7 +32,6 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
                 billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
             };
-            console.log('📝 Initializing formData for new lead:', parsedLead.id, parsedLead.name);
             setFormData(parsedLead);
         } else if (lead && formData.id && lead.id !== formData.id) {
             // Switching to a different lead - reinitialize
@@ -48,7 +46,6 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
                 billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
             };
-            console.log('📝 Switching to different lead:', parsedLead.id, parsedLead.name);
             setFormData(parsedLead);
         } else if (lead && formData.id === lead.id) {
             // Same lead reloaded - Merge only fields that aren't being actively edited
@@ -62,17 +59,12 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 
                 // Only update if formData still matches our last save (meaning user hasn't made new changes)
                 if (currentStatus === lastSavedStatus && currentStage === lastSavedStage) {
-                    console.log('✅ Same lead reloaded, formData matches last save, updating from API');
                     setFormData(prev => ({
                         ...prev,
                         status: lead.status,
                         stage: lead.stage
                     }));
-                } else {
-                    console.log('⚠️ Same lead reloaded, but formData has newer changes, preserving user input');
                 }
-            } else {
-                console.log('✅ Same lead reloaded, preserving formData changes (no last saved ref)');
             }
         }
     }, [lead?.id]); // Only re-run when lead ID changes, not when lead properties change
@@ -141,7 +133,6 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     
     // Keep ref in sync with state
     useEffect(() => {
-        console.log('🔄 formData changed:', JSON.stringify({status: formData.status, stage: formData.stage, hasAllFields: !!formData.stage}));
         formDataRef.current = formData;
     }, [formData]);
     
@@ -648,25 +639,16 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             value={formData.stage}
                                             onChange={(e) => {
                                                 const newStage = e.target.value;
-                                                console.log('=== STAGE CHANGE ===');
-                                                console.log('New stage:', newStage);
-                                                console.log('Current formData before update:', JSON.stringify({status: formData.status, stage: formData.stage}));
-                                                console.log('Current ref before update:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
                                                 
                                                 // Update state
                                                 setFormData(prev => {
-                                                    console.log('Inside setFormData - prev:', JSON.stringify({status: prev.status, stage: prev.stage}));
                                                     return {...prev, stage: newStage};
                                                 });
                                                 
                                                 // Auto-save using ref to get latest data
                                                 if (lead) {
-                                                    console.log('Scheduling auto-save for stage...');
                                                     setTimeout(() => {
-                                                        console.log('Executing auto-save for stage');
-                                                        console.log('Ref at save time:', JSON.stringify({status: formDataRef.current?.status, stage: formDataRef.current?.stage}));
                                                         const latest = {...formDataRef.current, stage: newStage};
-                                                        console.log('Final save payload:', JSON.stringify({status: latest.status, stage: latest.stage}));
                                                         
                                                         // Save this as the last saved state
                                                         lastSavedDataRef.current = latest;
@@ -677,7 +659,6 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                         // Clear the flag after a longer delay to allow API response to propagate
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
-                                                            console.log('✅ Auto-save completed, re-enabling formData updates');
                                                         }, 3000);
                                                     }, 0);
                                                 }
