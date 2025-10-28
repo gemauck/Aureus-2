@@ -1507,29 +1507,46 @@ const Clients = React.memo(() => {
             try {
                 console.log('🌐 Calling API to update lead status:', leadId, newStatus);
                 console.log('🌐 Sending lead data:', { status: newStatus, stage: updatedLead.stage });
+                
+                // Clear cache BEFORE updating to ensure fresh data
+                if (window.DatabaseAPI?.clearCache) {
+                    window.DatabaseAPI.clearCache('/leads');
+                    console.log('🗑️ Lead cache cleared before API update');
+                }
+                
                 const apiResponse = await window.api.updateLead(leadId, updatedLead);
                 console.log('✅ Lead status updated in database');
                 console.log('✅ API response:', apiResponse);
                 
-                // Verify the updated status was returned
-                const updatedStatus = apiResponse?.data?.status || apiResponse?.status;
-                if (updatedStatus) {
-                    console.log('✅ Verified updated status from API:', updatedStatus);
+                // Extract the updated lead from the API response
+                const updatedLeadFromAPI = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                console.log('✅ Updated lead from API:', updatedLeadFromAPI);
+                
+                // Update local state immediately with API response to prevent stale data
+                if (updatedLeadFromAPI && updatedLeadFromAPI.id) {
+                    console.log('✅ Updating local state with API response');
+                    const apiUpdatedStatus = updatedLeadFromAPI.status || newStatus;
+                    console.log('✅ API returned status:', apiUpdatedStatus);
+                    
+                    setLeads(leads.map(l => l.id === leadId ? updatedLeadFromAPI : l));
+                    
+                    if (selectedLead && selectedLead.id === leadId) {
+                        setSelectedLead(updatedLeadFromAPI);
+                    }
                 }
                 
-                // Invalidate cache
-                if (window.dataManager?.invalidate) {
-                    window.dataManager.invalidate('leads');
-                    console.log('🗑️ Cache invalidated after status update');
+                // Clear cache again AFTER successful update
+                if (window.DatabaseAPI?.clearCache) {
+                    window.DatabaseAPI.clearCache('/leads');
+                    console.log('🗑️ Lead cache cleared after API update');
                 }
                 
-                // Reload from database to ensure consistency (like opportunities do)
-                // Use force refresh to bypass all caches
+                // Reload from database to ensure consistency (with longer delay to ensure DB transaction committed)
                 setTimeout(async () => {
                     console.log('🔄 Force refreshing leads from database...');
                     await loadLeads(true);
                     console.log('✅ Leads reloaded from database after status change');
-                }, 100);
+                }, 500);
             } catch (apiError) {
                 console.error('❌ API error updating lead status:', apiError);
                 alert('❌ Error saving status to database: ' + apiError.message);
