@@ -76,3 +76,4 @@ if (!document.getElementById('loading-animations')) {
 
 // Make App available globally
 window.App = App;
+console.log('✅ App.jsx loaded and registered on window.App');
