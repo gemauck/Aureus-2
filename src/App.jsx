@@ -1,4 +1,5 @@
 // Main App Component
+console.log('🔍 App.jsx: Script is executing...');
 const AppContent = () => {
     const { user, loading: authLoading } = window.useAuth();
     const { initialLoadComplete, globalLoading } = window.useData();
