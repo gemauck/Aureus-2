@@ -32,10 +32,25 @@ function processClientData(rawClients, cacheKey) {
     
     // Process the data
     const startTime = performance.now();
-    const processed = rawClients.map(c => ({
+    const processed = rawClients.map(c => {
+        const isLead = c.type === 'lead';
+        let status = c.status;
+        
+        // Convert status based on type
+        if (isLead) {
+            // For leads: preserve status as-is (Potential, Active, Disinterested)
+            status = c.status || 'Potential';
+        } else {
+            // For clients: convert lowercase to capitalized
+            if (c.status === 'active') status = 'Active';
+            else if (c.status === 'inactive') status = 'Inactive';
+            else status = c.status || 'Inactive';
+        }
+        
+        return {
         id: c.id,
         name: c.name,
-        status: c.status === 'active' ? 'Active' : 'Inactive',
+        status: status,
         stage: c.stage || 'Awareness',
         industry: c.industry || 'Other',
         type: c.type || 'client',
@@ -63,7 +78,8 @@ function processClientData(rawClients, cacheKey) {
         ownerId: c.ownerId || null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt
-    }));
+        };
+    });
     
     // Cache the result
     clientDataCache = processed;
@@ -181,34 +197,52 @@ const Clients = React.memo(() => {
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
-        const mapDbClient = (c) => ({
-            id: c.id,
-            name: c.name,
-            status: c.status === 'active' ? 'Active' : (c.status || 'Inactive'),
-            industry: c.industry || 'Other',
-            type: c.type || 'client',
-            revenue: c.revenue || 0,
-            lastContact: new Date(c.updatedAt || c.createdAt || Date.now()).toISOString().split('T')[0],
-            address: c.address || '',
-            website: c.website || '',
-            notes: c.notes || '',
-            contacts: Array.isArray(c.contacts) ? c.contacts : [],
-            followUps: Array.isArray(c.followUps) ? c.followUps : [],
-            projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
-            comments: Array.isArray(c.comments) ? c.comments : [],
-            sites: Array.isArray(c.sites) ? c.sites : [],
-            opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
-            contracts: Array.isArray(c.contracts) ? c.contracts : [],
-            activityLog: Array.isArray(c.activityLog) ? c.activityLog : [],
-            billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : {
-                paymentTerms: 'Net 30',
-                billingFrequency: 'Monthly',
-                currency: 'ZAR',
-                retainerAmount: 0,
-                taxExempt: false,
-                notes: ''
+        const mapDbClient = (c) => {
+            const isLead = c.type === 'lead';
+            let status = c.status;
+            
+            // Convert status based on type
+            if (isLead) {
+                // For leads: preserve status as-is (Potential, Active, Disinterested)
+                status = c.status || 'Potential';
+            } else {
+                // For clients: convert lowercase to capitalized
+                if (c.status === 'active') status = 'Active';
+                else if (c.status === 'inactive') status = 'Inactive';
+                else status = c.status || 'Inactive';
             }
-        });
+            
+            return {
+                id: c.id,
+                name: c.name,
+                status: status,
+                industry: c.industry || 'Other',
+                type: c.type || 'client',
+                revenue: c.revenue || 0,
+                lastContact: new Date(c.updatedAt || c.createdAt || Date.now()).toISOString().split('T')[0],
+                address: c.address || '',
+                website: c.website || '',
+                notes: c.notes || '',
+                contacts: Array.isArray(c.contacts) ? c.contacts : [],
+                followUps: Array.isArray(c.followUps) ? c.followUps : [],
+                projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
+                comments: Array.isArray(c.comments) ? c.comments : [],
+                sites: Array.isArray(c.sites) ? c.sites : [],
+                opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
+                contracts: Array.isArray(c.contracts) ? c.contracts : [],
+                activityLog: Array.isArray(c.activityLog) ? c.activityLog : [],
+                billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : {
+                    paymentTerms: 'Net 30',
+                    billingFrequency: 'Monthly',
+                    currency: 'ZAR',
+                    retainerAmount: 0,
+                    taxExempt: false,
+                    notes: ''
+                },
+                createdAt: c.createdAt,
+                updatedAt: c.updatedAt
+            };
+        };
 
         const subscriberId = 'clients-screen-live-sync';
         const handler = (message) => {
@@ -811,9 +845,9 @@ const Clients = React.memo(() => {
                         console.log('✅ Lead updated in database');
                         console.log('✅ API response:', apiResponse);
                         
-                        // Refresh leads from database to ensure consistency
+                        // Refresh leads from database to ensure consistency (FORCE refresh to bypass cache)
                         setTimeout(() => {
-                            loadLeads();
+                        loadLeads(true); // Force refresh to bypass API throttling
                         }, 500);
                     } catch (apiError) {
                         console.error('❌ API error updating lead:', apiError);
@@ -885,7 +919,7 @@ const Clients = React.memo(() => {
                 if (token) {
                     setTimeout(() => {
                         console.log('🔄 Refreshing leads after creation...');
-                        loadLeads();
+                        loadLeads(true); // Force refresh to bypass API throttling
                     }, 100);
                 }
             }
@@ -947,7 +981,7 @@ const Clients = React.memo(() => {
             if (token) {
                 setTimeout(() => {
                     console.log('🔄 Refreshing leads after deletion...');
-                    loadLeads();
+                    loadLeads(true); // Force refresh to bypass API throttling
                 }, 100);
             }
             
