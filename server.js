@@ -303,7 +303,7 @@ app.use((err, req, res, next) => {
   }
 })
 
-// Serve static files from root directory with aggressive caching
+// Serve static files from root directory with HTTP/2-safe headers
 // MUST be after API routes to avoid serving HTML for API endpoints
 app.use(express.static(rootDir, {
   index: false, // Don't serve index.html automatically
@@ -312,11 +312,17 @@ app.use(express.static(rootDir, {
   lastModified: true,
   maxAge: '7d', // Cache for 7 days for better performance
   redirect: false, // Disable automatic redirects for trailing slashes
-  setHeaders: (res, path) => {
-    // Set proper MIME types for JSX files to prevent HTTP2 errors
+  setHeaders: (res, path, stat) => {
+    // CRITICAL: Set all headers BEFORE any data is written (HTTP/2 requirement)
+    // This prevents ERR_HTTP2_PROTOCOL_ERROR
+    
+    // Set content type first
     if (path.endsWith('.jsx')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-      res.setHeader('Cache-Control', 'public, max-age=3600') // 1 hour for JSX files
+      // No caching for JSX files (they're dynamic)
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+      res.setHeader('Pragma', 'no-cache')
+      res.setHeader('Expires', '0')
     } else if (path.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
@@ -325,7 +331,16 @@ app.use(express.static(rootDir, {
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
     } else if (path.endsWith('.html')) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-cache')
     }
+    
+    // Set content length if available (helps with HTTP/2)
+    if (stat && stat.size) {
+      res.setHeader('Content-Length', stat.size.toString())
+    }
+    
+    // Additional HTTP/2 safe headers
+    res.setHeader('X-Content-Type-Options', 'nosniff')
   }
 }))
 
