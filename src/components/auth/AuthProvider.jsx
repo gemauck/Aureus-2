@@ -14,21 +14,61 @@ const AuthProvider = ({ children }) => {
     useEffect(() => {
         const init = async () => {
             try {
+                // Safety check for storage
+                if (!storage || !storage.getUser) {
+                    console.warn('⚠️ Storage not available, skipping auth init');
+                    setLoading(false);
+                    return;
+                }
+                
                 const storedUser = storage.getUser();
-                if (storedUser) setUser(storedUser);
+                if (storedUser) {
+                    setUser(storedUser);
+                    console.log('✅ User restored from storage');
+                }
+                
                 // Try refresh + me if token not present but refresh cookie exists
-                if (!window.storage.getToken) return setLoading(false);
+                if (!window.storage || !window.storage.getToken) {
+                    setLoading(false);
+                    return;
+                }
+                
                 if (!window.storage.getToken()) {
-                    try { await window.api.refresh(); } catch {}
+                    // Try refresh if no token but might have refresh cookie
+                    if (window.api && window.api.refresh) {
+                        try {
+                            await Promise.race([
+                                window.api.refresh(),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 5000))
+                            ]);
+                        } catch (err) {
+                            console.warn('Refresh failed or timed out:', err.message);
+                        }
+                    }
                 }
+                
                 if (window.storage.getToken && window.storage.getToken()) {
-                    try {
-                        const me = await window.api.me();
-                        if (me) { storage.setUser(me); setUser(me); }
-                    } catch {}
+                    if (window.api && window.api.me) {
+                        try {
+                            const me = await Promise.race([
+                                window.api.me(),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('Me API timeout')), 5000))
+                            ]);
+                            if (me) {
+                                storage.setUser(me);
+                                setUser(me);
+                                console.log('✅ User loaded from API');
+                            }
+                        } catch (err) {
+                            console.warn('Me API failed or timed out:', err.message);
+                        }
+                    }
                 }
+            } catch (error) {
+                console.error('❌ Auth initialization error:', error);
             } finally {
                 setLoading(false);
+                console.log('✅ Auth initialization complete');
             }
         };
         init();

@@ -64,8 +64,8 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name $DOMAIN www.$DOMAIN;
 
     # SSL certificates (will be added by certbot)
@@ -86,7 +86,13 @@ server {
     add_header X-XSS-Protection "1; mode=block" always;
 
     # Large file uploads
-    client_max_body_size 10M;
+    client_max_body_size 50M;
+    
+    # Increase buffer sizes to handle large responses (prevents HTTP/2 protocol errors)
+    proxy_buffer_size 128k;
+    proxy_buffers 4 256k;
+    proxy_busy_buffers_size 256k;
+    proxy_temp_file_write_size 256k;
 
     # Proxy to Node.js app
     location / {
@@ -107,6 +113,10 @@ server {
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
+        
+        # Disable buffering for streaming responses (prevents HTTP/2 errors)
+        proxy_buffering off;
+        proxy_request_buffering off;
         
         # Disable caching for dynamic content
         proxy_cache_bypass \$http_upgrade;
