@@ -105,11 +105,27 @@ const Pipeline = () => {
                     console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
                 }
                 
-                // Ensure all clients have opportunities array
-                const clientsWithOpportunities = apiClients.map(client => ({
-                    ...client,
-                    opportunities: client.opportunities || []
+                // Load opportunities for each client
+                const clientsWithOpportunities = await Promise.all(apiClients.map(async (client) => {
+                    try {
+                        if (window.api?.getOpportunitiesByClient) {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            const opportunities = oppResponse?.data?.opportunities || [];
+                            if (opportunities.length > 0) {
+                                console.log(`✅ Pipeline: Loaded ${opportunities.length} opportunities for client ${client.name} (${client.id})`, opportunities);
+                            }
+                            return { ...client, opportunities };
+                        }
+                        return { ...client, opportunities: [] };
+                    } catch (error) {
+                        console.warn(`⚠️ Pipeline: Failed to load opportunities for client ${client.id}:`, error);
+                        return { ...client, opportunities: [] };
+                    }
                 }));
+                
+                // Log total opportunities found
+                const totalOpportunities = clientsWithOpportunities.reduce((sum, client) => sum + (client.opportunities?.length || 0), 0);
+                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
                 
                 setClients(clientsWithOpportunities);
                 setLeads(apiLeads);
@@ -117,7 +133,7 @@ const Pipeline = () => {
                 // Update localStorage for clients only (leads are database-only)
                 storage.setClients(clientsWithOpportunities);
                 
-                console.log('✅ Pipeline: API data loaded and cached');
+                console.log('✅ Pipeline: API data loaded and cached with opportunities');
                 return;
             }
         } catch (error) {
@@ -156,6 +172,21 @@ const Pipeline = () => {
         clients.forEach(client => {
             if (client.opportunities && Array.isArray(client.opportunities)) {
                 client.opportunities.forEach(opp => {
+                    // Map opportunity stages to AIDA pipeline stages
+                    let mappedStage = opp.stage || 'Awareness';
+                    const originalStage = mappedStage;
+                    // Convert common stage values to AIDA stages
+                    if (mappedStage === 'prospect' || mappedStage === 'new') {
+                        mappedStage = 'Awareness';
+                    } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
+                        // If stage doesn't match AIDA stages, default to Awareness
+                        mappedStage = 'Awareness';
+                    }
+                    
+                    if (originalStage !== mappedStage) {
+                        console.log(`🔄 Pipeline: Mapped opportunity stage "${originalStage}" → "${mappedStage}" for ${opp.title || opp.id}`);
+                    }
+                    
                     opportunityItems.push({
                         ...opp,
                         id: opp.id,
@@ -164,7 +195,7 @@ const Pipeline = () => {
                         itemType: 'Expansion',
                         clientId: client.id,
                         clientName: client.name,
-                        stage: opp.stage || 'Awareness',
+                        stage: mappedStage,
                         value: opp.value || 0,
                         createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
                         expectedCloseDate: opp.expectedCloseDate || null
@@ -172,6 +203,10 @@ const Pipeline = () => {
                 });
             }
         });
+        
+        if (opportunityItems.length > 0) {
+            console.log(`✅ Pipeline: Processed ${opportunityItems.length} opportunity items for display`, opportunityItems);
+        }
 
         return [...leadItems, ...opportunityItems];
     };
