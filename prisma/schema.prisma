@@ -72,7 +72,7 @@ model Client {
   name          String
   type          String // "client" or "lead"
   industry      String        @default("Other")
-  status        String        @default("active")
+  status        String        @default("Potential") // "Potential", "Active", "Disinterested" for leads; "active", "inactive" for clients
   stage         String        @default("Awareness") // AIDIA stage for leads
   revenue       Float         @default(0)
   value         Float         @default(0)
