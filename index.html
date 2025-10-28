@@ -346,14 +346,21 @@
         // Diagnostic: Check if MonthlyDocumentCollectionTracker loaded
         setTimeout(() => {
             if (typeof window.MonthlyDocumentCollectionTracker === 'undefined') {
-                console.error('❌ CRITICAL: MonthlyDocumentCollectionTracker failed to load!');
-                console.error('   This usually means a Babel transpilation error.');
-                console.error('   Check the Network tab for 404 errors on the .jsx file.');
-                console.error('   Check console for any red Babel errors.');
+                console.warn('⚠️ MonthlyDocumentCollectionTracker not yet available (may still be loading)');
+                // Check again after more time
+                setTimeout(() => {
+                    if (typeof window.MonthlyDocumentCollectionTracker === 'undefined') {
+                        console.error('❌ MonthlyDocumentCollectionTracker failed to load after 5 seconds');
+                        console.error('   Check the Network tab for 404 errors on the .jsx file.');
+                        console.error('   Check console for any red Babel errors.');
+                    } else {
+                        console.log('✅ MonthlyDocumentCollectionTracker loaded (delayed)');
+                    }
+                }, 3000);
             } else {
                 console.log('✅ MonthlyDocumentCollectionTracker is available on window');
             }
-        }, 2000);
+        }, 3000);
     </script>
     <script type="text/babel" src="./src/components/projects/CommentsPopup.jsx"></script>
     <script type="text/babel" src="./src/components/projects/DocumentCollectionModal.jsx"></script>
