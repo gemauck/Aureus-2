@@ -189,7 +189,14 @@ const DataProvider = ({ children }) => {
     const updateCache = useCallback((key, updater) => {
         setCache(prev => {
             const currentData = prev[key].data;
-            const newData = typeof updater === 'function' ? updater(currentData) : updater;
+            
+            // For array-type keys, ensure we always have an array to work with
+            const arrayKeys = ['clients', 'leads', 'projects', 'timeEntries', 'invoices', 'employees', 'users'];
+            const safeCurrentData = arrayKeys.includes(key) 
+                ? (Array.isArray(currentData) ? currentData : [])
+                : currentData;
+            
+            const newData = typeof updater === 'function' ? updater(safeCurrentData) : updater;
             
             return {
                 ...prev,

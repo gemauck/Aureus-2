@@ -100,10 +100,16 @@ const Clients = React.memo(() => {
     const cachedLeads = extractArray(cachedLeadsRaw, 'leads');
     const cachedProjects = extractArray(cachedProjectsRaw, 'projects');
     
-    // Process data (memoized)
-    const clients = useMemo(() => processClientData(cachedClients), [cachedClients]);
-    const leads = useMemo(() => processClientData(cachedLeads), [cachedLeads]);
-    const projects = cachedProjects;
+    // Process data (memoized) - ensure arrays before processing
+    const clients = useMemo(() => {
+        const safeArray = Array.isArray(cachedClients) ? cachedClients : [];
+        return processClientData(safeArray);
+    }, [cachedClients]);
+    const leads = useMemo(() => {
+        const safeArray = Array.isArray(cachedLeads) ? cachedLeads : [];
+        return processClientData(safeArray);
+    }, [cachedLeads]);
+    const projects = Array.isArray(cachedProjects) ? cachedProjects : [];
 
     // Utility function to calculate time since first contact
     const getTimeSinceFirstContact = (firstContactDate) => {
@@ -501,7 +507,7 @@ const Clients = React.memo(() => {
             return acc;
         }, []);
 
-        const activeLeads = leads.map(lead => {
+        const activeLeads = (Array.isArray(leads) ? leads : []).map(lead => {
             if (!lead.stage) {
                 return { ...lead, stage: 'Awareness' };
             }
