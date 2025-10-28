@@ -269,18 +269,30 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleAddComment = (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
 
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {
+            id: Date.now(),
             text: commentText,
             date: new Date().toISOString(),
-            author: 'User'
+            timestamp: new Date().toISOString(),
+            author: currentUser.name,
+            authorEmail: currentUser.email,
+            authorId: currentUser.id,
+            authorRole: currentUser.role
         };
 
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
+        // Get section and document names for audit trail
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
                 return {
-                    ...section,
-                    documents: section.documents.map(doc => {
+                    ...s,
+                    documents: s.documents.map(doc => {
                         if (doc.id === documentId) {
                             const existingComments = doc.comments?.[monthKey] || [];
                             return {
@@ -295,8 +307,27 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     })
                 };
             }
-            return section;
+            return s;
         }));
+
+        // Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'comment',
+                'projects',
+                {
+                    action: 'Comment Added',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: section?.name || 'Unknown',
+                    documentName: document?.name || 'Unknown',
+                    month: month,
+                    year: selectedYear,
+                    commentPreview: commentText.substring(0, 50) + (commentText.length > 50 ? '...' : '')
+                },
+                currentUser
+            );
+        }
 
         setQuickComment('');
     };

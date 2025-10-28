@@ -5,6 +5,50 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+// Helper function to parse JSON fields from database responses
+function parseClientJsonFields(client) {
+  const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms']
+  const parsed = { ...client }
+  
+  jsonFields.forEach(field => {
+    if (parsed[field] && typeof parsed[field] === 'string') {
+      try {
+        parsed[field] = JSON.parse(parsed[field])
+      } catch (e) {
+        // If parsing fails, set to default based on field type
+        if (field === 'billingTerms') {
+          parsed[field] = {
+            paymentTerms: 'Net 30',
+            billingFrequency: 'Monthly',
+            currency: 'ZAR',
+            retainerAmount: 0,
+            taxExempt: false,
+            notes: ''
+          }
+        } else {
+          parsed[field] = []
+        }
+      }
+    } else if (!parsed[field]) {
+      // Set defaults for missing fields
+      if (field === 'billingTerms') {
+        parsed[field] = {
+          paymentTerms: 'Net 30',
+          billingFrequency: 'Monthly',
+          currency: 'ZAR',
+          retainerAmount: 0,
+          taxExempt: false,
+          notes: ''
+        }
+      } else {
+        parsed[field] = []
+      }
+    }
+  })
+  
+  return parsed
+}
+
 async function handler(req, res) {
   try {
     // Parse the URL path - strip /api/ prefix if present
@@ -23,12 +67,15 @@ async function handler(req, res) {
         
         console.log('📊 Clients fetched from DB:', clients.length)
         console.log('📊 Client keys:', clients.length > 0 ? Object.keys(clients[0]) : 'No clients')
-        if (clients.length > 0) {
-          console.log('📊 First client sample (raw):', clients[0])
-          console.log('📊 First client sample (stringified):', JSON.stringify(clients[0], null, 2))
+        
+        // Parse JSON fields before returning
+        const parsedClients = clients.map(parseClientJsonFields)
+        
+        if (parsedClients.length > 0) {
+          console.log('📊 First client sample (parsed):', JSON.stringify(parsedClients[0], null, 2))
         }
         
-        const responseData = { clients }
+        const responseData = { clients: parsedClients }
         console.log('📊 Preparing response with clients:', responseData)
         return ok(res, responseData)
       } catch (dbError) {
@@ -118,7 +165,9 @@ async function handler(req, res) {
           }
         })
         
-        return created(res, { client })
+        // Parse JSON fields before returning
+        const parsedClient = parseClientJsonFields(client)
+        return created(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error creating client:', dbError)
         return serverError(res, 'Failed to create client', dbError.message)
@@ -133,7 +182,9 @@ async function handler(req, res) {
             where: { id }
           })
           if (!client) return notFound(res)
-          return ok(res, { client })
+          // Parse JSON fields before returning
+          const parsedClient = parseClientJsonFields(client)
+          return ok(res, { client: parsedClient })
         } catch (dbError) {
           console.error('❌ Database error getting client:', dbError)
           return serverError(res, 'Failed to get client', dbError.message)
@@ -171,7 +222,9 @@ async function handler(req, res) {
         
         try {
           const client = await prisma.client.update({ where: { id }, data: updateData })
-          return ok(res, { client })
+          // Parse JSON fields before returning
+          const parsedClient = parseClientJsonFields(client)
+          return ok(res, { client: parsedClient })
         } catch (dbError) {
           console.error('❌ Database error updating client:', dbError)
           return serverError(res, 'Failed to update client', dbError.message)

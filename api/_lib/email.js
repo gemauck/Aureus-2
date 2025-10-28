@@ -7,45 +7,77 @@ import nodemailer from 'nodemailer';
 // - or granular: SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
 // - or GMAIL_USER, GMAIL_APP_PASSWORD for Gmail App Password auth
 
-function createTransporterFromEnv() {
-    if (process.env.SMTP_URL) {
-        return nodemailer.createTransport(process.env.SMTP_URL);
-    }
+let transporter = null;
+let transporterInitialized = false;
 
-    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const port = Number(process.env.SMTP_PORT || 587);
-    const secure = String(process.env.SMTP_SECURE || 'false') === 'true' || port === 465;
+function getTransporter() {
+    // Create transporter lazily to ensure env vars are loaded
+    if (!transporterInitialized) {
+        transporterInitialized = true;
+        
+        if (process.env.SMTP_URL) {
+            transporter = nodemailer.createTransport(process.env.SMTP_URL);
+        } else {
+            const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+            const port = Number(process.env.SMTP_PORT || 587);
+            const secure = String(process.env.SMTP_SECURE || 'false') === 'true' || port === 465;
 
-    const user = process.env.SMTP_USER || process.env.GMAIL_USER;
-    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+            const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+            const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
 
-    return nodemailer.createTransport({
-        host,
-        port,
-        secure,
-        auth: user && pass ? { user, pass } : undefined,
-        tls: {
-            // Do not fail on invalid certs for development
-            rejectUnauthorized: false
+            console.log('📧 Initializing email transporter...', {
+                host,
+                port,
+                secure,
+                hasUser: !!user,
+                hasPass: !!pass
+            });
+
+            transporter = nodemailer.createTransport({
+                host,
+                port,
+                secure,
+                auth: user && pass ? { user, pass } : undefined,
+                tls: {
+                    // Do not fail on invalid certs for development
+                    rejectUnauthorized: false
+                },
+                connectionTimeout: 10000, // 10 seconds
+                greetingTimeout: 10000,
+                socketTimeout: 10000
+            });
+
+            // Verify connection configuration asynchronously
+            transporter.verify((error, success) => {
+                if (error) {
+                    console.error('❌ Email service configuration error:', error);
+                    console.error('❌ Email service details:', {
+                        message: error.message,
+                        code: error.code,
+                        command: error.command,
+                        response: error.response
+                    });
+                    console.error('⚠️ Email sending will fail. Check your SMTP configuration in environment variables.');
+                } else {
+                    console.log('✅ Email service ready to send messages');
+                }
+            });
         }
-    });
+    }
+    
+    return transporter;
 }
 
-const transporter = createTransporterFromEnv();
-
-// Verify connection configuration
-transporter.verify((error, success) => {
-    if (error) {
-        console.error('❌ Email service configuration error:', error);
-        console.error('❌ Email service details:', {
-            message: error.message,
-            code: error.code,
-            command: error.command
-        });
-    } else {
-        console.log('✅ Email service ready to send messages');
+function checkEmailConfiguration() {
+    const user = process.env.SMTP_USER || process.env.GMAIL_USER;
+    const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+    
+    if (!user || !pass) {
+        throw new Error('Email configuration incomplete. SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD) must be set in environment variables.');
     }
-});
+    
+    return true;
+}
 
 // Send invitation email
 export const sendInvitationEmail = async (invitationData) => {
@@ -128,13 +160,18 @@ export const sendInvitationEmail = async (invitationData) => {
     };
 
     try {
+        // Check configuration before attempting to send
+        checkEmailConfiguration();
+        
+        const emailTransporter = getTransporter();
+        
         console.log('📧 Sending email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject
         });
         
-        const result = await transporter.sendMail(mailOptions);
+        const result = await emailTransporter.sendMail(mailOptions);
         console.log('✅ Invitation email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
@@ -145,7 +182,18 @@ export const sendInvitationEmail = async (invitationData) => {
             command: error.command,
             response: error.response
         });
-        throw new Error(`Failed to send invitation email: ${error.message}`);
+        
+        // Provide more helpful error messages
+        let errorMessage = error.message;
+        if (error.code === 'EAUTH') {
+            errorMessage = 'Email authentication failed. Please check your SMTP username and password (app password for Gmail).';
+        } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
+            errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
+        } else if (error.message.includes('configuration incomplete')) {
+            errorMessage = error.message;
+        }
+        
+        throw new Error(`Failed to send invitation email: ${errorMessage}`);
     }
 };
 
@@ -175,10 +223,14 @@ export const sendNotificationEmail = async (to, subject, message) => {
     };
 
     try {
-        const result = await transporter.sendMail(mailOptions);
+        // Check configuration before attempting to send
+        checkEmailConfiguration();
+        
+        const emailTransporter = getTransporter();
+        const result = await emailTransporter.sendMail(mailOptions);
         return { success: true, messageId: result.messageId };
     } catch (error) {
         console.error('Failed to send notification email:', error);
-        throw new Error('Failed to send notification email');
+        throw new Error(`Failed to send notification email: ${error.message}`);
     }
 };

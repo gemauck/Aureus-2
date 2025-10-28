@@ -3,8 +3,19 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const storage = window.storage || {};
 
 // Performance optimization: Memoized client data processor
-function processClientData(rawClients) {
-    return rawClients.map(c => {
+// This function expects a pure array, not wrapped API responses
+function processClientData(clientsArray) {
+    // Safety check: ensure we have an array
+    if (!Array.isArray(clientsArray)) {
+        console.error('❌ processClientData received non-array:', typeof clientsArray, clientsArray);
+        return [];
+    }
+    
+    if (clientsArray.length === 0) {
+        return [];
+    }
+    
+    return clientsArray.map(c => {
         const isLead = c.type === 'lead';
         let status = c.status;
         
@@ -69,9 +80,25 @@ const Clients = React.memo(() => {
     const { isDark } = window.useTheme();
     
     // Get data from cache - instant, no loading!
-    const cachedClients = getCachedData('clients') || [];
-    const cachedLeads = getCachedData('leads') || [];
-    const cachedProjects = getCachedData('projects') || [];
+    const cachedClientsRaw = getCachedData('clients');
+    const cachedLeadsRaw = getCachedData('leads');
+    const cachedProjectsRaw = getCachedData('projects');
+    
+    // Universal data extractor - handles any response format
+    const extractArray = (data, key) => {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        if (data?.data?.[key] && Array.isArray(data.data[key])) return data.data[key];
+        if (data?.[key] && Array.isArray(data[key])) return data[key];
+        if (data?.data && Array.isArray(data.data)) return data.data;
+        console.warn(`⚠️ Could not extract array for ${key}, got:`, typeof data, data);
+        return [];
+    };
+    
+    // Extract arrays with guaranteed array output
+    const cachedClients = extractArray(cachedClientsRaw, 'clients');
+    const cachedLeads = extractArray(cachedLeadsRaw, 'leads');
+    const cachedProjects = extractArray(cachedProjectsRaw, 'projects');
     
     // Process data (memoized)
     const clients = useMemo(() => processClientData(cachedClients), [cachedClients]);
