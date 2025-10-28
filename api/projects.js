@@ -26,7 +26,7 @@ async function handler(req, res) {
     const urlPath = req.url.replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
     console.log('🔍 Projects API: Path segments:', pathSegments)
-    const id = pathSegments[pathSegments.length - 1]
+    const id = req.params?.id || pathSegments[pathSegments.length - 1]
     console.log('🔍 Projects API: Extracted ID:', id)
     console.log('🔍 Projects API: Path segments length:', pathSegments.length)
 
@@ -161,6 +161,14 @@ async function handler(req, res) {
     }
 
     // Get, Update, Delete Single Project (GET, PUT, DELETE /api/projects/[id])
+    console.log('🔍 Checking single project operation:', {
+      pathSegmentsLength: pathSegments.length,
+      firstSegment: pathSegments[0],
+      id: id,
+      method: req.method,
+      hasParams: !!req.params?.id
+    })
+    
     if (pathSegments.length === 2 && pathSegments[0] === 'projects' && id) {
       if (req.method === 'GET') {
         try {
@@ -248,18 +256,52 @@ async function handler(req, res) {
         }
       }
       if (req.method === 'DELETE') {
+        console.log('🗑️ DELETE request received for project:', id)
         try {
+          // Check if project exists first
+          const projectExists = await prisma.project.findUnique({ where: { id } })
+          if (!projectExists) {
+            console.error('❌ Project not found:', id)
+            return notFound(res, 'Project not found')
+          }
+          
+          console.log('🔍 Deleting project and related records:', id)
           // Ensure referential integrity by removing dependents first, then the project
           await prisma.$transaction(async (tx) => {
-            await tx.task.deleteMany({ where: { projectId: id } })
-            await tx.invoice.deleteMany({ where: { projectId: id } })
-            await tx.timeEntry.deleteMany({ where: { projectId: id } })
+            // First, handle task hierarchy - set parentTaskId to null for all tasks
+            // This prevents foreign key constraint issues with self-referential tasks
+            const tasksUpdated = await tx.task.updateMany({ 
+              where: { projectId: id },
+              data: { parentTaskId: null }
+            })
+            console.log('🔄 Updated tasks to remove parent references:', tasksUpdated.count)
+            
+            // Now delete all tasks (they no longer have parent references)
+            const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
+            console.log('🗑️ Deleted tasks:', tasksDeleted.count)
+            
+            // Delete invoices
+            const invoicesDeleted = await tx.invoice.deleteMany({ where: { projectId: id } })
+            console.log('🗑️ Deleted invoices:', invoicesDeleted.count)
+            
+            // Delete time entries
+            const timeEntriesDeleted = await tx.timeEntry.deleteMany({ where: { projectId: id } })
+            console.log('🗑️ Deleted time entries:', timeEntriesDeleted.count)
+            
+            // Delete the project
             await tx.project.delete({ where: { id } })
+            console.log('✅ Project deleted successfully:', id)
           })
           console.log('✅ Project and related records deleted successfully:', id)
-          return ok(res, { deleted: true })
+          return ok(res, { deleted: true, message: 'Project deleted successfully' })
         } catch (dbError) {
           console.error('❌ Database error deleting project (with cascade):', dbError)
+          console.error('❌ Error details:', {
+            message: dbError.message,
+            code: dbError.code,
+            meta: dbError.meta,
+            stack: dbError.stack
+          })
           return serverError(res, 'Failed to delete project', dbError.message)
         }
       }

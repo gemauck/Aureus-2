@@ -11,10 +11,18 @@ export function signRefreshToken(payload) {
 }
 
 export function verifyToken(token) {
-  return jwt.verify(token, process.env.JWT_SECRET)
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET)
+  } catch (error) {
+    return null
+  }
 }
 
 export function verifyRefreshToken(token) {
-  return jwt.verify(token, process.env.JWT_SECRET)
+  try {
+    return jwt.verify(token, process.env.JWT_SECRET)
+  } catch (error) {
+    return null
+  }
 }
 

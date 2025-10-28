@@ -16,7 +16,7 @@ async function handler(req, res) {
     
     const url = new URL(req.url, `http://${req.headers.host}`)
     const pathSegments = url.pathname.split('/').filter(Boolean)
-    const id = pathSegments[pathSegments.length - 1] // Get the ID from the URL
+    const id = req.params?.id || pathSegments[pathSegments.length - 1] // Get the ID from params or URL
 
     console.log('🔍 Path segments:', pathSegments, 'ID:', id)
 
@@ -123,7 +123,15 @@ async function handler(req, res) {
         
         // Delete all related records in a transaction
         await prisma.$transaction(async (tx) => {
-          // Delete tasks
+          // First, handle task hierarchy - set parentTaskId to null for all tasks
+          // This prevents foreign key constraint issues with self-referential tasks
+          const tasksUpdated = await tx.task.updateMany({ 
+            where: { projectId: id },
+            data: { parentTaskId: null }
+          })
+          console.log('🔄 Updated tasks to remove parent references:', tasksUpdated.count)
+          
+          // Now delete all tasks (they no longer have parent references)
           const tasksDeleted = await tx.task.deleteMany({ where: { projectId: id } })
           console.log('🗑️ Deleted tasks:', tasksDeleted.count)
           

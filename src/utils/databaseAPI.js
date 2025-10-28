@@ -102,9 +102,13 @@ const DatabaseAPI = {
     },
 
     // LEAD OPERATIONS
-    async getLeads() {
-        console.log('📡 Fetching leads from database...');
-        const raw = await this.makeRequest('/leads');
+    async getLeads(forceRefresh = false) {
+        console.log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
+        // If forceRefresh, we need to bypass any caching layers
+        // Add cache-busting query param to bypass any HTTP/proxy caches
+        const endpoint = forceRefresh ? `/leads?_t=${Date.now()}` : '/leads';
+        console.log('🔄 Lead API endpoint:', endpoint);
+        const raw = await this.makeRequest(endpoint);
         // Normalize payload to { data: { leads: [...] } } for downstream consumers
         const normalized = {
             data: {

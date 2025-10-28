@@ -9,7 +9,7 @@ const KanbanView = window.KanbanView;
 const CommentsPopup = window.CommentsPopup;
 const DocumentCollectionModal = window.DocumentCollectionModal;
 
-const ProjectDetail = ({ project, onBack }) => {
+const ProjectDetail = ({ project, onBack, onDelete }) => {
     console.log('ProjectDetail rendering with project:', project);
     
     // Check if required components are loaded
@@ -1635,35 +1635,16 @@ const ProjectDetail = ({ project, onBack }) => {
                         setShowProjectModal(false);
                     }}
                     onDelete={async (projectId) => {
-                        try {
-                            if (window.dataService && typeof window.dataService.getProjects === 'function') {
-                                const savedProjects = await window.dataService.getProjects();
-                                if (savedProjects) {
-                                    const updatedProjects = savedProjects.filter(p => p.id !== projectId);
-                                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                                        await window.dataService.setProjects(updatedProjects);
-                                        // Update clients' projectIds to remove this project
-                                        if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
-                                            const clients = await window.dataService.getClients() || [];
-                                            const clientsUpdated = clients.map(c => ({
-                                                ...c,
-                                                projectIds: Array.isArray(c.projectIds) ? c.projectIds.filter(id => id !== projectId) : []
-                                            }));
-                                            await window.dataService.setClients(clientsUpdated);
-                                            window.dispatchEvent(new CustomEvent('clientsUpdated'));
-                                        }
-                                    } else {
-                                        console.warn('DataService not available or setProjects method not found');
-                                    }
-                                }
-                            } else {
-                                console.warn('DataService not available or getProjects method not found');
-                            }
-                        } catch (error) {
-                            console.error('Error deleting project:', error);
+                        console.log('🗑️ ProjectDetail: Delete requested for project:', projectId);
+                        if (onDelete && typeof onDelete === 'function') {
+                            console.log('✅ ProjectDetail: Calling parent onDelete handler');
+                            await onDelete(projectId);
+                            setShowProjectModal(false);
+                            onBack();
+                        } else {
+                            console.error('❌ ProjectDetail: No onDelete handler provided');
+                            alert('Delete functionality not available. Please use the projects list to delete.');
                         }
-                        setShowProjectModal(false);
-                        onBack();
                     }}
                     onClose={() => setShowProjectModal(false)}
                 />

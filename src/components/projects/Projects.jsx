@@ -335,30 +335,78 @@ const Projects = () => {
     };
 
     const handleDeleteProject = async (projectId) => {
-        if (confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
-            try {
-                const token = window.storage?.getToken?.();
-                if (!token) {
-                    alert('No authentication token found. Please log in.');
-                    return;
-                }
+        if (!confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
+            return;
+        }
 
-                const projectToDelete = projects.find(p => p.id === projectId);
-                
-                console.log('🌐 Deleting project from database:', projectId);
-                await window.DatabaseAPI.deleteProject(projectId);
-                
-                // Update local state
-                setProjects(projects.filter(p => p.id !== projectId));
-                
-                // Remove project from client's projectIds
-                if (projectToDelete && projectToDelete.client) {
-                    updateClientProjectIds(projectToDelete.client, null, projectId);
-                }
-            } catch (error) {
-                console.error('❌ Error deleting project:', error);
-                alert('Failed to delete project: ' + error.message);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('No authentication token found. Please log in.');
+                return;
             }
+
+            const projectToDelete = projects.find(p => p.id === projectId);
+            
+            console.log('🗑️ Deleting project from database:', projectId);
+            
+            // Call the delete API
+            const result = await window.DatabaseAPI.deleteProject(projectId);
+            console.log('✅ Delete API response:', result);
+            
+            // Update local state - remove the deleted project
+            setProjects(prevProjects => {
+                const updated = prevProjects.filter(p => p.id !== projectId);
+                console.log(`✅ Updated projects list: ${prevProjects.length} -> ${updated.length}`);
+                return updated;
+            });
+            
+            // If viewing the deleted project, close the detail view
+            if (viewingProject && viewingProject.id === projectId) {
+                setViewingProject(null);
+            }
+            
+            // Remove project from client's projectIds
+            if (projectToDelete && projectToDelete.client) {
+                updateClientProjectIds(projectToDelete.client, null, projectId);
+            }
+            
+            // Reload projects to ensure consistency
+            const reloadProjects = async () => {
+                try {
+                    const response = await window.DatabaseAPI.getProjects();
+                    let apiProjects = [];
+                    if (response?.data?.projects) {
+                        apiProjects = response.data.projects;
+                    } else if (response?.projects) {
+                        apiProjects = response.projects;
+                    } else if (Array.isArray(response?.data)) {
+                        apiProjects = response.data;
+                    } else if (Array.isArray(response)) {
+                        apiProjects = response;
+                    }
+                    const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
+                        ...p,
+                        client: p.clientName || p.client || ''
+                    }));
+                    setProjects(normalizedProjects);
+                    console.log('✅ Projects reloaded after deletion');
+                } catch (reloadError) {
+                    console.error('❌ Error reloading projects:', reloadError);
+                }
+            };
+            
+            // Small delay then reload
+            setTimeout(reloadProjects, 500);
+            
+        } catch (error) {
+            console.error('❌ Error deleting project:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                projectId: projectId
+            });
+            alert('Failed to delete project: ' + (error.message || 'Unknown error'));
         }
     };
 
@@ -398,7 +446,11 @@ const Projects = () => {
                     </div>
                 );
             }
-            return <ProjectDetail project={viewingProject} onBack={() => setViewingProject(null)} />;
+            return <ProjectDetail 
+                project={viewingProject} 
+                onBack={() => setViewingProject(null)}
+                onDelete={handleDeleteProject}
+            />;
         } catch (error) {
             console.error('Error rendering ProjectDetail:', error);
             return (
