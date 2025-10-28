@@ -125,22 +125,8 @@ const Projects = () => {
         }
     };
     
-    // Save projects to data service whenever they change
-    useEffect(() => {
-        const saveProjects = async () => {
-            try {
-                const sortedProjects = [...projects].sort((a, b) => a.client.localeCompare(b.client));
-                await window.dataService.setProjects(sortedProjects);
-                console.log('✅ Projects: Saved to data service');
-            } catch (error) {
-                console.error('❌ Projects: Error saving projects:', error);
-            }
-        };
-
-        if (projects.length > 0) {
-            saveProjects();
-        }
-    }, [projects]);
+    // Note: Projects are database-first, so we don't need to save them back to dataService
+    // Individual project saves are handled by handleSaveProject which directly updates the database
 
     // Helper function to count all nested subtasks
     const countAllSubtasks = (subtasks) => {

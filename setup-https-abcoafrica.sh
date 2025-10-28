@@ -64,8 +64,8 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
     server_name $DOMAIN www.$DOMAIN;
 
     # SSL certificates (will be added by certbot)

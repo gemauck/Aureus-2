@@ -30,6 +30,11 @@ function processClientData(rawClients, cacheKey) {
         return clientDataCache;
     }
     
+    // Ensure rawClients is always an array
+    if (!rawClients || !Array.isArray(rawClients)) {
+        return [];
+    }
+    
     // Process the data
     const startTime = performance.now();
     const processed = rawClients.map(c => {
