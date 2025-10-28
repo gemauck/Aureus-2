@@ -38,7 +38,10 @@ function processClientData(rawClients, cacheKey) {
     // Process the data
     const startTime = performance.now();
     const processed = rawClients.map(c => {
-        const isLead = c.type === 'lead';
+        // Preserve type as-is, don't default null/undefined to 'client'
+        // This ensures leads aren't accidentally converted to clients
+        const clientType = c.type; // Keep null/undefined as-is, don't default
+        const isLead = clientType === 'lead';
         let status = c.status;
         
         // Convert status based on type
@@ -58,7 +61,7 @@ function processClientData(rawClients, cacheKey) {
         status: status,
         stage: c.stage || 'Awareness',
         industry: c.industry || 'Other',
-        type: c.type || 'client',
+        type: clientType, // Preserve null/undefined - will be filtered out later
         revenue: c.revenue || 0,
         lastContact: new Date(c.updatedAt || c.createdAt).toISOString().split('T')[0],
         address: c.address || '',
@@ -210,7 +213,7 @@ const Clients = React.memo(() => {
                 name: c.name,
                 status: status,
                 industry: c.industry || 'Other',
-                type: c.type || 'client',
+                type: c.type, // Preserve as-is - null types will be filtered out
                 revenue: c.revenue || 0,
                 lastContact: new Date(c.updatedAt || c.createdAt || Date.now()).toISOString().split('T')[0],
                 address: c.address || '',
@@ -249,7 +252,8 @@ const Clients = React.memo(() => {
                         return;
                     }
                     
-                    const processed = message.data.map(mapDbClient).filter(c => (c.type || 'client') === 'client');
+                    // Filter to only include actual clients (exclude leads and null types)
+                    const processed = message.data.map(mapDbClient).filter(c => c.type === 'client');
                     setClients(processed);
                     safeStorage.setClients(processed);
                     
@@ -313,7 +317,18 @@ const Clients = React.memo(() => {
             const cachedClients = safeStorage.getClients();
             
             if (cachedClients && cachedClients.length > 0) {
-                setClients(cachedClients);
+                // Filter cached data to ensure no leads or invalid types are included
+                const filteredCachedClients = cachedClients.filter(client => 
+                    client.type === 'client'
+                );
+                if (filteredCachedClients.length > 0) {
+                    setClients(filteredCachedClients);
+                }
+                // Log if any leads were filtered out from cache
+                const filteredOut = cachedClients.length - filteredCachedClients.length;
+                if (filteredOut > 0) {
+                    console.log(`⚠️ Filtered out ${filteredOut} leads/invalid types from cached data`);
+                }
             }
             
             // Check if user is logged in
@@ -359,8 +374,14 @@ const Clients = React.memo(() => {
                     console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
                     
                     // Separate clients and leads based on type
+                    // Explicitly filter: only include records with type='client' and exclude any with null/undefined type
                     const clientsOnly = processedClients.filter(c => c.type === 'client');
                     const leadsOnly = processedClients.filter(c => c.type === 'lead');
+                    // Log any records with missing type for debugging
+                    const missingType = processedClients.filter(c => !c.type || (c.type !== 'client' && c.type !== 'lead'));
+                    if (missingType.length > 0) {
+                        console.warn(`⚠️ Found ${missingType.length} records with invalid/missing type:`, missingType.map(c => ({ id: c.id, name: c.name, type: c.type })));
+                    }
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     const processEndTime = performance.now();
                     
@@ -1009,8 +1030,17 @@ const Clients = React.memo(() => {
         });
     };
 
-    // Filter clients
+    // Filter clients - explicitly exclude leads and records without proper type
     const filteredClients = clients.filter(client => {
+        // Exclude leads - only show actual clients
+        if (client.type === 'lead') {
+            return false;
+        }
+        // Exclude records without a proper type (null, undefined, or invalid values)
+        if (!client.type || client.type !== 'client') {
+            return false;
+        }
+        
         // Enhanced search across multiple fields
         const searchLower = searchTerm.toLowerCase();
         const matchesSearch = searchTerm === '' || 

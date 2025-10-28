@@ -176,6 +176,7 @@ async function handler(req, res) {
         
         const updateData = {
           name: body.name,
+          type: 'lead', // Explicitly preserve lead type to prevent conversion to client
           industry: body.industry,
           status: 'active', // Status is always 'active', hardcoded
           stage: body.stage, // Stage IS in database schema

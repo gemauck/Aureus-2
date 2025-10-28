@@ -201,6 +201,18 @@ const AuthProvider = ({ children }) => {
 const useAuth = () => useContext(AuthContext);
 
 // Make available globally
-window.AuthContext = AuthContext;
-window.AuthProvider = AuthProvider;
-window.useAuth = useAuth;
+try {
+    window.AuthContext = AuthContext;
+    window.AuthProvider = AuthProvider;
+    window.useAuth = useAuth;
+    if (window.debug && !window.debug.performanceMode) {
+        console.log('✅ AuthProvider.jsx loaded and registered', typeof window.AuthProvider);
+    }
+    
+    // Verify storage is available
+    if (!window.storage && (!window.debug || !window.debug.performanceMode)) {
+        console.warn('⚠️ Storage not available when AuthProvider.jsx executed');
+    }
+} catch (error) {
+    console.error('❌ AuthProvider.jsx: Error registering component:', error);
+}

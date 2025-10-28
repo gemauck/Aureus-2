@@ -357,6 +357,18 @@ const useData = () => {
 };
 
 // Make available globally
-window.DataContext = DataContext;
-window.DataProvider = DataProvider;
-window.useData = useData;
+try {
+    window.DataContext = DataContext;
+    window.DataProvider = DataProvider;
+    window.useData = useData;
+    if (window.debug && !window.debug.performanceMode) {
+        console.log('✅ DataContext.jsx loaded and registered', typeof window.DataProvider);
+    }
+    
+    // Verify React is available
+    if (!window.React) {
+        console.error('❌ React not available when DataContext.jsx executed');
+    }
+} catch (error) {
+    console.error('❌ DataContext.jsx: Error registering component:', error);
+}

@@ -26,34 +26,97 @@ const ProjectsDatabaseFirst = () => {
             }
 
             const response = await window.api.getProjects();
-            const apiProjects = response?.data || [];
-            console.log('📡 Database returned projects:', apiProjects.length);
+            console.log('📡 Raw API response:', response);
+            
+            // Handle different response structures
+            let apiProjects = [];
+            if (response?.data?.projects) {
+                apiProjects = response.data.projects;
+            } else if (response?.projects) {
+                apiProjects = response.projects;
+            } else if (Array.isArray(response?.data)) {
+                apiProjects = response.data;
+            } else if (Array.isArray(response)) {
+                apiProjects = response;
+            }
+            
+            console.log('📡 Database returned projects:', apiProjects?.length || 0);
+            
+            // Ensure apiProjects is an array before mapping
+            if (!Array.isArray(apiProjects)) {
+                console.error('❌ apiProjects is not an array:', apiProjects);
+                apiProjects = [];
+            }
+            
+            // Helper function to safely parse JSON strings
+            const parseJSONField = (field, defaultValue = []) => {
+                if (!field) return defaultValue;
+                if (Array.isArray(field)) return field;
+                if (typeof field === 'string') {
+                    try {
+                        return JSON.parse(field);
+                    } catch (e) {
+                        console.warn('Failed to parse JSON field:', e);
+                        return defaultValue;
+                    }
+                }
+                return defaultValue;
+            };
             
             // Process projects data
-            const processedProjects = apiProjects.map(p => ({
-                id: p.id,
-                name: p.name || '',
-                client: p.client || '',
-                type: p.type || 'Project',
-                status: p.status || 'Active',
-                startDate: p.startDate || new Date().toISOString().split('T')[0],
-                dueDate: p.dueDate || '',
-                progress: p.progress || 0,
-                assignedTo: p.assignedTo || '',
-                description: p.description || '',
-                budget: p.budget || 0,
-                actualCost: p.actualCost || 0,
-                tasks: Array.isArray(p.tasks) ? p.tasks : [],
-                taskLists: Array.isArray(p.taskLists) ? p.taskLists : [
+            const processedProjects = apiProjects.map(p => {
+                // Parse JSON string fields from database
+                const taskLists = parseJSONField(p.taskLists, [
                     { id: 1, name: 'To Do', color: 'blue' },
                     { id: 2, name: 'In Progress', color: 'yellow' },
                     { id: 3, name: 'Done', color: 'green' }
-                ],
-                customFieldDefinitions: Array.isArray(p.customFieldDefinitions) ? p.customFieldDefinitions : [],
-                documents: Array.isArray(p.documents) ? p.documents : [],
-                comments: Array.isArray(p.comments) ? p.comments : [],
-                activityLog: Array.isArray(p.activityLog) ? p.activityLog : []
-            }));
+                ]);
+                const tasksList = parseJSONField(p.tasksList, []);
+                const customFieldDefinitions = parseJSONField(p.customFieldDefinitions, []);
+                const documents = parseJSONField(p.documents, []);
+                const comments = parseJSONField(p.comments, []);
+                const activityLog = parseJSONField(p.activityLog, []);
+                const team = parseJSONField(p.team, []);
+                const documentSections = parseJSONField(p.documentSections, []);
+                
+                // Handle date fields
+                const formatDate = (date) => {
+                    if (!date) return '';
+                    try {
+                        const d = new Date(date);
+                        return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+                    } catch {
+                        return '';
+                    }
+                };
+                
+                return {
+                    id: p.id,
+                    name: p.name || '',
+                    client: p.clientName || p.client || '',
+                    clientId: p.clientId || null,
+                    type: p.type || 'Project',
+                    status: p.status || 'Active',
+                    startDate: formatDate(p.startDate),
+                    dueDate: formatDate(p.dueDate),
+                    progress: p.progress || 0,
+                    assignedTo: p.assignedTo || '',
+                    description: p.description || '',
+                    budget: p.budget || 0,
+                    actualCost: p.actualCost || 0,
+                    priority: p.priority || 'Medium',
+                    tasks: tasksList, // Map tasksList to tasks for frontend
+                    taskLists: taskLists,
+                    customFieldDefinitions: customFieldDefinitions,
+                    documents: documents,
+                    comments: comments,
+                    activityLog: activityLog,
+                    team: team,
+                    notes: p.notes || '',
+                    hasDocumentCollectionProcess: p.hasDocumentCollectionProcess || false,
+                    documentSections: documentSections
+                };
+            });
             
             setProjects(processedProjects);
             setIsLoading(false);

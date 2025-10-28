@@ -1,5 +1,7 @@
 // Use React from window
-console.log('🔍 MainLayout.jsx: Script is executing...');
+if (window.debug && !window.debug.performanceMode) {
+    console.log('🔍 MainLayout.jsx: Script is executing...');
+}
 const { useState } = React;
 
 const MainLayout = () => {
@@ -377,7 +379,16 @@ const MainLayout = () => {
 // Make available globally
 try {
     window.MainLayout = MainLayout;
-    console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout');
+    if (window.debug && !window.debug.performanceMode) {
+        console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout', typeof window.MainLayout);
+    }
+    
+    // Verify dependencies
+    if (!window.React) console.error('❌ React not available when MainLayout.jsx executed');
+    if (!window.debug || !window.debug.performanceMode) {
+        if (!window.useAuth) console.warn('⚠️ useAuth not available when MainLayout.jsx executed');
+        if (!window.useTheme) console.warn('⚠️ useTheme not available when MainLayout.jsx executed');
+    }
 } catch (error) {
-    console.error('❌ MainLayout.jsx: Error registering component:', error);
+    console.error('❌ MainLayout.jsx: Error registering component:', error, error.stack);
 }

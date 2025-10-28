@@ -410,6 +410,21 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         setFormData(updatedFormData);
         logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
         
+        // Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'comment',
+                'leads',
+                {
+                    action: 'Comment Added',
+                    leadId: formData.id,
+                    leadName: formData.name || formData.companyName,
+                    commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
+                },
+                currentUser
+            );
+        }
+        
         // Save comment changes immediately
         onSave(updatedFormData, true);
         

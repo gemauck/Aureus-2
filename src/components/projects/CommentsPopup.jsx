@@ -59,12 +59,18 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                                 <div key={comment.id} className="bg-gray-50 rounded-lg p-2 border border-gray-100">
                                     <div className="flex items-start gap-2 mb-1">
                                         <div className="w-5 h-5 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-[8px] flex-shrink-0">
-                                            {comment.author.charAt(0)}
+                                            {(comment.author || 'U').charAt(0).toUpperCase()}
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center justify-between">
-                                                <span className="font-medium text-gray-800 text-[10px]">{comment.author}</span>
-                                                <span className="text-[9px] text-gray-500">{new Date(comment.timestamp).toLocaleDateString()}</span>
+                                                <span className="font-medium text-gray-800 text-[10px]">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</span>
+                                                <span className="text-[9px] text-gray-500">{new Date(comment.timestamp || comment.date).toLocaleString('en-ZA', {
+                                                    month: 'short',
+                                                    day: '2-digit',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    year: 'numeric'
+                                                })}</span>
                                             </div>
                                             <p className="text-xs text-gray-700 mt-0.5 break-words">{comment.text}</p>
                                         </div>

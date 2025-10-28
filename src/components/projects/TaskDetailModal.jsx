@@ -586,11 +586,17 @@ const TaskDetailModal = ({
                                                 <div className="flex items-start justify-between mb-1.5">
                                                     <div className="flex items-center gap-1.5">
                                                         <div className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-[10px]">
-                                                            {comment.author.charAt(0)}
+                                                            {(comment.author || 'U').charAt(0).toUpperCase()}
                                                         </div>
                                                         <div>
-                                                            <div className="font-medium text-gray-800 text-xs">{comment.author}</div>
-                                                            <div className="text-[10px] text-gray-500">{comment.date}</div>
+                                                            <div className="font-medium text-gray-800 text-xs">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</div>
+                                                            <div className="text-[10px] text-gray-500">{comment.date || new Date(comment.timestamp).toLocaleString('en-ZA', {
+                                                                month: 'short',
+                                                                day: '2-digit',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit',
+                                                                year: 'numeric'
+                                                            })}</div>
                                                         </div>
                                                     </div>
                                                     <button

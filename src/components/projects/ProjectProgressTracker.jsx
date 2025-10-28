@@ -495,14 +495,39 @@ const ProjectProgressTracker = ({ onBack }) => {
                     return;
                 }
                 
+                // Get current user info
+                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+                
                 const updatedComments = [
                     ...existingComments,
                     {
+                        id: Date.now(),
                         text: newComment,
                         date: new Date().toISOString(),
-                        author: 'User' // You can get this from logged-in user
+                        timestamp: new Date().toISOString(),
+                        author: currentUser.name,
+                        authorEmail: currentUser.email,
+                        authorId: currentUser.id,
+                        authorRole: currentUser.role
                     }
                 ];
+                
+                // Log to audit trail
+                if (window.AuditLogger) {
+                    window.AuditLogger.log(
+                        'comment',
+                        'projects',
+                        {
+                            action: 'Progress Comment Added',
+                            projectId: selectedProject?.id,
+                            projectName: selectedProject?.name,
+                            field: selectedField,
+                            month: selectedMonth,
+                            commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
+                        },
+                        currentUser
+                    );
+                }
                 handleSaveProgress(updatedComments);
             } else {
                 // For compliance and data reviews
@@ -738,12 +763,13 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                     <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
                                                         <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
                                                         <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                            <span>{comment.author || 'User'}</span>
-                                                            <span>{new Date(comment.date).toLocaleString('en-ZA', { 
+                                                            <span className="font-medium">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</span>
+                                                            <span>{new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', { 
                                                                 month: 'short', 
                                                                 day: '2-digit',
                                                                 hour: '2-digit',
-                                                                minute: '2-digit'
+                                                                minute: '2-digit',
+                                                                year: 'numeric'
                                                             })}</span>
                                                         </div>
                                                     </div>

@@ -125,13 +125,29 @@ class LiveDataSync {
 
             const results = await Promise.allSettled(syncPromises);
             
-            // Check for any failures
-            const failures = results.filter(result => result.status === 'rejected');
+            // Check for failures - handle both rejected promises and failed syncData results
+            const failures = results.filter(result => {
+                if (result.status === 'rejected') return true;
+                // Check if the result itself indicates failure
+                if (result.status === 'fulfilled' && result.value && !result.value.success) {
+                    return true;
+                }
+                return false;
+            });
+            
+            const successful = results.length - failures.length;
+            const log = window.debug?.log || (() => {});
+            
             if (failures.length > 0) {
-                console.warn(`⚠️ ${failures.length} sync operations failed:`, failures);
+                if (successful > 0) {
+                    log(`⚠️ ${failures.length} sync operations failed, ${successful} succeeded`);
+                } else {
+                    log(`⚠️ All ${failures.length} sync operations failed - API may be unavailable`);
+                }
                 this.errorCount++;
             } else {
                 this.errorCount = 0; // Reset error count on success
+                log(`✅ All ${successful} sync operations succeeded`);
             }
 
             this.connectionStatus = 'connected';
@@ -179,7 +195,8 @@ class LiveDataSync {
             const CACHE_DURATION = 30000; // 30 seconds per data type
             
             if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
-                console.log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
+                const log = window.debug?.log || (() => {});
+                log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
                 // Send cached data to subscribers
                 this.notifySubscribers({ 
                     type: 'data', 
@@ -209,8 +226,25 @@ class LiveDataSync {
             
             return { dataType, data, success: true, cached: false };
         } catch (error) {
-            console.error(`❌ Failed to sync ${dataType}:`, error);
-            throw error;
+            // Don't throw errors for network failures - just log and return failure
+            // This allows the app to continue working even if API is temporarily unavailable
+            const log = window.debug?.log || (() => {});
+            const errorMessage = error.message || String(error);
+            
+            // Check if it's a network error (Failed to fetch)
+            if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+                log(`⚠️ Network error syncing ${dataType} - API may be unavailable`);
+            } else {
+                console.error(`❌ Failed to sync ${dataType}:`, error);
+            }
+            
+            // Return failure instead of throwing - allows other syncs to continue
+            return { 
+                dataType, 
+                success: false, 
+                error: errorMessage,
+                cached: false
+            };
         }
     }
 
