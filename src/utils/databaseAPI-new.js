@@ -18,12 +18,20 @@ const DatabaseAPI = {
     async makeRequest(endpoint, options = {}) {
         // Check cache for GET requests only
         const isGetRequest = !options.method || options.method === 'GET';
-        const cacheKey = endpoint;
         
-        if (isGetRequest && this.cache.has(cacheKey)) {
+        // Normalize endpoint - remove query params for cache key (but keep them for actual request)
+        const cacheKey = endpoint.split('?')[0];
+        const forceRefresh = options.forceRefresh === true || endpoint.includes('?_t=');
+        
+        // Handle force refresh FIRST - clear cache and skip check
+        if (forceRefresh) {
+            console.log(`🔄 Force refresh: clearing cache and bypassing for ${cacheKey}`);
+            this.cache.delete(cacheKey);
+        } else if (isGetRequest && this.cache.has(cacheKey)) {
+            // Only check cache if NOT force refresh
             const cached = this.cache.get(cacheKey);
             if (Date.now() - cached.timestamp < this.CACHE_DURATION) {
-                console.log(`⚡ Using cached ${endpoint} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
+                console.log(`⚡ Using cached ${cacheKey} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
                 return cached.data;
             }
         }
@@ -87,12 +95,15 @@ const DatabaseAPI = {
                 throw new Error(errorMessage);
             }
 
-            // Cache successful GET responses
+            // Cache successful GET responses (even after force refresh, cache the fresh data)
             if (isGetRequest && responseData) {
                 this.cache.set(cacheKey, {
                     data: responseData,
                     timestamp: Date.now()
                 });
+                if (forceRefresh) {
+                    console.log(`✅ Fresh data fetched and cached for ${cacheKey}`);
+                }
             }
             
             return responseData;
@@ -138,9 +149,14 @@ const DatabaseAPI = {
     },
 
     // Lead operations
-    async getLeads() {
-        console.log('📡 Fetching leads from database...');
-        return this.makeRequest('/leads');
+    async getLeads(forceRefresh = false) {
+        console.log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
+        if (forceRefresh) {
+            // Clear the cache before making the request
+            this.clearCache('/leads');
+            console.log('🗑️ Lead cache cleared before force refresh');
+        }
+        return this.makeRequest('/leads', { forceRefresh });
     },
 
     async createLead(leadData) {
@@ -189,9 +205,14 @@ const DatabaseAPI = {
     },
 
     async deleteProject(id) {
-        return this.makeRequest(`/projects/${id}`, {
+        console.log(`🗑️ Deleting project ${id} from database...`);
+        const result = await this.makeRequest(`/projects/${id}`, {
             method: 'DELETE'
         });
+        // Clear projects cache after deletion
+        this.clearCache('/projects');
+        console.log(`✅ Project ${id} deleted successfully`);
+        return result;
     },
 
     // Invoice operations

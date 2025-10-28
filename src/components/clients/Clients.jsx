@@ -116,12 +116,65 @@ const Clients = React.memo(() => {
     
     // Removed expensive state tracking logging
     
+    // Load projects from database
+    const loadProjects = async () => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.log('⚠️ Clients: No auth token, skipping projects load');
+                return;
+            }
+            
+            console.log('🔄 Loading projects for Clients component...');
+            
+            // Try different API methods in order of preference
+            let response = null;
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.getProjects === 'function') {
+                response = await window.DatabaseAPI.getProjects();
+            } else if (window.api && typeof window.api.getProjects === 'function') {
+                response = await window.api.getProjects();
+            } else {
+                console.warn('⚠️ No projects API available');
+                return;
+            }
+            
+            // Handle different response structures
+            let apiProjects = [];
+            if (response?.data?.projects) {
+                apiProjects = response.data.projects;
+            } else if (response?.data?.data?.projects) {
+                apiProjects = response.data.data.projects;
+            } else if (response?.projects) {
+                apiProjects = response.projects;
+            } else if (Array.isArray(response?.data)) {
+                apiProjects = response.data;
+            } else if (Array.isArray(response)) {
+                apiProjects = response;
+            }
+            
+            console.log('📡 Projects loaded for Clients:', apiProjects.length);
+            
+            // Ensure projects have both clientId and clientName mapped to client for compatibility
+            const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
+                ...p,
+                client: p.clientName || p.client || '',
+                clientId: p.clientId || null
+            }));
+            
+            setProjects(normalizedProjects);
+        } catch (error) {
+            console.error('❌ Failed to load projects in Clients component:', error);
+            // Don't set projects to empty array on error - keep existing if any
+        }
+    };
+
     // Load clients and leads from API immediately on mount
     useEffect(() => {
         console.log('🔥 Clients component mounted - calling loadClients()');
         const startTime = performance.now();
         loadClients();
         loadLeads();
+        loadProjects(); // Load projects too
         const endTime = performance.now();
         console.log(`⚡ Initial load took ${(endTime - startTime).toFixed(2)}ms`);
     }, []);
@@ -352,15 +405,30 @@ const Clients = React.memo(() => {
     };
 
     // Load leads from database only
-    const loadLeads = async () => {
+    const loadLeads = async (forceRefresh = false) => {
         try {
-            // Skip API call if we recently called it AND we have data
-            const now = Date.now();
-            const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
-            
-            if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
-                console.log(`⚡ Skipping Leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
-                return; // Use cached data, skip API call
+            // Skip API call if we recently called it AND we have data (unless force refresh)
+            if (!forceRefresh) {
+                const now = Date.now();
+                const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
+                
+                if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
+                    console.log(`⚡ Skipping Leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+                    return; // Use cached data, skip API call
+                }
+                lastLeadsApiCallTimestamp = now;
+            } else {
+                // Force refresh - clear all caches and bypass timestamp check
+                console.log('🔄 FORCE REFRESH: Resetting API call timestamp to bypass cache');
+                if (window.dataManager?.invalidate) {
+                    window.dataManager.invalidate('leads');
+                    console.log('🗑️ Cache invalidated for leads');
+                }
+                // Clear DatabaseAPI cache
+                if (window.DatabaseAPI?.clearCache) {
+                    window.DatabaseAPI.clearCache('/leads');
+                }
+                lastLeadsApiCallTimestamp = 0; // Reset to force API call
             }
             
             const token = window.storage?.getToken?.();
@@ -371,10 +439,16 @@ const Clients = React.memo(() => {
                 return;
             }
             
-            // Update last API call timestamp
-            lastLeadsApiCallTimestamp = now;
+            // Update last API call timestamp if not force refresh
+            if (!forceRefresh) {
+                lastLeadsApiCallTimestamp = Date.now();
+            }
             
-            const apiResponse = await window.api.getLeads();
+            if (forceRefresh) {
+                console.log('🔍 Loading leads from API... (FORCED REFRESH - bypassing all caches)');
+            }
+            
+            const apiResponse = await window.api.getLeads(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             
             // Map database fields to UI expected format with JSON parsing
@@ -417,8 +491,13 @@ const Clients = React.memo(() => {
                 });
                 
             setLeads(mappedLeads);
+            
+            if (forceRefresh) {
+                console.log(`✅ Force refresh complete: ${mappedLeads.length} Active leads found`);
+            }
         } catch (error) {
             // Keep existing leads on error, don't clear them
+            console.error('❌ Error loading leads:', error);
         }
     };
 
@@ -1427,13 +1506,29 @@ const Clients = React.memo(() => {
             
             try {
                 console.log('🌐 Calling API to update lead status:', leadId, newStatus);
+                console.log('🌐 Sending lead data:', { status: newStatus, stage: updatedLead.stage });
                 const apiResponse = await window.api.updateLead(leadId, updatedLead);
                 console.log('✅ Lead status updated in database');
+                console.log('✅ API response:', apiResponse);
+                
+                // Verify the updated status was returned
+                const updatedStatus = apiResponse?.data?.status || apiResponse?.status;
+                if (updatedStatus) {
+                    console.log('✅ Verified updated status from API:', updatedStatus);
+                }
+                
+                // Invalidate cache
+                if (window.dataManager?.invalidate) {
+                    window.dataManager.invalidate('leads');
+                    console.log('🗑️ Cache invalidated after status update');
+                }
                 
                 // Reload from database to ensure consistency (like opportunities do)
+                // Use force refresh to bypass all caches
                 setTimeout(async () => {
-                    await loadLeads();
-                    console.log('🔄 Leads reloaded from database after status change');
+                    console.log('🔄 Force refreshing leads from database...');
+                    await loadLeads(true);
+                    console.log('✅ Leads reloaded from database after status change');
                 }, 100);
             } catch (apiError) {
                 console.error('❌ API error updating lead status:', apiError);

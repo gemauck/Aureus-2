@@ -1128,8 +1128,18 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         }); // Main form save - will exit edit mode
     };
 
-    // Get projects that belong to this client (match by name)
-    const clientProjects = allProjects?.filter(p => p.client === formData.name) || [];
+    // Get projects that belong to this client (match by clientId or clientName)
+    const clientProjects = allProjects?.filter(p => {
+        // Primary: match by clientId (foreign key relationship)
+        if (formData.id && p.clientId === formData.id) {
+            return true;
+        }
+        // Fallback: match by client name (for projects without clientId set)
+        if (p.client === formData.name || p.clientName === formData.name) {
+            return true;
+        }
+        return false;
+    }) || [];
     const upcomingFollowUps = (formData.followUps || [])
         .filter(f => !f.completed)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
