@@ -451,6 +451,8 @@ const Clients = React.memo(() => {
             const apiResponse = await window.api.getLeads(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             
+            console.log('🔍 RAW LEADS FROM API:', JSON.stringify(rawLeads, null, 2));
+            
             // Map database fields to UI expected format with JSON parsing
             const mappedLeads = rawLeads.map(lead => {
                     
@@ -1511,15 +1513,22 @@ const Clients = React.memo(() => {
             
             try {
                 console.log('🌐 Calling API to update lead status:', leadId, newStatus);
-                console.log('🌐 Sending lead data:', { status: newStatus, stage: updatedLead.stage });
+                
+                // IMPORTANT: Send ONLY the fields we want to update to avoid overwriting other fields
+                const updatePayload = {
+                    status: newStatus,
+                    stage: updatedLead.stage
+                };
+                console.log('🌐 Sending lead data:', updatePayload);
                 
                 // Clear cache BEFORE updating to ensure fresh data
                 if (window.DatabaseAPI?.clearCache) {
                     window.DatabaseAPI.clearCache('/leads');
-                    console.log('🗑️ Lead cache cleared before API update');
+                    window.DatabaseAPI.clearCache('/clients'); // Also clear clients cache since it contains leads
+                    console.log('🗑️ Lead and client caches cleared before API update');
                 }
                 
-                const apiResponse = await window.api.updateLead(leadId, updatedLead);
+                const apiResponse = await window.api.updateLead(leadId, updatePayload);
                 console.log('✅ Lead status updated in database');
                 console.log('✅ API response:', apiResponse);
                 
@@ -1543,7 +1552,8 @@ const Clients = React.memo(() => {
                 // Clear cache again AFTER successful update
                 if (window.DatabaseAPI?.clearCache) {
                     window.DatabaseAPI.clearCache('/leads');
-                    console.log('🗑️ Lead cache cleared after API update');
+                    window.DatabaseAPI.clearCache('/clients'); // Also clear clients cache since it contains leads
+                    console.log('🗑️ Lead and client caches cleared after API update');
                 }
                 
                 // Reload from database to ensure consistency (with longer delay to ensure DB transaction committed)
