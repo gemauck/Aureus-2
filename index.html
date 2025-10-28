@@ -667,29 +667,55 @@
                 try {
                     // Try to manually fetch and execute MainLayout first
                     if (!window.MainLayout) {
-                        console.log('🔧 Manually loading MainLayout.jsx...');
-                        const mainLayoutResponse = await fetch('./src/components/layout/MainLayout.jsx');
-                        const mainLayoutCode = await mainLayoutResponse.text();
-                        // Transform with Babel inline
-                        const transformed = Babel.transform(mainLayoutCode, { 
-                            presets: ['react'],
-                            filename: 'MainLayout.jsx'
-                        }).code;
-                        eval(transformed);
-                        console.log('✅ MainLayout manually loaded');
+                        try {
+                            console.log('🔧 Manually loading MainLayout.jsx...');
+                            const mainLayoutResponse = await fetch('./src/components/layout/MainLayout.jsx');
+                            if (!mainLayoutResponse.ok) {
+                                throw new Error(`HTTP ${mainLayoutResponse.status}: ${mainLayoutResponse.statusText}`);
+                            }
+                            const mainLayoutCode = await mainLayoutResponse.text();
+                            console.log('📄 MainLayout code fetched, length:', mainLayoutCode.length);
+                            
+                            // Transform with Babel inline
+                            console.log('🔄 Transforming MainLayout with Babel...');
+                            const transformed = Babel.transform(mainLayoutCode, { 
+                                presets: ['react'],
+                                filename: 'MainLayout.jsx'
+                            }).code;
+                            console.log('✅ MainLayout transformed, length:', transformed.length);
+                            
+                            eval(transformed);
+                            console.log('✅ MainLayout manually loaded, window.MainLayout:', typeof window.MainLayout);
+                        } catch (error) {
+                            console.error('❌ MainLayout manual load error:', error);
+                            console.error('Stack:', error.stack);
+                        }
                     }
                     
                     // Then load App
                     if (!window.App) {
-                        console.log('🔧 Manually loading App.jsx...');
-                        const appResponse = await fetch('./src/App.jsx');
-                        const appCode = await appResponse.text();
-                        const transformed = Babel.transform(appCode, { 
-                            presets: ['react'],
-                            filename: 'App.jsx'
-                        }).code;
-                        eval(transformed);
-                        console.log('✅ App manually loaded');
+                        try {
+                            console.log('🔧 Manually loading App.jsx...');
+                            const appResponse = await fetch('./src/App.jsx');
+                            if (!appResponse.ok) {
+                                throw new Error(`HTTP ${appResponse.status}: ${appResponse.statusText}`);
+                            }
+                            const appCode = await appResponse.text();
+                            console.log('📄 App code fetched, length:', appCode.length);
+                            
+                            console.log('🔄 Transforming App with Babel...');
+                            const transformed = Babel.transform(appCode, { 
+                                presets: ['react'],
+                                filename: 'App.jsx'
+                            }).code;
+                            console.log('✅ App transformed, length:', transformed.length);
+                            
+                            eval(transformed);
+                            console.log('✅ App manually loaded, window.App:', typeof window.App);
+                        } catch (error) {
+                            console.error('❌ App manual load error:', error);
+                            console.error('Stack:', error.stack);
+                        }
                     }
                     
                     // Try mounting again
