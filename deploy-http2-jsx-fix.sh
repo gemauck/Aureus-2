@@ -37,8 +37,9 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name DOMAIN_PLACEHOLDER www.DOMAIN_PLACEHOLDER;
 
     # SSL certificates
@@ -61,12 +62,9 @@ server {
     # Large file uploads
     client_max_body_size 50M;
     
-    # HTTP/2 optimizations - CRITICAL for preventing protocol errors
-    http2_max_field_size 32k;
-    http2_max_header_size 64k;
-    http2_max_requests 10000;
-    http2_recv_buffer_size 512k;
-    http2_chunk_size 8k;
+    # HTTP/2 optimizations - using newer nginx syntax
+    large_client_header_buffers 8 64k;
+    keepalive_requests 10000;
 
     # Special handling for JSX files (must come before general location)
     location ~* \.jsx$ {
