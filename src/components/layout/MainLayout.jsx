@@ -375,3 +375,4 @@ const MainLayout = () => {
 
 // Make available globally
 window.MainLayout = MainLayout;
+console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout');
