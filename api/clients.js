@@ -80,7 +80,7 @@ async function handler(req, res) {
           where: {
             OR: [
               { type: null },
-              { type: { not: { in: ['client', 'lead'] } } }
+              { type: { notIn: ['client', 'lead'] } }
             ]
           },
           select: { id: true, name: true, type: true }
