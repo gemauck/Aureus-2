@@ -2,25 +2,30 @@
 // Wrap entire file in IIFE to prevent variable redeclaration when Babel transforms multiple times
 (() => {
     // Get environment from window (set by debug.js) or determine locally
-    const { isProduction, isLocalhost } = (() => {
-        // Use window values if available (from debug.js)
-        if (typeof window.isProduction !== 'undefined' && typeof window.isLocalhost !== 'undefined') {
-            return { 
-                isProduction: window.isProduction, 
-                isLocalhost: window.isLocalhost 
-            };
+    // Access via window to avoid variable redeclaration when Babel transforms multiple scripts
+    function getIsProduction() {
+        if (typeof window.isProduction !== 'undefined') {
+            return window.isProduction;
         }
-        
-        // Otherwise, determine locally
         const hostname = window.location.hostname;
-        const isLocalhostValue = hostname === 'localhost' || hostname === '127.0.0.1';
-        const isProductionValue = !isLocalhostValue && window.location.protocol === 'https:';
-        
-        return { isProduction: isProductionValue, isLocalhost: isLocalhostValue };
-    })();
+        const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+        return !isLocal && window.location.protocol === 'https:';
+    }
+    
+    function getIsLocalhost() {
+        if (typeof window.isLocalhost !== 'undefined') {
+            return window.isLocalhost;
+        }
+        const hostname = window.location.hostname;
+        return hostname === 'localhost' || hostname === '127.0.0.1';
+    }
 
     const log = window.debug?.log || (() => {});
-    log('🔍 Environment Detection:', { isProduction, isLocalhost, hostname: window.location.hostname });
+    log('🔍 Environment Detection:', { 
+        isProduction: getIsProduction(), 
+        isLocalhost: getIsLocalhost(), 
+        hostname: window.location.hostname 
+    });
     log('📡 DataService Mode: API-ONLY (no localStorage fallback)');
 
     // Helpers to normalize API/local responses to arrays and safely access storage methods
@@ -77,7 +82,7 @@
 
     // Time Entries
     async getTimeEntries() {
-        if (isProduction && window.api?.listTimeEntries) {
+        if (getIsProduction() && window.api?.listTimeEntries) {
             try {
                 console.log('🌐 Using API for time entries');
                 const response = await window.api.listTimeEntries();
@@ -93,7 +98,7 @@
     },
 
     async setTimeEntries(timeEntries) {
-        if (isProduction && window.api?.createTimeEntry) {
+        if (getIsProduction() && window.api?.createTimeEntry) {
             try {
                 console.log('🌐 Syncing time entries to API');
                 // For now, just store locally in production
@@ -116,7 +121,7 @@
     },
 
     async createTimeEntry(timeEntryData) {
-        if (isProduction && window.api?.createTimeEntry) {
+        if (getIsProduction() && window.api?.createTimeEntry) {
             try {
                 console.log('🌐 Creating time entry via API');
                 const response = await window.api.createTimeEntry(timeEntryData);
@@ -440,8 +445,8 @@
     // Debug function
     window.debugDataService = () => {
         console.log('🔍 Data Service Debug:', {
-            isProduction,
-            isLocalhost,
+            isProduction: getIsProduction(),
+            isLocalhost: getIsLocalhost(),
             hasAPI: !!window.api,
             hasStorage: !!window.storage,
             apiMethods: Object.keys(window.api || {}),
@@ -451,5 +456,5 @@
     };
 
     const finalLog = window.debug?.log || (() => {});
-    finalLog('✅ Data Service loaded - Environment:', isProduction ? 'Production' : 'Development');
+    finalLog('✅ Data Service loaded - Environment:', getIsProduction() ? 'Production' : 'Development');
 })(); // End IIFE - prevents variable redeclaration errors

@@ -55,8 +55,6 @@ async function handler(req, res) {
     const clientId = req.params?.clientId || (pathSegments.length === 3 && pathSegments[0] === 'opportunities' && pathSegments[1] === 'client' ? pathSegments[2] : null)
     
     if (req.method === 'GET' && clientId) {
-      if (!clientId) return badRequest(res, 'Client ID required')
-      
       try {
         const opportunities = await prisma.opportunity.findMany({ 
           where: { clientId },
