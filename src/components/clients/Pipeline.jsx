@@ -36,6 +36,7 @@ const Pipeline = () => {
     const [timeRange, setTimeRange] = useState('current'); // current, monthly, quarterly
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
+    const [isLoading, setIsLoading] = useState(false);
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -79,6 +80,9 @@ const Pipeline = () => {
     }, [refreshKey]);
 
     const loadData = async () => {
+        // Don't clear existing data while loading to prevent flashing
+        setIsLoading(true);
+        
         try {
             // Try to load from API first if authenticated
             const token = storage.getToken();
@@ -105,19 +109,29 @@ const Pipeline = () => {
                     console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
                 }
                 
-                // Load opportunities for each client
+                // Load opportunities for each client in parallel
+                console.log(`📡 Pipeline: Fetching opportunities for ${apiClients.length} clients...`);
                 const clientsWithOpportunities = await Promise.allSettled(apiClients.map(async (client) => {
                     try {
                         if (window.api?.getOpportunitiesByClient) {
-                            console.log(`📡 Pipeline: Fetching opportunities for client ${client.name} (${client.id})...`);
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                             const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                            if (opportunities.length > 0) {
-                                console.log(`✅ Pipeline: Loaded ${opportunities.length} opportunities for client ${client.name} (${client.id})`, opportunities);
-                            } else {
-                                console.log(`📭 Pipeline: No opportunities found for client ${client.name} (${client.id})`);
+                            
+                            // Ensure each opportunity has required fields with defaults
+                            const validatedOpportunities = opportunities.map(opp => ({
+                                ...opp,
+                                title: opp.title || 'Untitled Opportunity',
+                                stage: opp.stage || 'Awareness',
+                                value: opp.value || 0,
+                                clientId: client.id,
+                                createdAt: opp.createdAt || opp.createdDate || new Date().toISOString()
+                            }));
+                            
+                            if (validatedOpportunities.length > 0) {
+                                console.log(`✅ Pipeline: Loaded ${validatedOpportunities.length} opportunities for ${client.name}`, 
+                                    validatedOpportunities.map(o => ({ title: o.title, stage: o.stage, value: o.value })));
                             }
-                            return { ...client, opportunities };
+                            return { ...client, opportunities: validatedOpportunities };
                         } else {
                             console.warn(`⚠️ Pipeline: getOpportunitiesByClient API method not available`);
                             return { ...client, opportunities: [] };
@@ -157,6 +171,7 @@ const Pipeline = () => {
                     }
                 });
                 
+                // Update state only after all data is loaded (prevents flashing)
                 setClients(processedClients);
                 setLeads(apiLeads);
                 
@@ -164,6 +179,7 @@ const Pipeline = () => {
                 storage.setClients(processedClients);
                 
                 console.log('✅ Pipeline: API data loaded and cached with opportunities');
+                setIsLoading(false);
                 return;
             }
         } catch (error) {
@@ -184,6 +200,7 @@ const Pipeline = () => {
         setLeads([]); // Leads are database-only, no localStorage fallback
         
         console.log('✅ Pipeline: localStorage data loaded - Clients:', clientsWithOpportunities.length, 'Leads: 0 (database-only)');
+        setIsLoading(false);
     };
 
     // Get all pipeline items (leads + client opportunities)
@@ -200,8 +217,17 @@ const Pipeline = () => {
 
         const opportunityItems = [];
         clients.forEach(client => {
+            // Ensure client has opportunities array (defensive check)
+            if (!client) return;
+            
             if (client.opportunities && Array.isArray(client.opportunities)) {
                 client.opportunities.forEach(opp => {
+                    // Skip if opportunity is missing required fields
+                    if (!opp || !opp.id) {
+                        console.warn(`⚠️ Pipeline: Skipping invalid opportunity for ${client.name}:`, opp);
+                        return;
+                    }
+                    
                     // Map opportunity stages to AIDA pipeline stages
                     let mappedStage = opp.stage || 'Awareness';
                     const originalStage = mappedStage;
@@ -224,11 +250,12 @@ const Pipeline = () => {
                         type: 'opportunity',
                         itemType: 'Expansion',
                         clientId: client.id,
-                        clientName: client.name,
+                        clientName: client.name || 'Unknown Client',
                         stage: mappedStage,
-                        value: opp.value || 0,
+                        value: Number(opp.value) || 0,
                         createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
-                        expectedCloseDate: opp.expectedCloseDate || null
+                        expectedCloseDate: opp.expectedCloseDate || null,
+                        industry: opp.industry || client.industry || 'Other'
                     });
                 });
             } else {
@@ -433,8 +460,10 @@ const Pipeline = () => {
 
         setDraggedItem(null);
         setDraggedType(null);
-        setRefreshKey(k => k + 1);
         setIsDragging(false);
+        
+        // Don't trigger full reload after drag - state is already updated
+        // Only reload if we need to sync with server changes
     };
 
     const handleDragEnd = () => {

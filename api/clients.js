@@ -59,13 +59,38 @@ async function handler(req, res) {
     // List Clients (GET /api/clients)
     if (req.method === 'GET' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
       try {
-        // Return ALL clients for all users - this is a system where all users should see all clients
+        // Return ONLY clients (not leads) - filter by type='client' explicitly
+        // Also exclude null/undefined types to ensure data integrity
         // Optimized: removed opportunities include and expensive logging
-        const clients = await prisma.client.findMany({ 
+        const allClients = await prisma.client.findMany({ 
+          where: {
+            type: 'client'
+          },
           orderBy: { createdAt: 'desc' }
         })
         
-        console.log('📊 Clients fetched from DB:', clients.length)
+        // Additional safeguard: filter out any leads or records with missing/invalid type
+        const clients = allClients.filter(client => {
+          // Explicitly check that type is exactly 'client' (not null, undefined, or 'lead')
+          return client.type === 'client';
+        })
+        
+        // Log warning if any records with null type exist in the database
+        const recordsWithNullType = await prisma.client.findMany({
+          where: {
+            OR: [
+              { type: null },
+              { type: { not: { in: ['client', 'lead'] } } }
+            ]
+          },
+          select: { id: true, name: true, type: true }
+        })
+        if (recordsWithNullType.length > 0) {
+          console.warn(`⚠️ Found ${recordsWithNullType.length} Client records with invalid type:`, recordsWithNullType)
+        }
+        
+        console.log('📊 Clients fetched from DB (before filter):', allClients.length)
+        console.log('📊 Clients after filtering:', clients.length)
         console.log('📊 Client keys:', clients.length > 0 ? Object.keys(clients[0]) : 'No clients')
         
         // Parse JSON fields before returning
@@ -193,9 +218,15 @@ async function handler(req, res) {
       if (req.method === 'PATCH') {
         const body = req.body || {}
         
+        // First verify this is actually a client (not a lead being updated through wrong endpoint)
+        const existing = await prisma.client.findUnique({ where: { id } })
+        if (existing && existing.type === 'lead') {
+          return badRequest(res, 'Cannot update lead through clients endpoint')
+        }
+        
         const updateData = {
           name: body.name,
-          type: body.type, // Handle type field for leads vs clients
+          type: body.type || 'client', // Default to 'client' to prevent null types
           industry: body.industry,
           status: body.status,
           revenue: body.revenue,

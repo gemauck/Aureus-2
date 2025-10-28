@@ -140,8 +140,12 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
                             } : p
                         );
                         if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            await window.dataService.setProjects(updatedProjects);
-                            console.log('✅ localStorage updated for consistency');
+                            try {
+                                await window.dataService.setProjects(updatedProjects);
+                                console.log('✅ localStorage updated for consistency');
+                            } catch (saveError) {
+                                console.warn('Failed to save projects to dataService:', saveError);
+                            }
                         }
                     }
                 }
@@ -1621,7 +1625,11 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
                                         p.id === project.id ? { ...p, ...projectData } : p
                                     );
                                     if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                                        await window.dataService.setProjects(updatedProjects);
+                                        try {
+                                            await window.dataService.setProjects(updatedProjects);
+                                        } catch (saveError) {
+                                            console.warn('Failed to save projects to dataService:', saveError);
+                                        }
                                     } else {
                                         console.warn('DataService not available or setProjects method not found');
                                     }

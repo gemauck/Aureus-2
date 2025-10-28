@@ -24,17 +24,43 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         try {
             // Handle stringified data
             if (typeof data === 'string') {
-                // Remove extra quotes and escaping
                 let cleaned = data.trim();
-                // Remove outer quotes if present
-                if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
-                    cleaned = cleaned.slice(1, -1);
+                if (!cleaned) return [];
+                
+                // Recursively unescape until we get valid JSON
+                let attempts = 0;
+                const maxAttempts = 10;
+                
+                while (attempts < maxAttempts) {
+                    try {
+                        // Try to parse directly first
+                        const parsed = JSON.parse(cleaned);
+                        if (Array.isArray(parsed)) return parsed;
+                        // If it's a string, continue unescaping
+                        if (typeof parsed === 'string') {
+                            cleaned = parsed;
+                            attempts++;
+                            continue;
+                        }
+                        return [];
+                    } catch (parseError) {
+                        // If parsing fails, try to unescape
+                        if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+                            cleaned = cleaned.slice(1, -1);
+                        }
+                        // Unescape backslashes and quotes
+                        cleaned = cleaned.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                        attempts++;
+                        
+                        // If we've made no progress, give up
+                        if (attempts >= maxAttempts) {
+                            console.warn('Failed to parse documentSections after', attempts, 'attempts:', parseError);
+                            return [];
+                        }
+                    }
                 }
-                // Handle escaped quotes
-                cleaned = cleaned.replace(/\\"/g, '"');
-                // Parse JSON
-                const parsed = JSON.parse(cleaned);
-                return Array.isArray(parsed) ? parsed : [];
+                
+                return [];
             }
         } catch (e) {
             console.warn('Failed to parse documentSections:', e);
@@ -106,8 +132,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             return p;
                         });
                         if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                            await window.dataService.setProjects(updatedProjects);
-                            console.log('✅ localStorage updated for document sections');
+                            try {
+                                await window.dataService.setProjects(updatedProjects);
+                                console.log('✅ localStorage updated for document sections');
+                            } catch (saveError) {
+                                console.warn('Failed to save projects to dataService:', saveError);
+                            }
                         }
                     }
                 }
@@ -161,10 +191,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleSaveSection = (sectionData) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+
         if (editingSection) {
             setSections(sections.map(s => 
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
             ));
+            
+            // Log to audit trail
+            if (window.AuditLogger) {
+                window.AuditLogger.log(
+                    'update',
+                    'projects',
+                    {
+                        action: 'Section Updated',
+                        projectId: project.id,
+                        projectName: project.name,
+                        sectionName: sectionData.name,
+                        oldSectionName: editingSection.name
+                    },
+                    currentUser
+                );
+            }
         } else {
             const newSection = {
                 id: Date.now(),
@@ -172,15 +221,49 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 documents: []
             };
             setSections([...sections, newSection]);
+            
+            // Log to audit trail
+            if (window.AuditLogger) {
+                window.AuditLogger.log(
+                    'create',
+                    'projects',
+                    {
+                        action: 'Section Created',
+                        projectId: project.id,
+                        projectName: project.name,
+                        sectionName: sectionData.name
+                    },
+                    currentUser
+                );
+            }
         }
         setShowSectionModal(false);
         setEditingSection(null);
     };
 
     const handleDeleteSection = (sectionId) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        
         const section = sections.find(s => s.id === sectionId);
         if (confirm(`Delete section "${section.name}" and all its documents?`)) {
             setSections(sections.filter(s => s.id !== sectionId));
+            
+            // Log to audit trail
+            if (window.AuditLogger) {
+                window.AuditLogger.log(
+                    'delete',
+                    'projects',
+                    {
+                        action: 'Section Deleted',
+                        projectId: project.id,
+                        projectName: project.name,
+                        sectionName: section.name,
+                        documentsCount: section.documents?.length || 0
+                    },
+                    currentUser
+                );
+            }
         }
     };
 
@@ -197,16 +280,40 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleSaveDocument = (documentData) => {
-        setSections(sections.map(section => {
-            if (section.id === editingSectionId) {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        
+        const section = sections.find(s => s.id === editingSectionId);
+        
+        setSections(sections.map(s => {
+            if (s.id === editingSectionId) {
                 if (editingDocument) {
                     // Update existing document
-                    return {
-                        ...section,
-                        documents: section.documents.map(doc =>
+                    const updated = {
+                        ...s,
+                        documents: s.documents.map(doc =>
                             doc.id === editingDocument.id ? { ...doc, ...documentData } : doc
                         )
                     };
+                    
+                    // Log to audit trail
+                    if (window.AuditLogger) {
+                        window.AuditLogger.log(
+                            'update',
+                            'projects',
+                            {
+                                action: 'Document Updated',
+                                projectId: project.id,
+                                projectName: project.name,
+                                sectionName: section?.name || 'Unknown',
+                                documentName: documentData.name,
+                                oldDocumentName: editingDocument.name
+                            },
+                            currentUser
+                        );
+                    }
+                    
+                    return updated;
                 } else {
                     // Add new document
                     const newDocument = {
@@ -215,13 +322,31 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         collectionStatus: {}, // Store month-year status
                         comments: {} // Store month-year comments
                     };
-                    return {
-                        ...section,
-                        documents: [...section.documents, newDocument]
+                    const updated = {
+                        ...s,
+                        documents: [...s.documents, newDocument]
                     };
+                    
+                    // Log to audit trail
+                    if (window.AuditLogger) {
+                        window.AuditLogger.log(
+                            'create',
+                            'projects',
+                            {
+                                action: 'Document Created',
+                                projectId: project.id,
+                                projectName: project.name,
+                                sectionName: section?.name || 'Unknown',
+                                documentName: documentData.name
+                            },
+                            currentUser
+                        );
+                    }
+                    
+                    return updated;
                 }
             }
-            return section;
+            return s;
         }));
         setShowDocumentModal(false);
         setEditingDocument(null);
@@ -229,25 +354,55 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     const handleDeleteDocument = (sectionId, documentId) => {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+        
         if (confirm('Delete this document/data item?')) {
-            setSections(sections.map(section => {
-                if (section.id === sectionId) {
+            setSections(sections.map(s => {
+                if (s.id === sectionId) {
                     return {
-                        ...section,
-                        documents: section.documents.filter(doc => doc.id !== documentId)
+                        ...s,
+                        documents: s.documents.filter(doc => doc.id !== documentId)
                     };
                 }
-                return section;
+                return s;
             }));
+            
+            // Log to audit trail
+            if (window.AuditLogger) {
+                window.AuditLogger.log(
+                    'delete',
+                    'projects',
+                    {
+                        action: 'Document Deleted',
+                        projectId: project.id,
+                        projectName: project.name,
+                        sectionName: section?.name || 'Unknown',
+                        documentName: document?.name || 'Unknown'
+                    },
+                    currentUser
+                );
+            }
         }
     };
 
     const handleUpdateStatus = (sectionId, documentId, month, status) => {
-        setSections(sections.map(section => {
-            if (section.id === sectionId) {
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+
+        // Get section and document names for audit trail
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+        const oldStatus = document?.collectionStatus?.[`${month}-${selectedYear}`];
+
+        setSections(sections.map(s => {
+            if (s.id === sectionId) {
                 return {
-                    ...section,
-                    documents: section.documents.map(doc => {
+                    ...s,
+                    documents: s.documents.map(doc => {
                         if (doc.id === documentId) {
                             const monthKey = `${month}-${selectedYear}`;
                             return {
@@ -262,8 +417,29 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                     })
                 };
             }
-            return section;
+            return s;
         }));
+
+        // Log to audit trail
+        if (window.AuditLogger) {
+            const statusLabel = statusOptions.find(opt => opt.value === status)?.label || status;
+            window.AuditLogger.log(
+                'update',
+                'projects',
+                {
+                    action: 'Status Updated',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: section?.name || 'Unknown',
+                    documentName: document?.name || 'Unknown',
+                    month: month,
+                    year: selectedYear,
+                    oldStatus: oldStatus || 'Not Set',
+                    newStatus: statusLabel
+                },
+                currentUser
+            );
+        }
     };
 
     const handleAddComment = (sectionId, documentId, month, commentText) => {
@@ -401,14 +577,17 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         // Comments
                         const comments = document.comments?.[monthKey] || [];
                         const commentsText = comments.map((comment, idx) => {
-                            const date = new Date(comment.date).toLocaleString('en-ZA', {
+                            const date = new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', {
                                 year: 'numeric',
                                 month: 'short',
                                 day: '2-digit',
                                 hour: '2-digit',
                                 minute: '2-digit'
                             });
-                            return `[${date}] ${comment.author || 'User'}: ${comment.text}`;
+                            const authorInfo = comment.authorEmail 
+                                ? `${comment.author || 'User'} (${comment.authorEmail})`
+                                : (comment.author || 'User');
+                            return `[${date}] ${authorInfo}: ${comment.text}`;
                         }).join('\n\n');
                         row.push(commentsText);
                     });
@@ -778,12 +957,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
                                             <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                <span>{comment.author || 'User'}</span>
-                                                <span>{new Date(comment.date).toLocaleString('en-ZA', { 
+                                                <span className="font-medium">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</span>
+                                                <span>{new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', { 
                                                     month: 'short', 
                                                     day: '2-digit',
                                                     hour: '2-digit',
-                                                    minute: '2-digit'
+                                                    minute: '2-digit',
+                                                    year: 'numeric'
                                                 })}</span>
                                             </div>
                                         </div>

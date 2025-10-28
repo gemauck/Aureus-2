@@ -207,6 +207,36 @@
     <!-- Babel Standalone -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Wait for Babel to be ready -->
+    <script>
+        (function() {
+            let babelReady = false;
+            const checkBabel = setInterval(() => {
+                if (typeof Babel !== 'undefined' && Babel.transform) {
+                    babelReady = true;
+                    clearInterval(checkBabel);
+                    window.BabelReady = true;
+                    // Only log if not in performance mode
+                    if (!window.debug || !window.debug.performanceMode) {
+                        console.log('✅ Babel Standalone is ready');
+                    }
+                    
+                    // Dispatch ready event
+                    window.dispatchEvent(new Event('babelready'));
+                }
+            }, 50);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                if (!babelReady) {
+                    clearInterval(checkBabel);
+                    console.error('❌ Babel failed to load after 5 seconds');
+                    window.BabelReady = false;
+                }
+            }, 5000);
+        })();
+    </script>
+    
     <!-- Fix for exports undefined errors -->
     <script>
         // Enhanced polyfill for CommonJS exports in browser environment
@@ -280,6 +310,47 @@
     <!-- Map Component -->
     <script type="text/babel" src="./src/components/maps/MapComponent.jsx"></script>
     
+    <!-- Verify critical dependencies before loading components -->
+    <script>
+        // Ensure all critical dependencies are loaded
+        const checkDependencies = () => {
+            const deps = {
+                React: typeof React !== 'undefined',
+                ReactDOM: typeof ReactDOM !== 'undefined',
+                Babel: typeof Babel !== 'undefined',
+                storage: typeof window.storage !== 'undefined'
+            };
+            
+            const allReady = Object.values(deps).every(v => v);
+            
+            const performanceMode = window.debug && window.debug.performanceMode;
+            
+            if (!allReady) {
+                if (!performanceMode) {
+                    const missing = Object.entries(deps).filter(([k, v]) => !v).map(([k]) => k);
+                    console.warn('⚠️ Dependencies not ready:', missing);
+                }
+                return false;
+            }
+            
+            if (!performanceMode) {
+                console.log('✅ All critical dependencies ready');
+            }
+            return true;
+        };
+        
+        // Check dependencies before components load
+        window.checkDependencies = checkDependencies;
+        
+        // Also check when Babel is ready
+        window.addEventListener('babelready', () => {
+            setTimeout(checkDependencies, 100);
+        });
+        
+        // Initial check
+        setTimeout(checkDependencies, 500);
+    </script>
+    
     <!-- Theme Provider -->
     <script type="text/babel" src="./src/components/theme/ThemeProvider.jsx"></script>
     
@@ -303,9 +374,10 @@
     <!-- Wait for storage to be ready before loading auth components -->
     <script type="text/babel">
         // Ensure storage is ready before loading auth components
+        const performanceMode = window.debug && window.debug.performanceMode;
         if (typeof window.storage === 'undefined') {
             console.error('❌ Storage not loaded before auth components');
-        } else {
+        } else if (!performanceMode) {
             console.log('✅ Storage ready, loading auth components');
         }
     </script>
@@ -339,13 +411,14 @@
         // Set to false to revert to old behavior instantly
         window.USE_LOAD_ONCE_ARCHITECTURE = true;
         
-        if (window.USE_LOAD_ONCE_ARCHITECTURE) {
+        const performanceMode = window.debug && window.debug.performanceMode;
+        if (window.USE_LOAD_ONCE_ARCHITECTURE && !performanceMode) {
             console.log('🚀 Load-Once Architecture ENABLED');
             console.log('   ✅ Data loads once, cached in memory');
             console.log('   ✅ Instant navigation (< 100ms)');
             console.log('   ✅ No race conditions');
             console.log('   ✅ Optimistic updates');
-        } else {
+        } else if (!window.USE_LOAD_ONCE_ARCHITECTURE && !performanceMode) {
             console.log('⚠️ Using Legacy Architecture');
         }
     </script>
@@ -556,12 +629,61 @@
     
     <!-- Mount App - Wait for all scripts to load -->
     <script>
-        // Simple mount script that waits for dependencies and mounts
+        // Enhanced mount script with better error handling and Babel support
         let retryCount = 0;
-        const MAX_RETRIES = 50; // Increased to 10 seconds (50 * 200ms)
+        const MAX_RETRIES = 100; // Increased to 20 seconds (100 * 200ms)
         let mounted = false;
+        let manualLoadAttempted = false;
         
-        const checkAndMount = () => {
+        // Helper to manually load and transform a component
+        const manuallyLoadComponent = async (filePath, windowName) => {
+            try {
+                const performanceMode = window.debug && window.debug.performanceMode;
+                if (!performanceMode) {
+                    console.log(`🔧 Manually loading ${windowName} from ${filePath}...`);
+                }
+                const response = await fetch(filePath);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                const code = await response.text();
+                if (!performanceMode) {
+                    console.log(`📄 ${windowName} code fetched, length:`, code.length);
+                }
+                
+                // Transform with Babel
+                if (!performanceMode) {
+                    console.log(`🔄 Transforming ${windowName} with Babel...`);
+                }
+                const transformed = Babel.transform(code, { 
+                    presets: ['react'],
+                    filename: filePath.split('/').pop()
+                }).code;
+                if (!performanceMode) {
+                    console.log(`✅ ${windowName} transformed, length:`, transformed.length);
+                }
+                
+                // Execute the transformed code
+                eval(transformed);
+                
+                // Check if component was registered
+                if (window[windowName]) {
+                    if (!performanceMode) {
+                        console.log(`✅ ${windowName} successfully loaded and registered`);
+                    }
+                    return true;
+                } else {
+                    console.warn(`⚠️ ${windowName} code executed but not registered on window`);
+                    return false;
+                }
+            } catch (error) {
+                console.error(`❌ ${windowName} manual load error:`, error);
+                console.error('Stack:', error.stack);
+                return false;
+            }
+        };
+        
+        const checkAndMount = async () => {
             // Don't mount twice
             if (mounted) return;
             
@@ -581,7 +703,10 @@
             if (allLoaded) {
                 try {
                     mounted = true;
-                    console.log('✅ All components loaded, mounting app...', components);
+                    const performanceMode = window.debug && window.debug.performanceMode;
+                    if (!performanceMode) {
+                        console.log('✅ All components loaded, mounting app...', components);
+                    }
                     const root = document.getElementById('root');
                     if (!root) {
                         console.error('❌ Root element not found');
@@ -592,10 +717,14 @@
                     if (window.ReactDOM.createRoot) {
                         const reactRoot = window.ReactDOM.createRoot(root);
                         reactRoot.render(window.React.createElement(window.App));
-                        console.log('✅ App mounted successfully using React 18');
+                        if (!performanceMode) {
+                            console.log('✅ App mounted successfully using React 18');
+                        }
                     } else if (window.ReactDOM.render) {
                         window.ReactDOM.render(window.React.createElement(window.App), root);
-                        console.log('✅ App mounted successfully using React 17');
+                        if (!performanceMode) {
+                            console.log('✅ App mounted successfully using React 17');
+                        }
                     } else {
                         throw new Error('ReactDOM not available');
                     }
@@ -606,12 +735,46 @@
             } else {
                 retryCount++;
                 
-                // Log missing components every 5 retries
-                if (retryCount % 5 === 0) {
+                // Log missing components every 5 retries (and not in performance mode)
+                const performanceMode = window.debug && window.debug.performanceMode;
+                if (retryCount % 5 === 0 && !performanceMode) {
                     const missing = Object.entries(components)
                         .filter(([k, v]) => !v)
                         .map(([k]) => k);
                     console.log(`⏳ Waiting for components... (${retryCount}/${MAX_RETRIES}) Missing:`, missing);
+                }
+                
+                // Attempt manual load after 10 seconds if still missing critical components
+                if (retryCount === 50 && !manualLoadAttempted && typeof Babel !== 'undefined') {
+                    manualLoadAttempted = true;
+                    const performanceMode = window.debug && window.debug.performanceMode;
+                    if (!performanceMode) {
+                        console.warn('⚠️ Components still missing after 10s, attempting manual load...');
+                    }
+                    
+                    const missing = Object.entries(components)
+                        .filter(([k, v]) => !v)
+                        .map(([k]) => k);
+                    
+                    // Manual load in dependency order
+                    if (missing.includes('ThemeProvider')) {
+                        await manuallyLoadComponent('./src/components/theme/ThemeProvider.jsx', 'ThemeProvider');
+                    }
+                    if (missing.includes('DataProvider')) {
+                        await manuallyLoadComponent('./src/components/common/DataContext.jsx', 'DataProvider');
+                    }
+                    if (missing.includes('AuthProvider')) {
+                        await manuallyLoadComponent('./src/components/auth/AuthProvider.jsx', 'AuthProvider');
+                    }
+                    if (missing.includes('MainLayout')) {
+                        await manuallyLoadComponent('./src/components/layout/MainLayout.jsx', 'MainLayout');
+                    }
+                    if (missing.includes('App')) {
+                        await manuallyLoadComponent('./src/App.jsx', 'App');
+                    }
+                    
+                    // Reset retry count to give manual load a chance
+                    retryCount = 0;
                 }
                 
                 if (retryCount < MAX_RETRIES) {
@@ -626,110 +789,53 @@
                     console.error('❌ Failed to load components after', MAX_RETRIES, 'retries');
                     console.error('Missing:', missing);
                     
-                    document.getElementById('root').innerHTML = `
-                        <div style="padding: 40px; text-align: center; font-family: system-ui;">
-                            <h2 style="color: #dc2626;">Failed to load application</h2>
-                            <p style="color: #d97706; margin: 20px 0;">Missing: ${missing.join(', ')}</p>
-                            <p style="color: #666; margin: 10px 0; font-size: 14px;">Check browser console for details</p>
-                            <button onclick="location.reload()" style="padding: 12px 24px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px;">
-                                Reload Page
-                            </button>
-                        </div>
-                    `;
+                    const root = document.getElementById('root');
+                    if (root) {
+                        root.innerHTML = `
+                            <div style="padding: 40px; text-align: center; font-family: system-ui;">
+                                <h2 style="color: #dc2626;">Failed to load application</h2>
+                                <p style="color: #d97706; margin: 20px 0;">Missing: ${missing.join(', ')}</p>
+                                <p style="color: #666; margin: 10px 0; font-size: 14px;">Check browser console for details</p>
+                                <button onclick="location.reload()" style="padding: 12px 24px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; margin-top: 10px;">
+                                    Reload Page
+                                </button>
+                            </div>
+                        `;
+                    }
                 }
             }
         };
         
         // Check for Babel transformation errors
         window.addEventListener('error', (event) => {
-            if (event.filename && (event.filename.includes('App.jsx') || event.filename.includes('MainLayout.jsx'))) {
-                console.error('❌ Error in component:', event.filename, event.message);
+            const filename = event.filename || '';
+            if (filename.includes('.jsx') || filename.includes('.js')) {
+                console.error('❌ Script error:', {
+                    filename: filename.split('/').pop(),
+                    message: event.message,
+                    line: event.lineno,
+                    col: event.colno
+                });
             }
         }, true);
         
         // Start checking when DOM is ready
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                console.log('🔍 DOM loaded, waiting for components...');
+                const performanceMode = window.debug && window.debug.performanceMode;
+                if (!performanceMode) {
+                    console.log('🔍 DOM loaded, waiting for components...');
+                }
                 // Wait longer for Babel to transform all scripts
-                setTimeout(checkAndMount, 2000);
+                setTimeout(checkAndMount, 1000);
             });
         } else {
-            console.log('🔍 DOM already loaded, waiting for components...');
-            setTimeout(checkAndMount, 2000);
-        }
-        
-        // Manual fallback: Load App and MainLayout if Babel fails
-        setTimeout(async () => {
-            if (!mounted && (!window.App || !window.MainLayout)) {
-                console.warn('⚠️ Babel failed to load App/MainLayout, trying manual load...');
-                
-                try {
-                    // Try to manually fetch and execute MainLayout first
-                    if (!window.MainLayout) {
-                        try {
-                            console.log('🔧 Manually loading MainLayout.jsx...');
-                            const mainLayoutResponse = await fetch('./src/components/layout/MainLayout.jsx');
-                            if (!mainLayoutResponse.ok) {
-                                throw new Error(`HTTP ${mainLayoutResponse.status}: ${mainLayoutResponse.statusText}`);
-                            }
-                            const mainLayoutCode = await mainLayoutResponse.text();
-                            console.log('📄 MainLayout code fetched, length:', mainLayoutCode.length);
-                            
-                            // Transform with Babel inline
-                            console.log('🔄 Transforming MainLayout with Babel...');
-                            const transformed = Babel.transform(mainLayoutCode, { 
-                                presets: ['react'],
-                                filename: 'MainLayout.jsx'
-                            }).code;
-                            console.log('✅ MainLayout transformed, length:', transformed.length);
-                            
-                            eval(transformed);
-                            console.log('✅ MainLayout manually loaded, window.MainLayout:', typeof window.MainLayout);
-                        } catch (error) {
-                            console.error('❌ MainLayout manual load error:', error);
-                            console.error('Stack:', error.stack);
-                        }
-                    }
-                    
-                    // Then load App
-                    if (!window.App) {
-                        try {
-                            console.log('🔧 Manually loading App.jsx...');
-                            const appResponse = await fetch('./src/App.jsx');
-                            if (!appResponse.ok) {
-                                throw new Error(`HTTP ${appResponse.status}: ${appResponse.statusText}`);
-                            }
-                            const appCode = await appResponse.text();
-                            console.log('📄 App code fetched, length:', appCode.length);
-                            
-                            console.log('🔄 Transforming App with Babel...');
-                            const transformed = Babel.transform(appCode, { 
-                                presets: ['react'],
-                                filename: 'App.jsx'
-                            }).code;
-                            console.log('✅ App transformed, length:', transformed.length);
-                            
-                            eval(transformed);
-                            console.log('✅ App manually loaded, window.App:', typeof window.App);
-                        } catch (error) {
-                            console.error('❌ App manual load error:', error);
-                            console.error('Stack:', error.stack);
-                        }
-                    }
-                    
-                    // Try mounting again
-                    if (window.App && window.MainLayout) {
-                        console.log('🔄 Retrying mount after manual load...');
-                        mounted = false;
-                        retryCount = 0;
-                        checkAndMount();
-                    }
-                } catch (error) {
-                    console.error('❌ Manual load failed:', error);
-                }
+            const performanceMode = window.debug && window.debug.performanceMode;
+            if (!performanceMode) {
+                console.log('🔍 DOM already loaded, waiting for components...');
             }
-        }, 8000);
+            setTimeout(checkAndMount, 1000);
+        }
     </script>
 </body>
 </html>

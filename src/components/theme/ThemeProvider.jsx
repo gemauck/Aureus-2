@@ -100,5 +100,12 @@ const useTheme = () => {
 };
 
 // Make available globally
-window.ThemeProvider = ThemeProvider;
-window.useTheme = useTheme;
+try {
+    window.ThemeProvider = ThemeProvider;
+    window.useTheme = useTheme;
+    if (window.debug && !window.debug.performanceMode) {
+        console.log('✅ ThemeProvider.jsx loaded and registered', typeof window.ThemeProvider);
+    }
+} catch (error) {
+    console.error('❌ ThemeProvider.jsx: Error registering component:', error);
+}

@@ -1,5 +1,7 @@
 // Main App Component
-console.log('🔍 App.jsx: Script is executing...');
+if (window.debug && !window.debug.performanceMode) {
+    console.log('🔍 App.jsx: Script is executing...');
+}
 const AppContent = () => {
     const { user, loading: authLoading } = window.useAuth();
     const { initialLoadComplete, globalLoading } = window.useData();
@@ -76,5 +78,16 @@ if (!document.getElementById('loading-animations')) {
 }
 
 // Make App available globally
-window.App = App;
-console.log('✅ App.jsx loaded and registered on window.App');
+try {
+    window.App = App;
+    if (window.debug && !window.debug.performanceMode) {
+        console.log('✅ App.jsx loaded and registered on window.App', typeof window.App);
+    }
+    
+    // Verify React is available
+    if (!window.React) {
+        console.error('❌ React not available when App.jsx executed');
+    }
+} catch (error) {
+    console.error('❌ App.jsx: Error registering component:', error);
+}

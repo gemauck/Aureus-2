@@ -751,6 +751,21 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         setFormData(updatedFormData);
         logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
         
+        // Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'comment',
+                'clients',
+                {
+                    action: 'Comment Added',
+                    clientId: formData.id,
+                    clientName: formData.name,
+                    commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
+                },
+                currentUser
+            );
+        }
+        
         // Save comment changes immediately - stay in edit mode
         isAutoSavingRef.current = true;
         onSave(updatedFormData, true);
