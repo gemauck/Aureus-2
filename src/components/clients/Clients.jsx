@@ -1375,7 +1375,7 @@ const Clients = React.memo(() => {
     const filteredLeads = leads.filter(lead => {
         const matchesSearch = searchTerm === '' || 
             lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (lead.contacts?.[0]?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase());
+            // Contact search removed for leads
         
         const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
         // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
@@ -1739,7 +1739,7 @@ const Clients = React.memo(() => {
                                                     <i className="fas fa-user text-xs text-gray-500"></i>
                                                 </div>
                                                 <div className="flex-1">
-                                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{lead.contacts?.[0]?.name || 'No contact'}</p>
+                                                    {/* Contact removed from leads display */}
                                                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || 'No email'}</p>
                                                 </div>
                                             </div>
@@ -1913,7 +1913,6 @@ const Clients = React.memo(() => {
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Lead</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Contact</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Industry</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
@@ -1923,7 +1922,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {filteredLeads.length === 0 ? (
                             <tr>
-                                <td colSpan="6" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
                                         <i className="fas fa-user-plus text-2xl text-gray-400"></i>
                                     </div>
@@ -1940,10 +1939,6 @@ const Clients = React.memo(() => {
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className={`text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.contacts?.[0]?.name || 'No contact'}</div>
-                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || ''}</div>
                                     </td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
