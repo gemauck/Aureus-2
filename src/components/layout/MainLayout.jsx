@@ -166,23 +166,36 @@ const MainLayout = () => {
     ];
 
     // Filter menu items based on user role (admin-only items)
+    // Track if we're waiting for role refresh (to allow temporary access)
+    const [refreshingRole, setRefreshingRole] = React.useState(false);
+    
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
         // Check if user exists - user object might exist even without id/email initially
         const hasUser = !!user && user !== null && user !== undefined;
         
         // If user exists but doesn't have a role yet, try to refresh from API
-        if (hasUser && !user.role && window.useAuth) {
+        if (hasUser && !user.role && window.useAuth && !refreshingRole) {
             const { refreshUser } = window.useAuth();
             if (refreshUser) {
                 console.log('🔄 User missing role, refreshing from API...');
-                refreshUser();
+                setRefreshingRole(true);
+                refreshUser().then((refreshedUser) => {
+                    if (refreshedUser?.role) {
+                        console.log('✅ Role refreshed:', refreshedUser.role);
+                    }
+                    // Stop allowing fallback after 3 seconds
+                    setTimeout(() => setRefreshingRole(false), 3000);
+                }).catch(() => {
+                    setTimeout(() => setRefreshingRole(false), 3000);
+                });
             }
         }
         
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
-                return userRole === 'admin';
+                // Allow if admin OR temporarily if we're refreshing role (fallback)
+                return userRole === 'admin' || (refreshingRole && hasUser && !userRole);
             }
             return true;
         });
@@ -190,6 +203,7 @@ const MainLayout = () => {
         console.error('🚨 DEBUG: Menu filtering result:', {
             userRole,
             hasUser,
+            refreshingRole,
             user: { id: user?.id, email: user?.email, role: user?.role },
             menuItemsCount: filtered.length,
             menuLabels: filtered.map(i => i.label),
@@ -198,13 +212,14 @@ const MainLayout = () => {
         });
         
         return filtered;
-    }, [user?.role, user?.id, user?.email]);
+    }, [user?.role, user?.id, user?.email, refreshingRole]);
 
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        return userRole === 'admin';
-    }, [user?.role]);
+        // Allow temporarily if refreshing role (fallback for undefined role during refresh)
+        return userRole === 'admin' || (refreshingRole && user && !user.role);
+    }, [user?.role, refreshingRole]);
 
     // Redirect non-admin users away from admin-only pages
     React.useEffect(() => {
