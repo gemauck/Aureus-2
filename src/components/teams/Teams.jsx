@@ -79,6 +79,7 @@ const Teams = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedTeam, setSelectedTeam] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [isReady, setIsReady] = useState(false);
     
     // Modal states
     const [showDocumentModal, setShowDocumentModal] = useState(false);
@@ -141,8 +142,12 @@ const Teams = () => {
                 setChecklists(savedChecklists);
                 setNotices(savedNotices);
                 setWorkflowExecutions(savedExecutions);
+                
+                // Delay rendering to prevent renderer crash
+                setTimeout(() => setIsReady(true), 100);
             } catch (error) {
                 console.error('❌ Teams: Error loading data:', error);
+                setIsReady(true); // Show error state
             }
         };
 
@@ -354,6 +359,18 @@ const Teams = () => {
         setViewingDocument(document);
         setShowDocumentViewModal(true);
     };
+
+    // Show loading state initially to prevent renderer crash
+    if (!isReady) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-primary-600 mx-auto mb-4"></div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading Teams...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-3">
