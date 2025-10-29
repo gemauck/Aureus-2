@@ -562,16 +562,16 @@ const Pipeline = () => {
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-lg p-3 border border-gray-200 shadow-sm cursor-move ${!isDragging ? 'hover:shadow-md transition' : ''} ${
+                className={`bg-white rounded-lg p-2.5 border border-gray-200 shadow-sm cursor-move ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
             >
                 {/* Header */}
-                <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
+                <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                    <div className="font-medium text-xs text-gray-900 line-clamp-2 flex-1">
                         {item.name}
                     </div>
-                    <span className={`px-2 py-0.5 text-xs rounded-full font-medium shrink-0 ${
+                    <span className={`px-1.5 py-0.5 text-[10px] rounded-full font-medium shrink-0 ${
                         item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}>
                         {item.type === 'lead' ? 'LEAD' : 'OPP'}
@@ -579,8 +579,8 @@ const Pipeline = () => {
                 </div>
 
                 {/* Contact/Client */}
-                <div className="text-xs text-gray-600 mb-2 flex items-center gap-1">
-                    <i className={`fas ${item.type === 'lead' ? 'fa-user' : 'fa-building'}`}></i>
+                <div className="text-[10px] text-gray-600 mb-1.5 flex items-center gap-1">
+                    <i className={`fas ${item.type === 'lead' ? 'fa-user' : 'fa-building'} text-[9px]`}></i>
                     <span className="truncate">
                         {item.type === 'lead' 
                             ? item.contacts?.[0]?.name || 'No contact'
@@ -590,27 +590,27 @@ const Pipeline = () => {
                 </div>
 
                 {/* Value */}
-                <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-bold text-gray-900">
+                <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-bold text-gray-900">
                         R {item.value.toLocaleString('en-ZA')}
                     </span>
                 </div>
 
                 {/* Age Badge */}
-                <div className="flex items-center justify-between text-xs">
-                    <span className={`px-2 py-0.5 rounded font-medium ${getAgeBadgeColor(age)}`}>
+                <div className="flex items-center justify-between text-[10px]">
+                    <span className={`px-1.5 py-0.5 rounded font-medium ${getAgeBadgeColor(age)}`}>
                         {age} {age === 1 ? 'day' : 'days'}
                     </span>
                     {item.industry && (
-                        <span className="text-gray-500">{item.industry}</span>
+                        <span className="text-gray-500 text-[9px]">{item.industry}</span>
                     )}
                 </div>
 
                 {/* Expected Close Date */}
                 {item.expectedCloseDate && (
-                    <div className="mt-2 pt-2 border-t border-gray-100">
-                        <div className="text-xs text-gray-600">
-                            <i className="fas fa-calendar-alt mr-1"></i>
+                    <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                        <div className="text-[10px] text-gray-600">
+                            <i className="fas fa-calendar-alt mr-1 text-[9px]"></i>
                             Close: {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')}
                         </div>
                     </div>
@@ -621,7 +621,7 @@ const Pipeline = () => {
 
     // Kanban Board View
     const KanbanView = () => (
-        <div className="flex gap-4 overflow-x-auto pb-4">
+        <div className="flex gap-3 overflow-x-auto pb-4">
             {pipelineStages.map(stage => {
                 const stageItems = filteredItems.filter(item => item.stage === stage.name);
                 const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
@@ -630,38 +630,38 @@ const Pipeline = () => {
                 return (
                     <div 
                         key={stage.id} 
-                        className={`flex-1 min-w-[300px] bg-gray-50 rounded-lg p-4 ${!isDragging ? 'transition-all' : ''} ${
+                        className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
                             isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50' : ''
                         }`}
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, stage.name)}
                     >
                         {/* Stage Header */}
-                        <div className="mb-3 px-1">
+                        <div className="mb-2 px-1">
                             <div className="flex items-center gap-2 mb-1">
-                                <div className={`w-8 h-8 bg-${stage.color}-100 rounded-lg flex items-center justify-center`}>
-                                    <i className={`fas ${stage.icon} text-${stage.color}-600 text-sm`}></i>
+                                <div className={`w-6 h-6 bg-${stage.color}-100 rounded-lg flex items-center justify-center`}>
+                                    <i className={`fas ${stage.icon} text-${stage.color}-600 text-xs`}></i>
                                 </div>
                                 <div className="flex-1">
-                                    <h3 className="text-sm font-semibold text-gray-900">{stage.name}</h3>
-                                    <p className="text-[10px] text-gray-500">{stage.avgDuration}</p>
+                                    <h3 className="text-xs font-semibold text-gray-900">{stage.name}</h3>
+                                    <p className="text-[9px] text-gray-500">{stage.avgDuration}</p>
                                 </div>
-                                <span className="px-2 py-1 bg-white rounded-full text-xs font-medium text-gray-700 border border-gray-200">
+                                <span className="px-1.5 py-0.5 bg-white rounded-full text-xs font-medium text-gray-700 border border-gray-200">
                                     {stageItems.length}
                                 </span>
                             </div>
                             
                             {/* Stage Metrics */}
-                            <div className="mt-2 p-2 bg-white rounded border border-gray-200">
-                                <div className="text-xs text-gray-600">
+                            <div className="mt-1.5 p-1.5 bg-white rounded border border-gray-200">
+                                <div className="text-[10px] text-gray-600">
                                     <span className="font-medium">Total:</span> R {stageValue.toLocaleString('en-ZA')}
                                 </div>
                             </div>
                         </div>
 
                         {/* Stage Description */}
-                        <div className="mb-3 px-1">
-                            <p className="text-[10px] text-gray-500 italic">{stage.description}</p>
+                        <div className="mb-2 px-1">
+                            <p className="text-[9px] text-gray-500 italic">{stage.description}</p>
                         </div>
 
                         {/* Cards */}

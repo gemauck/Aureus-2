@@ -1629,9 +1629,7 @@ const Clients = React.memo(() => {
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>New prospects</div>
                     </div>
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
-                        <div className="flex items-center justify-between mb-1">
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Opportunities</div>
-                        </div>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Opportunities</div>
                         <div className="text-2xl font-bold text-primary-600">{activeOpportunities.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Client expansions</div>
                     </div>
@@ -1654,7 +1652,7 @@ const Clients = React.memo(() => {
                 </div>
 
                 {/* Enhanced Pipeline Board */}
-                <div className="flex gap-6 overflow-x-auto pb-6">
+                <div className="flex gap-4 overflow-x-auto pb-6">
                     {pipelineStages.map(stage => {
                         const stageLeads = activeLeads.filter(lead => lead.stage === stage);
                         const stageOpps = activeOpportunities.filter(opp => opp.stage === stage);
@@ -1678,7 +1676,7 @@ const Clients = React.memo(() => {
                         return (
                             <div 
                                 key={stage} 
-                                className={`flex-1 min-w-[320px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
+                                className={`flex-1 min-w-[250px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
                                     isDark ? 'border-gray-700' : 'border-gray-200'
                                 } ${
                                     isDraggedOver ? `ring-2 ring-primary-500 ${isDark ? 'bg-primary-900' : 'bg-primary-50'} transform scale-105` : 'hover:shadow-xl'
@@ -1687,18 +1685,18 @@ const Clients = React.memo(() => {
                                 onDrop={(e) => handleDrop(e, stage)}
                             >
                                 {/* Stage Header with Gradient */}
-                                <div className={`bg-gradient-to-r ${stageColors[stage]} rounded-t-xl p-4 mb-4 -mx-1 -mt-1`}>
+                                <div className={`bg-gradient-to-r ${stageColors[stage]} rounded-t-xl p-3 mb-3 -mx-1 -mt-1`}>
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-                                                <i className={`fas ${stageIcons[stage]} text-white text-sm`}></i>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 bg-white/20 rounded-lg flex items-center justify-center">
+                                                <i className={`fas ${stageIcons[stage]} text-white text-xs`}></i>
                                             </div>
                                             <div>
-                                                <h3 className="text-white font-semibold text-lg">{stage}</h3>
-                                                <p className="text-white/80 text-sm">{stageCount} items</p>
+                                                <h3 className="text-white font-semibold text-sm">{stage}</h3>
+                                                <p className="text-white/80 text-xs">{stageCount} items</p>
                                             </div>
                                         </div>
-                                        <span className={`px-2 py-1 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-full text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} border`}>
+                                        <span className={`px-2 py-0.5 ${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-full text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} border`}>
                                             {stageLeads.length + stageOpps.length}
                                         </span>
                                     </div>
@@ -1724,7 +1722,7 @@ const Clients = React.memo(() => {
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenLead(lead)}
-                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-xl p-4 border transition-all duration-300 cursor-move group ${
+                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-xl p-3 border transition-all duration-300 cursor-move group ${
                                                 isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
                                             } ${
                                                 draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-lg hover:-translate-y-1'
@@ -1767,7 +1765,7 @@ const Clients = React.memo(() => {
                                                     }
                                                     handleOpenClient(client);
                                                 }}
-                                                className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-3 border shadow-sm hover:shadow-md cursor-move transition ${
+                                                className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-2.5 border shadow-sm hover:shadow-md cursor-move transition ${
                                                     draggedItem?.id === opp.id ? 'opacity-50' : ''
                                                 }`}
                                             >
