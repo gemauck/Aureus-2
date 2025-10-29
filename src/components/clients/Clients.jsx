@@ -121,6 +121,7 @@ const Clients = React.memo(() => {
         return `${Math.ceil(diffDays / 365)} years ago`;
     };
     const [leads, setLeads] = useState([]);
+    const [leadsCount, setLeadsCount] = useState(0);
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
@@ -184,11 +185,28 @@ const Clients = React.memo(() => {
         }
     };
 
-    // Load clients (fast) and projects on mount; defer leads until needed
+    // Load clients (fast) and projects on mount; load lightweight leads count
     useEffect(() => {
         console.log('🚀 Clients component mounted - loading data...');
         loadClients();
         loadProjects(); // Load projects too
+        
+        // Load leads count immediately (lightweight, no processing)
+        const loadLeadsCount = async () => {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token || !window.api?.getLeads) return;
+                
+                // Quick fetch - just get count, skip full processing
+                const apiResponse = await window.api.getLeads();
+                const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+                setLeadsCount(Array.isArray(rawLeads) ? rawLeads.length : 0);
+            } catch (error) {
+                // Silent fail - count will update when tab is clicked
+            }
+        };
+        // Load count in background, don't block initial render
+        setTimeout(() => loadLeadsCount(), 100);
     }, []);
 
     // Load leads only when user navigates to Leads or Pipeline
@@ -590,6 +608,7 @@ const Clients = React.memo(() => {
                 });
                 
             setLeads(mappedLeads);
+            setLeadsCount(mappedLeads.length); // Update count badge
             
             if (forceRefresh) {
                 // Count leads by status for accurate reporting
@@ -2183,7 +2202,7 @@ const Clients = React.memo(() => {
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
-                    Leads ({leads.length})
+                    Leads ({leadsCount})
                 </button>
                 <button
                     onClick={async () => {
