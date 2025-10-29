@@ -142,8 +142,12 @@ function checkEmailConfiguration() {
 export const sendInvitationEmail = async (invitationData) => {
     const { email, name, role, invitationLink } = invitationData;
     
+    const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    // Format from field with name "Abcotronics" if it's just an email address
+    const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+    
     const mailOptions = {
-        from: process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za',
+        from: fromAddress,
         replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
         to: email,
         subject: 'Invitation to Join Abcotronics System',
@@ -181,13 +185,13 @@ export const sendInvitationEmail = async (invitationData) => {
                     <div style="background: #e9ecef; padding: 15px; border-radius: 5px; margin: 20px 0;">
                         <p style="color: #666; margin: 0; font-size: 14px;">
                             <strong>Important:</strong> This invitation link will expire in 7 days. 
-                            If you need help, contact us at <a href="mailto:support@abcotronics.co.za">support@abcotronics.co.za</a>
+                            If you need help, contact us at <a href="mailto:garethm@abcotronics.co.za">garethm@abcotronics.co.za</a>
                         </p>
                     </div>
                     
                     <p style="color: #555; line-height: 1.6;">
                         Best regards,<br>
-                        The Abcotronics Team
+                        Gareth Mauck
                     </p>
                 </div>
                 
@@ -211,10 +215,10 @@ export const sendInvitationEmail = async (invitationData) => {
             To accept your invitation, click this link: ${invitationLink}
             
             Important: This invitation link will expire in 7 days.
-            If you need help, contact us at support@abcotronics.co.za
+            If you need help, contact us at garethm@abcotronics.co.za
             
             Best regards,
-            The Abcotronics Team
+            Gareth Mauck
         `
     };
 
@@ -235,7 +239,7 @@ export const sendInvitationEmail = async (invitationData) => {
         // Use SendGrid HTTP API if configured
         let result;
         if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
-            mailOptions.fromName = 'Abcotronics ERP';
+            mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, apiKey);
         } else {
             result = await emailTransporter.sendMail(mailOptions);

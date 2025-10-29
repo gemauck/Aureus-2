@@ -65,27 +65,34 @@ const DashboardDatabaseFirst = () => {
             const dataPromise = Promise.all([
                 window.DatabaseAPI.getClients().catch(err => {
                     console.warn('Failed to load clients:', err);
-                    return [];
+                    return { data: { clients: [] } };
+                }),
+                window.DatabaseAPI.getLeads().catch(err => {
+                    console.warn('Failed to load leads:', err);
+                    return { data: { leads: [] } };
                 }),
                 window.DatabaseAPI.getProjects().catch(err => {
                     console.warn('Failed to load projects:', err);
-                    return [];
+                    return { data: { projects: [] } };
                 }),
                 window.DatabaseAPI.getInvoices().catch(err => {
                     console.warn('Failed to load invoices:', err);
-                    return [];
+                    return { data: { invoices: [] } };
                 }),
                 window.DatabaseAPI.getTimeEntries().catch(err => {
                     console.warn('Failed to load time entries:', err);
-                    return [];
+                    return { data: { timeEntries: [] } };
                 })
             ]);
 
-            const [allClientsData, projects, invoices, timeEntries] = await Promise.race([dataPromise, timeoutPromise]);
+            const [clientsResponse, leadsResponse, projectsResponse, invoicesResponse, timeEntriesResponse] = await Promise.race([dataPromise, timeoutPromise]);
             
-            // Separate clients and leads based on type field
-            const clients = allClientsData.filter(c => c.type === 'client' || !c.type); // Default to client if no type
-            const leads = allClientsData.filter(c => c.type === 'lead');
+            // Extract data from responses
+            const clients = clientsResponse?.data?.clients || [];
+            const leads = leadsResponse?.data?.leads || [];
+            const projects = projectsResponse?.data?.projects || [];
+            const invoices = invoicesResponse?.data?.invoices || [];
+            const timeEntries = timeEntriesResponse?.data?.timeEntries || [];
 
             // Calculate statistics
             const stats = {
@@ -97,6 +104,16 @@ const DashboardDatabaseFirst = () => {
                 activeProjects: projects.filter(p => p.status === 'Active').length,
                 pendingInvoices: invoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length
             };
+
+            // Save to localStorage for instant load next time
+            if (window.storage) {
+                window.storage.setClients(clients);
+                window.storage.setLeads(leads);
+                window.storage.setProjects(projects);
+                window.storage.setInvoices(invoices);
+                window.storage.setTimeEntries(timeEntries);
+                console.log('✅ Dashboard: Cached all data to localStorage');
+            }
 
             setDashboardData({
                 clients,

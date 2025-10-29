@@ -260,7 +260,7 @@ const MainLayout = () => {
                         <button
                             key={item.id}
                             onClick={() => navigateToPage(item.id)}
-                            className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-sm lg:text-xs touch-target ${
+                            className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-base lg:text-sm touch-target ${
                                 currentPage === item.id 
                                     ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 
                                     : isDark 
@@ -268,7 +268,7 @@ const MainLayout = () => {
                                         : 'text-gray-700 hover:bg-gray-50'
                             }`}
                         >
-                            <i className={`fas ${item.icon} ${sidebarOpen ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-sm lg:text-xs`}></i>
+                            <i className={`fas ${item.icon} ${sidebarOpen ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-base lg:text-sm`}></i>
                             {sidebarOpen && <span className="font-medium">{item.label}</span>}
                         </button>
                     ))}
@@ -282,7 +282,7 @@ const MainLayout = () => {
                         </div>
                         {sidebarOpen && (
                             <div className="ml-3 lg:ml-2 flex-1 min-w-0">
-                                <p className={`text-sm lg:text-xs font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
+                                <p className={`text-base lg:text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
                                 <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
                             </div>
                         )}

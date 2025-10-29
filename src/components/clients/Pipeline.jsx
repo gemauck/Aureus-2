@@ -79,20 +79,42 @@ const Pipeline = () => {
         loadData();
     }, [refreshKey]);
 
+    // Preload cached data immediately on mount
+    useEffect(() => {
+        // Show cached data immediately while API loads
+        const savedClients = storage.getClients() || [];
+        const savedLeads = storage.getLeads() || [];
+        
+        if (savedClients.length > 0) {
+            const clientsWithOpportunities = savedClients.map(client => ({
+                ...client,
+                opportunities: client.opportunities || []
+            }));
+            setClients(clientsWithOpportunities);
+            console.log('⚡ Pipeline: Loaded cached data immediately:', clientsWithOpportunities.length, 'clients');
+        }
+        
+        if (savedLeads.length > 0) {
+            setLeads(savedLeads);
+            console.log('⚡ Pipeline: Loaded cached leads immediately:', savedLeads.length, 'leads');
+        }
+    }, []);
+
     const loadData = async () => {
-        // Don't clear existing data while loading to prevent flashing
+        // Don't set loading state immediately - show cached data first
         setIsLoading(true);
         
         try {
             // Try to load from API first if authenticated
             const token = storage.getToken();
             if (token && window.DatabaseAPI) {
-                console.log('🔄 Pipeline: Loading data from API...');
+                console.log('🔄 Pipeline: Refreshing data from API...');
                 
-                // Load clients and leads from API
-                const [clientsResponse, leadsResponse] = await Promise.allSettled([
+                // Load clients, leads, and opportunities in parallel for fastest load
+                const [clientsResponse, leadsResponse, opportunitiesResponse] = await Promise.allSettled([
                     window.DatabaseAPI.getClients(),
-                    window.DatabaseAPI.getLeads()
+                    window.DatabaseAPI.getLeads(),
+                    window.DatabaseAPI?.getOpportunities?.() || window.api?.getOpportunities?.() || Promise.resolve({ data: { opportunities: [] } })
                 ]);
                 
                 // Process clients
@@ -109,103 +131,83 @@ const Pipeline = () => {
                     console.log('✅ Pipeline: Loaded leads from API:', apiLeads.length);
                 }
                 
-                // Load opportunities for each client in parallel
-                console.log(`📡 Pipeline: Fetching opportunities for ${apiClients.length} clients...`);
-                const clientsWithOpportunities = await Promise.allSettled(apiClients.map(async (client) => {
-                    try {
-                        if (window.api?.getOpportunitiesByClient) {
-                            console.log(`🔍 Pipeline: Fetching opportunities for client ${client.name} (${client.id})...`);
-                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            console.log(`📥 Pipeline: Raw API response for ${client.name}:`, oppResponse);
-                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                            console.log(`📊 Pipeline: Parsed ${opportunities.length} opportunities for ${client.name}:`, opportunities);
-                            
-                            // Ensure each opportunity has required fields with defaults
-                            const validatedOpportunities = opportunities.map(opp => ({
-                                ...opp,
-                                title: opp.title || 'Untitled Opportunity',
-                                stage: opp.stage || 'Awareness',
-                                value: opp.value || 0,
-                                clientId: client.id,
-                                createdAt: opp.createdAt || opp.createdDate || new Date().toISOString()
-                            }));
-                            
-                            if (validatedOpportunities.length > 0) {
-                                console.log(`✅ Pipeline: Loaded ${validatedOpportunities.length} opportunities for ${client.name}`, 
-                                    validatedOpportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, value: o.value })));
-                            } else {
-                                console.log(`📭 Pipeline: No opportunities for ${client.name}`);
-                            }
-                            return { ...client, opportunities: validatedOpportunities };
-                        } else {
-                            console.warn(`⚠️ Pipeline: getOpportunitiesByClient API method not available`);
-                            return { ...client, opportunities: [] };
-                        }
-                    } catch (error) {
-                        console.error(`❌ Pipeline: Failed to load opportunities for client ${client.name} (${client.id}):`, error);
-                        console.error(`   Error details:`, error.message, error.stack);
-                        // Return client with empty opportunities array so it still appears
-                        return { ...client, opportunities: [] };
-                    }
-                }));
+                // Process opportunities (already loaded in parallel above)
+                let allOpportunities = [];
+                if (opportunitiesResponse.status === 'fulfilled' && opportunitiesResponse.value) {
+                    const oppData = opportunitiesResponse.value?.data?.opportunities || 
+                                  opportunitiesResponse.value?.opportunities || 
+                                  [];
+                    
+                    // Validate and normalize opportunities
+                    allOpportunities = oppData.map(opp => ({
+                        ...opp,
+                        title: opp.title || 'Untitled Opportunity',
+                        stage: opp.stage || 'Awareness',
+                        value: opp.value || 0,
+                        clientId: opp.clientId || opp.client?.id,
+                        createdAt: opp.createdAt || opp.createdDate || new Date().toISOString()
+                    }));
+                    
+                    console.log(`✅ Pipeline: Loaded ${allOpportunities.length} opportunities from parallel fetch`);
+                } else {
+                    console.warn('⚠️ Pipeline: Failed to load opportunities from parallel fetch, opportunities will be empty');
+                }
                 
-                // Process settled promises - handle both fulfilled and rejected
-                const processedClients = clientsWithOpportunities.map((result, index) => {
-                    if (result.status === 'fulfilled') {
-                        return result.value;
-                    } else {
-                        console.error(`❌ Pipeline: Promise rejected for client ${apiClients[index]?.name}:`, result.reason);
-                        return { ...apiClients[index], opportunities: [] };
+                // Attach opportunities to their respective clients
+                const clientsWithOpportunities = apiClients.map(client => {
+                    const clientOpportunities = allOpportunities.filter(opp => opp.clientId === client.id);
+                    if (clientOpportunities.length > 0) {
+                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities`);
                     }
+                    return {
+                        ...client,
+                        opportunities: clientOpportunities
+                    };
                 });
                 
-                // Log total opportunities found
-                const totalOpportunities = processedClients.reduce((sum, client) => sum + (client.opportunities?.length || 0), 0);
-                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${processedClients.length} clients`);
-                
-                // Log detailed breakdown
-                processedClients.forEach(client => {
-                    const oppCount = client.opportunities?.length || 0;
-                    if (oppCount > 0) {
-                        console.log(`   📊 ${client.name}: ${oppCount} opportunities`, 
-                            client.opportunities.map(opp => ({ 
-                                title: opp.title, 
-                                stage: opp.stage, 
-                                value: opp.value 
-                            }))
-                        );
-                    }
-                });
+                const totalOpportunities = allOpportunities.length;
+                console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
                 
                 // Update state only after all data is loaded (prevents flashing)
-                setClients(processedClients);
+                setClients(clientsWithOpportunities);
                 setLeads(apiLeads);
                 
-                // Update localStorage for clients only (leads are database-only)
-                storage.setClients(processedClients);
+                // Update localStorage for both clients and leads (cache for instant load next time)
+                storage.setClients(clientsWithOpportunities);
+                if (apiLeads.length > 0 || storage.getLeads()) {
+                    // Save leads to cache even if empty array (to avoid showing stale data)
+                    storage.setLeads(apiLeads);
+                }
                 
-                console.log('✅ Pipeline: API data loaded and cached with opportunities');
+                console.log('✅ Pipeline: API data refreshed and cached with opportunities');
                 setIsLoading(false);
                 return;
             }
         } catch (error) {
-            console.warn('⚠️ Pipeline: API loading failed, falling back to localStorage:', error);
+            console.warn('⚠️ Pipeline: API loading failed, using cached data:', error);
         }
         
-        // Fallback to localStorage for clients only (leads are database-only)
-        console.log('💾 Pipeline: Loading clients from localStorage...');
+        // If API failed but we have cached data, keep using it (already set in useEffect)
+        // Only update if we have no cached data at all
         const savedClients = storage.getClients() || [];
+        const savedLeads = storage.getLeads() || [];
         
-        // Ensure all clients have opportunities array
-        const clientsWithOpportunities = savedClients.map(client => ({
-            ...client,
-            opportunities: client.opportunities || []
-        }));
+        if (savedClients.length > 0 || savedLeads.length > 0) {
+            // We already set cached data in useEffect, just refresh from localStorage
+            const clientsWithOpportunities = savedClients.map(client => ({
+                ...client,
+                opportunities: client.opportunities || []
+            }));
+            setClients(clientsWithOpportunities);
+            setLeads(savedLeads);
+            console.log('✅ Pipeline: Using cached data - Clients:', clientsWithOpportunities.length, 'Leads:', savedLeads.length);
+        } else {
+            // No cached data at all - empty state
+            setClients([]);
+            setLeads([]);
+            console.log('📭 Pipeline: No cached data available');
+        }
         
-        setClients(clientsWithOpportunities);
-        setLeads([]); // Leads are database-only, no localStorage fallback
-        
-        console.log('✅ Pipeline: localStorage data loaded - Clients:', clientsWithOpportunities.length, 'Leads: 0 (database-only)');
         setIsLoading(false);
     };
 
