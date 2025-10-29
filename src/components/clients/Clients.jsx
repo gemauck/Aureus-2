@@ -347,8 +347,8 @@ const Clients = React.memo(() => {
                     // Show cached clients IMMEDIATELY without waiting for opportunities (much faster!)
                     setClients(filteredCachedClients);
                     
-                    // Load opportunities in the background after showing cached data
-                    if (window.api?.getOpportunitiesByClient) {
+                    // Only load opportunities in background if Pipeline view is active
+                    if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
                         Promise.all(filteredCachedClients.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
@@ -449,8 +449,8 @@ const Clients = React.memo(() => {
                     setLeads(leadsOnly);
                     safeStorage.setClients(clientsOnly);
                     
-                    // Load opportunities in background (non-blocking for faster initial render)
-                    if (window.api?.getOpportunitiesByClient) {
+                    // Only load opportunities in background when Pipeline is active
+                    if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
                         Promise.all(clientsOnly.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
