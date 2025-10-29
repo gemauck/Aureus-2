@@ -31,19 +31,17 @@ const DashboardEnhanced = () => {
                 } else {
                     // Try to load from API
                     try {
-                        const [clientsResponse, leadsResponse, projectsResponse, timeResponse, invoicesResponse] = await Promise.allSettled([
+                        const [clientsResponse, leadsResponse, projectsResponse, timeResponse] = await Promise.allSettled([
                             window.api.getClients(),
                             window.api.getLeads?.() || Promise.resolve({ data: [] }),
                             window.api.getProjects?.() || Promise.resolve({ data: [] }),
-                            window.api.getTimeEntries?.() || Promise.resolve({ data: [] }),
-                            window.api.getInvoices?.() || Promise.resolve({ data: [] })
+                            window.api.getTimeEntries?.() || Promise.resolve({ data: [] })
                         ]);
 
                         setClients(clientsResponse.status === 'fulfilled' ? clientsResponse.value : ((storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : []));
                         setLeads(leadsResponse.status === 'fulfilled' ? leadsResponse.value.data || [] : []); // Leads are database-only
                         setProjects(projectsResponse.status === 'fulfilled' ? projectsResponse.value.data || [] : []); // Projects are database-only
                         setTimeEntries(timeResponse.status === 'fulfilled' ? timeResponse.value.data || [] : ((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []));
-                        setInvoices(invoicesResponse.status === 'fulfilled' ? invoicesResponse.value.data || [] : ((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []));
                     } catch (error) {
                         console.error('Error loading data:', error);
                         // Fallback to localStorage (leads are database-only)
@@ -51,7 +49,6 @@ const DashboardEnhanced = () => {
                         setLeads([]); // Leads are database-only
                         setProjects((storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : []);
                         setTimeEntries((storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : []);
-                        setInvoices((storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : []);
                     }
                 }
 
@@ -110,18 +107,6 @@ const DashboardEnhanced = () => {
             });
         });
 
-        // Add recent invoices
-        invoices.slice(-5).forEach(invoice => {
-            activities.push({
-                id: `invoice-${invoice.id}`,
-                type: 'invoice',
-                title: `Invoice: ${invoice.invoiceNumber}`,
-                description: `${invoice.clientName} - R${invoice.total}`,
-                timestamp: invoice.date || new Date().toISOString(),
-                icon: 'fas fa-file-invoice',
-                color: 'text-orange-600'
-            });
-        });
 
         // Sort by timestamp and take the most recent 10
         setRecentActivity(activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)).slice(0, 10));
@@ -149,11 +134,6 @@ const DashboardEnhanced = () => {
         const recentClients = filterByTimeRange(clients);
         const recentLeads = filterByTimeRange(leads);
         const recentProjects = filterByTimeRange(projects, 'updatedAt');
-        const recentInvoices = filterByTimeRange(invoices, 'date');
-
-        // Calculate totals
-        const totalRevenue = invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
-        const recentRevenue = recentInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0);
         const activeProjects = projects.filter(p => p.status === 'Active').length;
         const totalTimeEntries = timeEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
@@ -194,9 +174,6 @@ const DashboardEnhanced = () => {
                 break;
             case 'add-lead':
                 window.location.hash = '#/clients?action=add-lead';
-                break;
-            case 'create-invoice':
-                window.location.hash = '#/invoicing?action=create';
                 break;
             case 'start-timer':
                 window.location.hash = '#/time?action=start';
@@ -381,13 +358,6 @@ const DashboardEnhanced = () => {
                         color="bg-green-600"
                         description="Add a new sales lead"
                         onClick={() => handleQuickAction('add-lead')}
-                    />
-                    <QuickActionButton
-                        title="Create Invoice"
-                        icon="fas fa-file-invoice"
-                        color="bg-orange-600"
-                        description="Generate a new invoice"
-                        onClick={() => handleQuickAction('create-invoice')}
                     />
                     <QuickActionButton
                         title="Start Timer"

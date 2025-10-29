@@ -150,9 +150,10 @@ const MainLayout = () => {
     // Filter menu items based on user role (admin-only items)
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
+        const hasUser = !!user && (!!user.id || !!user.email); // User exists if they have id or email
         
         // If user doesn't have a role yet, try to refresh from API
-        if (user && !user.role && window.useAuth) {
+        if (hasUser && !user.role && window.useAuth) {
             const { refreshUser } = window.useAuth();
             if (refreshUser) {
                 console.log('🔄 User missing role, refreshing from API...');
@@ -163,10 +164,12 @@ const MainLayout = () => {
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 const shouldShow = userRole === 'admin';
-                // Temporary: If user exists but role is undefined, show menu as fallback
-                // This allows access while role is being set in database
-                if (!userRole && user && user.id) {
-                    console.warn('⚠️ User role undefined, showing Users menu as fallback');
+                // Temporary fallback: If user exists but role is undefined, show menu
+                // This allows access while role is being set in database or refreshed
+                if (!userRole && hasUser) {
+                    console.warn('⚠️ User role undefined but user exists, showing Users menu as fallback', {
+                        user: { id: user?.id, email: user?.email, name: user?.name, hasRole: !!user?.role }
+                    });
                     return true;
                 }
                 return shouldShow;
@@ -174,8 +177,16 @@ const MainLayout = () => {
             return true;
         });
         
+        console.log('🔍 Menu filtering result:', {
+            userRole,
+            hasUser,
+            menuItemsCount: filtered.length,
+            menuLabels: filtered.map(i => i.label),
+            hasUsersMenu: filtered.some(i => i.id === 'users')
+        });
+        
         return filtered;
-    }, [user?.role, user?.id]);
+    }, [user?.role, user?.id, user?.email]);
 
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {

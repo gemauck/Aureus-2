@@ -6,16 +6,12 @@ const DashboardDatabaseFirst = () => {
         clients: [],
         leads: [],
         projects: [],
-        invoices: [],
         timeEntries: [],
         stats: {
             totalClients: 0,
             totalLeads: 0,
             totalProjects: 0,
-            totalInvoices: 0,
-            totalRevenue: 0,
-            activeProjects: 0,
-            pendingInvoices: 0
+            activeProjects: 0
         }
     });
     const [isLoading, setIsLoading] = useState(true);
@@ -37,16 +33,12 @@ const DashboardDatabaseFirst = () => {
                     clients: [],
                     leads: [],
                     projects: [],
-                    invoices: [],
                     timeEntries: [],
                     stats: {
                         totalClients: 0,
                         totalLeads: 0,
                         totalProjects: 0,
-                        totalInvoices: 0,
-                        totalRevenue: 0,
-                        activeProjects: 0,
-                        pendingInvoices: 0
+                        activeProjects: 0
                     }
                 });
                 setIsLoading(false);
@@ -75,23 +67,18 @@ const DashboardDatabaseFirst = () => {
                     console.warn('Failed to load projects:', err);
                     return { data: { projects: [] } };
                 }),
-                window.DatabaseAPI.getInvoices().catch(err => {
-                    console.warn('Failed to load invoices:', err);
-                    return { data: { invoices: [] } };
-                }),
                 window.DatabaseAPI.getTimeEntries().catch(err => {
                     console.warn('Failed to load time entries:', err);
                     return { data: { timeEntries: [] } };
                 })
             ]);
 
-            const [clientsResponse, leadsResponse, projectsResponse, invoicesResponse, timeEntriesResponse] = await Promise.race([dataPromise, timeoutPromise]);
+            const [clientsResponse, leadsResponse, projectsResponse, timeEntriesResponse] = await Promise.race([dataPromise, timeoutPromise]);
             
             // Extract data from responses
             const clients = clientsResponse?.data?.clients || [];
             const leads = leadsResponse?.data?.leads || [];
             const projects = projectsResponse?.data?.projects || [];
-            const invoices = invoicesResponse?.data?.invoices || [];
             const timeEntries = timeEntriesResponse?.data?.timeEntries || [];
 
             // Calculate statistics
@@ -99,10 +86,7 @@ const DashboardDatabaseFirst = () => {
                 totalClients: clients.length,
                 totalLeads: leads.length,
                 totalProjects: projects.length,
-                totalInvoices: invoices.length,
-                totalRevenue: invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
-                activeProjects: projects.filter(p => p.status === 'Active').length,
-                pendingInvoices: invoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length
+                activeProjects: projects.filter(p => p.status === 'Active').length
             };
 
             // Save to localStorage for instant load next time
@@ -110,7 +94,6 @@ const DashboardDatabaseFirst = () => {
                 window.storage.setClients(clients);
                 window.storage.setLeads(leads);
                 window.storage.setProjects(projects);
-                window.storage.setInvoices(invoices);
                 window.storage.setTimeEntries(timeEntries);
                 console.log('✅ Dashboard: Cached all data to localStorage');
             }
@@ -119,7 +102,6 @@ const DashboardDatabaseFirst = () => {
                 clients,
                 leads,
                 projects,
-                invoices,
                 timeEntries,
                 stats
             });
