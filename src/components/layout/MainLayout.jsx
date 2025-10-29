@@ -31,13 +31,17 @@ const MainLayout = () => {
     React.useEffect(() => {
         console.error('🚨 DEBUG: MainLayout user object:', {
             user,
+            userType: typeof user,
+            userIsNull: user === null,
+            userIsUndefined: user === undefined,
             hasUser: !!user,
             userId: user?.id,
             userEmail: user?.email,
             userName: user?.name,
             userRole: user?.role,
             userRoleLower: user?.role?.toLowerCase(),
-            userKeys: user ? Object.keys(user) : []
+            userKeys: user ? Object.keys(user) : [],
+            userStringified: JSON.stringify(user)
         });
     }, [user]);
 
@@ -164,9 +168,10 @@ const MainLayout = () => {
     // Filter menu items based on user role (admin-only items)
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        const hasUser = !!user && (!!user.id || !!user.email); // User exists if they have id or email
+        // Check if user exists - user object might exist even without id/email initially
+        const hasUser = !!user && user !== null && user !== undefined;
         
-        // If user doesn't have a role yet, try to refresh from API
+        // If user exists but doesn't have a role yet, try to refresh from API
         if (hasUser && !user.role && window.useAuth) {
             const { refreshUser } = window.useAuth();
             if (refreshUser) {
@@ -178,11 +183,13 @@ const MainLayout = () => {
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 const shouldShow = userRole === 'admin';
-                // Temporary fallback: If user exists but role is undefined, show menu
-                // This allows access while role is being set in database or refreshed
+                // Temporary fallback: If user exists (regardless of properties) but role is undefined, show menu
+                // This allows access while role is being set in database or refreshed from API
                 if (!userRole && hasUser) {
-                    console.warn('⚠️ User role undefined but user exists, showing Users menu as fallback', {
-                        user: { id: user?.id, email: user?.email, name: user?.name, hasRole: !!user?.role }
+                    console.error('⚠️ User role undefined but user object exists, showing Users menu as fallback', {
+                        user,
+                        hasUser,
+                        userKeys: user ? Object.keys(user) : []
                     });
                     return true;
                 }
