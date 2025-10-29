@@ -21,6 +21,24 @@ const MainLayout = () => {
     }, []);
     const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
+    
+    // Track mobile state
+    React.useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 1024);
+        };
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
+    
+    // Auto-expand sidebar text when mobile menu opens
+    React.useEffect(() => {
+        if (mobileMenuOpen && isMobile) {
+            setSidebarOpen(true);
+        }
+    }, [mobileMenuOpen, isMobile]);
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
     const [showSettingsPortal, setShowSettingsPortal] = useState(false);
@@ -124,8 +142,8 @@ const MainLayout = () => {
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
     const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
-    // Use TeamsSimple first to avoid crashes, fallback to full Teams if needed
-    const Teams = window.TeamsSimple || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
+    // Use main Teams component first, fallback to TeamsSimple only if needed
+    const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
     const Users = window.UserManagement || window.Users || (() => {
         console.warn('⚠️ MainLayout: Users component not found. window.UserManagement:', typeof window.UserManagement, 'window.Users:', typeof window.Users);
         return <div className="text-center py-12 text-gray-500">Users component loading...</div>;
@@ -319,7 +337,7 @@ const MainLayout = () => {
 
             {/* Sidebar */}
             <div className={`
-                ${sidebarOpen ? 'w-64 lg:w-48' : 'w-12'} 
+                ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
                 ${mobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto sidebar-mobile open' : 'hidden lg:flex'}
@@ -327,7 +345,7 @@ const MainLayout = () => {
             `}>
                 {/* Logo */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    {sidebarOpen ? (
+                    {(sidebarOpen || (mobileMenuOpen && isMobile)) ? (
                         <div className="flex-1">
                             <h1 className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
                         </div>
@@ -344,22 +362,26 @@ const MainLayout = () => {
 
                 {/* Menu Items */}
                 <nav className="flex-1 overflow-y-auto sidebar-scrollbar py-2">
-                    {menuItems.map(item => (
-                        <button
-                            key={item.id}
-                            onClick={() => navigateToPage(item.id)}
-                            className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-base lg:text-sm touch-target ${
-                                currentPage === item.id 
-                                    ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600' 
-                                    : isDark 
-                                        ? 'text-gray-200 hover:bg-gray-700 hover:text-white' 
-                                        : 'text-gray-700 hover:bg-gray-50'
-                            }`}
-                        >
-                            <i className={`fas ${item.icon} ${sidebarOpen ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-base lg:text-sm`}></i>
-                            {sidebarOpen && <span className="font-medium">{item.label}</span>}
-                        </button>
-                    ))}
+                    {menuItems.map(item => {
+                        // On mobile, show text when sidebar or mobile menu is open
+                        const showText = sidebarOpen || (mobileMenuOpen && isMobile);
+                        return (
+                            <button
+                                key={item.id}
+                                onClick={() => navigateToPage(item.id)}
+                                className={`w-full flex items-center px-3 py-3 lg:px-2 lg:py-1.5 transition-colors text-base lg:text-sm touch-target ${
+                                    currentPage === item.id 
+                                        ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600 dark:bg-primary-900 dark:text-primary-200' 
+                                        : isDark 
+                                            ? 'text-gray-200 hover:bg-gray-700 hover:text-white' 
+                                            : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                            >
+                                <i className={`fas ${item.icon} ${showText ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-base lg:text-sm`}></i>
+                                {showText && <span className="font-medium">{item.label}</span>}
+                            </button>
+                        );
+                    })}
                 </nav>
 
                 {/* User Profile */}
@@ -368,13 +390,13 @@ const MainLayout = () => {
                         <div className="w-8 h-8 lg:w-6 lg:h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm lg:text-xs">
                             {user?.name?.charAt(0) || 'U'}
                         </div>
-                        {sidebarOpen && (
+                        {(sidebarOpen || (mobileMenuOpen && window.innerWidth < 1024)) && (
                             <div className="ml-3 lg:ml-2 flex-1 min-w-0">
                                 <p className={`text-base lg:text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
                                 <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
                             </div>
                         )}
-                        {sidebarOpen && (
+                        {(sidebarOpen || (mobileMenuOpen && window.innerWidth < 1024)) && (
                             <button 
                                 onClick={logout}
                                 className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}

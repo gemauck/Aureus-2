@@ -398,10 +398,9 @@
     <script src="./dist/src/components/teams/NoticeModal.js"></script>
     <script src="./dist/src/components/teams/WorkflowExecutionModal.js"></script>
     <script src="./dist/src/components/teams/TeamModals.js"></script>
-    <script type="text/babel" src="./src/components/teams/TeamsSimple.jsx"></script>
-    <!-- Disabled to prevent crashes - using TeamsSimple instead -->
-    <!-- <script src="./dist/src/components/teams/TeamsEnhanced.js"></script> -->
-    <!-- <script src="./dist/src/components/teams/Teams.js"></script> -->
+    <script src="./dist/src/components/teams/Teams.js"></script>
+    <!-- TeamsSimple kept as fallback only -->
+    <script src="./dist/src/components/teams/TeamsSimple.js"></script>
     
     <!-- Users Components -->
     <script src="./dist/src/components/users/UserModal.js"></script>
@@ -435,7 +434,7 @@
     <script src="./dist/src/components/reports/Reports.js"></script>
     
     <!-- User Management -->
-    <script src="./dist/src/components/users/UserManagement.js"></script>
+    <script src="./dist/src/components/users/UserManagement.js?v=4002"></script>
     
     <!-- Account Component -->
     <script src="./dist/src/components/account/Account.js"></script>
@@ -512,7 +511,8 @@
         }
         // Use the main Projects component (has latest fixes) with fallback
         window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
-        window.Teams = window.TeamsEnhanced || window.Teams;
+        // Use main Teams component, fallback to TeamsSimple only if main fails
+        window.Teams = window.Teams || window.TeamsSimple;
         window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
         window.HR = window.HR;
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
