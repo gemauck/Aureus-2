@@ -34,22 +34,46 @@ function copyJSFile(srcPath) {
   
   // Check if file uses ES6 exports
   if (content.includes('export ')) {
-    // Collect exports to expose to window
+    // Collect all exports to expose to window
     const exportsToExpose = [];
-    const exportMatches = content.matchAll(/export\s+(?:const|function|default\s+function)\s+(\w+)/g);
-    for (const match of exportMatches) {
-      exportsToExpose.push(match[1]);
-    }
+    
+    // Match export const, export function, export class, export default
+    const patterns = [
+      /export\s+const\s+(\w+)/g,
+      /export\s+function\s+(\w+)/g,
+      /export\s+class\s+(\w+)/g,
+      /export\s+default\s+(?:function\s+)?(\w+)/g,
+      /export\s+default\s+(\w+)/g
+    ];
+    
+    patterns.forEach(pattern => {
+      const matches = [...content.matchAll(pattern)];
+      matches.forEach(match => {
+        if (match[1] && !exportsToExpose.includes(match[1])) {
+          exportsToExpose.push(match[1]);
+        }
+      });
+    });
     
     // Replace export statements
-    content = content.replace(/export\s+const\s+(\w+)/g, 'const $1');
+    content = content.replace(/export\s+const\s+/g, 'const ');
+    content = content.replace(/export\s+function\s+/g, 'function ');
+    content = content.replace(/export\s+class\s+/g, 'class ');
     content = content.replace(/export\s+default\s+function\s+(\w+)/g, 'function $1');
-    content = content.replace(/export\s+function\s+(\w+)/g, 'function $1');
-    content = content.replace(/export\s+default\s+(\w+)/g, 'const $1 = ');
+    content = content.replace(/export\s+default\s+class\s+(\w+)/g, 'class $1');
+    // Handle export default identifier (but not function/class)
+    content = content.replace(/export\s+default\s+(\w+);/g, 'const defaultExport = $1;');
+    content = content.replace(/export\s+default\s+([^;]+);/g, 'const defaultExport = $1;');
     
     // Wrap in IIFE and expose to window
-    if (exportsToExpose.length > 0) {
-      const exposeStatements = exportsToExpose.map(exp => `window.${exp} = ${exp};`).join('\n');
+    if (exportsToExpose.length > 0 || content.includes('defaultExport')) {
+      let exposeStatements = '';
+      if (exportsToExpose.length > 0) {
+        exposeStatements = exportsToExpose.map(exp => `window.${exp} = ${exp};`).join('\n');
+      }
+      if (content.includes('defaultExport')) {
+        exposeStatements += '\nif (typeof defaultExport !== "undefined") { window.GoogleCalendarService = defaultExport; }';
+      }
       content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}\n})();`;
     } else {
       content = `(() => {\n${content}\n})();`;
