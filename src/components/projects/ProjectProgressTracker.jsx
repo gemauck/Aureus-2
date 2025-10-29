@@ -106,6 +106,56 @@ const ProjectProgressTracker = ({ onBack }) => {
 
     const loadProjects = async () => {
         try {
+            // Try to load from database API first
+            const token = window.storage?.getToken?.();
+            if (token && window.DatabaseAPI?.getProjects) {
+                console.log('🔄 ProjectProgressTracker: Loading projects from database');
+                const response = await window.DatabaseAPI.getProjects();
+                
+                // Handle different response structures
+                let apiProjects = [];
+                if (response?.data?.projects && Array.isArray(response.data.projects)) {
+                    apiProjects = response.data.projects;
+                } else if (response?.projects && Array.isArray(response.projects)) {
+                    apiProjects = response.projects;
+                } else if (Array.isArray(response?.data)) {
+                    apiProjects = response.data;
+                } else if (Array.isArray(response)) {
+                    apiProjects = response;
+                }
+                
+                console.log('✅ ProjectProgressTracker: Loaded', apiProjects.length, 'projects from database');
+                
+                // Parse monthlyProgress if it's stored as JSON string
+                const projectsWithProgress = apiProjects.map(project => {
+                    let monthlyProgress = project.monthlyProgress || {};
+                    
+                    // If monthlyProgress is a string, parse it
+                    if (typeof monthlyProgress === 'string') {
+                        try {
+                            monthlyProgress = JSON.parse(monthlyProgress);
+                        } catch (e) {
+                            console.warn('Failed to parse monthlyProgress for project', project.id, e);
+                            monthlyProgress = {};
+                        }
+                    }
+                    
+                    return {
+                        ...project,
+                        monthlyProgress: monthlyProgress || {}
+                    };
+                });
+                
+                setProjects(projectsWithProgress);
+                
+                // Also update localStorage for consistency
+                if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                    await window.dataService.setProjects(projectsWithProgress);
+                }
+                return;
+            }
+            
+            // Fallback to localStorage/dataService
             const savedProjects = (window.dataService && typeof window.dataService.getProjects === 'function') 
                 ? await window.dataService.getProjects() || [] 
                 : [];
@@ -115,8 +165,9 @@ const ProjectProgressTracker = ({ onBack }) => {
                 monthlyProgress: project.monthlyProgress || {}
             }));
             setProjects(projectsWithProgress);
+            console.log('⚠️ ProjectProgressTracker: Loaded', projectsWithProgress.length, 'projects from localStorage (fallback)');
         } catch (error) {
-            console.error('Error loading projects:', error);
+            console.error('❌ Error loading projects:', error);
             setProjects([]);
         }
     };
@@ -128,7 +179,7 @@ const ProjectProgressTracker = ({ onBack }) => {
         setShowProgressModal(true);
     };
 
-    const handleSaveProgress = (progressData) => {
+    const handleSaveProgress = async (progressData) => {
         const updatedProjects = projects.map(p => {
             if (p.id === selectedProject.id) {
                 const monthKey = `${selectedMonth}-${selectedYear}`;
@@ -147,11 +198,34 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
+        
+        // Save to database first
+        try {
+            const updatedProject = updatedProjects.find(p => p.id === selectedProject.id);
+            if (updatedProject && window.DatabaseAPI?.updateProject) {
+                console.log('💾 ProjectProgressTracker: Saving progress to database');
+                const updatePayload = {
+                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
+                };
+                await window.DatabaseAPI.updateProject(selectedProject.id, updatePayload);
+                console.log('✅ ProjectProgressTracker: Progress saved to database');
+            }
+        } catch (error) {
+            console.error('❌ Error saving progress to database:', error);
+            // Continue anyway - at least save to localStorage
+        }
+        
+        // Also update localStorage for consistency
         if (storage && typeof storage.setProjects === 'function') {
-            storage.setProjects(updatedProjects);
+            try {
+                storage.setProjects(updatedProjects);
+            } catch (error) {
+                console.warn('Failed to update localStorage:', error);
+            }
         } else {
             console.warn('Storage not available or setProjects method not found');
         }
+        
         setShowProgressModal(false);
         setSelectedProject(null);
         setSelectedMonth(null);
@@ -163,7 +237,7 @@ const ProjectProgressTracker = ({ onBack }) => {
         return project.monthlyProgress?.[monthKey]?.[field] || null;
     };
 
-    const handleDeleteProgress = (project, month, field) => {
+    const handleDeleteProgress = async (project, month, field) => {
         if (!confirm(`Delete this entry for ${month}?`)) return;
 
         const updatedProjects = projects.map(p => {
@@ -184,15 +258,39 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
+        
+        // Save to database first
+        try {
+            const updatedProject = updatedProjects.find(p => p.id === project.id);
+            if (updatedProject && window.DatabaseAPI?.updateProject) {
+                console.log('💾 ProjectProgressTracker: Saving progress deletion to database');
+                const updatePayload = {
+                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
+                };
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ ProjectProgressTracker: Progress deletion saved to database');
+            }
+        } catch (error) {
+            console.error('❌ Error saving progress deletion to database:', error);
+        }
+        
+        // Also update localStorage for consistency
         if (storage && typeof storage.setProjects === 'function') {
-            storage.setProjects(updatedProjects);
+            try {
+                storage.setProjects(updatedProjects);
+            } catch (error) {
+                console.warn('Failed to update localStorage:', error);
+            }
         } else {
             console.warn('Storage not available or setProjects method not found');
         }
     };
 
-    const handleQuickComment = (project, month) => {
+    const handleQuickComment = async (project, month) => {
         if (!quickComment.trim()) return;
+
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'User', email: 'user', id: 'user', role: 'User' };
 
         const monthKey = `${month}-${selectedYear}`;
         const existingData = project.monthlyProgress?.[monthKey]?.comments;
@@ -201,9 +299,14 @@ const ProjectProgressTracker = ({ onBack }) => {
         const updatedComments = [
             ...existingComments,
             {
+                id: Date.now(),
                 text: quickComment,
                 date: new Date().toISOString(),
-                author: 'User'
+                timestamp: new Date().toISOString(),
+                author: currentUser.name,
+                authorEmail: currentUser.email,
+                authorId: currentUser.id,
+                authorRole: currentUser.role
             }
         ];
 
@@ -224,15 +327,37 @@ const ProjectProgressTracker = ({ onBack }) => {
         });
 
         setProjects(updatedProjects);
+        
+        // Save to database first
+        try {
+            const updatedProject = updatedProjects.find(p => p.id === project.id);
+            if (updatedProject && window.DatabaseAPI?.updateProject) {
+                console.log('💾 ProjectProgressTracker: Saving quick comment to database');
+                const updatePayload = {
+                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
+                };
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ ProjectProgressTracker: Quick comment saved to database');
+            }
+        } catch (error) {
+            console.error('❌ Error saving quick comment to database:', error);
+        }
+        
+        // Also update localStorage for consistency
         if (storage && typeof storage.setProjects === 'function') {
-            storage.setProjects(updatedProjects);
+            try {
+                storage.setProjects(updatedProjects);
+            } catch (error) {
+                console.warn('Failed to update localStorage:', error);
+            }
         } else {
             console.warn('Storage not available or setProjects method not found');
         }
+        
         setQuickComment('');
     };
 
-    const handleMoveProject = (fromIndex, toIndex) => {
+    const handleMoveProject = async (fromIndex, toIndex) => {
         if (fromIndex === toIndex) return;
 
         const newProjects = [...projects];
@@ -240,8 +365,15 @@ const ProjectProgressTracker = ({ onBack }) => {
         newProjects.splice(toIndex, 0, movedProject);
 
         setProjects(newProjects);
+        
+        // Note: Project order is typically not saved to database, only to localStorage
+        // If you want to persist order, you'd need to add an "order" field to the Project model
         if (storage && typeof storage.setProjects === 'function') {
-            storage.setProjects(newProjects);
+            try {
+                storage.setProjects(newProjects);
+            } catch (error) {
+                console.warn('Failed to update localStorage:', error);
+            }
         } else {
             console.warn('Storage not available or setProjects method not found');
         }
@@ -369,14 +501,19 @@ const ProjectProgressTracker = ({ onBack }) => {
                     
                     // Format all comments chronologically
                     const commentsText = commentArray.map((comment, idx) => {
-                        const date = new Date(comment.date).toLocaleString('en-ZA', {
+                        const date = new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', {
                             year: 'numeric',
                             month: 'short',
                             day: '2-digit',
                             hour: '2-digit',
                             minute: '2-digit'
                         });
-                        return `[${date}] ${comment.author || 'User'}: ${comment.text}`;
+                        const authorName = comment.author || comment.createdBy || 'User';
+                        const authorEmail = comment.authorEmail || comment.createdByEmail;
+                        const authorInfo = authorEmail 
+                            ? `${authorName} (${authorEmail})`
+                            : authorName;
+                        return `[${date}] ${authorInfo}: ${comment.text}`;
                     }).join('\n\n');
                     
                     row.push(commentsText);
@@ -581,8 +718,8 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                 <div key={idx} className="bg-white rounded p-2 border border-gray-100">
                                                     <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
                                                     <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                        <span>{comment.author || 'User'}</span>
-                                                        <span>{new Date(comment.date).toLocaleString('en-ZA', { 
+                                                        <span className="font-medium">{(comment.author || comment.createdBy || 'User')}{(comment.authorEmail || comment.createdByEmail) ? ` (${comment.authorEmail || comment.createdByEmail})` : ''}</span>
+                                                        <span>{new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', { 
                                                             year: 'numeric',
                                                             month: 'short', 
                                                             day: '2-digit',

@@ -3053,13 +3053,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                                                             <span className="text-primary-600 font-semibold text-xs">
-                                                                {comment.createdBy?.charAt(0) || 'U'}
+                                                                {(comment.createdBy || comment.author || 'U').charAt(0).toUpperCase()}
                                                             </span>
                                                         </div>
                                                         <div>
-                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy}</div>
+                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
                                                             <div className="text-xs text-gray-500">
-                                                                {new Date(comment.createdAt).toLocaleString()}
+                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString()}
                                                             </div>
                                                         </div>
                                                     </div>

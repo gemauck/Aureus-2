@@ -37,17 +37,8 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         console.log('✅ ProjectDetail: All required components loaded');
     }
     
-    // Tab navigation state - persist across re-renders
-    const [activeSection, setActiveSection] = useState(() => {
-        // Check if we should default to documentCollection
-        if (project.hasDocumentCollectionProcess) {
-            const savedSection = sessionStorage.getItem(`project-${project.id}-activeSection`);
-            if (savedSection === 'documentCollection') {
-                return 'documentCollection';
-            }
-        }
-        return 'overview';
-    });
+    // Tab navigation state - always start with overview when opening a project
+    const [activeSection, setActiveSection] = useState('overview');
     
     // Persist activeSection to sessionStorage
     useEffect(() => {

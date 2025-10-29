@@ -6,6 +6,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
+    // Calculate working months (2 months in arrears from current month)
+    // Example: If current month is October, working months are August and September
+    const getWorkingMonths = () => {
+        const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
+        const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
+        return [twoMonthsBack, oneMonthBack];
+    };
+    
+    const workingMonths = getWorkingMonths();
+    
     const tableRef = useRef(null);
     const monthRefs = useRef({});
 
@@ -102,6 +112,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     ];
 
     useEffect(() => {
+        // Scroll to working months after sections load and when year changes
+        if (sections.length > 0 && tableRef.current && selectedYear === currentYear) {
+            setTimeout(() => {
+                scrollToWorkingMonths();
+            }, 100);
+        }
+    }, [sections, selectedYear]);
+
+    const scrollToWorkingMonths = () => {
+        const firstWorkingMonthName = months[workingMonths[0]];
+        const firstMonthElement = monthRefs.current[firstWorkingMonthName];
+        
+        if (firstMonthElement && tableRef.current) {
+            const container = tableRef.current;
+            const elementLeft = firstMonthElement.offsetLeft;
+            
+            // Calculate the width of document column (sticky left column)
+            const documentColumnWidth = 250; // Approximate width of the document info column
+            
+            // Scroll to show the first working month with enough padding
+            // Position it after the sticky document column with some breathing room
+            const scrollPosition = elementLeft - documentColumnWidth - 100;
+            
+            container.scrollTo({
+                left: Math.max(0, scrollPosition),
+                behavior: 'smooth'
+            });
+        }
+    };
+
+    useEffect(() => {
         // Save sections to project whenever they change
         const saveProjectData = async () => {
             try {
@@ -177,6 +218,64 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         return statusOptions.find(opt => opt.value === status) || statusOptions[0];
     };
 
+    // Helper function to safely get current user info
+    const getCurrentUser = () => {
+        const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
+        
+        // Try to get user from storage using multiple methods
+        if (window.storage) {
+            // Method 1: Try getUserInfo() if it exists
+            if (typeof window.storage.getUserInfo === 'function') {
+                try {
+                    const userInfo = window.storage.getUserInfo();
+                    if (userInfo && userInfo.name) {
+                        return userInfo;
+                    }
+                } catch (error) {
+                    console.warn('Error calling storage.getUserInfo():', error);
+                }
+            }
+            
+            // Method 2: Try getUser() and build info object
+            if (typeof window.storage.getUser === 'function') {
+                try {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        return {
+                            name: user.name || user.email || 'System',
+                            email: user.email || 'system',
+                            id: user.id || user._id || 'system',
+                            role: user.role || 'System'
+                        };
+                    }
+                } catch (error) {
+                    console.warn('Error calling storage.getUser():', error);
+                }
+            }
+            
+            // Method 3: Try to parse from localStorage directly
+            try {
+                const userData = localStorage.getItem('abcotronics_user');
+                if (userData) {
+                    const user = JSON.parse(userData);
+                    if (user) {
+                        return {
+                            name: user.name || user.email || 'System',
+                            email: user.email || 'system',
+                            id: user.id || user._id || 'system',
+                            role: user.role || 'System'
+                        };
+                    }
+                }
+            } catch (error) {
+                console.warn('Error parsing user from localStorage:', error);
+            }
+        }
+        
+        // Return default user if all methods fail
+        return defaultUser;
+    };
+
     const handleAddSection = () => {
         console.log('🔵 Add Section button clicked');
         console.log('  - Current sections:', sections.length);
@@ -192,7 +291,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleSaveSection = (sectionData) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
 
         if (editingSection) {
             setSections(sections.map(s => 
@@ -243,7 +342,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleDeleteSection = (sectionId) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
         
         const section = sections.find(s => s.id === sectionId);
         if (confirm(`Delete section "${section.name}" and all its documents?`)) {
@@ -281,7 +380,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleSaveDocument = (documentData) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
         
         const section = sections.find(s => s.id === editingSectionId);
         
@@ -355,7 +454,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleDeleteDocument = (sectionId, documentId) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
         
         const section = sections.find(s => s.id === sectionId);
         const document = section?.documents.find(d => d.id === documentId);
@@ -391,7 +490,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleUpdateStatus = (sectionId, documentId, month, status) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
 
         // Get section and document names for audit trail
         const section = sections.find(s => s.id === sectionId);
@@ -442,11 +541,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
-    const handleAddComment = (sectionId, documentId, month, commentText) => {
+    const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
 
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
+        const currentUser = getCurrentUser();
 
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {
@@ -464,7 +563,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const section = sections.find(s => s.id === sectionId);
         const document = section?.documents.find(d => d.id === documentId);
 
-        setSections(sections.map(s => {
+        const updatedSections = sections.map(s => {
             if (s.id === sectionId) {
                 return {
                     ...s,
@@ -484,7 +583,20 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 };
             }
             return s;
-        }));
+        });
+
+        setSections(updatedSections);
+
+        // Save to database
+        try {
+            const updatePayload = {
+                documentSections: JSON.stringify(updatedSections)
+            };
+            await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Comment saved to database');
+        } catch (error) {
+            console.error('❌ Error saving comment to database:', error);
+        }
 
         // Log to audit trail
         if (window.AuditLogger) {
@@ -508,6 +620,85 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         setQuickComment('');
     };
 
+    const handleDeleteComment = async (sectionId, documentId, month, commentId) => {
+        // Get current user info
+        const currentUser = getCurrentUser();
+        
+        // Get section and document
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+        const comment = document?.comments?.[`${month}-${selectedYear}`]?.find(c => c.id === commentId);
+        
+        // Check if user can delete (own comment or admin role)
+        const canDelete = comment?.authorId === currentUser.id || 
+                         currentUser.role === 'Admin' || 
+                         currentUser.role === 'Administrator' ||
+                         currentUser.role === 'admin';
+        
+        if (!canDelete) {
+            alert('You can only delete your own comments or you need admin privileges.');
+            return;
+        }
+        
+        if (!confirm('Delete this comment?')) return;
+
+        const monthKey = `${month}-${selectedYear}`;
+
+        const updatedSections = sections.map(s => {
+            if (s.id === sectionId) {
+                return {
+                    ...s,
+                    documents: s.documents.map(doc => {
+                        if (doc.id === documentId) {
+                            const existingComments = doc.comments?.[monthKey] || [];
+                            return {
+                                ...doc,
+                                comments: {
+                                    ...doc.comments,
+                                    [monthKey]: existingComments.filter(c => c.id !== commentId)
+                                }
+                            };
+                        }
+                        return doc;
+                    })
+                };
+            }
+            return s;
+        });
+
+        setSections(updatedSections);
+
+        // Save to database
+        try {
+            const updatePayload = {
+                documentSections: JSON.stringify(updatedSections)
+            };
+            await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Comment deletion saved to database');
+        } catch (error) {
+            console.error('❌ Error saving comment deletion to database:', error);
+        }
+
+        // Log to audit trail
+        if (window.AuditLogger) {
+            window.AuditLogger.log(
+                'delete',
+                'projects',
+                {
+                    action: 'Comment Deleted',
+                    projectId: project.id,
+                    projectName: project.name,
+                    sectionName: section?.name || 'Unknown',
+                    documentName: document?.name || 'Unknown',
+                    month: month,
+                    year: selectedYear,
+                    commentAuthor: comment?.author || 'Unknown'
+                },
+                currentUser
+            );
+        }
+    };
+
     const getDocumentStatus = (document, month) => {
         const monthKey = `${month}-${selectedYear}`;
         return document.collectionStatus?.[monthKey] || null;
@@ -525,15 +716,91 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             let XLSX = window.XLSX;
             
             // If not loaded, dynamically load it
+            if (!XLSX || !XLSX.utils) {
+                // Remove existing script if present
+                const existingScript = document.querySelector('script[src*="xlsx"]');
+                if (existingScript) {
+                    existingScript.remove();
+                }
+                
+                // Try multiple CDN sources in order of preference
+                const cdnUrls = [
+                    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+                    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+                    'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js'
+                ];
+                
+                let loadError = null;
+                
+                for (const cdnUrl of cdnUrls) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = cdnUrl;
+                            script.onload = () => {
+                                // Wait a bit more to ensure XLSX is fully exposed
+                                setTimeout(() => {
+                                    XLSX = window.XLSX;
+                                    if (!XLSX || !XLSX.utils) {
+                                        reject(new Error('XLSX library failed to load properly'));
+                                    } else {
+                                        resolve();
+                                    }
+                                }, 150);
+                            };
+                            script.onerror = () => {
+                                reject(new Error(`Failed to load XLSX from ${cdnUrl}`));
+                            };
+                            document.head.appendChild(script);
+                        });
+                        
+                        XLSX = window.XLSX;
+                        if (XLSX && XLSX.utils) {
+                            break; // Successfully loaded
+                        }
+                    } catch (error) {
+                        loadError = error;
+                        // Remove the failed script
+                        const failedScript = document.querySelector(`script[src="${cdnUrl}"]`);
+                        if (failedScript) {
+                            failedScript.remove();
+                        }
+                        continue; // Try next CDN
+                    }
+                }
+                
+                if (!XLSX || !XLSX.utils) {
+                    throw new Error(`Failed to load XLSX library from any CDN. Last error: ${loadError?.message || 'Unknown error'}`);
+                }
+            }
+            
+            // Ensure we're using the globally loaded XLSX
+            XLSX = window.XLSX;
+            
+            // Wait a bit more if XLSX is still not ready
+            if (!XLSX || !XLSX.utils) {
+                // Wait up to 2 seconds for XLSX to be fully loaded
+                for (let waitAttempt = 0; waitAttempt < 20 && (!XLSX || !XLSX.utils); waitAttempt++) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    XLSX = window.XLSX;
+                }
+            }
+            
+            // Verify XLSX is available and has required methods
             if (!XLSX) {
-                await new Promise((resolve, reject) => {
-                    const script = document.createElement('script');
-                    script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
-                    script.onload = resolve;
-                    script.onerror = reject;
-                    document.head.appendChild(script);
-                });
-                XLSX = window.XLSX;
+                throw new Error('XLSX library failed to load. window.XLSX is undefined.');
+            }
+            if (!XLSX.utils) {
+                throw new Error('XLSX library loaded but utils is missing. Try refreshing and exporting again.');
+            }
+            if (!XLSX.utils.book_new) {
+                throw new Error('XLSX.utils.book_new is missing. The library may not be fully loaded.');
+            }
+            if (!XLSX.utils.aoa_to_sheet) {
+                throw new Error('XLSX.utils.aoa_to_sheet is missing. The library may not be fully loaded.');
+            }
+            if (!XLSX.writeFile) {
+                throw new Error('XLSX.writeFile is missing. The library may not be fully loaded.');
             }
         
             // Prepare data for Excel
@@ -577,16 +844,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         // Comments
                         const comments = document.comments?.[monthKey] || [];
                         const commentsText = comments.map((comment, idx) => {
-                            const date = new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', {
+                            const date = new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', {
                                 year: 'numeric',
                                 month: 'short',
                                 day: '2-digit',
                                 hour: '2-digit',
                                 minute: '2-digit'
                             });
-                            const authorInfo = comment.authorEmail 
-                                ? `${comment.author || 'User'} (${comment.authorEmail})`
-                                : (comment.author || 'User');
+                            const authorName = comment.author || comment.createdBy || 'User';
+                            const authorEmail = comment.authorEmail || comment.createdByEmail;
+                            const authorInfo = authorEmail 
+                                ? `${authorName} (${authorEmail})`
+                                : authorName;
                             return `[${date}] ${authorInfo}: ${comment.text}`;
                         }).join('\n\n');
                         row.push(commentsText);
@@ -597,6 +866,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             });
             
             // Create workbook and worksheet
+            // Double-check XLSX.utils is available before use
+            if (!XLSX || !XLSX.utils) {
+                throw new Error('XLSX.utils became unavailable. Please refresh the page and try again.');
+            }
+            if (typeof XLSX.utils.book_new !== 'function') {
+                throw new Error('XLSX.utils.book_new is not a function. The library version may be incompatible.');
+            }
+            
             const wb = XLSX.utils.book_new();
             const ws = XLSX.utils.aoa_to_sheet(excelData);
             
@@ -650,7 +927,8 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             
         } catch (error) {
             console.error('Error exporting to Excel:', error);
-            alert('Failed to export to Excel. Please try again.');
+            const errorMessage = error.message || 'Unknown error occurred';
+            alert(`Failed to export to Excel: ${errorMessage}\n\nPlease check your internet connection and try again.`);
         } finally {
             setIsExporting(false);
         }
@@ -871,7 +1149,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
         return (
             <td 
-                className={`px-2 py-1 text-xs border-l border-gray-100 ${statusConfig ? statusConfig.cellColor : ''}`}
+                className={`px-2 py-1 text-xs border-l border-gray-100 ${
+                    workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
+                        ? 'bg-primary-50 bg-opacity-30'
+                        : ''
+                } ${statusConfig ? statusConfig.cellColor : ''}`}
             >
                 <div className="min-w-[160px] relative">
                     {/* Status Dropdown */}
@@ -953,21 +1235,45 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
                                 <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                    {comments.map((comment, idx) => (
-                                        <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
-                                            <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
-                                            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                <span className="font-medium">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</span>
-                                                <span>{new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', { 
-                                                    month: 'short', 
-                                                    day: '2-digit',
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                    year: 'numeric'
-                                                })}</span>
+                                    {comments.map((comment, idx) => {
+                                        const currentUser = getCurrentUser();
+                                        const canDelete = comment?.authorId === currentUser.id || 
+                                                         comment?.author === currentUser.name ||
+                                                         currentUser.role === 'Admin' || 
+                                                         currentUser.role === 'Administrator' ||
+                                                         currentUser.role === 'admin';
+                                        const authorName = comment.author || comment.createdBy || 'User';
+                                        const authorEmail = comment.authorEmail || comment.createdByEmail;
+                                        
+                                        return (
+                                            <div key={comment.id || idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5 relative group">
+                                                <p className="text-xs text-gray-700 whitespace-pre-wrap pr-6">{comment.text}</p>
+                                                <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                    <span className="font-medium">
+                                                        {authorName}
+                                                        {authorEmail ? ` (${authorEmail})` : ''}
+                                                    </span>
+                                                    <span>{new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', { 
+                                                        month: 'short', 
+                                                        day: '2-digit',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                        year: 'numeric'
+                                                    })}</span>
+                                                </div>
+                                                {canDelete && (
+                                                    <button
+                                                        onClick={() => handleDeleteComment(parseInt(sectionId), parseInt(documentId), month, comment.id || idx)}
+                                                        className="absolute top-1 right-1 text-gray-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                        title="Delete comment"
+                                                        type="button"
+                                                    >
+                                                        <i className="fas fa-trash text-[10px]"></i>
+                                                    </button>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -1031,6 +1337,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                             </option>
                         ))}
                     </select>
+                    {selectedYear === currentYear && (
+                        <button
+                            onClick={scrollToWorkingMonths}
+                            className="px-2.5 py-1 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors text-[10px] font-medium"
+                            title="Scroll to working months"
+                        >
+                            <i className="fas fa-crosshairs mr-1"></i>
+                            Working Months
+                        </button>
+                    )}
                     <button
                         onClick={handleExportToExcel}
                         disabled={isExporting || sections.length === 0}
@@ -1061,23 +1377,37 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
             {/* Legend */}
             <div className="bg-white rounded-lg border border-gray-200 p-2.5">
-                <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
-                    {statusOptions.slice(0, 3).map((option, idx) => (
-                        <React.Fragment key={option.value}>
-                            <div className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300`}></div>
-                                <span className="text-[10px] text-gray-600">{option.label}</span>
-                            </div>
-                            {idx < 2 && (
-                                <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>
-                            )}
-                        </React.Fragment>
-                    ))}
-                    <span className="text-gray-300 mx-1">|</span>
-                    <div className="flex items-center gap-1">
-                        <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300`}></div>
-                        <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
+                <div className="space-y-1.5">
+                    {/* Working Months Info */}
+                    <div className="flex items-center gap-2 pb-1.5 border-b border-gray-100">
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-primary-50 text-primary-700 text-[10px] font-medium">
+                            <i className="fas fa-calendar-check mr-1 text-[10px]"></i>
+                            Working Months
+                        </span>
+                        <span className="text-[10px] text-gray-500">
+                            Highlighted columns show current focus months (2 months in arrears)
+                        </span>
+                    </div>
+                    
+                    {/* Status Legend */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
+                        {statusOptions.slice(0, 3).map((option, idx) => (
+                            <React.Fragment key={option.value}>
+                                <div className="flex items-center gap-1">
+                                    <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-300`}></div>
+                                    <span className="text-[10px] text-gray-600">{option.label}</span>
+                                </div>
+                                {idx < 2 && (
+                                    <i className="fas fa-arrow-right text-[8px] text-gray-400"></i>
+                                )}
+                            </React.Fragment>
+                        ))}
+                        <span className="text-gray-300 mx-1">|</span>
+                        <div className="flex items-center gap-1">
+                            <div className={`w-3 h-3 rounded ${statusOptions[3].cellColor} border border-gray-300`}></div>
+                            <span className="text-[10px] text-gray-600">{statusOptions[3].label}</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1091,13 +1421,25 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                 <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide sticky left-0 bg-gray-50 z-10 border-r border-gray-200">
                                     Document / Data
                                 </th>
-                                {months.map((month) => (
+                                {months.map((month, idx) => (
                                     <th 
                                         key={month}
                                         ref={el => monthRefs.current[month] = el}
-                                        className="px-1.5 py-1.5 text-center text-[10px] font-semibold text-gray-600 uppercase tracking-wide border-l border-gray-200"
+                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 ${
+                                            workingMonths.includes(idx) && selectedYear === currentYear
+                                                ? 'bg-primary-50 text-primary-700'
+                                                : 'text-gray-600'
+                                        }`}
                                     >
-                                        {month.slice(0, 3)} '{String(selectedYear).slice(-2)}
+                                        <div className="flex flex-col items-center gap-0.5">
+                                            <span>{month.slice(0, 3)} '{String(selectedYear).slice(-2)}</span>
+                                            {workingMonths.includes(idx) && selectedYear === currentYear && (
+                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700">
+                                                    <i className="fas fa-calendar-check mr-0.5"></i>
+                                                    Working
+                                                </span>
+                                            )}
+                                        </div>
                                     </th>
                                 ))}
                                 <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide border-l border-gray-200">

@@ -176,10 +176,10 @@ const DashboardLive = () => {
                 const leadsFromAPI = Array.isArray(leadsRes.data?.leads) ? leadsRes.data.leads : [];
                 const leads = leadsFromAPI.length > 0 ? leadsFromAPI : cachedLeads;
                 
-                // Store leads in localStorage for next load
-                if (leadsFromAPI.length > 0 && window.storage?.setLeads) {
+                // Store leads in localStorage for next load (even if empty to prevent stale cache)
+                if (window.storage?.setLeads) {
                     window.storage.setLeads(leadsFromAPI);
-                    console.log('✅ DashboardLive: Stored leads in localStorage');
+                    console.log('✅ DashboardLive: Stored leads in localStorage:', leadsFromAPI.length);
                 }
                 
                 // Handle different API response formats

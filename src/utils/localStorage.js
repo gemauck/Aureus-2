@@ -34,6 +34,40 @@ const storage = {
         localStorage.removeItem('abcotronics_user');
     },
     
+    // Get current user name for logging
+    getUserName: () => {
+        try {
+            const userData = localStorage.getItem('abcotronics_user');
+            const user = userData ? JSON.parse(userData) : null;
+            return user?.name || user?.email || 'System';
+        } catch (e) {
+            console.error('Error getting user name:', e);
+            return 'System';
+        }
+    },
+    
+    // Get current user info object for logging
+    getUserInfo: () => {
+        try {
+            const userData = localStorage.getItem('abcotronics_user');
+            const user = userData ? JSON.parse(userData) : null;
+            return {
+                name: user?.name || 'System',
+                email: user?.email || 'system',
+                id: user?.id || 'system',
+                role: user?.role || 'System'
+            };
+        } catch (e) {
+            console.error('Error getting user info:', e);
+            return {
+                name: 'System',
+                email: 'system',
+                id: 'system',
+                role: 'System'
+            };
+        }
+    },
+    
     // Clients
     getClients: () => {
         try {
