@@ -1595,6 +1595,7 @@ const Clients = React.memo(() => {
         });
 
         const handleDragStart = (item, type) => {
+            console.log('🎯 DRAG START:', type, item?.id, item?.title || item?.name);
             setDraggedItem(item);
             setDraggedType(type);
         };
@@ -1626,11 +1627,14 @@ const Clients = React.memo(() => {
                         .catch(err => console.error('❌ Failed to update lead stage:', err));
                 }
             } else if (draggedType === 'opportunity') {
+                console.log('🎯🎯🎯 DROPPING OPPORTUNITY!', { draggedItem: draggedItem.id, targetStage, draggedItem });
+                
                 const updatedClients = clients.map(client => {
                     if (client.id === draggedItem.clientId) {
                         const updatedOpportunities = client.opportunities.map(opp =>
                             opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
                         );
+                        console.log(`✅ Updated opportunity ${draggedItem.id} to stage ${targetStage}`);
                         return { ...client, opportunities: updatedOpportunities };
                     }
                     return client;
@@ -1640,10 +1644,17 @@ const Clients = React.memo(() => {
                 
                 // Save opportunity update to API if opportunity has an ID
                 const token = window.storage?.getToken?.();
-                if (token && window.DatabaseAPI && draggedItem.id) {
-                    window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: targetStage })
-                        .then(() => console.log('✅ Opportunity stage updated:', targetStage))
-                        .catch(err => console.error('❌ Failed to update opportunity stage:', err));
+                if (token && window.api && window.api.updateOpportunity && draggedItem.id) {
+                    console.log('📡 Calling API to update opportunity stage...');
+                    window.api.updateOpportunity(draggedItem.id, { stage: targetStage })
+                        .then((response) => {
+                            console.log('✅ Opportunity stage updated via API:', targetStage, response);
+                        })
+                        .catch(err => {
+                            console.error('❌ Failed to update opportunity stage via API:', err);
+                        });
+                } else {
+                    console.warn('⚠️ Cannot save opportunity update - missing token or API method');
                 }
             }
 
