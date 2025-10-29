@@ -1372,7 +1372,7 @@ const Clients = React.memo(() => {
             };
             
             loadOpps();
-        }, []); // Run once on mount
+        }, [clients.length]); // Re-run when clients are loaded
         
         console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
         console.log('🔍 Pipeline View - Sample clients:', clients.slice(0, 3).map(c => ({ 
