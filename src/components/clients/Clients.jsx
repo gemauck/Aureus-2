@@ -1334,24 +1334,36 @@ const Clients = React.memo(() => {
             const handleOpportunitiesUpdated = async (event) => {
                 if (!window.api?.getOpportunitiesByClient) return;
                 
-                // Reload opportunities for all clients to ensure Pipeline view is up-to-date
-                const clientsWithOpps = await Promise.all(clients.map(async (client) => {
-                    try {
-                        const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                        const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                        return { ...client, opportunities: opps };
-                    } catch (error) {
-                        console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
-                        return { ...client, opportunities: client.opportunities || [] };
-                    }
-                }));
-                setClients(clientsWithOpps);
-                safeStorage.setClients(clientsWithOpps);
+                const { clientId } = event.detail || {};
+                if (!clientId) return;
+                
+                // Reload opportunities for the specific client that was updated
+                setClients(prevClients => {
+                    // Start async reload, but return current clients immediately
+                    Promise.all(prevClients.map(async (client) => {
+                        if (client.id === clientId) {
+                            try {
+                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                                return { ...client, opportunities: opps };
+                            } catch (error) {
+                                console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
+                                return client;
+                            }
+                        }
+                        return client;
+                    })).then(updatedClients => {
+                        setClients(updatedClients);
+                        safeStorage.setClients(updatedClients);
+                    });
+                    
+                    return prevClients; // Return immediately without waiting
+                });
             };
             
             window.addEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
             return () => window.removeEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
-        }, [clients]);
+        }, []); // Empty deps - only set up listener once
         
         let clientOpportunities = clients.reduce((acc, client) => {
             if (client.opportunities && Array.isArray(client.opportunities)) {
@@ -2040,52 +2052,38 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={async () => {
-                        console.log('🖱️🖱️🖱️🖱️🖱️ PIPELINE TAB CLICKED! 🖱️🖱️🖱️🖱️🖱️');
-                        console.log('🔍 Current viewMode BEFORE click:', viewMode);
                         setViewMode('pipeline');
-                        console.log('🔍 viewMode set to "pipeline"');
                         
-                        // IMMEDIATELY load opportunities for all clients when Pipeline tab is clicked
-                        if (!window.api?.getOpportunitiesByClient) {
-                            console.error('❌ getOpportunitiesByClient NOT AVAILABLE!');
+                        // Load opportunities when Pipeline tab is clicked (only if needed)
+                        if (!window.api?.getOpportunitiesByClient || clients.length === 0) {
                             return;
                         }
                         
-                        if (clients.length === 0) {
-                            console.warn('⚠️ No clients to load opportunities for');
-                            return;
+                        // Check if clients already have opportunities loaded
+                        const clientsNeedingOpps = clients.filter(c => !c.opportunities || c.opportunities.length === 0);
+                        if (clientsNeedingOpps.length === 0) {
+                            return; // Already loaded
                         }
                         
-                        console.log(`🚀🚀🚀 FORCE LOADING opportunities for ${clients.length} clients NOW!`);
                         try {
                             const clientsWithOpps = await Promise.all(clients.map(async (client) => {
+                                // Only fetch if client doesn't have opportunities
+                                if (client.opportunities && client.opportunities.length > 0) {
+                                    return client; // Keep existing
+                                }
                                 try {
-                                    console.log(`📡 Fetching opportunities for ${client.name} (${client.id})...`);
                                     const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                                     const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                    if (opportunities.length > 0) {
-                                        console.log(`✅✅✅ Loaded ${opportunities.length} opps for ${client.name}:`, 
-                                            opportunities.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
-                                    } else {
-                                        console.log(`📭 No opportunities for ${client.name}`);
-                                    }
                                     return { ...client, opportunities };
                                 } catch (error) {
                                     console.error(`❌ Failed to load opportunities for ${client.name}:`, error);
                                     return { ...client, opportunities: client.opportunities || [] };
                                 }
                             }));
-                            
-                            const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            console.log(`🎉🎉🎉 PIPELINE: LOADED ${totalOpps} TOTAL OPPORTUNITIES!`);
-                            console.log(`🎉 Clients with opportunities:`, clientsWithOpps.filter(c => c.opportunities && c.opportunities.length > 0).map(c => ({ 
-                                name: c.name, 
-                                count: c.opportunities.length 
-                            })));
                             setClients(clientsWithOpps);
                             safeStorage.setClients(clientsWithOpps);
                         } catch (error) {
-                            console.error('❌ CRITICAL ERROR loading opportunities:', error);
+                            console.error('❌ Error loading opportunities:', error);
                         }
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
@@ -2182,47 +2180,7 @@ const Clients = React.memo(() => {
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
-            {viewMode === 'pipeline' ? (() => {
-                console.log('🚀🚀🚀🚀🚀 CONSOLE TEST - YOU SHOULD SEE THIS IF PIPELINE IS RENDERING! 🚀🚀🚀🚀🚀');
-                console.log('🎯🎯🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
-                console.log('🎯🎯🎯🎯🎯 Current clients:', clients.length);
-                
-                // FORCE LOAD OPPORTUNITIES IMMEDIATELY WHEN PIPELINE VIEW RENDERS
-                if (clients.length > 0 && window.api?.getOpportunitiesByClient) {
-                    console.log('🚀🚀🚀 PIPELINE VIEW RENDERING - FORCE LOADING OPPORTUNITIES NOW!');
-                    // Load opportunities asynchronously and update state
-                    Promise.all(clients.map(async (client) => {
-                        try {
-                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                            if (opportunities.length > 0) {
-                                console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
-                            }
-                            return { ...client, opportunities };
-                        } catch (error) {
-                            console.error(`❌ Failed for ${client.name}:`, error);
-                            return { ...client, opportunities: client.opportunities || [] };
-                        }
-                    })).then(clientsWithOpps => {
-                        const total = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                        console.log(`🎉🎉🎉 TOTAL OPPORTUNITIES LOADED: ${total}`);
-                        setClients(clientsWithOpps);
-                        safeStorage.setClients(clientsWithOpps);
-                    });
-                }
-                
-                if (clients.length > 0) {
-                    console.log('🎯🎯🎯🎯🎯 Client opportunities:', clients.map(c => ({ name: c.name, opps: c.opportunities?.length || 0, hasOpps: !!(c.opportunities) })));
-                }
-                try {
-                    return <PipelineView />;
-                } catch (error) {
-                    console.error('❌ ERROR RENDERING PipelineView:', error);
-                    return <div>Error rendering Pipeline: {error.message}</div>;
-                }
-            })() : (
-                console.log('🚫 NOT rendering PipelineView, viewMode is:', viewMode) || null
-            )}
+            {viewMode === 'pipeline' && <PipelineView />}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>
