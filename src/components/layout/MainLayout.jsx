@@ -241,10 +241,10 @@ const MainLayout = () => {
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen ? (
                         <div className="flex-1">
-                            <h1 className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
+                            <h1 className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
                         </div>
                     ) : (
-                        <div className={`text-lg lg:text-sm font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>
+                        <div className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -323,7 +323,7 @@ const MainLayout = () => {
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
                         <div className="lg:hidden">
-                            <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Abcotronics</h2>
+                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Abcotronics</h2>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
