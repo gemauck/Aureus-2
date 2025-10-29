@@ -562,7 +562,7 @@ const Pipeline = () => {
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-lg p-2.5 border border-gray-200 shadow-sm cursor-move ${!isDragging ? 'hover:shadow-md transition' : ''} ${
+                className={`bg-white rounded-lg p-2.5 border border-gray-200 shadow-sm cursor-move min-h-[140px] flex flex-col ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
             >
@@ -597,23 +597,26 @@ const Pipeline = () => {
                 </div>
 
                 {/* Age Badge */}
-                <div className="flex items-center justify-between text-[10px]">
+                <div className="flex items-center justify-between text-[10px] mb-1.5">
                     <span className={`px-1.5 py-0.5 rounded font-medium ${getAgeBadgeColor(age)}`}>
                         {age} {age === 1 ? 'day' : 'days'}
                     </span>
                     {item.industry && (
                         <span className="text-gray-500 text-[9px]">{item.industry}</span>
                     )}
+                    {!item.industry && <span></span>}
                 </div>
 
                 {/* Expected Close Date */}
-                {item.expectedCloseDate && (
-                    <div className="mt-1.5 pt-1.5 border-t border-gray-100">
+                {item.expectedCloseDate ? (
+                    <div className="mt-auto pt-1.5 border-t border-gray-100">
                         <div className="text-[10px] text-gray-600">
                             <i className="fas fa-calendar-alt mr-1 text-[9px]"></i>
                             Close: {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')}
                         </div>
                     </div>
+                ) : (
+                    <div className="mt-auto min-h-[20px]"></div>
                 )}
             </div>
         );

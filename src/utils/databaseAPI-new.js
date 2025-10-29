@@ -379,6 +379,162 @@ const DatabaseAPI = {
         // Clear users cache after deletion to ensure fresh data on next fetch
         this.clearCache('/users');
         return result;
+    },
+
+    // Manufacturing operations - Inventory
+    async getInventory() {
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching inventory from database...');
+        return this.makeRequest('/manufacturing/inventory');
+    },
+
+    async createInventoryItem(itemData) {
+        const result = await this.makeRequest('/manufacturing/inventory', {
+            method: 'POST',
+            body: JSON.stringify(itemData)
+        });
+        this.clearCache('/manufacturing/inventory');
+        return result;
+    },
+
+    async updateInventoryItem(id, itemData) {
+        const result = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(itemData)
+        });
+        this.clearCache('/manufacturing/inventory');
+        return result;
+    },
+
+    async deleteInventoryItem(id) {
+        const result = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'DELETE'
+        });
+        this.clearCache('/manufacturing/inventory');
+        return result;
+    },
+
+    // Manufacturing operations - BOMs
+    async getBOMs() {
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching BOMs from database...');
+        return this.makeRequest('/manufacturing/boms');
+    },
+
+    async createBOM(bomData) {
+        const result = await this.makeRequest('/manufacturing/boms', {
+            method: 'POST',
+            body: JSON.stringify(bomData)
+        });
+        this.clearCache('/manufacturing/boms');
+        return result;
+    },
+
+    async updateBOM(id, bomData) {
+        const result = await this.makeRequest(`/manufacturing/boms/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(bomData)
+        });
+        this.clearCache('/manufacturing/boms');
+        return result;
+    },
+
+    async deleteBOM(id) {
+        const result = await this.makeRequest(`/manufacturing/boms/${id}`, {
+            method: 'DELETE'
+        });
+        this.clearCache('/manufacturing/boms');
+        return result;
+    },
+
+    // Manufacturing operations - Production Orders
+    async getProductionOrders() {
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching production orders from database...');
+        return this.makeRequest('/manufacturing/production-orders');
+    },
+
+    async createProductionOrder(orderData) {
+        const result = await this.makeRequest('/manufacturing/production-orders', {
+            method: 'POST',
+            body: JSON.stringify(orderData)
+        });
+        this.clearCache('/manufacturing/production-orders');
+        return result;
+    },
+
+    async updateProductionOrder(id, orderData) {
+        const result = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(orderData)
+        });
+        this.clearCache('/manufacturing/production-orders');
+        return result;
+    },
+
+    async deleteProductionOrder(id) {
+        const result = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
+            method: 'DELETE'
+        });
+        this.clearCache('/manufacturing/production-orders');
+        return result;
+    },
+
+    // Manufacturing operations - Stock Movements
+    async getStockMovements() {
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching stock movements from database...');
+        return this.makeRequest('/manufacturing/stock-movements');
+    },
+
+    async createStockMovement(movementData) {
+        const result = await this.makeRequest('/manufacturing/stock-movements', {
+            method: 'POST',
+            body: JSON.stringify(movementData)
+        });
+        this.clearCache('/manufacturing/stock-movements');
+        return result;
+    },
+
+    async deleteStockMovement(id) {
+        const result = await this.makeRequest(`/manufacturing/stock-movements/${id}`, {
+            method: 'DELETE'
+        });
+        this.clearCache('/manufacturing/stock-movements');
+        return result;
+    },
+
+    // Manufacturing operations - Suppliers
+    async getSuppliers() {
+        const log = window.debug?.log || (() => {});
+        log('📡 Fetching suppliers from database...');
+        return this.makeRequest('/manufacturing/suppliers');
+    },
+
+    async createSupplier(supplierData) {
+        const result = await this.makeRequest('/manufacturing/suppliers', {
+            method: 'POST',
+            body: JSON.stringify(supplierData)
+        });
+        this.clearCache('/manufacturing/suppliers');
+        return result;
+    },
+
+    async updateSupplier(id, supplierData) {
+        const result = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(supplierData)
+        });
+        this.clearCache('/manufacturing/suppliers');
+        return result;
+    },
+
+    async deleteSupplier(id) {
+        const result = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
+            method: 'DELETE'
+        });
+        this.clearCache('/manufacturing/suppliers');
+        return result;
     }
 };
 

@@ -290,6 +290,16 @@
         }
     },
 
+    async getTeamTasks() {
+        return safeStorageCall(window.storage, 'getTeamTasks', []);
+    },
+
+    async setTeamTasks(tasks) {
+        if (typeof window.storage?.setTeamTasks === 'function') {
+            window.storage.setTeamTasks(tasks);
+        }
+    },
+
     // HR - Employees (API with localStorage fallback)
     async getEmployees() {
         if (window.api?.getEmployees) {

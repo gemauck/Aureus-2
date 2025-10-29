@@ -1052,7 +1052,8 @@ const Clients = React.memo(() => {
                     sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : (selectedLead.sites || []),
                     contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : (selectedLead.contracts || []),
                     activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : (selectedLead.activityLog || []),
-                    projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : (selectedLead.projectIds || [])
+                    projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : (selectedLead.projectIds || []),
+                    proposals: Array.isArray(leadFormData.proposals) ? leadFormData.proposals : (selectedLead.proposals || [])
                 };
                 
                 console.log('🔄 Updated lead object:', { 
