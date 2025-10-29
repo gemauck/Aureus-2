@@ -2114,8 +2114,22 @@ const Clients = React.memo(() => {
                     <div className="flex-1">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clients and Leads</h1>
-                                <p className="text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                                <h1 
+                                    id="clients-leads-heading"
+                                    className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}
+                                    style={{ 
+                                        color: isDark ? '#f3f4f6' : '#111827',
+                                        WebkitTextFillColor: isDark ? '#f3f4f6' : '#111827'
+                                    }}
+                                >
+                                    Clients and Leads
+                                </h1>
+                                <p 
+                                    className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+                                    style={{ color: isDark ? '#9ca3af' : '#4b5563' }}
+                                >
+                                    Manage clients and leads
+                                </p>
                             </div>
                             {SectionCommentWidget && (
                                 <SectionCommentWidget 
@@ -2136,10 +2150,18 @@ const Clients = React.memo(() => {
                             setCurrentTab('overview');
                             setViewMode('client-detail');
                         }}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-all duration-200 shadow-sm hover:shadow-md"
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
+                            isDark 
+                                ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' 
+                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
                     >
-                        <div className="w-5 h-5 bg-blue-100 rounded-md flex items-center justify-center">
-                            <i className="fas fa-plus text-blue-600 text-xs"></i>
+                        <div className={`w-5 h-5 rounded-md flex items-center justify-center ${
+                            isDark ? 'bg-blue-900/30' : 'bg-blue-100'
+                        }`}>
+                            <i className={`fas fa-plus text-xs ${
+                                isDark ? 'text-blue-400' : 'text-blue-600'
+                            }`}></i>
                         </div>
                         <span>Add Client</span>
                     </button>
@@ -2160,13 +2182,15 @@ const Clients = React.memo(() => {
             </div>
 
             {/* Modern View Tabs */}
-            <div className="bg-white rounded-xl border border-gray-200 p-1 inline-flex shadow-sm">
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-1 inline-flex shadow-sm`}>
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'clients' 
                             ? 'bg-blue-600 text-white shadow-sm' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-building mr-2"></i>
@@ -2177,7 +2201,9 @@ const Clients = React.memo(() => {
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'leads' 
                             ? 'bg-blue-600 text-white shadow-sm' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-star mr-2"></i>
@@ -2222,7 +2248,9 @@ const Clients = React.memo(() => {
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
                             ? 'bg-blue-600 text-white shadow-sm' 
-                            : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
                 >
                     <i className="fas fa-stream mr-2"></i>
@@ -2232,7 +2260,7 @@ const Clients = React.memo(() => {
 
             {/* Modern Search and Filters */}
             {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
-                <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-6 shadow-sm`}>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
@@ -2241,13 +2269,21 @@ const Clients = React.memo(() => {
                                     placeholder="Search by name, industry, or contact..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                                    className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400 focus:bg-gray-700' 
+                                            : 'bg-gray-50 border-gray-300 text-gray-900 placeholder-gray-500 focus:bg-white'
+                                    }`}
                                 />
-                                <i className="fas fa-search absolute left-3 top-3.5 text-gray-400 text-sm"></i>
+                                <i className={`fas fa-search absolute left-3 top-3.5 text-sm ${
+                                    isDark ? 'text-gray-400' : 'text-gray-400'
+                                }`}></i>
                                 {searchTerm && (
                                     <button
                                         onClick={() => setSearchTerm('')}
-                                        className="absolute right-3 top-3.5 text-gray-400 hover:text-gray-600 transition-colors"
+                                        className={`absolute right-3 top-3.5 transition-colors ${
+                                            isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
+                                        }`}
                                         title="Clear search"
                                     >
                                         <i className="fas fa-times text-sm"></i>
@@ -2259,7 +2295,11 @@ const Clients = React.memo(() => {
                             <select
                                 value={filterIndustry}
                                 onChange={(e) => setFilterIndustry(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                    isDark 
+                                        ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
+                                        : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                                }`}
                             >
                                 <option value="All Industries">All Industries</option>
                                 <option value="Mining">Mining</option>
@@ -2272,7 +2312,11 @@ const Clients = React.memo(() => {
                             <select
                                 value={filterStatus}
                                 onChange={(e) => setFilterStatus(e.target.value)}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-gray-50 focus:bg-white transition-colors"
+                                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                    isDark 
+                                        ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
+                                        : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                                }`}
                             >
                                 <option value="All Status">All Status</option>
                                 <option value="Potential">Potential</option>
