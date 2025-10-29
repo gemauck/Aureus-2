@@ -59,8 +59,16 @@ const Projects = () => {
 
                 console.log('🔄 Projects: Loading projects from database');
                 
+                // Wait for DatabaseAPI to be available (with timeout)
+                let waitAttempts = 0;
+                while (!window.DatabaseAPI && waitAttempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    waitAttempts++;
+                }
+                
                 if (!window.DatabaseAPI) {
-                    console.error('❌ Projects: DatabaseAPI not available on window object');
+                    console.error('❌ Projects: DatabaseAPI not available on window object after waiting');
+                    console.error('🔍 Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('database') || k.toLowerCase().includes('api')));
                     setProjects([]);
                     setLoadError('Database API not available. Please refresh the page.');
                     setIsLoading(false);
@@ -69,12 +77,14 @@ const Projects = () => {
                 
                 if (!window.DatabaseAPI.getProjects) {
                     console.error('❌ Projects: DatabaseAPI.getProjects method not available');
+                    console.error('🔍 DatabaseAPI methods:', Object.keys(window.DatabaseAPI));
                     setProjects([]);
                     setLoadError('Projects API method not available. Please refresh the page.');
                     setIsLoading(false);
                     return;
                 }
                 
+                console.log('✅ DatabaseAPI.getProjects is available, making request...');
                 const response = await window.DatabaseAPI.getProjects();
                 console.log('📡 Raw response from database:', response);
                 console.log('📡 Response structure check:', {
@@ -619,7 +629,7 @@ const Projects = () => {
 
             {/* Project Cards */}
             {!isLoading && !loadError && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                <>
                     {filteredProjects.length === 0 ? (
                         <div className="col-span-full text-center py-12">
                             <i className="fas fa-filter text-4xl text-gray-300 mb-3"></i>
@@ -642,83 +652,84 @@ const Projects = () => {
                                 </button>
                             )}
                         </div>
-                    ) : null}
-                {filteredProjects.map((project, index) => (
-                    <div 
-                        key={project.id}
-                        draggable
-                        onDragStart={(e) => {
-                            setDraggedProject(index);
-                            e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        onDragOver={(e) => {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                        }}
-                        onDrop={(e) => {
-                            e.preventDefault();
-                            if (draggedProject === null) return;
-                            
-                            const newProjects = [...filteredProjects];
-                            const draggedItem = newProjects[draggedProject];
-                            newProjects.splice(draggedProject, 1);
-                            newProjects.splice(index, 0, draggedItem);
-                            
-                            // Update the original projects array with the new order
-                            // We need to merge the reordered filtered projects back into the full list
-                            const updatedProjects = projects.map(p => {
-                                const filteredIndex = newProjects.findIndex(fp => fp.id === p.id);
-                                return filteredIndex !== -1 ? newProjects[filteredIndex] : p;
-                            });
-                            setProjects(updatedProjects);
-                            setDraggedProject(null);
-                        }}
-                        onDragEnd={() => setDraggedProject(null)}
-                        onClick={() => handleViewProject(project)}
-                        className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
-                    >
-                        <div className="flex justify-between items-start mb-3">
-                            <div className="flex-1">
-                                <h3 className="font-semibold text-gray-900 text-sm mb-0.5">{project.name}</h3>
-                                <p className="text-xs text-gray-500">{project.client}</p>
-                            </div>
-                            <div className="flex items-center gap-1.5">
-                                <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${
-                                    project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                    project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                    project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
-                                    project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
-                                    project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                    'bg-gray-100 text-gray-700'
-                                }`}>
-                                    {project.status}
-                                </span>
-                            </div>
+                    ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                            {filteredProjects.map((project, index) => (
+                                <div 
+                                    key={project.id}
+                                    draggable
+                                    onDragStart={(e) => {
+                                        setDraggedProject(index);
+                                        e.dataTransfer.effectAllowed = 'move';
+                                    }}
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        e.dataTransfer.dropEffect = 'move';
+                                    }}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        if (draggedProject === null) return;
+                                        
+                                        const newProjects = [...filteredProjects];
+                                        const draggedItem = newProjects[draggedProject];
+                                        newProjects.splice(draggedProject, 1);
+                                        newProjects.splice(index, 0, draggedItem);
+                                        
+                                        // Update the original projects array with the new order
+                                        // We need to merge the reordered filtered projects back into the full list
+                                        const updatedProjects = projects.map(p => {
+                                            const filteredIndex = newProjects.findIndex(fp => fp.id === p.id);
+                                            return filteredIndex !== -1 ? newProjects[filteredIndex] : p;
+                                        });
+                                        setProjects(updatedProjects);
+                                        setDraggedProject(null);
+                                    }}
+                                    onDragEnd={() => setDraggedProject(null)}
+                                    onClick={() => handleViewProject(project)}
+                                    className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
+                                >
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex-1">
+                                            <h3 className="font-semibold text-gray-900 text-sm mb-0.5">{project.name}</h3>
+                                            <p className="text-xs text-gray-500">{project.client}</p>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className={`px-2 py-0.5 text-[10px] rounded font-medium ${
+                                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                                project.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                                project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
+                                                project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
+                                                project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                                                'bg-gray-100 text-gray-700'
+                                            }`}>
+                                                {project.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 mb-3">
+                                        <div className="flex items-center text-xs text-gray-600">
+                                            <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
+                                            {project.type}
+                                        </div>
+                                        <div className="flex items-center text-xs text-gray-600">
+                                            <i className="fas fa-calendar mr-2 w-3 text-[10px]"></i>
+                                            {project.startDate} - {project.dueDate}
+                                        </div>
+                                        <div className="flex items-center text-xs text-gray-600">
+                                            <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
+                                            {project.assignedTo}
+                                        </div>
+                                        <div className="flex items-center text-xs text-gray-600">
+                                            <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
+                                            {project.tasks?.length || 0} tasks • {countAllSubtasks(project.tasks?.flatMap(t => t.subtasks || []))} subtasks
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-
-                        <div className="space-y-2 mb-3">
-                            <div className="flex items-center text-xs text-gray-600">
-                                <i className="fas fa-tag mr-2 w-3 text-[10px]"></i>
-                                {project.type}
-                            </div>
-                            <div className="flex items-center text-xs text-gray-600">
-                                <i className="fas fa-calendar mr-2 w-3 text-[10px]"></i>
-                                {project.startDate} - {project.dueDate}
-                            </div>
-                            <div className="flex items-center text-xs text-gray-600">
-                                <i className="fas fa-user mr-2 w-3 text-[10px]"></i>
-                                {project.assignedTo}
-                            </div>
-                            <div className="flex items-center text-xs text-gray-600">
-                                <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
-                                {project.tasks?.length || 0} tasks • {countAllSubtasks(project.tasks?.flatMap(t => t.subtasks || []))} subtasks
-                            </div>
-                        </div>
-
-
-                    </div>
-                ))}
-                </div>
+                    )}
+                </>
             )}
 
             {/* Add/Edit Modal */}

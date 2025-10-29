@@ -1,0 +1,28 @@
+<!-- ============================================
+     PRODUCTION MODE vs DEVELOPMENT MODE
+     ============================================
+     
+     PRODUCTION MODE (Fast, Pre-compiled):
+     - Set USE_PRODUCTION_BUILD = true
+     - Loads pre-compiled JS from dist/
+     - 10x faster load times
+     - No Babel warnings
+     - Run: npm run build before deploying
+     
+     DEVELOPMENT MODE (Flexible, Slower):
+     - Set USE_PRODUCTION_BUILD = false
+     - Loads JSX files directly
+     - In-browser Babel transpilation
+     - Hot-reload friendly
+     - Good for rapid development
+     
+     To switch modes, change the constant below:
+============================================ -->
+<script>
+    // TOGGLE THIS TO SWITCH MODES
+    window.USE_PRODUCTION_BUILD = false; // Set to true for production
+    
+    console.log(window.USE_PRODUCTION_BUILD ? '🚀 PRODUCTION MODE' : '⚙️ DEVELOPMENT MODE');
+</script>
+
+<!-- The rest of your HTML follows... -->

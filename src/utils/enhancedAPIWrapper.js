@@ -484,16 +484,20 @@ class EnhancedAPIWrapper {
         this.requestTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
         this.requestTimeouts.clear();
         
-        console.log('🧹 Request queue cleared');
+        // Debugging disabled
+        if (window.debug && window.debug.enabled) {
+            console.log('🧹 Request queue cleared');
+        }
     }
 }
 
 // Create global instance
 window.EnhancedAPIWrapper = new EnhancedAPIWrapper();
 
-// Debug function
+// Debug function - disabled by default
 window.debugEnhancedAPI = () => {
-    console.log('🔍 Enhanced API Wrapper Debug:', window.EnhancedAPIWrapper.getConnectionStatus());
+    // Debugging disabled - uncomment to enable:
+    // console.log('🔍 Enhanced API Wrapper Debug:', window.EnhancedAPIWrapper.getConnectionStatus());
 };
 
 export default EnhancedAPIWrapper;

@@ -16,11 +16,9 @@
             script.src = src;
             script.onload = () => {
                 loadedComponents++;
-                console.log(`✅ Loaded ${src} (${loadedComponents}/${componentFiles.length})`);
                 resolve();
             };
             script.onerror = () => {
-                console.error(`❌ Failed to load ${src}`);
                 resolve(); // Continue even if one fails
             };
             document.body.appendChild(script);
@@ -37,8 +35,6 @@
     function startLazyLoading() {
         // Wait for critical components to be ready
         setTimeout(() => {
-            console.log('🚀 Starting lazy load of non-critical components...');
-            
             // Load in small batches to not block rendering
             const batchSize = 3;
             let index = 0;
@@ -46,7 +42,6 @@
             function loadBatch() {
                 const batch = componentFiles.slice(index, index + batchSize);
                 if (batch.length === 0) {
-                    console.log('✅ All components loaded!');
                     return;
                 }
                 

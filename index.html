@@ -532,17 +532,25 @@
                     const root = document.getElementById('root');
                     if (root && !root._reactRootContainer) {
                         if (window.__reactRoot) {
-                            window.__reactRoot.render(React.createElement(window.App));
+                            window.__reactRoot.render(window.React.createElement(window.App));
                         } else {
-                            const reactRoot = ReactDOM.createRoot(root);
+                            const reactRoot = window.ReactDOM.createRoot(root);
                             window.__reactRoot = reactRoot;
-                            reactRoot.render(React.createElement(window.App));
+                            reactRoot.render(window.React.createElement(window.App));
                         }
                         window.__appMounted = true;
+                        console.log('✅ App mounted by fallback loader');
                     }
                 } catch (error) {
-                    console.error('Mount error:', error);
+                    console.error('❌ Mount error:', error);
                 }
+            } else if (!window.__appMounted) {
+                console.warn('⚠️ App not mounted after 3s. Missing:', {
+                    React: !window.React,
+                    ReactDOM: !window.ReactDOM,
+                    App: !window.App,
+                    mounted: window.__appMounted
+                });
             }
         }, 3000);
     </script>

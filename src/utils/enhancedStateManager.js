@@ -565,16 +565,20 @@ class EnhancedStateManager {
         this.lastSyncTimestamp.clear();
         this.syncInProgress.clear();
         
-        console.log('🧹 All state cleared');
+        // Debugging disabled
+        if (window.debug && window.debug.enabled) {
+            console.log('🧹 All state cleared');
+        }
     }
 }
 
 // Create global instance
 window.EnhancedStateManager = new EnhancedStateManager();
 
-// Debug function
+// Debug function - disabled by default
 window.debugEnhancedState = () => {
-    console.log('🔍 Enhanced State Manager Debug:', window.EnhancedStateManager.getOperationStatus());
+    // Debugging disabled - uncomment to enable:
+    // console.log('🔍 Enhanced State Manager Debug:', window.EnhancedStateManager.getOperationStatus());
 };
 
 export default EnhancedStateManager;
