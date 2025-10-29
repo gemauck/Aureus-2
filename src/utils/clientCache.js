@@ -26,7 +26,9 @@ const ClientCache = {
     // Get cached clients with immediate return
     getClients() {
         if (this.isCacheValid(this.cache.clientsTimestamp)) {
-            console.log('⚡ ClientCache: Returning cached clients');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: Returning cached clients');
+            }
             return this.cache.clients || [];
         }
         return null;
@@ -36,13 +38,17 @@ const ClientCache = {
     setClients(clients) {
         this.cache.clients = clients;
         this.cache.clientsTimestamp = Date.now();
-        console.log('💾 ClientCache: Cached clients updated');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Cached clients updated');
+        }
     },
 
     // Get cached leads
     getLeads() {
         if (this.isCacheValid(this.cache.leadsTimestamp)) {
-            console.log('⚡ ClientCache: Returning cached leads');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: Returning cached leads');
+            }
             return this.cache.leads || [];
         }
         return null;
@@ -52,13 +58,17 @@ const ClientCache = {
     setLeads(leads) {
         this.cache.leads = leads;
         this.cache.leadsTimestamp = Date.now();
-        console.log('💾 ClientCache: Cached leads updated');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Cached leads updated');
+        }
     },
 
     // Get cached projects
     getProjects() {
         if (this.isCacheValid(this.cache.projectsTimestamp)) {
-            console.log('⚡ ClientCache: Returning cached projects');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: Returning cached projects');
+            }
             return this.cache.projects || [];
         }
         return null;
@@ -68,13 +78,17 @@ const ClientCache = {
     setProjects(projects) {
         this.cache.projects = projects;
         this.cache.projectsTimestamp = Date.now();
-        console.log('💾 ClientCache: Cached projects updated');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Cached projects updated');
+        }
     },
 
     // Get cached invoices
     getInvoices() {
         if (this.isCacheValid(this.cache.invoicesTimestamp)) {
-            console.log('⚡ ClientCache: Returning cached invoices');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: Returning cached invoices');
+            }
             return this.cache.invoices || [];
         }
         return null;
@@ -84,13 +98,17 @@ const ClientCache = {
     setInvoices(invoices) {
         this.cache.invoices = invoices;
         this.cache.invoicesTimestamp = Date.now();
-        console.log('💾 ClientCache: Cached invoices updated');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Cached invoices updated');
+        }
     },
 
     // Get cached time entries
     getTimeEntries() {
         if (this.isCacheValid(this.cache.timeEntriesTimestamp)) {
-            console.log('⚡ ClientCache: Returning cached time entries');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: Returning cached time entries');
+            }
             return this.cache.timeEntries || [];
         }
         return null;
@@ -100,7 +118,9 @@ const ClientCache = {
     setTimeEntries(timeEntries) {
         this.cache.timeEntries = timeEntries;
         this.cache.timeEntriesTimestamp = Date.now();
-        console.log('💾 ClientCache: Cached time entries updated');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Cached time entries updated');
+        }
     },
 
     // Clear all cache
@@ -117,12 +137,17 @@ const ClientCache = {
             timeEntries: null,
             timeEntriesTimestamp: null
         };
-        console.log('🧹 ClientCache: All cache cleared');
+        // Debugging disabled
+        if (window.debug && window.debug.enabled) {
+            console.log('🧹 ClientCache: All cache cleared');
+        }
     },
 
     // Force refresh clients from API (bypass cache)
     async forceRefreshClients() {
-        console.log('🔄 ClientCache: Force refreshing clients from API...');
+        if (window.debug && window.debug.enabled) {
+            console.log('🔄 ClientCache: Force refreshing clients from API...');
+        }
         try {
             if (window.DatabaseAPI?.getClients) {
                 const response = await window.DatabaseAPI.getClients();
@@ -136,13 +161,18 @@ const ClientCache = {
                     window.storage.setClients(clients);
                 }
                 
-                console.log('✅ ClientCache: Clients force refreshed:', clients.length);
+                if (window.debug && window.debug.enabled) {
+                    console.log('✅ ClientCache: Clients force refreshed:', clients.length);
+                }
                 return clients;
             } else {
-                console.warn('⚠️ ClientCache: DatabaseAPI not available for force refresh');
+                if (window.debug && window.debug.enabled) {
+                    console.warn('⚠️ ClientCache: DatabaseAPI not available for force refresh');
+                }
                 return this.getClients() || [];
             }
         } catch (error) {
+            // Always log errors
             console.error('❌ ClientCache: Force refresh failed:', error);
             return this.getClients() || [];
         }
@@ -181,7 +211,9 @@ const ClientCache = {
 
     // Optimized data loading with cache-first strategy
     async loadDataWithCache() {
-        console.log('🚀 ClientCache: Starting optimized data load...');
+        if (window.debug && window.debug.enabled) {
+            console.log('🚀 ClientCache: Starting optimized data load...');
+        }
         
         // IMMEDIATE: Try cache first
         const cachedClients = this.getClients();
@@ -193,7 +225,9 @@ const ClientCache = {
         // If we have valid cache for all data, return immediately
         if (cachedClients !== null && cachedLeads !== null && cachedProjects !== null && 
             cachedInvoices !== null && cachedTimeEntries !== null) {
-            console.log('⚡ ClientCache: All data served from cache');
+            if (window.debug && window.debug.enabled) {
+                console.log('⚡ ClientCache: All data served from cache');
+            }
             return {
                 clients: cachedClients,
                 leads: cachedLeads,
@@ -205,7 +239,9 @@ const ClientCache = {
         }
 
         // FALLBACK: Load from localStorage (leads are database-only)
-        console.log('💾 ClientCache: Loading from localStorage...');
+        if (window.debug && window.debug.enabled) {
+            console.log('💾 ClientCache: Loading from localStorage...');
+        }
         const localStorageClients = window.storage?.getClients?.() || [];
         const localStorageProjects = window.storage?.getProjects?.() || [];
         const localStorageInvoices = window.storage?.getInvoices?.() || [];
@@ -335,25 +371,37 @@ window.ClientCache = ClientCache;
 
 // Debug function
 window.debugClientCache = () => {
-    console.log('🔍 Client Cache Debug:', ClientCache.getCacheStatus());
+    // Debugging disabled - uncomment to enable:
+    // console.log('🔍 Client Cache Debug:', ClientCache.getCacheStatus());
 };
 
 // Global function to force refresh clients (useful for debugging)
 window.forceRefreshClients = async () => {
-    console.log('🔄 Force refreshing clients...');
+    // Debugging disabled
+    if (window.debug && window.debug.enabled) {
+        console.log('🔄 Force refreshing clients...');
+    }
     const clients = await ClientCache.forceRefreshClients();
-    console.log('✅ Clients refreshed:', clients.length, 'clients');
+    if (window.debug && window.debug.enabled) {
+        console.log('✅ Clients refreshed:', clients.length, 'clients');
+    }
     return clients;
 };
 
 // Global function to clear all client cache
 window.clearClientCache = () => {
-    console.log('🧹 Clearing client cache...');
+    // Debugging disabled
+    if (window.debug && window.debug.enabled) {
+        console.log('🧹 Clearing client cache...');
+    }
     ClientCache.clearCache();
     if (window.storage?.setClients) {
         window.storage.setClients([]);
     }
-    console.log('✅ Client cache cleared');
+    // Debugging disabled
+    if (window.debug && window.debug.enabled) {
+        console.log('✅ Client cache cleared');
+    }
 };
 
 console.log('✅ Client Cache loaded - Optimized data loading ready');

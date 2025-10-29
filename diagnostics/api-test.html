@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Diagnostic Tool</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0369a1;
+        }
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .success {
+            background: #d1fae5;
+            border: 1px solid #6ee7b7;
+            color: #065f46;
+        }
+        .error {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #991b1b;
+        }
+        .info {
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
+            color: #1e3a8a;
+        }
+        .warning {
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            color: #92400e;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            text-align: left;
+            padding: 8px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th {
+            background: #f3f4f6;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 API Diagnostic Tool</h1>
+    <p>Use this tool to diagnose API connectivity and server issues</p>
+
+    <div class="test-section">
+        <h2>1. Server Health Check</h2>
+        <button onclick="testHealth()">Test Health Endpoint</button>
+        <div id="health-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. API Endpoint Test (No Auth)</h2>
+        <button onclick="testApiNoAuth()">Test /api/clients (No Auth)</button>
+        <div id="api-noauth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Authentication Status</h2>
+        <button onclick="checkAuth()">Check Current Auth</button>
+        <button onclick="clearAuth()">Clear Auth Token</button>
+        <div id="auth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. API Endpoint Test (With Auth)</h2>
+        <p><small>⚠️ Requires valid authentication token</small></p>
+        <button onclick="testApiWithAuth()">Test /api/clients (With Auth)</button>
+        <div id="api-auth-result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Environment Info</h2>
+        <button onclick="showEnvironment()">Show Environment</button>
+        <div id="env-result"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://abcoafrica.co.za';
+
+        function showResult(elementId, message, type = 'info') {
+            const el = document.getElementById(elementId);
+            el.className = `result ${type}`;
+            el.textContent = message;
+        }
+
+        async function testHealth() {
+            try {
+                showResult('health-result', '⏳ Testing...', 'info');
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/health`);
+                const duration = Date.now() - start;
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult('health-result', 
+                        `✅ Server is UP!\n` +
+                        `Status: ${response.status}\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Data: ${JSON.stringify(data, null, 2)}`,
+                        'success'
+                    );
+                } else {
+                    showResult('health-result', 
+                        `❌ Server returned error ${response.status}\n` +
+                        `Data: ${JSON.stringify(data, null, 2)}`,
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showResult('health-result', 
+                    `❌ FAILED to connect to server\n` +
+                    `Error: ${error.message}\n` +
+                    `This usually means:\n` +
+                    `  - Server is down\n` +
+                    `  - Network connectivity issue\n` +
+                    `  - CORS blocking the request`,
+                    'error'
+                );
+            }
+        }
+
+        async function testApiNoAuth() {
+            try {
+                showResult('api-noauth-result', '⏳ Testing...', 'info');
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/api/clients`);
+                const duration = Date.now() - start;
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = await response.text();
+                }
+                
+                if (response.status === 401) {
+                    showResult('api-noauth-result', 
+                        `✅ API is working! (Auth required)\n` +
+                        `Status: 401 (Unauthorized)\n` +
+                        `Response time: ${duration}ms\n` +
+                        `This is expected - the endpoint requires authentication.`,
+                        'success'
+                    );
+                } else if (response.status === 500) {
+                    showResult('api-noauth-result', 
+                        `❌ SERVER ERROR (500)\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Error data: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}\n\n` +
+                        `This means:\n` +
+                        `  - Database connection issues\n` +
+                        `  - Server-side error\n` +
+                        `  - Check server logs for details`,
+                        'error'
+                    );
+                } else if (response.ok) {
+                    showResult('api-noauth-result', 
+                        `✅ API returned data successfully\n` +
+                        `Status: ${response.status}\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Data: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}`,
+                        'success'
+                    );
+                } else {
+                    showResult('api-noauth-result', 
+                        `⚠️ Unexpected status: ${response.status}\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Data: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}`,
+                        'warning'
+                    );
+                }
+            } catch (error) {
+                showResult('api-noauth-result', 
+                    `❌ FAILED to connect to API\n` +
+                    `Error: ${error.message}\n` +
+                    `Check:\n` +
+                    `  - Is server running?\n` +
+                    `  - CORS configuration\n` +
+                    `  - Network connectivity`,
+                    'error'
+                );
+            }
+        }
+
+        function checkAuth() {
+            try {
+                const token = localStorage.getItem('abcotronics_token');
+                const user = localStorage.getItem('abcotronics_user');
+                
+                if (token && user) {
+                    const userData = JSON.parse(user);
+                    showResult('auth-result', 
+                        `✅ Authenticated as: ${userData.name || 'Unknown'}\n` +
+                        `Role: ${userData.role || 'Unknown'}\n` +
+                        `Email: ${userData.email || 'Unknown'}\n` +
+                        `Token: ${token.substring(0, 20)}...`,
+                        'success'
+                    );
+                } else if (token) {
+                    showResult('auth-result', 
+                        `⚠️ Token exists but no user data\n` +
+                        `Token: ${token.substring(0, 20)}...`,
+                        'warning'
+                    );
+                } else {
+                    showResult('auth-result', 
+                        `❌ Not authenticated\n` +
+                        `No token found in localStorage`,
+                        'info'
+                    );
+                }
+            } catch (error) {
+                showResult('auth-result', 
+                    `❌ Error checking auth: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        function clearAuth() {
+            localStorage.removeItem('abcotronics_token');
+            localStorage.removeItem('abcotronics_user');
+            showResult('auth-result', 
+                `✅ Authentication cleared\n` +
+                `Token and user data removed from localStorage`,
+                'success'
+            );
+        }
+
+        async function testApiWithAuth() {
+            try {
+                const token = localStorage.getItem('abcotronics_token');
+                if (!token) {
+                    showResult('api-auth-result', 
+                        `❌ No authentication token found\n` +
+                        `Please log in first`,
+                        'error'
+                    );
+                    return;
+                }
+
+                showResult('api-auth-result', '⏳ Testing...', 'info');
+                const start = Date.now();
+                const response = await fetch(`${API_BASE}/api/clients`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+                const duration = Date.now() - start;
+                
+                let data;
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = await response.text();
+                }
+                
+                if (response.ok) {
+                    const clientCount = data.clients ? data.clients.length : 0;
+                    showResult('api-auth-result', 
+                        `✅ API request successful!\n` +
+                        `Status: ${response.status}\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Clients returned: ${clientCount}\n` +
+                        `Sample data: ${JSON.stringify(data, null, 2).substring(0, 500)}...`,
+                        'success'
+                    );
+                } else if (response.status === 401) {
+                    showResult('api-auth-result', 
+                        `❌ Authentication failed\n` +
+                        `Status: 401 (Unauthorized)\n` +
+                        `Token may be expired or invalid\n` +
+                        `Response: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}`,
+                        'error'
+                    );
+                } else if (response.status === 500) {
+                    showResult('api-auth-result', 
+                        `❌ SERVER ERROR (500)\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Error data: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}\n\n` +
+                        `⚠️ DATABASE OR SERVER ISSUE - Check server logs`,
+                        'error'
+                    );
+                } else {
+                    showResult('api-auth-result', 
+                        `⚠️ Unexpected status: ${response.status}\n` +
+                        `Response time: ${duration}ms\n` +
+                        `Data: ${typeof data === 'object' ? JSON.stringify(data, null, 2) : data}`,
+                        'warning'
+                    );
+                }
+            } catch (error) {
+                showResult('api-auth-result', 
+                    `❌ Request failed: ${error.message}`,
+                    'error'
+                );
+            }
+        }
+
+        function showEnvironment() {
+            const info = {
+                'Current URL': window.location.href,
+                'User Agent': navigator.userAgent,
+                'API Base URL': API_BASE,
+                'Local Storage Keys': Object.keys(localStorage).join(', '),
+                'Cookies': document.cookie || 'None',
+                'Online Status': navigator.onLine ? 'Online' : 'Offline',
+                'Browser': getBrowserName()
+            };
+
+            let output = '🌍 Environment Information:\n\n';
+            for (const [key, value] of Object.entries(info)) {
+                output += `${key}: ${value}\n`;
+            }
+
+            showResult('env-result', output, 'info');
+        }
+
+        function getBrowserName() {
+            const ua = navigator.userAgent;
+            if (ua.includes('Firefox')) return 'Firefox';
+            if (ua.includes('Chrome')) return 'Chrome';
+            if (ua.includes('Safari')) return 'Safari';
+            if (ua.includes('Edge')) return 'Edge';
+            return 'Unknown';
+        }
+
+        // Auto-run health check on page load
+        setTimeout(testHealth, 500);
+    </script>
+</body>
+</html>

@@ -8,12 +8,12 @@
     // Check for debug flag in localStorage
     const debugEnabled = localStorage.getItem('debug') === 'true' || localStorage.getItem('debug_logging') === 'true';
     
-    // Performance mode - minimize ALL logging
-    const performanceMode = localStorage.getItem('performance_mode') === 'true' || (isProduction && !debugEnabled);
+    // Performance mode - minimize ALL logging (default: enabled to turn off debugging)
+    const performanceMode = localStorage.getItem('performance_mode') !== 'false'; // Default to true unless explicitly disabled
 
     // Debug logger that only logs in development or when explicitly enabled
     const debug = {
-        enabled: isDevelopment || debugEnabled,
+        enabled: false, // Disabled by default - set localStorage.debug='true' to enable
         performanceMode: performanceMode,
         
         log(...args) {

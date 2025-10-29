@@ -29,17 +29,26 @@ async function handler(req, res) {
       const userCount = await prisma.user.count()
       console.log('✅ Database query successful, user count:', userCount)
       
-      // Check if admin user exists
-      const adminUser = await prisma.user.findUnique({
-        where: { email: 'admin@abcotronics.com' }
-      })
-      
-      if (adminUser) {
-        healthData.checks.admin_user = 'exists'
-        console.log('✅ Admin user exists')
-      } else {
-        healthData.checks.admin_user = 'missing'
-        console.log('⚠️ Admin user missing')
+      // Check if any admin user exists (non-blocking check)
+      try {
+        const adminUsers = await prisma.user.findMany({
+          where: { 
+            role: 'admin',
+            status: 'active'
+          },
+          take: 1
+        })
+        
+        if (adminUsers.length > 0) {
+          healthData.checks.admin_user = 'exists'
+          console.log('✅ Admin users exist')
+        } else {
+          healthData.checks.admin_user = 'none_found'
+          console.log('ℹ️ No active admin users found (this is informational only)')
+        }
+      } catch (adminCheckError) {
+        console.log('ℹ️ Admin user check skipped:', adminCheckError.message)
+        healthData.checks.admin_user = 'check_skipped'
       }
       
     } catch (dbError) {
@@ -67,13 +76,13 @@ async function handler(req, res) {
       healthData.migration = 'skipped'
     }
     
-    // Determine overall status
+    // Determine overall status (only fail on critical issues)
     if (healthData.checks.database === 'failed') {
       healthData.status = 'error'
       healthData.message = 'Database connection failed'
-    } else if (healthData.checks.admin_user === 'missing') {
-      healthData.status = 'warning'
-      healthData.message = 'Admin user missing - run fix-railway-login.js'
+    } else {
+      healthData.status = 'ok'
+      // Admin user check is informational only, not a blocking issue
     }
     
     console.log('🏥 Health check completed:', healthData.status)

@@ -18,11 +18,11 @@
             
             // Store React root for potential reuse
             if (window.__reactRoot) {
-                window.__reactRoot.render(React.createElement(window.App));
+                window.__reactRoot.render(window.React.createElement(window.App));
             } else {
-                const reactRoot = ReactDOM.createRoot(root);
+                const reactRoot = window.ReactDOM.createRoot(root);
                 window.__reactRoot = reactRoot;
-                reactRoot.render(React.createElement(window.App));
+                reactRoot.render(window.React.createElement(window.App));
             }
             
             return true;
