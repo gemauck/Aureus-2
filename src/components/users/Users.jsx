@@ -18,43 +18,25 @@ const Users = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
 
-    // Role definitions with permissions
+    // Role definitions with permissions (Admin > Manager > User hierarchy)
     const roleDefinitions = {
         admin: {
             name: 'Administrator',
             color: 'red',
             permissions: ['all'],
-            description: 'Full system access'
+            description: 'Full system access - Can manage users and all system settings'
         },
         manager: {
             name: 'Manager',
             color: 'blue',
             permissions: ['view_all', 'edit_projects', 'edit_clients', 'view_reports', 'manage_team'],
-            description: 'Manage projects and teams'
+            description: 'Manage projects, teams, and assigned resources'
         },
-        accountant: {
-            name: 'Accountant',
-            color: 'green',
-            permissions: ['view_all', 'manage_invoicing', 'view_reports', 'manage_expenses'],
-            description: 'Financial management'
-        },
-        project_manager: {
-            name: 'Project Manager',
-            color: 'purple',
-            permissions: ['view_projects', 'edit_projects', 'manage_tasks', 'view_team', 'time_tracking'],
-            description: 'Manage assigned projects'
-        },
-        team_member: {
-            name: 'Team Member',
+        user: {
+            name: 'User',
             color: 'orange',
             permissions: ['view_assigned', 'edit_assigned', 'time_tracking'],
-            description: 'Work on assigned tasks'
-        },
-        viewer: {
-            name: 'Viewer',
-            color: 'gray',
-            permissions: ['view_assigned'],
-            description: 'Read-only access'
+            description: 'Standard user with assigned task access'
         }
     };
 

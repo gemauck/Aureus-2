@@ -24,7 +24,7 @@ const UserManagement = () => {
     const [newUser, setNewUser] = useState({
         name: '',
         email: '',
-        role: 'member',
+        role: 'user',
         department: '',
         phone: '',
         status: 'active'
@@ -958,7 +958,7 @@ const UserManagement = () => {
                                     onChange={(e) => setEditingInvitation({...editingInvitation, role: e.target.value})}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                 >
-                                    <option value="member">Member</option>
+                                    <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
                                 </select>
@@ -1042,7 +1042,7 @@ const UserManagement = () => {
                                     onChange={(e) => setNewUser({...newUser, role: e.target.value})}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                 >
-                                    <option value="member">Member</option>
+                                    <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
                                 </select>

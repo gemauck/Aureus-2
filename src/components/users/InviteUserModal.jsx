@@ -4,7 +4,7 @@ const { useState } = React;
 const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
     const [formData, setFormData] = useState({
         email: '',
-        role: 'team_member',
+        role: 'user',
         department: '',
         message: ''
     });
