@@ -7,25 +7,49 @@ import { withLogging } from './_lib/logger.js'
 async function handler(req, res) {
   if (req.method !== 'GET') return unauthorized(res, 'Invalid method')
   try {
-    const user = await prisma.user.findUnique({ 
-      where: { id: req.user.sub },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        permissions: true,
-        provider: true,
-        lastLoginAt: true,
-        mustChangePassword: true,
-        phone: true,
-        department: true,
-        jobTitle: true
-      }
-    })
-    if (!user) return unauthorized(res, 'User not found')
+    // Validate req.user exists and has sub
+    if (!req.user || !req.user.sub) {
+      console.error('❌ Me endpoint: req.user or req.user.sub is missing')
+      console.error('❌ Me endpoint: req.user =', req.user)
+      return unauthorized(res, 'Authentication required')
+    }
+
+    console.log('✅ Me endpoint: Fetching user for id:', req.user.sub)
+
+    let user
+    try {
+      user = await prisma.user.findUnique({ 
+        where: { id: req.user.sub },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          permissions: true,
+          provider: true,
+          lastLoginAt: true,
+          mustChangePassword: true,
+          phone: true,
+          department: true,
+          jobTitle: true
+        }
+      })
+    } catch (dbError) {
+      console.error('❌ Me endpoint: Database query failed:', dbError)
+      console.error('❌ Me endpoint: Error stack:', dbError.stack)
+      throw new Error(`Database query failed: ${dbError.message}`)
+    }
+
+    if (!user) {
+      console.error('❌ Me endpoint: User not found for id:', req.user.sub)
+      return unauthorized(res, 'User not found')
+    }
+
+    console.log('✅ Me endpoint: User found:', user.email)
     return ok(res, { user })
   } catch (e) {
+    console.error('❌ Me endpoint error:', e)
+    console.error('❌ Me endpoint error stack:', e.stack)
     return serverError(res, 'Me endpoint failed', e.message)
   }
 }
