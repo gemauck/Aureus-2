@@ -1382,15 +1382,13 @@ const Clients = React.memo(() => {
         })));
 
         // Extract opportunities from clients - with EXTENSIVE logging
-        console.log('🔍 EXTRACTING OPPORTUNITIES FROM CLIENTS:', clients.length);
-        clients.forEach((client, idx) => {
-            console.log(`Client ${idx}: ${client.name}`, {
-                hasOpportunities: !!(client.opportunities),
-                isArray: Array.isArray(client.opportunities),
-                oppCount: client.opportunities?.length || 0,
-                opportunities: client.opportunities
-            });
-        });
+        console.log('🔍🔍🔍 EXTRACTING OPPORTUNITIES FROM CLIENTS:', clients.length);
+        console.log('🔍🔍🔍 ALL CLIENTS DATA:', JSON.stringify(clients.map(c => ({ 
+            name: c.name, 
+            hasOpps: !!(c.opportunities),
+            oppCount: c.opportunities?.length || 0,
+            opps: c.opportunities
+        })), null, 2));
         
         let clientOpportunities = clients.reduce((acc, client) => {
             if (client.opportunities && Array.isArray(client.opportunities)) {
@@ -1631,8 +1629,12 @@ const Clients = React.memo(() => {
                         const isDraggedOver = draggedItem && draggedItem.stage !== stage;
                         
                         // Debug logging for each stage
+                        console.log(`🔍🔍🔍 Kanban Stage "${stage}": ${stageLeads.length} leads, ${stageOpps.length} opportunities`);
                         if (stageOpps.length > 0) {
-                            console.log(`📊 Kanban: Stage "${stage}" has ${stageOpps.length} opportunities:`, stageOpps.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
+                            console.log(`📊 Kanban: Stage "${stage}" has ${stageOpps.length} opportunities:`, stageOpps.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage, status: o.status })));
+                        } else if (activeOpportunities.length > 0) {
+                            console.log(`⚠️ Kanban: Stage "${stage}" has NO opportunities, but total activeOpportunities = ${activeOpportunities.length}`);
+                            console.log(`⚠️ Active opportunities stages:`, activeOpportunities.map(o => ({ title: o.title || o.name, stage: o.stage })));
                         }
                         
                         const stageIcons = {
@@ -1726,11 +1728,12 @@ const Clients = React.memo(() => {
                                         </div>
                                     ))}
                                     
-                                    {stageOpps.map(opp => {
+                                    {stageOpps.map((opp, idx) => {
+                                        console.log(`🎯 Rendering opportunity ${idx + 1}/${stageOpps.length} in stage ${stage}:`, opp.title || opp.name);
                                         const client = clients.find(c => c.id === opp.clientId);
                                         return (
                                             <div 
-                                                key={`opp-${opp.id}`}
+                                                key={`opp-${opp.id}-${idx}`}
                                                 draggable
                                                 onDragStart={() => handleDragStart(opp, 'opportunity')}
                                                 onDragEnd={handleDragEnd}
@@ -1740,7 +1743,7 @@ const Clients = React.memo(() => {
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.title || opp.name}</div>
+                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.title || opp.name || 'Untitled Opportunity'}</div>
                                                     <span className={`px-2 py-0.5 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'} text-xs rounded-full font-medium shrink-0`}>OPP</span>
                                                 </div>
                                                 <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
