@@ -1322,11 +1322,14 @@ const Clients = React.memo(() => {
 
     // Pipeline View Component
     const PipelineView = () => {
+        console.log('🎯🎯🎯 PipelineView FUNCTION CALLED - Component is rendering!');
+        
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
         
         // Load opportunities immediately when PipelineView renders
         useEffect(() => {
+            console.log('🎯 PipelineView useEffect TRIGGERED');
             const loadOpps = async () => {
                 console.log('🚀 PipelineView MOUNTED - Loading opportunities immediately...');
                 console.log(`📊 Current state: ${clients.length} clients, ${leads.length} leads`);
