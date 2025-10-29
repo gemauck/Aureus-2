@@ -12,8 +12,11 @@
     function loadComponent(src) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
-            script.type = 'text/babel';
-            script.src = src;
+            script.type = 'text/javascript';
+            // Convert src/ paths to dist/src/ paths if needed
+            const scriptSrc = src.startsWith('./src/') ? src.replace('./src/', './dist/src/').replace('.jsx', '.js') : src;
+            script.src = scriptSrc;
+            script.async = true;
             script.onload = () => {
                 loadedComponents++;
                 resolve();

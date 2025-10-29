@@ -38,12 +38,21 @@ const PDFToWordConverter = () => {
         setProgress(10);
 
         try {
+            // Lazy load PDF.js if not already loaded
+            if (!window.pdfjsLib && window.loadPDFJS) {
+                await window.loadPDFJS();
+            }
+            
+            if (!window.pdfjsLib) {
+                throw new Error('PDF.js library failed to load');
+            }
+
             // Read file as ArrayBuffer
             const arrayBuffer = await pdfFile.arrayBuffer();
             setProgress(20);
 
             // Load PDF using pdf.js
-            const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+            const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
             const pdf = await loadingTask.promise;
             setProgress(40);
 
