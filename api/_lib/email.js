@@ -274,8 +274,12 @@ export const sendInvitationEmail = async (invitationData) => {
 
 // Send notification email
 export const sendNotificationEmail = async (to, subject, message) => {
+    const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'garethm@abcotronics.co.za';
+    const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+    
     const mailOptions = {
-        from: 'garethm@abcotronics.co.za',
+        from: fromAddress,
+        replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
         to: to,
         subject: subject,
         html: `
@@ -294,7 +298,8 @@ export const sendNotificationEmail = async (to, subject, message) => {
                     <p style="margin: 0;">© 2024 Abcotronics. All rights reserved.</p>
                 </div>
             </div>
-        `
+        `,
+        text: subject + '\n\n' + message.replace(/<[^>]*>/g, '') // Plain text version
     };
 
     try {
@@ -302,10 +307,34 @@ export const sendNotificationEmail = async (to, subject, message) => {
         checkEmailConfiguration();
         
         const emailTransporter = getTransporter();
-        const result = await emailTransporter.sendMail(mailOptions);
+        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        
+        console.log('📧 Sending notification email with options:', {
+            from: mailOptions.from,
+            to: mailOptions.to,
+            subject: mailOptions.subject,
+            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP'
+        });
+        
+        // Use SendGrid HTTP API if configured
+        let result;
+        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+            mailOptions.fromName = 'Abcotronics';
+            result = await sendViaSendGridAPI(mailOptions, apiKey);
+        } else {
+            result = await emailTransporter.sendMail(mailOptions);
+        }
+        
+        console.log('✅ Notification email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
         console.error('Failed to send notification email:', error);
+        console.error('Email sending error details:', {
+            message: error.message,
+            code: error.code,
+            command: error.command,
+            response: error.response
+        });
         throw new Error(`Failed to send notification email: ${error.message}`);
     }
 };
