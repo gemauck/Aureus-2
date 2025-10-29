@@ -556,7 +556,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         const updatedFollowUps = [...currentFollowUps, newFollowUpItem];
         
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || 'system',
+            id: user?.id || 'system'
+        };
         
         const newActivityLog = [...(formData.activityLog || []), {
             id: Date.now() + 1,
@@ -606,7 +611,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         
         if (followUp && !followUp.completed) {
             // Get current user info
-            const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+            const user = window.storage?.getUser?.() || {};
+            const currentUser = {
+                name: user?.name || 'System',
+                email: user?.email || 'system',
+                id: user?.id || 'system'
+            };
             
             updatedFormData.activityLog = [...(formData.activityLog || []), {
                 id: Date.now(),
@@ -734,7 +744,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         if (!newComment.trim()) return;
         
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || 'system',
+            id: user?.id || 'system'
+        };
         
         const updatedComments = [...(formData.comments || []), {
             id: Date.now(),
@@ -960,7 +975,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             
             if (savedOpportunity && savedOpportunity.id) {
                 // Get current user info
-                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                const user = window.storage?.getUser?.() || {};
+                const currentUser = {
+                    name: user?.name || 'System',
+                    email: user?.email || 'system',
+                    id: user?.id || 'system'
+                };
                 
                 // Add to local opportunities array for immediate UI update
                 const currentOpportunities = Array.isArray(formData.opportunities) ? formData.opportunities : [];
@@ -1113,7 +1133,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
     const logActivity = (type, description, relatedId = null) => {
         // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        const user = window.storage?.getUser?.() || {};
+        const currentUser = {
+            name: user?.name || 'System',
+            email: user?.email || 'system',
+            id: user?.id || 'system'
+        };
         
         const activity = {
             id: Date.now(),

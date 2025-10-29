@@ -36,7 +36,12 @@ function processClientData(clientsArray) {
             industry: c.industry || 'Other',
             type: c.type || 'client',
             revenue: c.revenue || 0,
-            lastContact: new Date(c.updatedAt || c.createdAt).toISOString().split('T')[0],
+            lastContact: (() => {
+                const dateStr = c.updatedAt || c.createdAt;
+                if (!dateStr) return new Date().toISOString().split('T')[0];
+                const date = new Date(dateStr);
+                return isNaN(date.getTime()) ? new Date().toISOString().split('T')[0] : date.toISOString().split('T')[0];
+            })(),
             address: c.address || '',
             website: c.website || '',
             notes: c.notes || '',
