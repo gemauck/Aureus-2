@@ -50,7 +50,7 @@ function copyJSFile(srcPath) {
     // Wrap in IIFE and expose to window
     if (exportsToExpose.length > 0) {
       const exposeStatements = exportsToExpose.map(exp => `window.${exp} = ${exp};`).join('\n');
-      content = `(() => {\n${content}\n${exposeStatements}\n})();`;
+      content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}\n})();`;
     } else {
       content = `(() => {\n${content}\n})();`;
     }
