@@ -336,7 +336,12 @@ app.use(express.static(rootDir, {
       res.setHeader('Expires', '0')
     } else if (path.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-      res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
+      // Reduced cache time for development/debugging - files in dist/ change frequently during dev
+      if (process.env.NODE_ENV === 'development' || path.includes('/dist/')) {
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
+      }
     } else if (path.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css; charset=utf-8')
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days

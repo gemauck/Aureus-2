@@ -196,21 +196,22 @@
     <div id="root"></div>
 
     <!-- React Production Builds - Much faster than development -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="window.React = React; window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready'));"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(!window.React) window.React = React; if(!window.ReactDOM) window.ReactDOM = ReactDOM;"></script>
     
-    <!-- Verify React loaded and expose globally -->
+    <!-- Verify React loaded and expose globally (fallback) -->
     <script>
-        if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
-            console.error('React failed to load!');
-            document.body.innerHTML = '<div style="padding: 20px; color: red;">Error: React failed to load. Please refresh the page.</div>';
-        } else {
-            // Ensure React is on window
+        // Fallback check after scripts load
+        if (typeof React !== 'undefined') {
             window.React = React;
+        }
+        if (typeof ReactDOM !== 'undefined') {
             window.ReactDOM = ReactDOM;
-            // Dispatch ready event immediately (no Babel needed)
-            window.BabelReady = true;
-            window.dispatchEvent(new Event('babelready'));
+            // Dispatch ready event
+            if (!window.BabelReady) {
+                window.BabelReady = true;
+                window.dispatchEvent(new Event('babelready'));
+            }
         }
     </script>
     
@@ -323,7 +324,7 @@
     <script src="./dist/src/components/clients/ClientDetailModal.js"></script>
     <script src="./dist/src/components/clients/LeadDetailModal.js"></script>
     <!-- Load both old and new versions for safe migration -->
-    <script type="text/babel" src="./src/components/clients/Clients.jsx?v=1001"></script>
+    <script src="./dist/src/components/clients/Clients.js?v=1001"></script>
     <script src="./dist/src/components/clients/ClientsCached.js"></script>
     <script src="./dist/src/components/clients/ClientsDatabaseFirst.js"></script>
     
