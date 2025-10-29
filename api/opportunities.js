@@ -71,8 +71,14 @@ async function handler(req, res) {
         } else {
           console.log('⚠️ No opportunities found for client:', clientId)
           // Check if ANY opportunities exist in database
-          const allOpps = await prisma.opportunity.findMany({ take: 5 })
+          const allOpps = await prisma.opportunity.findMany({ take: 10 })
           console.log('📊 Total opportunities in database:', allOpps.length)
+          if (allOpps.length > 0) {
+            console.log('📋 All opportunities clientIds:', allOpps.map(o => ({ id: o.id, title: o.title, clientId: o.clientId })))
+            console.log('🔍 Searching for clientId match:', clientId)
+            const matching = allOpps.filter(o => o.clientId === clientId)
+            console.log('🔍 Matches found:', matching.length, matching)
+          }
         }
         return ok(res, { opportunities })
       } catch (dbError) {
