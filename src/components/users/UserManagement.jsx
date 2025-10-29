@@ -781,14 +781,19 @@ const UserManagement = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <div className="flex items-center gap-3">
                                                 <button
-                                                    onClick={() => {
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log('✅ Edit button clicked for user:', user.name, user.id);
                                                         setEditingUser(user);
                                                         setShowEditUserModal(true);
                                                     }}
-                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                                                    title="Edit User"
+                                                    className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:text-green-400 dark:bg-green-900/30 dark:hover:bg-green-900/50 rounded-lg transition-colors flex items-center gap-2 border border-green-200 dark:border-green-800"
+                                                    title="Edit User - Change Role"
+                                                    style={{ minWidth: '70px' }}
                                                 >
-                                                    <i className="fas fa-edit"></i>
+                                                    <i className="fas fa-edit text-xs"></i>
+                                                    <span className="text-xs font-semibold">Edit</span>
                                                 </button>
                                                 <button
                                                     onClick={() => {
