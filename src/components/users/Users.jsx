@@ -3,6 +3,11 @@ const { useState, useEffect } = React;
 const storage = window.storage;
 
 const Users = () => {
+    const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
+    
+    // Check if current user is admin (case-insensitive)
+    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    
     const [users, setUsers] = useState([]);
     const [showUserModal, setShowUserModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
@@ -82,9 +87,37 @@ const Users = () => {
         setUsers(savedUsers);
     };
 
-    const loadInvitations = () => {
-        const savedInvitations = storage.getInvitations() || [];
-        setInvitations(savedInvitations);
+    const loadInvitations = async () => {
+        try {
+            // Try to load from API first
+            const token = window.storage?.getToken?.();
+            if (token) {
+                const response = await fetch('/api/users', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const responseData = data.data || data;
+                    const apiInvitations = responseData.invitations || [];
+                    if (apiInvitations.length > 0) {
+                        setInvitations(apiInvitations);
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback to local storage
+            const savedInvitations = storage.getInvitations() || [];
+            setInvitations(savedInvitations);
+        } catch (error) {
+            console.error('Error loading invitations:', error);
+            // Fallback to local storage on error
+            const savedInvitations = storage.getInvitations() || [];
+            setInvitations(savedInvitations);
+        }
     };
 
     const handleAddUser = () => {
@@ -174,11 +207,65 @@ const Users = () => {
         alert(`Invitation resent to ${invitation.email}!`);
     };
 
-    const handleCancelInvitation = (invitationId) => {
-        if (confirm('Are you sure you want to cancel this invitation?')) {
-            const updatedInvitations = invitations.filter(inv => inv.id !== invitationId);
-            setInvitations(updatedInvitations);
-            storage.setInvitations(updatedInvitations);
+    const handleCancelInvitation = async (invitationId, email) => {
+        console.log('🗑️ Cancel/Delete invitation clicked:', { invitationId, email });
+        
+        if (!invitationId) {
+            console.error('❌ No invitation ID provided');
+            alert('Error: Invitation ID is missing');
+            return;
+        }
+
+        if (!confirm(`Are you sure you want to delete the invitation for ${email || 'this user'}?`)) {
+            return;
+        }
+
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.error('❌ No token available');
+                alert('Authentication error: Please refresh the page and try again');
+                return;
+            }
+
+            console.log('📤 Sending DELETE request to:', `/api/users/invitation/${invitationId}`);
+            const response = await fetch(`/api/users/invitation/${invitationId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            console.log('📡 Response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Error response:', errorText);
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch (e) {
+                    errorData = { message: errorText || 'Failed to delete invitation' };
+                }
+                alert(errorData.message || `Failed to delete invitation (Status: ${response.status})`);
+                return;
+            }
+
+            const data = await response.json();
+            console.log('✅ Delete response:', data);
+
+            alert('Invitation deleted successfully');
+            
+            // Reload invitations from API if using API, otherwise update local state
+            await loadInvitations();
+            
+        } catch (error) {
+            console.error('❌ Error deleting invitation:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack
+            });
+            alert(`Failed to delete invitation: ${error.message}`);
         }
     };
 
@@ -195,6 +282,56 @@ const Users = () => {
     const getUserCountByRole = (role) => {
         return users.filter(u => u.role === role).length;
     };
+
+    // Check if user is online (last seen within last 5 minutes)
+    const isUserOnline = (user) => {
+        if (!user.lastSeenAt) return false;
+        const lastSeen = new Date(user.lastSeenAt);
+        const now = new Date();
+        const diffMinutes = (now - lastSeen) / (1000 * 60);
+        return diffMinutes <= 5;
+    };
+
+    // Format last seen time
+    const formatLastSeen = (user) => {
+        if (!user.lastSeenAt) return 'Never';
+        if (isUserOnline(user)) return 'Online';
+        
+        const lastSeen = new Date(user.lastSeenAt);
+        const now = new Date();
+        const diffMs = now - lastSeen;
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 1) return 'Just now';
+        if (diffMinutes < 60) return `${diffMinutes}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return lastSeen.toLocaleDateString();
+    };
+
+    // Show access denied message if user is not admin
+    if (!isAdmin) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">You need administrator privileges to access the Users page.</p>
+                    <button
+                        onClick={() => {
+                            // Navigate to dashboard
+                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'dashboard' } }));
+                        }}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                    >
+                        Go to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-3">
@@ -348,20 +485,31 @@ const Users = () => {
                             return (
                                 <div key={user.id} className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-md transition">
                                     <div className="flex items-start justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <div className={`w-10 h-10 rounded-full bg-${role?.color || 'gray'}-100 flex items-center justify-center`}>
-                                                <span className={`text-${role?.color || 'gray'}-600 font-semibold text-sm`}>
-                                                    {user.name.charAt(0)}
-                                                </span>
+                                        <div className="flex items-center gap-2 flex-1">
+                                            <div className="relative">
+                                                <div className={`w-10 h-10 rounded-full bg-${role?.color || 'gray'}-100 flex items-center justify-center`}>
+                                                    <span className={`text-${role?.color || 'gray'}-600 font-semibold text-sm`}>
+                                                        {user.name.charAt(0)}
+                                                    </span>
+                                                </div>
+                                                {isUserOnline(user) && (
+                                                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                                                )}
                                             </div>
-                                            <div className="flex-1">
-                                                <h3 className="font-semibold text-gray-900 text-sm">{user.name}</h3>
-                                                <p className="text-xs text-gray-500">{user.email}</p>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="font-semibold text-gray-900 text-sm truncate">{user.name}</h3>
+                                                    {isUserOnline(user) && (
+                                                        <span className="text-[10px] text-green-600 font-medium">●</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">{formatLastSeen(user)}</p>
                                             </div>
                                         </div>
                                         <button
                                             onClick={() => handleToggleStatus(user)}
-                                            className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                                            className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
                                                 user.status === 'Active'
                                                     ? 'bg-green-100 text-green-600'
                                                     : 'bg-gray-100 text-gray-400'
@@ -430,6 +578,7 @@ const Users = () => {
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Role</th>
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Department</th>
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Status</th>
+                                    <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Last Seen</th>
                                     <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 uppercase">Actions</th>
                                 </tr>
                             </thead>
@@ -441,12 +590,24 @@ const Users = () => {
                                             <tr key={user.id} className="hover:bg-gray-50">
                                                 <td className="px-3 py-2">
                                                     <div className="flex items-center gap-2">
-                                                        <div className={`w-8 h-8 rounded-full bg-${role?.color || 'gray'}-100 flex items-center justify-center`}>
-                                                            <span className={`text-${role?.color || 'gray'}-600 font-semibold text-xs`}>
-                                                                {user.name.charAt(0)}
-                                                            </span>
+                                                        <div className="relative">
+                                                            <div className={`w-8 h-8 rounded-full bg-${role?.color || 'gray'}-100 flex items-center justify-center`}>
+                                                                <span className={`text-${role?.color || 'gray'}-600 font-semibold text-xs`}>
+                                                                    {user.name.charAt(0)}
+                                                                </span>
+                                                            </div>
+                                                            {isUserOnline(user) && (
+                                                                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border border-white"></div>
+                                                            )}
                                                         </div>
-                                                        <span className="font-medium text-gray-900 text-sm">{user.name}</span>
+                                                        <div>
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="font-medium text-gray-900 text-sm">{user.name}</span>
+                                                                {isUserOnline(user) && (
+                                                                    <span className="text-[10px] text-green-600 font-medium">●</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-2 text-xs text-gray-600">{user.email}</td>
@@ -467,6 +628,15 @@ const Users = () => {
                                                     >
                                                         {user.status}
                                                     </button>
+                                                </td>
+                                                <td className="px-3 py-2">
+                                                    <div className="flex flex-col">
+                                                        {isUserOnline(user) ? (
+                                                            <span className="text-[10px] text-green-600 font-medium">Online</span>
+                                                        ) : (
+                                                            <span className="text-[10px] text-gray-500">{formatLastSeen(user)}</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="px-3 py-2">
                                                     <div className="flex gap-1">
@@ -491,7 +661,7 @@ const Users = () => {
                                     })
                                 ) : (
                                     <tr>
-                                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400">
+                                        <td colSpan="7" className="px-6 py-12 text-center text-gray-400">
                                             <i className="fas fa-users text-4xl mb-3 opacity-50"></i>
                                             <p className="text-sm">No users found</p>
                                         </td>
@@ -538,12 +708,27 @@ const Users = () => {
                                         Resend
                                     </button>
                                     <button
-                                        onClick={() => handleCancelInvitation(invitation.id)}
-                                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition"
-                                        title="Cancel Invitation"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            console.log('🔴 Cancel/Delete button clicked for invitation:', invitation);
+                                            if (!invitation || !invitation.id) {
+                                                console.error('❌ Invalid invitation object:', invitation);
+                                                alert('Error: Invalid invitation data');
+                                                return;
+                                            }
+                                            handleCancelInvitation(invitation.id, invitation.email);
+                                        }}
+                                        onMouseDown={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                        className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition cursor-pointer"
+                                        title="Delete Invitation"
+                                        type="button"
                                     >
-                                        <i className="fas fa-times mr-1"></i>
-                                        Cancel
+                                        <i className="fas fa-trash mr-1"></i>
+                                        Delete
                                     </button>
                                 </div>
                             </div>
