@@ -8,6 +8,7 @@ const GoogleCalendarSync = window.GoogleCalendarSync;
 const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
+    const [refreshTrigger, setRefreshTrigger] = useState(0); // Force re-render after optimistic updates
     
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
@@ -505,7 +506,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
-                // Optimistically update UI immediately
+                // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
                     const currentContacts = prev.contacts || [];
                     // Check if contact already exists to avoid duplicates
@@ -514,12 +515,24 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         console.log('⚠️ Contact already in state, skipping optimistic update');
                         return prev;
                     }
-                    console.log('✅ Optimistic update: adding contact to state', savedContact.id);
-                    return {
+                    const updatedContacts = [...currentContacts, savedContact];
+                    console.log('✅ Optimistic update: adding contact to state', {
+                        contactId: savedContact.id,
+                        previousCount: currentContacts.length,
+                        newCount: updatedContacts.length,
+                        contacts: updatedContacts
+                    });
+                    const newFormData = {
                         ...prev,
-                        contacts: [...currentContacts, savedContact]
+                        contacts: updatedContacts
                     };
+                    // Force React to see this as a new object reference
+                    return newFormData;
                 });
+                
+                // Force re-render by incrementing refresh trigger
+                setRefreshTrigger(prev => prev + 1);
+                console.log('🔄 Refresh trigger incremented to force re-render');
                 
                 logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
                 
@@ -539,13 +552,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowContactForm(false);
                 
-                alert('✅ Contact saved to database successfully!');
-                
-                // Don't reload from database - optimistic update is sufficient
-                // The contact is already in state and will persist
-                // If user wants fresh data, they can refresh the page or navigate away and back
+                // Delay alert to ensure state update and render complete first
+                setTimeout(() => {
+                    alert('✅ Contact saved to database successfully!');
+                }, 100);
                 
                 console.log('✅ Contact created and saved to database:', savedContact.id);
+                console.log('✅ Current formData.contacts count should be:', (formData.contacts?.length || 0) + 1);
             } else {
                 throw new Error('No contact ID returned from API');
             }
@@ -921,7 +934,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
-                // Optimistically update UI immediately
+                // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
                     const currentSites = prev.sites || [];
                     // Check if site already exists to avoid duplicates
@@ -930,12 +943,24 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         console.log('⚠️ Site already in state, skipping optimistic update');
                         return prev;
                     }
-                    console.log('✅ Optimistic update: adding site to state', savedSite.id);
-                    return {
+                    const updatedSites = [...currentSites, savedSite];
+                    console.log('✅ Optimistic update: adding site to state', {
+                        siteId: savedSite.id,
+                        previousCount: currentSites.length,
+                        newCount: updatedSites.length,
+                        sites: updatedSites
+                    });
+                    const newFormData = {
                         ...prev,
-                        sites: [...currentSites, savedSite]
+                        sites: updatedSites
                     };
+                    // Force React to see this as a new object reference
+                    return newFormData;
                 });
+                
+                // Force re-render by incrementing refresh trigger
+                setRefreshTrigger(prev => prev + 1);
+                console.log('🔄 Refresh trigger incremented to force re-render');
                 
                 logActivity('Site Added', `Added site: ${newSite.name}`);
                 
@@ -956,13 +981,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowSiteForm(false);
                 
-                alert('✅ Site saved to database successfully!');
-                
-                // Don't reload from database - optimistic update is sufficient
-                // The site is already in state and will persist
-                // If user wants fresh data, they can refresh the page or navigate away and back
+                // Delay alert to ensure state update and render complete first
+                setTimeout(() => {
+                    alert('✅ Site saved to database successfully!');
+                }, 100);
                 
                 console.log('✅ Site created and saved to database:', savedSite.id);
+                console.log('✅ Current formData.sites count should be:', (formData.sites?.length || 0) + 1);
             } else {
                 throw new Error('No site ID returned from API');
             }
