@@ -7,7 +7,6 @@ const Dashboard = () => {
     const [leads, setLeads] = useState([]);
     const [projects, setProjects] = useState([]);
     const [timeEntries, setTimeEntries] = useState([]);
-    const [invoices, setInvoices] = useState([]);
     const { isDark } = window.useTheme();
 
     // Ultra-optimized data loading with ClientCache
@@ -24,7 +23,6 @@ const Dashboard = () => {
                     setLeads([]); // Leads are database-only, no localStorage fallback
                     setProjects(cachedData.projects);
                     setTimeEntries(cachedData.timeEntries);
-                    setInvoices(cachedData.invoices);
                     
                     console.log(`✅ Dashboard loaded instantly from ${cachedData.fromCache ? 'cache' : 'localStorage'}`);
                 } else {
@@ -33,13 +31,11 @@ const Dashboard = () => {
                     const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
                     const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                     const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
-                    const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
                     setLeads([]); // Leads are database-only
                     setProjects(savedProjects);
                     setTimeEntries(savedTimeEntries);
-                    setInvoices(savedInvoices);
                 }
             } catch (error) {
                 console.error('Failed to load dashboard data:', error);
@@ -47,13 +43,11 @@ const Dashboard = () => {
                 const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
                 const savedProjects = (storage && typeof storage.getProjects === 'function') ? storage.getProjects() || [] : [];
                 const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
-                const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                 setClients(savedClients);
                 setLeads([]); // Leads are database-only
                 setProjects(savedProjects);
                 setTimeEntries(savedTimeEntries);
-                setInvoices(savedInvoices);
             }
         };
         
@@ -117,7 +111,7 @@ const Dashboard = () => {
             taskCount: p.tasks?.length || 0
         }));
 
-    // Get recent activities from time entries and invoices
+    // Get recent activities from time entries
     const recentActivities = [];
     
     // Helper function to calculate better time ago
@@ -158,25 +152,6 @@ const Dashboard = () => {
             sortValue: timeAgo.value,
             icon: 'clock',
             color: 'blue'
-        });
-    });
-    
-    // Add recent invoices (only from last 30 days)
-    const recentInvoices = [...invoices]
-        .filter(inv => new Date(inv.issueDate) >= thirtyDaysAgo)
-        .sort((a, b) => new Date(b.issueDate) - new Date(a.issueDate))
-        .slice(0, 2);
-    
-    recentInvoices.forEach(inv => {
-        const timeAgo = getTimeAgo(inv.issueDate);
-        recentActivities.push({
-            user: 'System',
-            action: 'created invoice',
-            target: `${inv.invoiceNumber} - ${inv.client}`,
-            time: timeAgo.text,
-            sortValue: timeAgo.value,
-            icon: 'file-invoice-dollar',
-            color: 'green'
         });
     });
     
@@ -243,13 +218,6 @@ const Dashboard = () => {
     // Combined counts only
     const totalPipeline = leadsPipelineValue;
     const weightedPipeline = leadsWeightedValue;
-
-    // Outstanding invoices
-    const overdueInvoices = invoices.filter(inv => {
-        const dueDate = new Date(inv.dueDate);
-        return inv.status === 'Unpaid' && dueDate < now;
-    });
-    const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + inv.balance, 0);
 
     return (
         <div className="space-y-3">

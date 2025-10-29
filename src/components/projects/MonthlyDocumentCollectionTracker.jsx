@@ -224,28 +224,55 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
         
         try {
-            // Method 1: Try getUser() first (more reliable)
-            if (window.storage && typeof window.storage.getUser === 'function') {
-                try {
-                    const user = window.storage.getUser();
-                    if (user) {
-                        return {
+            // Helper to extract user from various formats
+            const extractUser = (data) => {
+                if (!data) return null;
+                
+                // Handle case where API returns { user: {...} }
+                if (data.user && typeof data.user === 'object') {
+                    return data.user;
+                }
+                
+                // Handle direct user object
+                if (data.name || data.email) {
+                    return data;
+                }
+                
+                return null;
+            };
+            
+            // Method 1: Try to parse from localStorage directly first (most reliable)
+            try {
+                const userData = localStorage.getItem('abcotronics_user');
+                if (userData && userData !== 'null' && userData !== 'undefined') {
+                    const parsed = JSON.parse(userData);
+                    const user = extractUser(parsed);
+                    
+                    if (user && (user.name || user.email)) {
+                        const result = {
                             name: user.name || user.email || 'System',
                             email: user.email || 'system',
                             id: user.id || user._id || user.email || 'system',
                             role: user.role || 'System'
                         };
+                        
+                        // Only return if it's not the default System user
+                        if (result.name !== 'System' && result.email !== 'system') {
+                            console.log('✅ Retrieved user from localStorage:', result.name, result.email);
+                            return result;
+                        }
                     }
-                } catch (error) {
-                    // Silently continue to next method
                 }
+            } catch (error) {
+                console.warn('Failed to parse user from localStorage:', error);
             }
             
             // Method 2: Try getUserInfo() if it exists
             if (window.storage && typeof window.storage.getUserInfo === 'function') {
                 try {
                     const userInfo = window.storage.getUserInfo();
-                    if (userInfo && (userInfo.name || userInfo.email)) {
+                    if (userInfo && ((userInfo.name && userInfo.name !== 'System') || (userInfo.email && userInfo.email !== 'system'))) {
+                        console.log('✅ Retrieved user from getUserInfo():', userInfo.name || userInfo.email);
                         return userInfo;
                     }
                 } catch (error) {
@@ -253,28 +280,35 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
             }
             
-            // Method 3: Try to parse from localStorage directly (most reliable)
-            try {
-                const userData = localStorage.getItem('abcotronics_user');
-                if (userData) {
-                    const user = JSON.parse(userData);
+            // Method 3: Try getUser() as fallback
+            if (window.storage && typeof window.storage.getUser === 'function') {
+                try {
+                    const userRaw = window.storage.getUser();
+                    const user = extractUser(userRaw);
+                    
                     if (user && (user.name || user.email)) {
-                        return {
+                        const result = {
                             name: user.name || user.email || 'System',
                             email: user.email || 'system',
                             id: user.id || user._id || user.email || 'system',
                             role: user.role || 'System'
                         };
+                        
+                        if (result.name !== 'System' && result.email !== 'system') {
+                            console.log('✅ Retrieved user from getUser():', result.name || result.email);
+                            return result;
+                        }
                     }
+                } catch (error) {
+                    // Silently continue to next method
                 }
-            } catch (error) {
-                // Silently continue
             }
         } catch (error) {
             // Catch any unexpected errors
             console.warn('Unexpected error in getCurrentUser:', error);
         }
         
+        console.warn('⚠️ Could not retrieve user, defaulting to System. localStorage content:', localStorage.getItem('abcotronics_user'));
         // Always return a valid user object - never throw
         return defaultUser;
     };
@@ -547,8 +581,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const handleAddComment = async (sectionId, documentId, month, commentText) => {
         if (!commentText.trim()) return;
 
-        // Get current user info
-        const currentUser = getCurrentUser();
+        // Get current user info - try multiple methods
+        let currentUser = getCurrentUser();
+        
+        // If we got System, try to fetch from API as a last resort
+        if (currentUser.name === 'System' && currentUser.email === 'system') {
+            try {
+                if (window.storage && window.storage.getToken && window.storage.getToken()) {
+                    if (window.api && window.api.me) {
+                        console.log('🔄 Attempting to fetch user from API...');
+                        const meResponse = await window.api.me();
+                        if (meResponse) {
+                            // Handle different response formats
+                            const user = meResponse.user || meResponse;
+                            if (user && (user.name || user.email)) {
+                                currentUser = {
+                                    name: user.name || user.email || 'System',
+                                    email: user.email || 'system',
+                                    id: user.id || user._id || user.email || 'system',
+                                    role: user.role || 'System'
+                                };
+                                
+                                // Save to localStorage for future use
+                                if (window.storage && window.storage.setUser) {
+                                    window.storage.setUser(user);
+                                }
+                                console.log('✅ Retrieved user from API:', currentUser.name, currentUser.email);
+                            }
+                        }
+                    }
+                }
+            } catch (error) {
+                console.warn('Failed to fetch user from API:', error);
+            }
+        }
+        
+        console.log('💬 Creating comment with user:', currentUser.name, currentUser.email);
 
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {

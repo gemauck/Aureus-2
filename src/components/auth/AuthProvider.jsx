@@ -19,11 +19,15 @@ const AuthProvider = ({ children }) => {
             
             const token = window.storage.getToken();
             if (token && window.api && window.api.me) {
-                const me = await window.api.me();
-                if (me) {
-                    storage.setUser(me);
-                    setUser(me);
-                    return me;
+                const meResponse = await window.api.me();
+                if (meResponse) {
+                    // Extract user from response (API returns { user: {...} } or direct user object)
+                    const user = meResponse.user || meResponse;
+                    if (user) {
+                        storage.setUser(user);
+                        setUser(user);
+                        return user;
+                    }
                 }
             } else {
                 // Fallback to storage
@@ -48,6 +52,40 @@ const AuthProvider = ({ children }) => {
     useEffect(() => {
         const init = async () => {
             try {
+                // Check for Google OAuth redirect with token
+                const urlParams = new URLSearchParams(window.location.search);
+                const loginSuccess = urlParams.get('login');
+                const token = urlParams.get('token');
+                
+                if (loginSuccess === 'success' && token) {
+                    console.log('🔐 Google OAuth login detected, processing token...');
+                    // Save token
+                    if (window.storage && window.storage.setToken) {
+                        window.storage.setToken(token);
+                    }
+                    
+                    // Fetch user data
+                    if (window.api && window.api.me) {
+                        try {
+                            const meResponse = await window.api.me();
+                            if (meResponse) {
+                                // Extract user from response
+                                const user = meResponse.user || meResponse;
+                                if (user) {
+                                    storage.setUser(user);
+                                    setUser(user);
+                                    console.log('✅ User loaded from OAuth:', user.name, user.email);
+                                    
+                                    // Clean up URL
+                                    window.history.replaceState({}, document.title, window.location.pathname);
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Failed to load user after OAuth:', err);
+                        }
+                    }
+                }
+                
                 // Safety check for storage
                 if (!storage || !storage.getUser) {
                     console.warn('⚠️ Storage not available, skipping auth init');
@@ -85,15 +123,19 @@ const AuthProvider = ({ children }) => {
                 if (window.storage.getToken && window.storage.getToken()) {
                     if (window.api && window.api.me) {
                         try {
-                            const me = await Promise.race([
+                            const meResponse = await Promise.race([
                                 window.api.me(),
                                 new Promise((_, reject) => setTimeout(() => reject(new Error('Me API timeout')), 5000))
                             ]);
-                            if (me) {
-                                storage.setUser(me);
-                                setUser(me);
-                                const log = window.debug?.log || (() => {});
-                                log('✅ User loaded from API');
+                            if (meResponse) {
+                                // Extract user from response (API returns { user: {...} } or direct user object)
+                                const user = meResponse.user || meResponse;
+                                if (user) {
+                                    storage.setUser(user);
+                                    setUser(user);
+                                    const log = window.debug?.log || (() => {});
+                                    log('✅ User loaded from API');
+                                }
                             }
                         } catch (err) {
                             console.warn('Me API failed or timed out:', err.message);
@@ -158,14 +200,20 @@ const AuthProvider = ({ children }) => {
             const loginResult = await window.api.login(email, password);
             console.log('✅ Login API successful:', loginResult);
             
-            const me = await window.api.me();
-            console.log('✅ Me API successful:', me);
+            const meResponse = await window.api.me();
+            console.log('✅ Me API successful:', meResponse);
             
-            storage.setUser(me);
-            setUser(me);
+            // Extract user from response (API returns { user: {...} } or direct user object)
+            const user = meResponse.user || meResponse;
+            if (!user) {
+                throw new Error('Failed to get user data from API');
+            }
+            
+            storage.setUser(user);
+            setUser(user);
             
             if (window.AuditLogger) {
-                window.AuditLogger.log('login', 'authentication', { email: me.email, loginMethod: 'email_password' }, me);
+                window.AuditLogger.log('login', 'authentication', { email: user.email, loginMethod: 'email_password' }, user);
             }
             
             // Start live data sync on successful login (with a small delay to ensure token is set)
@@ -178,7 +226,7 @@ const AuthProvider = ({ children }) => {
             console.log('🎉 Login flow completed successfully');
             
             // Check if password change is required (from login response or user data)
-            const requiresPasswordChange = loginResult.mustChangePassword || me.mustChangePassword;
+            const requiresPasswordChange = loginResult.mustChangePassword || user.mustChangePassword;
             
             if (requiresPasswordChange) {
                 console.log('🔒 Password change required for user:', email);
@@ -190,7 +238,7 @@ const AuthProvider = ({ children }) => {
                 }, 500);
             }
             
-            return { user: me, mustChangePassword: requiresPasswordChange || false };
+            return { user: user, mustChangePassword: requiresPasswordChange || false };
         } catch (err) {
             console.error('❌ Login error details:', {
                 message: err.message,
