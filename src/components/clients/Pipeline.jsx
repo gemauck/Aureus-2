@@ -79,20 +79,32 @@ const Pipeline = () => {
         loadData();
     }, [refreshKey]);
 
-    // Preload cached data immediately on mount
+    // Preload cached data immediately on mount - CRITICAL for instant display
     useEffect(() => {
-        // Show cached data immediately while API loads
+        // Show cached data immediately while API loads (same as leads do)
         const savedClients = storage.getClients() || [];
         const savedLeads = storage.getLeads() || [];
         
         if (savedClients.length > 0) {
+            // Extract and preserve ALL opportunities from cached clients
             const clientsWithOpportunities = savedClients.map(client => ({
                 ...client,
-                opportunities: client.opportunities || []
+                // Ensure opportunities array exists and is properly formatted
+                opportunities: Array.isArray(client.opportunities) ? client.opportunities : []
             }));
+            
             const totalCachedOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
             setClients(clientsWithOpportunities);
-            console.log(`⚡ Pipeline: Loaded cached data immediately: ${clientsWithOpportunities.length} clients, ${totalCachedOpps} opportunities`);
+            console.log(`⚡ Pipeline: Loaded cached data IMMEDIATELY: ${clientsWithOpportunities.length} clients, ${totalCachedOpps} opportunities`);
+            
+            // Log opportunity details for debugging
+            if (totalCachedOpps > 0) {
+                clientsWithOpportunities.forEach(client => {
+                    if (client.opportunities?.length > 0) {
+                        console.log(`   ⚡ ${client.name}: ${client.opportunities.length} opportunities visible immediately`);
+                    }
+                });
+            }
         }
         
         if (savedLeads.length > 0) {
@@ -163,18 +175,48 @@ const Pipeline = () => {
                 }
                 
                 // Attach opportunities to their respective clients
+                // PRESERVE cached opportunities for clients - only replace when API has newer data
                 const clientsWithOpportunities = apiClients.map(client => {
-                    const clientOpportunities = allOpportunities.filter(opp => opp.clientId === client.id);
+                    // First, get API opportunities for this client
+                    let clientOpportunities = allOpportunities.filter(opp => opp.clientId === client.id);
+                    
+                    // If API has opportunities, use them (they're fresh)
                     if (clientOpportunities.length > 0) {
-                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities`);
+                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities from API`);
+                    } else {
+                        // If no API opportunities, preserve cached ones (keep them visible immediately)
+                        const cachedClient = cachedClients.find(c => c.id === client.id);
+                        if (cachedClient?.opportunities?.length > 0) {
+                            clientOpportunities = cachedClient.opportunities.map(opp => ({
+                                ...opp,
+                                clientId: client.id
+                            }));
+                            console.log(`   💾 ${client.name}: Preserving ${clientOpportunities.length} cached opportunities (API had none)`);
+                        }
                     }
+                    
                     return {
                         ...client,
                         opportunities: clientOpportunities
                     };
                 });
                 
-                const totalOpportunities = allOpportunities.length;
+                // If API opportunities call failed completely, ensure all cached opportunities are preserved
+                if (opportunitiesResponse.status !== 'fulfilled' && cachedOpportunities.length > 0) {
+                    console.log(`💾 Pipeline: API opportunities failed, preserving all ${cachedOpportunities.length} cached opportunities`);
+                    cachedOpportunities.forEach(cachedOpp => {
+                        const client = clientsWithOpportunities.find(c => c.id === cachedOpp.clientId);
+                        if (client) {
+                            // Only add if not already present (avoid duplicates)
+                            const exists = client.opportunities.find(o => o.id === cachedOpp.id);
+                            if (!exists) {
+                                client.opportunities.push(cachedOpp);
+                            }
+                        }
+                    });
+                }
+                
+                const totalOpportunities = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
                 console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
                 
                 // Update state only after all data is loaded (prevents flashing)
