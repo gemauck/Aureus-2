@@ -1329,29 +1329,26 @@ const Clients = React.memo(() => {
         
         // Load opportunities immediately when PipelineView renders
         useEffect(() => {
-            console.log('🎯 PipelineView useEffect TRIGGERED');
             const loadOpps = async () => {
-                console.log('🚀 PipelineView MOUNTED - Loading opportunities immediately...');
-                console.log(`📊 Current state: ${clients.length} clients, ${leads.length} leads`);
+                if (clients.length === 0) return;
+                if (!window.api?.getOpportunitiesByClient) return;
                 
-                if (clients.length === 0) {
-                    console.warn('⚠️ No clients available in PipelineView');
+                // Check if ANY client is missing opportunities
+                const needsLoading = clients.some(c => !c.opportunities || c.opportunities.length === 0);
+                if (!needsLoading) {
+                    const total = clients.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                    console.log(`✅ Pipeline: All clients already have opportunities (${total} total)`);
                     return;
                 }
                 
-                if (!window.api?.getOpportunitiesByClient) {
-                    console.error('❌ getOpportunitiesByClient not available!');
-                    return;
-                }
-                
-                // Check current opportunity status
-                const clientsWithOpps = clients.filter(c => c.opportunities && c.opportunities.length > 0);
-                const totalOpps = clients.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                console.log(`📊 Before load: ${clientsWithOpps.length} clients have ${totalOpps} opportunities`);
-                
-                // Fetch opportunities for all clients
+                console.log(`📡 PipelineView: Loading opportunities for ${clients.length} clients...`);
                 try {
                     const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
+                        // Skip if client already has opportunities
+                        if (client.opportunities && client.opportunities.length > 0) {
+                            return client;
+                        }
+                        
                         try {
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                             const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
@@ -1365,8 +1362,8 @@ const Clients = React.memo(() => {
                         }
                     }));
                     
-                    const newTotalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                    console.log(`✅ PipelineView: Loaded ${newTotalOpps} total opportunities`);
+                    const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                    console.log(`✅ PipelineView: Loaded ${totalOpps} total opportunities`);
                     setClients(clientsWithOpportunities);
                     safeStorage.setClients(clientsWithOpportunities);
                 } catch (error) {
@@ -1375,7 +1372,7 @@ const Clients = React.memo(() => {
             };
             
             loadOpps();
-        }, [clients.length]); // Re-run when clients count changes
+        }, []); // Run once on mount
         
         console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
         console.log('🔍 Pipeline View - Sample clients:', clients.slice(0, 3).map(c => ({ 
