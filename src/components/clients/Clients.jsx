@@ -1381,9 +1381,20 @@ const Clients = React.memo(() => {
             oppCount: c.opportunities?.length || 0 
         })));
 
-        // Extract opportunities from clients
+        // Extract opportunities from clients - with EXTENSIVE logging
+        console.log('🔍 EXTRACTING OPPORTUNITIES FROM CLIENTS:', clients.length);
+        clients.forEach((client, idx) => {
+            console.log(`Client ${idx}: ${client.name}`, {
+                hasOpportunities: !!(client.opportunities),
+                isArray: Array.isArray(client.opportunities),
+                oppCount: client.opportunities?.length || 0,
+                opportunities: client.opportunities
+            });
+        });
+        
         let clientOpportunities = clients.reduce((acc, client) => {
             if (client.opportunities && Array.isArray(client.opportunities)) {
+                console.log(`📊 Processing ${client.opportunities.length} opportunities for ${client.name}`);
                 const mapped = client.opportunities.map(opp => {
                     // Normalize stage to match pipeline stages exactly
                     let normalizedStage = 'Awareness'; // Default
@@ -1482,14 +1493,30 @@ const Clients = React.memo(() => {
         
         console.log('🔍 Pipeline Debug - Active leads (after stage filter):', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
         // Filter out inactive opportunities - include all opportunities that don't have an explicit inactive/closed status
+        // Filter active opportunities - log EVERYTHING
+        console.log(`🔍 FILTERING OPPORTUNITIES - Total before filter: ${clientOpportunities.length}`);
+        clientOpportunities.forEach(opp => {
+            console.log(`Opportunity: ${opp.title || opp.name}`, {
+                id: opp.id,
+                stage: opp.stage,
+                status: opp.status || 'NO_STATUS',
+                clientId: opp.clientId,
+                clientName: opp.clientName
+            });
+        });
+        
         const activeOpportunities = clientOpportunities.filter(opp => {
             const status = opp.status || 'Active'; // Default to 'Active' if no status
             const isActive = status !== 'Inactive' && status !== 'Closed Lost' && status !== 'Closed Won';
             if (!isActive) {
                 console.log(`🚫 Filtered out inactive opportunity: ${opp.title || opp.name} (status: ${status})`);
+            } else {
+                console.log(`✅ Keeping active opportunity: ${opp.title || opp.name} (stage: ${opp.stage}, status: ${status})`);
             }
             return isActive;
         });
+        
+        console.log(`✅ FILTERED OPPORTUNITIES - Active after filter: ${activeOpportunities.length}`);
         
         console.log(`🔍 Pipeline: Filtered opportunities - Total: ${clientOpportunities.length}, Active: ${activeOpportunities.length}`);
         console.log(`🔍 Pipeline: Active opportunities by stage:`, {
