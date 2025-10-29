@@ -1412,14 +1412,18 @@ const Clients = React.memo(() => {
         useEffect(() => {
             const handleOpportunitiesUpdated = async (event) => {
                 const { clientId, opportunities } = event.detail;
-                console.log('🔄 Pipeline: Received opportunitiesUpdated event for client:', clientId);
+                console.log('🔄🔄🔄 Pipeline: Received opportunitiesUpdated event for client:', clientId);
                 
-                if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
+                if (window.api?.getOpportunitiesByClient) {
+                    console.log('🔄 Pipeline: Reloading opportunities for ALL clients after creation...');
                     // Reload opportunities for all clients to ensure Pipeline view is up-to-date
                     const clientsWithOpps = await Promise.all(clients.map(async (client) => {
                         try {
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                             const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            if (opps.length > 0) {
+                                console.log(`✅ Reloaded ${opps.length} opportunities for ${client.name}`);
+                            }
                             return { ...client, opportunities: opps };
                         } catch (error) {
                             console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
@@ -1428,13 +1432,16 @@ const Clients = React.memo(() => {
                     }));
                     setClients(clientsWithOpps);
                     safeStorage.setClients(clientsWithOpps);
-                    console.log('✅ Pipeline: Updated clients after opportunity creation');
+                    console.log('✅✅✅ Pipeline: Updated clients after opportunity creation - forcing re-render');
+                    
+                    // Force a refresh by updating state
+                    setRefreshKey(prev => prev + 1);
                 }
             };
             
             window.addEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
             return () => window.removeEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
-        }, [viewMode, clients.length]);
+        }, [viewMode, clients]);
         
         console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
         console.log('🔍 Pipeline View - Sample clients:', clients.slice(0, 3).map(c => ({ 
