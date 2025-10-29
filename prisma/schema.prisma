@@ -254,6 +254,11 @@ model Feedback {
   meta      String?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
   createdAt DateTime @default(now())
+  
+  @@index([pageUrl])
+  @@index([section])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // Teams Knowledge Hub Models
