@@ -13,6 +13,111 @@ const FeedbackWidget = () => {
     const { user } = window.useAuth();
     const { isDark } = window.useTheme();
 
+    // Auto-detect current section/page
+    const detectCurrentSection = () => {
+        // Get page from URL or pathname
+        const path = window.location.pathname;
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Page name mapping
+        const pageNames = {
+            '/': 'Dashboard',
+            '/dashboard': 'Dashboard',
+            '/clients': 'Clients and Leads',
+            '/projects': 'Projects',
+            '/teams': 'Teams',
+            '/users': 'Users',
+            '/hr': 'HR',
+            '/manufacturing': 'Manufacturing',
+            '/tools': 'Tools',
+            '/reports': 'Reports',
+            '/settings': 'Settings',
+            '/account': 'Account',
+            '/time': 'Time Tracking'
+        };
+
+        // Try to get from window.currentPage (exposed by MainLayout)
+        let pageName = null;
+        if (window.currentPage) {
+            const pageId = window.currentPage;
+            // Map page IDs to friendly names
+            const pageIdMap = {
+                'dashboard': 'Dashboard',
+                'clients': 'Clients and Leads',
+                'projects': 'Projects',
+                'teams': 'Teams',
+                'users': 'Users',
+                'hr': 'HR',
+                'manufacturing': 'Manufacturing',
+                'tools': 'Tools',
+                'reports': 'Reports',
+                'settings': 'Settings',
+                'account': 'Account',
+                'time': 'Time Tracking',
+                'documents': 'Documents'
+            };
+            pageName = pageIdMap[pageId] || pageId.charAt(0).toUpperCase() + pageId.slice(1);
+        }
+
+        // If not available, detect from URL
+        if (!pageName) {
+            pageName = pageNames[path] || path.split('/').filter(Boolean).pop()?.charAt(0).toUpperCase() + path.split('/').filter(Boolean).pop()?.slice(1) || 'General';
+        }
+
+        // Check for sub-sections (query params, hash, or specific elements)
+        const tab = urlParams.get('tab');
+        const view = urlParams.get('view');
+        const hash = window.location.hash;
+        
+        // Detect active tab/view from URL params
+        if (tab) {
+            const tabLabel = tab.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            return `${pageName} > ${tabLabel}`;
+        }
+        if (view) {
+            const viewLabel = view.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            return `${pageName} > ${viewLabel}`;
+        }
+        
+        // Detect from hash (e.g., #pipeline, #list)
+        if (hash && hash.length > 1) {
+            const hashSection = hash.substring(1).split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+            if (hashSection && hashSection !== pageName) {
+                return `${pageName} > ${hashSection}`;
+            }
+        }
+
+        // Check for common UI elements that indicate sections
+        // This is a fallback - the SectionCommentWidget will provide better context
+        const pipelineElement = document.querySelector('[data-section="pipeline"], .pipeline-view, #pipeline');
+        const listViewElement = document.querySelector('[data-section="list"], .list-view, [data-view="list"]');
+        
+        if (pipelineElement && (pageName.includes('Clients') || pageName.includes('Leads'))) {
+            return `${pageName} > Pipeline`;
+        }
+        if (listViewElement && !pipelineElement) {
+            return `${pageName} > List View`;
+        }
+
+        return pageName;
+    };
+
+    // Auto-populate section when widget opens or page changes
+    useEffect(() => {
+        if (open) {
+            const autoDetected = detectCurrentSection();
+            // Only auto-populate if section is empty or it's a generic value
+            if (!section || section === 'general' || section === '') {
+                setSection(autoDetected);
+            }
+            // Always update if the detected section is different (user can still override)
+            else if (autoDetected !== section && !section.includes('>')) {
+                // Only update if current section doesn't look manually customized
+                setSection(autoDetected);
+            }
+        }
+    }, [open, window.currentPage, window.location.pathname]);
+
     // Load recent comments when widget opens
     useEffect(() => {
         if (open) {
@@ -141,7 +246,9 @@ const FeedbackWidget = () => {
                     {/* Form Section */}
                     <div className="flex-1 overflow-y-auto p-3 space-y-2">
                         <div>
-                            <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Section (optional)</label>
+                            <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>
+                                Section {section && <span className="text-green-600 dark:text-green-400">(auto-detected)</span>}
+                            </label>
                             <input
                                 value={section}
                                 onChange={(e) => setSection(e.target.value)}
@@ -151,7 +258,21 @@ const FeedbackWidget = () => {
                                         ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
                                         : 'border-gray-300'
                                 }`}
+                                title="Auto-detected from current page. You can edit if needed."
                             />
+                            {section && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const detected = detectCurrentSection();
+                                        setSection(detected);
+                                    }}
+                                    className={`mt-1 text-[10px] ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'} underline`}
+                                >
+                                    <i className="fas fa-refresh mr-1"></i>
+                                    Re-detect from page
+                                </button>
+                            )}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>

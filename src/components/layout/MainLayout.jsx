@@ -299,6 +299,14 @@ const MainLayout = () => {
         }
     }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary]);
 
+    // Expose currentPage globally for feedback widgets
+    React.useEffect(() => {
+        window.currentPage = currentPage;
+        return () => {
+            delete window.currentPage;
+        };
+    }, [currentPage]);
+
     return (
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Mobile Overlay */}
