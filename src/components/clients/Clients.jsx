@@ -2300,6 +2300,31 @@ const Clients = React.memo(() => {
             {viewMode === 'pipeline' ? (() => {
                 console.log('🎯🎯🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
                 console.log('🎯🎯🎯🎯🎯 Current clients:', clients.length);
+                
+                // FORCE LOAD OPPORTUNITIES IMMEDIATELY WHEN PIPELINE VIEW RENDERS
+                if (clients.length > 0 && window.api?.getOpportunitiesByClient) {
+                    console.log('🚀🚀🚀 PIPELINE VIEW RENDERING - FORCE LOADING OPPORTUNITIES NOW!');
+                    // Load opportunities asynchronously and update state
+                    Promise.all(clients.map(async (client) => {
+                        try {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            if (opportunities.length > 0) {
+                                console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
+                            }
+                            return { ...client, opportunities };
+                        } catch (error) {
+                            console.error(`❌ Failed for ${client.name}:`, error);
+                            return { ...client, opportunities: client.opportunities || [] };
+                        }
+                    })).then(clientsWithOpps => {
+                        const total = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                        console.log(`🎉🎉🎉 TOTAL OPPORTUNITIES LOADED: ${total}`);
+                        setClients(clientsWithOpps);
+                        safeStorage.setClients(clientsWithOpps);
+                    });
+                }
+                
                 if (clients.length > 0) {
                     console.log('🎯🎯🎯🎯🎯 Client opportunities:', clients.map(c => ({ name: c.name, opps: c.opportunities?.length || 0, hasOpps: !!(c.opportunities) })));
                 }
