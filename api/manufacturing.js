@@ -79,29 +79,62 @@ async function handler(req, res) {
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
       
-      if (!body.sku || !body.name) {
-        return badRequest(res, 'sku and name required')
+      if (!body.name) {
+        return badRequest(res, 'name required')
       }
 
       try {
-        const totalValue = (parseFloat(body.quantity) || 0) * (parseFloat(body.unitCost) || 0)
+        // Generate sequential SKU (SKU0001, SKU0002, etc.)
+        // Find all items with SKU prefix and extract the highest number
+        const allItems = await prisma.inventoryItem.findMany({
+          where: {
+            sku: { startsWith: 'SKU' }
+          },
+          select: { sku: true }
+        })
+        
+        let maxNumber = 0
+        for (const item of allItems) {
+          const match = item.sku.match(/^SKU(\d+)$/)
+          if (match) {
+            const num = parseInt(match[1])
+            if (num > maxNumber) {
+              maxNumber = num
+            }
+          }
+        }
+        
+        const nextSkuNumber = maxNumber + 1
+        const sku = `SKU${String(nextSkuNumber).padStart(4, '0')}`
+        
+        // Calculate status based on quantity and reorder point
+        const quantity = parseFloat(body.quantity) || 0
+        const reorderPoint = parseFloat(body.reorderPoint) || 0
+        let status = 'out_of_stock'
+        if (quantity > reorderPoint) {
+          status = 'in_stock'
+        } else if (quantity > 0 && quantity <= reorderPoint) {
+          status = 'low_stock'
+        }
+        
+        const totalValue = quantity * (parseFloat(body.unitCost) || 0)
         const lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : new Date()
         
         const item = await prisma.inventoryItem.create({
           data: {
-            sku: body.sku,
+            sku: sku,
             name: body.name,
             category: body.category || 'components',
             type: body.type || 'raw_material',
-            quantity: parseFloat(body.quantity) || 0,
+            quantity: quantity,
             unit: body.unit || 'pcs',
-            reorderPoint: parseFloat(body.reorderPoint) || 0,
+            reorderPoint: reorderPoint,
             reorderQty: parseFloat(body.reorderQty) || 0,
             location: body.location || '',
             unitCost: parseFloat(body.unitCost) || 0,
             totalValue,
             supplier: body.supplier || '',
-            status: body.status || 'in_stock',
+            status: status,
             lastRestocked,
             ownerId: req.user?.sub
           }
@@ -127,28 +160,46 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
+        const existing = await prisma.inventoryItem.findUnique({ where: { id } })
+        if (!existing) {
+          return notFound(res, 'Inventory item not found')
+        }
+        
         const updateData = {}
         
-        if (body.sku !== undefined) updateData.sku = body.sku
+        // SKU cannot be changed (read-only after creation)
+        // if (body.sku !== undefined) updateData.sku = body.sku
         if (body.name !== undefined) updateData.name = body.name
         if (body.category !== undefined) updateData.category = body.category
         if (body.type !== undefined) updateData.type = body.type
-        if (body.quantity !== undefined) updateData.quantity = parseFloat(body.quantity)
+        // Quantity cannot be edited (only through stock movements)
+        // if (body.quantity !== undefined) updateData.quantity = parseFloat(body.quantity)
         if (body.unit !== undefined) updateData.unit = body.unit
         if (body.reorderPoint !== undefined) updateData.reorderPoint = parseFloat(body.reorderPoint)
         if (body.reorderQty !== undefined) updateData.reorderQty = parseFloat(body.reorderQty)
-        if (body.location !== undefined) updateData.location = body.location
+        // Location removed - don't update it
         if (body.unitCost !== undefined) updateData.unitCost = parseFloat(body.unitCost)
         if (body.supplier !== undefined) updateData.supplier = body.supplier
-        if (body.status !== undefined) updateData.status = body.status
+        // Status will be auto-calculated based on quantity and reorder point
         if (body.lastRestocked !== undefined) updateData.lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : null
         
-        // Recalculate totalValue if quantity or unitCost changed
-        if (body.quantity !== undefined || body.unitCost !== undefined) {
-          const existing = await prisma.inventoryItem.findUnique({ where: { id } })
-          const qty = body.quantity !== undefined ? parseFloat(body.quantity) : existing.quantity
-          const cost = body.unitCost !== undefined ? parseFloat(body.unitCost) : existing.unitCost
+        // Recalculate totalValue if unitCost changed (quantity won't change as it's read-only)
+        if (body.unitCost !== undefined) {
+          const qty = existing.quantity
+          const cost = parseFloat(body.unitCost)
           updateData.totalValue = qty * cost
+        }
+        
+        // Auto-calculate status based on quantity and reorder point
+        // Use existing quantity (it can't be changed via update)
+        const quantity = existing.quantity
+        const reorderPoint = body.reorderPoint !== undefined ? parseFloat(body.reorderPoint) : existing.reorderPoint
+        if (quantity > reorderPoint) {
+          updateData.status = 'in_stock'
+        } else if (quantity > 0 && quantity <= reorderPoint) {
+          updateData.status = 'low_stock'
+        } else {
+          updateData.status = 'out_of_stock'
         }
         
         const item = await prisma.inventoryItem.update({
@@ -640,6 +691,177 @@ async function handler(req, res) {
           return notFound(res, 'Stock movement not found')
         }
         return serverError(res, 'Failed to delete stock movement', error.message)
+      }
+    }
+  }
+
+  // SUPPLIERS
+  if (resourceType === 'suppliers') {
+    // LIST (GET /api/manufacturing/suppliers)
+    if (req.method === 'GET' && !id) {
+      try {
+        const suppliers = await prisma.supplier.findMany({
+          where: { ownerId: req.user?.sub },
+          orderBy: { createdAt: 'desc' }
+        })
+        
+        const formatted = suppliers.map(supplier => ({
+          ...supplier,
+          createdAt: formatDate(supplier.createdAt),
+          updatedAt: formatDate(supplier.updatedAt)
+        }))
+        
+        return ok(res, { suppliers: formatted })
+      } catch (error) {
+        console.error('❌ Failed to list suppliers:', error)
+        return serverError(res, 'Failed to list suppliers', error.message)
+      }
+    }
+
+    // GET ONE (GET /api/manufacturing/suppliers/:id)
+    if (req.method === 'GET' && id) {
+      try {
+        const supplier = await prisma.supplier.findUnique({
+          where: { id }
+        })
+        
+        if (!supplier) {
+          return notFound(res, 'Supplier not found')
+        }
+        
+        return ok(res, { 
+          supplier: {
+            ...supplier,
+            createdAt: formatDate(supplier.createdAt),
+            updatedAt: formatDate(supplier.updatedAt)
+          }
+        })
+      } catch (error) {
+        console.error('❌ Failed to get supplier:', error)
+        return serverError(res, 'Failed to get supplier', error.message)
+      }
+    }
+
+    // CREATE (POST /api/manufacturing/suppliers)
+    if (req.method === 'POST' && !id) {
+      const body = req.body || {}
+      
+      if (!body.name) {
+        return badRequest(res, 'name is required')
+      }
+
+      try {
+        // Generate supplier code if not provided
+        let supplierCode = body.code
+        if (!supplierCode) {
+          const lastSupplier = await prisma.supplier.findFirst({
+            orderBy: { createdAt: 'desc' }
+          })
+          const nextNumber = lastSupplier && lastSupplier.code?.startsWith('SUP')
+            ? parseInt(lastSupplier.code.replace('SUP', '')) + 1
+            : 1
+          supplierCode = `SUP${String(nextNumber).padStart(3, '0')}`
+        }
+        
+        const supplier = await prisma.supplier.create({
+          data: {
+            code: supplierCode,
+            name: body.name,
+            contactPerson: body.contactPerson || '',
+            email: body.email || '',
+            phone: body.phone || '',
+            website: body.website || '',
+            address: body.address || '',
+            paymentTerms: body.paymentTerms || 'Net 30',
+            status: body.status || 'active',
+            notes: body.notes || '',
+            ownerId: req.user?.sub
+          }
+        })
+        
+        console.log('✅ Created supplier:', supplier.id)
+        return created(res, { 
+          supplier: {
+            ...supplier,
+            createdAt: formatDate(supplier.createdAt),
+            updatedAt: formatDate(supplier.updatedAt)
+          }
+        })
+      } catch (error) {
+        console.error('❌ Failed to create supplier:', error)
+        return serverError(res, 'Failed to create supplier', error.message)
+      }
+    }
+
+    // UPDATE (PATCH /api/manufacturing/suppliers/:id)
+    if (req.method === 'PATCH' && id) {
+      const body = req.body || {}
+      
+      try {
+        const updateData = {}
+        
+        if (body.code !== undefined) updateData.code = body.code
+        if (body.name !== undefined) updateData.name = body.name
+        if (body.contactPerson !== undefined) updateData.contactPerson = body.contactPerson
+        if (body.email !== undefined) updateData.email = body.email
+        if (body.phone !== undefined) updateData.phone = body.phone
+        if (body.website !== undefined) updateData.website = body.website
+        if (body.address !== undefined) updateData.address = body.address
+        if (body.paymentTerms !== undefined) updateData.paymentTerms = body.paymentTerms
+        if (body.status !== undefined) updateData.status = body.status
+        if (body.notes !== undefined) updateData.notes = body.notes
+        
+        const supplier = await prisma.supplier.update({
+          where: { id },
+          data: updateData
+        })
+        
+        console.log('✅ Updated supplier:', id)
+        return ok(res, { 
+          supplier: {
+            ...supplier,
+            createdAt: formatDate(supplier.createdAt),
+            updatedAt: formatDate(supplier.updatedAt)
+          }
+        })
+      } catch (error) {
+        console.error('❌ Failed to update supplier:', error)
+        if (error.code === 'P2025') {
+          return notFound(res, 'Supplier not found')
+        }
+        return serverError(res, 'Failed to update supplier', error.message)
+      }
+    }
+
+    // DELETE (DELETE /api/manufacturing/suppliers/:id)
+    if (req.method === 'DELETE' && id) {
+      try {
+        // Check if supplier is used in any inventory items
+        const inventoryItems = await prisma.inventoryItem.findMany({
+          where: {
+            ownerId: req.user?.sub,
+            supplier: {
+              contains: id
+            }
+          },
+          take: 1
+        })
+        
+        if (inventoryItems.length > 0) {
+          // Get supplier name for better error message
+          const supplier = await prisma.supplier.findUnique({ where: { id } })
+          return badRequest(res, `Cannot delete supplier: This supplier is assigned to one or more inventory items. Please update those items first.`)
+        }
+        
+        await prisma.supplier.delete({ where: { id } })
+        console.log('✅ Deleted supplier:', id)
+        return ok(res, { deleted: true })
+      } catch (error) {
+        console.error('❌ Failed to delete supplier:', error)
+        if (error.code === 'P2025') {
+          return notFound(res, 'Supplier not found')
+        }
+        return serverError(res, 'Failed to delete supplier', error.message)
       }
     }
   }
