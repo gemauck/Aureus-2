@@ -325,10 +325,9 @@
     <!-- Load Client modals BEFORE Clients component to avoid race condition -->
     <script src="./dist/src/components/clients/ClientDetailModal.js"></script>
     <script src="./dist/src/components/clients/LeadDetailModal.js"></script>
-    <!-- Load both old and new versions for safe migration -->
+    <!-- Load ONLY the main Clients.jsx with Pipeline fixes -->
     <script src="./dist/src/components/clients/Clients.js?v=4001"></script>
-    <script src="./dist/src/components/clients/ClientsCached.js"></script>
-    <script src="./dist/src/components/clients/ClientsDatabaseFirst.js"></script>
+    <!-- REMOVED ClientsCached and ClientsDatabaseFirst to prevent conflicts -->
     
     <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
     <script>
@@ -496,14 +495,12 @@
         // Use original components with full functionality
         window.Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback;
         
-        // 🚀 Choose Clients version based on architecture setting
-        // PRIORITIZE the main Clients.jsx component (has Pipeline opportunity fixes)
-        if (window.USE_LOAD_ONCE_ARCHITECTURE) {
-            // Use main Clients.jsx (has latest Pipeline fixes) with fallback
-            window.Clients = window.Clients || window.ClientsSimple;
+        // 🚀 FORCE USE ONLY Clients.jsx (has Pipeline opportunity fixes)
+        console.log('🔍 Available Clients components:', Object.keys(window).filter(k => k.startsWith('Clients')));
+        if (!window.Clients) {
+            console.error('❌ CRITICAL: window.Clients not found!');
         } else {
-            // Use main Clients.jsx first (has latest Pipeline fixes)
-            window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple;
+            console.log('✅ Using window.Clients (Pipeline fixes enabled)');
         }
         // Use the main Projects component (has latest fixes) with fallback
         window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
