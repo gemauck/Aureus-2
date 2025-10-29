@@ -268,7 +268,8 @@ const ClientsDatabaseFirst = () => {
                     // These fields might not exist in all leads
                     sites: leadFormData.sites || selectedLead.sites || [],
                     contracts: leadFormData.contracts || selectedLead.contracts || [],
-                    billingTerms: leadFormData.billingTerms || selectedLead.billingTerms || {}
+                    billingTerms: leadFormData.billingTerms || selectedLead.billingTerms || {},
+                    proposals: leadFormData.proposals || selectedLead.proposals || []
                 };
                 
                 console.log('📦 Final updatedLead being sent to API:', JSON.stringify(updatedLead, null, 2));

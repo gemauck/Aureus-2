@@ -8,7 +8,7 @@ import { withLogging } from './_lib/logger.js'
 // Helper function to parse JSON fields from database responses
 function parseClientJsonFields(client) {
   try {
-    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms']
+    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals']
     const parsed = { ...client }
     
     jsonFields.forEach(field => {
