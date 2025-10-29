@@ -28,6 +28,9 @@ echo "📥 Pulling latest code..."
 cd /var/www/abcotronics-erp
 git pull origin main
 
+echo "📦 Installing dependencies..."
+npm install
+
 echo "🔨 Building project..."
 npm run build
 
