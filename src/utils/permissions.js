@@ -76,15 +76,40 @@ export class PermissionChecker {
         this.user = user;
         this.userRole = user?.role || 'viewer';
         this.rolePermissions = ROLE_PERMISSIONS[this.userRole]?.permissions || [];
+        
+        // Parse custom permissions from user object (stored as JSON string or array)
+        let customPermissions = [];
+        if (user?.permissions) {
+            try {
+                if (typeof user.permissions === 'string') {
+                    customPermissions = JSON.parse(user.permissions);
+                } else if (Array.isArray(user.permissions)) {
+                    customPermissions = user.permissions;
+                }
+            } catch (e) {
+                console.warn('Failed to parse user permissions:', e);
+                customPermissions = [];
+            }
+        }
+        this.customPermissions = customPermissions;
     }
 
     hasPermission(permission) {
-        // Admin has all permissions
+        // Admin has all permissions (unless explicitly overridden)
+        if (this.userRole?.toLowerCase() === 'admin' && !this.customPermissions.length) {
+            return true;
+        }
+        
+        // Check custom permissions first (they override role permissions)
+        if (this.customPermissions.includes('all') || this.customPermissions.includes(permission)) {
+            return true;
+        }
+        
+        // Check role-based permissions
         if (this.rolePermissions.includes('all')) {
             return true;
         }
         
-        // Check if user has the specific permission
         return this.rolePermissions.includes(permission);
     }
 

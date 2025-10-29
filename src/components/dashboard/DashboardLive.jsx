@@ -1,5 +1,6 @@
 // Live Dashboard Component - Connected to Real Mechanisms
 const { useState, useEffect, useCallback } = React;
+const SectionCommentWidget = window.SectionCommentWidget;
 
 const DashboardLive = () => {
     const [dashboardData, setDashboardData] = useState({
@@ -404,19 +405,27 @@ const DashboardLive = () => {
         <div className="space-y-4">
             {/* Header with Live Status */}
             <div className="flex justify-between items-center">
-                <div>
-                    <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                        Live Dashboard
-                    </h1>
-                    <div className="flex items-center space-x-2">
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                            Last updated: {lastUpdated.toLocaleTimeString()}
-                        </p>
-                        <div className={`flex items-center space-x-1 ${getConnectionStatusColor()}`}>
-                            <i className={`fas ${getConnectionStatusIcon()} text-xs`}></i>
-                            <span className="text-xs font-medium capitalize">{connectionStatus}</span>
+                <div className="flex-1 flex items-center justify-between">
+                    <div>
+                        <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            Live Dashboard
+                        </h1>
+                        <div className="flex items-center space-x-2">
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                Last updated: {lastUpdated.toLocaleTimeString()}
+                            </p>
+                            <div className={`flex items-center space-x-1 ${getConnectionStatusColor()}`}>
+                                <i className={`fas ${getConnectionStatusIcon()} text-xs`}></i>
+                                <span className="text-xs font-medium capitalize">{connectionStatus}</span>
+                            </div>
                         </div>
                     </div>
+                    {SectionCommentWidget && (
+                        <SectionCommentWidget 
+                            sectionId="dashboard-main"
+                            sectionName="Dashboard"
+                        />
+                    )}
                 </div>
                 {/* Live controls removed: dashboard is always live */}
             </div>

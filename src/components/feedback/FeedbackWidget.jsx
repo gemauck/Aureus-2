@@ -1,5 +1,5 @@
-// Lightweight feedback widget
-const { useState } = React;
+// Lightweight feedback widget with comment viewing
+const { useState, useEffect } = React;
 
 const FeedbackWidget = () => {
     const [open, setOpen] = useState(false);
@@ -8,7 +8,41 @@ const FeedbackWidget = () => {
     const [type, setType] = useState('feedback');
     const [severity, setSeverity] = useState('medium');
     const [submitting, setSubmitting] = useState(false);
+    const [comments, setComments] = useState([]);
+    const [loadingComments, setLoadingComments] = useState(false);
     const { user } = window.useAuth();
+    const { isDark } = window.useTheme();
+
+    // Load recent comments when widget opens
+    useEffect(() => {
+        if (open) {
+            loadRecentComments();
+        }
+    }, [open]);
+
+    const loadRecentComments = async () => {
+        setLoadingComments(true);
+        try {
+            const data = await window.api.getFeedback({
+                pageUrl: window.location.pathname,
+                includeUser: true
+            });
+            // Get unique sections and their latest comments
+            const sectionComments = {};
+            (Array.isArray(data) ? data : []).forEach(comment => {
+                const key = comment.section || 'general';
+                if (!sectionComments[key] || new Date(comment.createdAt) > new Date(sectionComments[key].createdAt)) {
+                    sectionComments[key] = comment;
+                }
+            });
+            setComments(Object.values(sectionComments).slice(0, 5)); // Show up to 5 recent comments
+        } catch (error) {
+            console.error('Failed to load comments:', error);
+            setComments([]);
+        } finally {
+            setLoadingComments(false);
+        }
+    };
 
     const submit = async () => {
         if (!message.trim()) {
@@ -17,28 +51,24 @@ const FeedbackWidget = () => {
         }
         setSubmitting(true);
         try {
-            const res = await fetch('/api/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    message: message.trim(),
-                    pageUrl: window.location.href,
-                    section: section.trim(),
-                    type,
-                    severity,
-                    meta: {
-                        userAgent: navigator.userAgent,
-                        viewport: `${window.innerWidth}x${window.innerHeight}`,
-                        screen: `${window.screen.width}x${window.screen.height}`,
-                        userName: user?.name || null,
-                        userEmail: user?.email || null
-                    }
-                })
+            await window.api.submitFeedback({
+                message: message.trim(),
+                pageUrl: window.location.pathname,
+                section: section.trim() || 'general',
+                type,
+                severity,
+                meta: {
+                    userAgent: navigator.userAgent,
+                    viewport: `${window.innerWidth}x${window.innerHeight}`,
+                    screen: `${window.screen.width}x${window.screen.height}`,
+                    userName: user?.name || null,
+                    userEmail: user?.email || null
+                }
             });
-            if (!res.ok) throw new Error('Failed to submit');
             setMessage('');
             setSection('');
             setOpen(false);
+            await loadRecentComments(); // Refresh comments
             alert('Thanks! Your feedback was submitted.');
         } catch (e) {
             console.error(e);
@@ -46,6 +76,21 @@ const FeedbackWidget = () => {
         } finally {
             setSubmitting(false);
         }
+    };
+
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return date.toLocaleDateString();
     };
 
     return (
@@ -60,30 +105,65 @@ const FeedbackWidget = () => {
                     Feedback
                 </button>
             ) : (
-                <div className="w-80 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden">
-                    <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between bg-gray-50">
-                        <div className="text-xs font-semibold text-gray-700">Send Feedback</div>
-                        <button className="text-gray-500 hover:text-gray-700" onClick={() => setOpen(false)}>
+                <div className={`w-80 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col`}>
+                    <div className={`px-3 py-2 border-b ${isDark ? 'border-gray-700 bg-gray-750' : 'border-gray-200 bg-gray-50'} flex items-center justify-between`}>
+                        <div className={`text-xs font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>Send Feedback</div>
+                        <button className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setOpen(false)}>
                             <i className="fas fa-times text-xs"></i>
                         </button>
                     </div>
-                    <div className="p-3 space-y-2">
+                    
+                    {/* Recent Comments Section */}
+                    {comments.length > 0 && (
+                        <div className={`px-3 py-2 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} ${isDark ? 'bg-gray-750' : 'bg-gray-50'}`}>
+                            <div className={`text-[10px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
+                                Recent Comments
+                            </div>
+                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                                {loadingComments ? (
+                                    <div className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                                        <i className="fas fa-spinner fa-spin mr-1"></i>Loading...
+                                    </div>
+                                ) : (
+                                    comments.map((comment) => (
+                                        <div key={comment.id} className={`text-[10px] ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                                            <span className="font-medium">{comment.user?.name || 'Anonymous'}</span>
+                                            {' '}on{' '}
+                                            <span className="font-medium">{comment.section || 'general'}</span>
+                                            {' '}<span className={isDark ? 'text-gray-500' : 'text-gray-400'}>({formatDate(comment.createdAt)})</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Form Section */}
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
                         <div>
-                            <label className="block text-[10px] text-gray-600 mb-1">Section (optional)</label>
+                            <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Section (optional)</label>
                             <input
                                 value={section}
                                 onChange={(e) => setSection(e.target.value)}
                                 placeholder="e.g., Clients > Contacts"
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-500 focus:border-transparent"
+                                className={`w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-500 focus:border-transparent ${
+                                    isDark
+                                        ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
+                                        : 'border-gray-300'
+                                }`}
                             />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-[10px] text-gray-600 mb-1">Type</label>
+                                <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Type</label>
                                 <select
                                     value={type}
                                     onChange={(e) => setType(e.target.value)}
-                                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                    className={`w-full border rounded px-2 py-1 text-xs ${
+                                        isDark
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200'
+                                            : 'border-gray-300'
+                                    }`}
                                 >
                                     <option value="feedback">Feedback</option>
                                     <option value="bug">Bug</option>
@@ -91,11 +171,15 @@ const FeedbackWidget = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-[10px] text-gray-600 mb-1">Severity</label>
+                                <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Severity</label>
                                 <select
                                     value={severity}
                                     onChange={(e) => setSeverity(e.target.value)}
-                                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs"
+                                    className={`w-full border rounded px-2 py-1 text-xs ${
+                                        isDark
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200'
+                                            : 'border-gray-300'
+                                    }`}
                                 >
                                     <option value="low">Low</option>
                                     <option value="medium">Medium</option>
@@ -104,23 +188,27 @@ const FeedbackWidget = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-[10px] text-gray-600 mb-1">Your message</label>
+                            <label className={`block text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Your message</label>
                             <textarea
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
                                 placeholder="Describe the issue or suggestion"
                                 rows={4}
-                                className="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-500 focus:border-transparent"
+                                className={`w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-primary-500 focus:border-transparent ${
+                                    isDark
+                                        ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400'
+                                        : 'border-gray-300'
+                                }`}
                             />
                         </div>
                         <button
                             onClick={submit}
                             disabled={submitting}
-                            className="w-full bg-primary-600 text-white rounded px-3 py-1.5 text-xs font-medium hover:bg-primary-700 disabled:opacity-60"
+                            className={`w-full ${isDark ? 'bg-primary-600 hover:bg-primary-700' : 'bg-primary-600 hover:bg-primary-700'} text-white rounded px-3 py-1.5 text-xs font-medium disabled:opacity-60`}
                         >
                             {submitting ? 'Sending…' : 'Submit feedback'}
                         </button>
-                        <div className="text-[10px] text-gray-500 text-center">
+                        <div className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'} text-center`}>
                             Page: {window.location.pathname}
                         </div>
                     </div>
