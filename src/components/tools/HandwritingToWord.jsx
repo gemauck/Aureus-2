@@ -40,8 +40,17 @@ const HandwritingToWord = () => {
         setProgress(0);
 
         try {
+            // Lazy load Tesseract.js if not already loaded
+            if (!window.Tesseract && window.loadTesseract) {
+                await window.loadTesseract();
+            }
+            
+            if (!window.Tesseract) {
+                throw new Error('Tesseract.js library failed to load');
+            }
+
             // Initialize Tesseract worker
-            const worker = await Tesseract.createWorker({
+            const worker = await window.Tesseract.createWorker({
                 logger: (m) => {
                     if (m.status === 'recognizing text') {
                         setProgress(Math.round(m.progress * 100));

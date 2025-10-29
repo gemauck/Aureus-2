@@ -97,17 +97,17 @@
         return false;
     }
     
-    // Wait for Babel to be ready before starting
+    // Start checking for components (no Babel needed anymore)
     function startChecking() {
-        // Check if Babel is ready
-        if (typeof Babel !== 'undefined' && (window.BabelReady || typeof window.BabelReady !== 'undefined')) {
+        // Check if BabelReady event was fired (or just start checking)
+        if (window.BabelReady) {
             const checkInterval = setInterval(() => {
                 if (tryMount()) {
                     clearInterval(checkInterval);
                 }
             }, 250);
         } else {
-            // Wait for babelready event
+            // Wait for babelready event (still used for React loading signal)
             window.addEventListener('babelready', () => {
                 const checkInterval = setInterval(() => {
                     if (tryMount()) {
@@ -116,7 +116,7 @@
                 }, 250);
             }, { once: true });
             
-            // Fallback: start checking after a delay even if Babel event doesn't fire
+            // Fallback: start checking after a delay
             setTimeout(() => {
                 if (!mounted) {
                     const checkInterval = setInterval(() => {
@@ -125,7 +125,7 @@
                         }
                     }, 250);
                 }
-            }, 2000);
+            }, 500);
         }
     }
     

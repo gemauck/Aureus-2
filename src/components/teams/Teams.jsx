@@ -1104,5 +1104,8 @@ const Teams = () => {
     );
 };
 
+// Wrap Teams with React.memo to prevent unnecessary re-renders
+const MemoizedTeams = React.memo(Teams);
+
 // Make available globally
-window.Teams = Teams;
+window.Teams = MemoizedTeams;
