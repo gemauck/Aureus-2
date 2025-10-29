@@ -5,10 +5,7 @@ const UserManagement = () => {
     const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
     
     // Check if current user is admin (case-insensitive)
-    const userRole = currentUser?.role?.toLowerCase();
-    const hasUser = !!currentUser && currentUser !== null && currentUser !== undefined;
-    // Allow access if admin OR if user exists but role is undefined (fallback)
-    const isAdmin = userRole === 'admin' || (!userRole && hasUser);
+    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
     
     const [users, setUsers] = useState([]);
     const [invitations, setInvitations] = useState([]);
