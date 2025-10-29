@@ -693,7 +693,7 @@ const Teams = () => {
                                 {displayDocuments.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {displayDocuments.map(doc => (
-                                            <div key={doc.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition">
+                                            <div key={doc.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition dark:bg-slate-800 dark:border-slate-700">
                                                 <div className="flex items-start justify-between mb-2">
 										<div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900">
 											<i className="fas fa-file-alt text-blue-600 dark:text-blue-300"></i>
@@ -701,7 +701,7 @@ const Teams = () => {
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleViewDocument(doc)}
-                                                            className="p-1 text-gray-400 hover:text-blue-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-blue-600 transition dark:text-slate-400 dark:hover:text-blue-400"
                                                             title="View"
                                                         >
                                                             <i className="fas fa-eye text-xs"></i>
@@ -711,14 +711,14 @@ const Teams = () => {
                                                                 setEditingDocument(doc);
                                                                 setShowDocumentModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteDocument(doc.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -739,8 +739,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-file-alt text-4xl text-gray-300 mb-3"></i>
-                                        <p className="text-sm text-gray-500">No documents yet</p>
+                                        <i className="fas fa-file-alt text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">No documents yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingDocument(null);
@@ -757,11 +757,11 @@ const Teams = () => {
 
                         {activeTab === 'workflows' && (
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3">Workflows & Processes</h3>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Workflows & Processes</h3>
                                 {displayWorkflows.length > 0 ? (
 									<div className="space-y-3">
                                         {displayWorkflows.map(workflow => (
-                                            <div key={workflow.id} className="border border-gray-200 rounded-lg p-3">
+                                            <div key={workflow.id} className="border border-gray-200 rounded-lg p-3 dark:bg-slate-800 dark:border-slate-700">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
 										<div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center dark:bg-purple-900">
@@ -775,7 +775,7 @@ const Teams = () => {
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleExecuteWorkflow(workflow)}
-                                                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition font-medium"
+                                                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition font-medium dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800"
                                                             title="Execute Workflow"
                                                         >
                                                             <i className="fas fa-play mr-1"></i>
@@ -786,14 +786,14 @@ const Teams = () => {
                                                                 setEditingWorkflow(workflow);
                                                                 setShowWorkflowModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteWorkflow(workflow.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -828,8 +828,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-project-diagram text-4xl text-gray-300 mb-3"></i>
-                                        <p className="text-sm text-gray-500">No workflows yet</p>
+                                        <i className="fas fa-project-diagram text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">No workflows yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingWorkflow(null);
@@ -850,7 +850,7 @@ const Teams = () => {
                                 {displayChecklists.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {displayChecklists.map(checklist => (
-                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3">
+                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3 dark:bg-slate-800 dark:border-slate-700">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
 										<div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center dark:bg-green-900">
@@ -867,14 +867,14 @@ const Teams = () => {
                                                                 setEditingChecklist(checklist);
                                                                 setShowChecklistModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteChecklist(checklist.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -887,7 +887,7 @@ const Teams = () => {
 										<p className="text-xs text-gray-600 mb-2 dark:text-slate-400">{checklist.description}</p>
 										<div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
                                                     <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
-                                                    <button className="text-primary-600 hover:text-primary-700 font-medium">
+                                                    <button className="text-primary-600 hover:text-primary-700 font-medium dark:text-primary-400 dark:hover:text-primary-300">
                                                         Use Template →
                                                     </button>
                                                 </div>
@@ -896,8 +896,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-tasks text-4xl text-gray-300 mb-3"></i>
-                                        <p className="text-sm text-gray-500">No checklists yet</p>
+                                        <i className="fas fa-tasks text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">No checklists yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingChecklist(null);
@@ -919,24 +919,24 @@ const Teams = () => {
                                     <div className="space-y-3">
                                         {displayNotices.map(notice => (
                                             <div key={notice.id} className={`border-l-4 rounded-lg p-3 ${
-                                                notice.priority === 'Critical' || notice.priority === 'High' ? 'border-red-500 bg-red-50' :
-                                                notice.priority === 'Medium' ? 'border-yellow-500 bg-yellow-50' :
-                                                'border-blue-500 bg-blue-50'
+                                                notice.priority === 'Critical' || notice.priority === 'High' ? 'border-red-500 bg-red-50 dark:bg-red-900/30 dark:border-red-400' :
+                                                notice.priority === 'Medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/30 dark:border-yellow-400' :
+                                                'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400'
                                             }`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2 flex-1">
                                                         <i className={`fas fa-bullhorn ${
-                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'text-red-600' :
-                                                            notice.priority === 'Medium' ? 'text-yellow-600' :
-                                                            'text-blue-600'
+                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'text-red-600 dark:text-red-400' :
+                                                            notice.priority === 'Medium' ? 'text-yellow-600 dark:text-yellow-400' :
+                                                            'text-blue-600 dark:text-blue-400'
                                                         }`}></i>
 												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{notice.title}</h4>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <span className={`px-2 py-1 text-xs rounded font-medium ${
-                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'bg-red-100 text-red-700' :
-                                                            notice.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
-                                                            'bg-blue-100 text-blue-700'
+                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
+                                                            notice.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300' :
+                                                            'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
                                                         }`}>
                                                             {notice.priority}
                                                         </span>
@@ -945,14 +945,14 @@ const Teams = () => {
                                                                 setEditingNotice(notice);
                                                                 setShowNoticeModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteNotice(notice.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition"
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -969,8 +969,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-bullhorn text-4xl text-gray-300 mb-3"></i>
-                                        <p className="text-sm text-gray-500">No notices yet</p>
+                                        <i className="fas fa-bullhorn text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">No notices yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingNotice(null);
@@ -1056,11 +1056,11 @@ const Teams = () => {
             {/* Document View Modal */}
             {showDocumentViewModal && viewingDocument && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10">
+                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
+                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10 dark:bg-slate-800 dark:border-slate-700">
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900">{viewingDocument.title}</h3>
-                                <p className="text-xs text-gray-600">
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{viewingDocument.title}</h3>
+                                <p className="text-xs text-gray-600 dark:text-slate-400">
                                     {viewingDocument.category} • Version {viewingDocument.version}
                                 </p>
                             </div>
@@ -1069,7 +1069,7 @@ const Teams = () => {
                                     setShowDocumentViewModal(false);
                                     setViewingDocument(null);
                                 }}
-                                className="text-gray-400 hover:text-gray-600 transition"
+                                className="text-gray-400 hover:text-gray-600 transition dark:text-slate-400 dark:hover:text-slate-200"
                             >
                                 <i className="fas fa-times text-lg"></i>
                             </button>
@@ -1077,28 +1077,28 @@ const Teams = () => {
 
                         <div className="p-4 space-y-4">
                             {viewingDocument.description && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                    <p className="text-sm text-blue-900">{viewingDocument.description}</p>
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 dark:bg-blue-900/30 dark:border-blue-700">
+                                    <p className="text-sm text-blue-900 dark:text-blue-200">{viewingDocument.description}</p>
                                 </div>
                             )}
 
                             <div className="prose prose-sm max-w-none">
-                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900">
+                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900 dark:text-slate-100">
                                     {viewingDocument.content}
                                 </pre>
                             </div>
 
                             {viewingDocument.attachments && viewingDocument.attachments.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Attachments</h4>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 dark:text-slate-100">Attachments</h4>
                                     <div className="space-y-2">
                                         {viewingDocument.attachments.map((att, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200">
+                                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200 dark:bg-slate-700 dark:border-slate-600">
                                                 <div className="flex items-center gap-2">
-                                                    <i className="fas fa-file text-gray-400"></i>
-                                                    <span className="text-sm text-gray-900">{att.name}</span>
+                                                    <i className="fas fa-file text-gray-400 dark:text-slate-400"></i>
+                                                    <span className="text-sm text-gray-900 dark:text-slate-100">{att.name}</span>
                                                 </div>
-                                                <span className="text-xs text-gray-500">
+                                                <span className="text-xs text-gray-500 dark:text-slate-400">
                                                     {(att.size / 1024).toFixed(2)} KB
                                                 </span>
                                             </div>
@@ -1109,10 +1109,10 @@ const Teams = () => {
 
                             {viewingDocument.tags && viewingDocument.tags.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2">Tags</h4>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 dark:text-slate-100">Tags</h4>
                                     <div className="flex flex-wrap gap-2">
                                         {viewingDocument.tags.map(tag => (
-                                            <span key={tag} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs">
+                                            <span key={tag} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs dark:bg-primary-900/50 dark:text-primary-300">
                                                 {tag}
                                             </span>
                                         ))}
@@ -1120,7 +1120,7 @@ const Teams = () => {
                                 </div>
                             )}
 
-                            <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+                            <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500 dark:border-slate-700 dark:text-slate-400">
                                 <span>Created by {viewingDocument.createdBy}</span>
                                 <span>
                                     Last updated: {new Date(viewingDocument.updatedAt).toLocaleDateString('en-ZA', {
