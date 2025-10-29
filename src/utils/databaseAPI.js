@@ -416,6 +416,144 @@ const DatabaseAPI = {
         return response;
     },
 
+    // MANUFACTURING OPERATIONS - INVENTORY
+    async getInventory() {
+        console.log('📡 Fetching inventory from database...');
+        const response = await this.makeRequest('/manufacturing/inventory');
+        console.log('✅ Inventory fetched from database:', response.data?.inventory?.length || 0);
+        return response;
+    },
+
+    async createInventoryItem(itemData) {
+        console.log('📡 Creating inventory item in database...');
+        const response = await this.makeRequest('/manufacturing/inventory', {
+            method: 'POST',
+            body: JSON.stringify(itemData)
+        });
+        console.log('✅ Inventory item created in database');
+        return response;
+    },
+
+    async updateInventoryItem(id, itemData) {
+        console.log(`📡 Updating inventory item ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(itemData)
+        });
+        console.log('✅ Inventory item updated in database');
+        return response;
+    },
+
+    async deleteInventoryItem(id) {
+        console.log(`📡 Deleting inventory item ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/inventory/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Inventory item deleted from database');
+        return response;
+    },
+
+    // MANUFACTURING OPERATIONS - BOMs
+    async getBOMs() {
+        console.log('📡 Fetching BOMs from database...');
+        const response = await this.makeRequest('/manufacturing/boms');
+        console.log('✅ BOMs fetched from database:', response.data?.boms?.length || 0);
+        return response;
+    },
+
+    async createBOM(bomData) {
+        console.log('📡 Creating BOM in database...');
+        const response = await this.makeRequest('/manufacturing/boms', {
+            method: 'POST',
+            body: JSON.stringify(bomData)
+        });
+        console.log('✅ BOM created in database');
+        return response;
+    },
+
+    async updateBOM(id, bomData) {
+        console.log(`📡 Updating BOM ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/boms/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(bomData)
+        });
+        console.log('✅ BOM updated in database');
+        return response;
+    },
+
+    async deleteBOM(id) {
+        console.log(`📡 Deleting BOM ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/boms/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ BOM deleted from database');
+        return response;
+    },
+
+    // MANUFACTURING OPERATIONS - PRODUCTION ORDERS
+    async getProductionOrders() {
+        console.log('📡 Fetching production orders from database...');
+        const response = await this.makeRequest('/manufacturing/production-orders');
+        console.log('✅ Production orders fetched from database:', response.data?.productionOrders?.length || 0);
+        return response;
+    },
+
+    async createProductionOrder(orderData) {
+        console.log('📡 Creating production order in database...');
+        const response = await this.makeRequest('/manufacturing/production-orders', {
+            method: 'POST',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Production order created in database');
+        return response;
+    },
+
+    async updateProductionOrder(id, orderData) {
+        console.log(`📡 Updating production order ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Production order updated in database');
+        return response;
+    },
+
+    async deleteProductionOrder(id) {
+        console.log(`📡 Deleting production order ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/production-orders/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Production order deleted from database');
+        return response;
+    },
+
+    // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
+    async getStockMovements() {
+        console.log('📡 Fetching stock movements from database...');
+        const response = await this.makeRequest('/manufacturing/stock-movements');
+        console.log('✅ Stock movements fetched from database:', response.data?.movements?.length || 0);
+        return response;
+    },
+
+    async createStockMovement(movementData) {
+        console.log('📡 Creating stock movement in database...');
+        const response = await this.makeRequest('/manufacturing/stock-movements', {
+            method: 'POST',
+            body: JSON.stringify(movementData)
+        });
+        console.log('✅ Stock movement created in database');
+        return response;
+    },
+
+    async deleteStockMovement(id) {
+        console.log(`📡 Deleting stock movement ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/stock-movements/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Stock movement deleted from database');
+        return response;
+    },
+
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');
