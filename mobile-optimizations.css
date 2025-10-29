@@ -413,6 +413,45 @@
     transform: translateX(0);
   }
   
+  /* Ensure sidebar text is visible on mobile */
+  .sidebar-mobile.open nav button span,
+  .sidebar-mobile.open nav button,
+  .sidebar-mobile.open * {
+    color: inherit !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Ensure text in sidebar menu items is visible */
+  @media (max-width: 768px) {
+    .sidebar-mobile.open nav button {
+      width: 100% !important;
+      overflow: visible !important;
+      white-space: nowrap !important;
+    }
+    
+    .sidebar-mobile.open nav button span {
+      display: inline-block !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      color: inherit !important;
+    }
+    
+    /* Dark mode text visibility */
+    .dark .sidebar-mobile.open nav button {
+      color: #e5e7eb !important;
+    }
+    
+    .dark .sidebar-mobile.open nav button span {
+      color: #e5e7eb !important;
+    }
+    
+    .dark .sidebar-mobile.open nav button.active span,
+    .dark .sidebar-mobile.open nav button:hover span {
+      color: #ffffff !important;
+    }
+  }
+  
   .sidebar-overlay {
     position: fixed;
     top: 0;

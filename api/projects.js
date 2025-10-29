@@ -33,7 +33,23 @@ async function handler(req, res) {
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
+        // Optimize: Only select fields needed for the list view
         const projects = await prisma.project.findMany({ 
+          select: {
+            id: true,
+            name: true,
+            clientName: true,
+            status: true,
+            type: true,
+            startDate: true,
+            dueDate: true,
+            assignedTo: true,
+            description: true,
+            createdAt: true,
+            updatedAt: true
+            // Exclude large JSON fields: tasksList, taskLists, customFieldDefinitions, 
+            // documents, comments, activityLog, team, documentSections
+          },
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Projects retrieved successfully:', projects.length)

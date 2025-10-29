@@ -30,7 +30,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
                 comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
             };
             setFormData(parsedLead);
         } else if (lead && formData.id && lead.id !== formData.id) {
@@ -44,7 +45,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
                 comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
             };
             setFormData(parsedLead);
         } else if (lead && formData.id === lead.id) {
@@ -110,7 +112,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
             comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
             activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {})
+            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
         } : {
             name: '',
             industry: '',
@@ -124,6 +127,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             projectIds: [],
             comments: [],
             activityLog: [],
+            proposals: [],
             firstContactDate: new Date().toISOString().split('T')[0]
         };
         
@@ -849,7 +853,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
                     <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'calendar', 'projects', 'proposals', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -865,6 +869,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     tab === 'contacts' ? 'users' :
                                     tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'projects' ? 'folder-open' :
+                                    tab === 'proposals' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
                                     'comment-alt'
                                 } mr-2`}></i>
@@ -877,6 +882,11 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                 {tab === 'projects' && selectedProjectIds.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {selectedProjectIds.length}
+                                    </span>
+                                )}
+                                {tab === 'proposals' && Array.isArray(formData.proposals) && formData.proposals.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
+                                        {formData.proposals.length}
                                     </span>
                                 )}
                                 {tab === 'calendar' && Array.isArray(upcomingFollowUps) && upcomingFollowUps.length > 0 && (
@@ -1468,6 +1478,247 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     <div className="text-center py-8 text-gray-500 text-sm">
                                         <i className="fas fa-folder-open text-3xl mb-2"></i>
                                         <p>No projects available</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Proposals Tab */}
+                        {activeTab === 'proposals' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const newProposal = {
+                                                id: Date.now(),
+                                                title: `Proposal for ${formData.name}`,
+                                                createdDate: new Date().toISOString().split('T')[0],
+                                                workflowStage: 'create-site-inspection',
+                                                stages: [
+                                                    { 
+                                                        name: 'Create Site Inspection Document', 
+                                                        department: 'Business Development',
+                                                        assignee: 'Darren Mortimer',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Darren Mortimer' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Conduct site visit input data to Site Inspection Document', 
+                                                        department: 'Technical',
+                                                        assignee: 'Greg Keague',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Greg Keague' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Comments on work loading requirements', 
+                                                        department: 'Data',
+                                                        assignee: 'Gareth Mauck',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Gareth Mauck' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Comments on time allocations', 
+                                                        department: 'Support',
+                                                        assignee: 'Keith Geere',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Keith Geere' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Relevant comments time allocations', 
+                                                        department: 'Compliance',
+                                                        assignee: 'Timothy La Fontaine',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Timothy La Fontaine' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Creates proposal from template add client information', 
+                                                        department: 'Business Development',
+                                                        assignee: 'Darren Mortimer',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Darren Mortimer' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Reviews proposal against Site Inspection comments', 
+                                                        department: 'Operations Manager',
+                                                        assignee: 'Gareth Mauck',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Gareth Mauck' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Price proposal', 
+                                                        department: 'Commercial',
+                                                        assignee: 'Reinhardt Scholtz',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'Reinhardt Scholtz' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    },
+                                                    { 
+                                                        name: 'Final Approval', 
+                                                        department: 'CEO',
+                                                        assignee: 'David Buttemer',
+                                                        status: 'pending',
+                                                        canApprove: window.storage?.getUser()?.name === 'David Buttemer' || window.storage?.getUser()?.role === 'admin',
+                                                        comments: ''
+                                                    }
+                                                ],
+                                                proposalContent: '',
+                                                siteInspectionData: '',
+                                                pricing: {
+                                                    subtotal: 0,
+                                                    tax: 0,
+                                                    total: 0
+                                                }
+                                            };
+                                            const updatedProposals = [...(formData.proposals || []), newProposal];
+                                            setFormData({ ...formData, proposals: updatedProposals });
+                                            handleSave({ ...formData, proposals: updatedProposals }, true);
+                                        }}
+                                        className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        Create New Proposal
+                                    </button>
+                                </div>
+
+                                {(!Array.isArray(formData.proposals) || formData.proposals.length === 0) ? (
+                                    <div className="text-center py-12 text-gray-500">
+                                        <i className="fas fa-file-contract text-4xl mb-3"></i>
+                                        <p className="text-sm">No proposals created yet</p>
+                                        <p className="text-xs mt-1">Click "Create New Proposal" to start the approval workflow</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {formData.proposals.map((proposal, proposalIndex) => (
+                                            <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <h4 className="font-semibold text-gray-900">{proposal.title}</h4>
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            <i className="fas fa-calendar mr-1"></i>
+                                                            Created: {new Date(proposal.createdDate).toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (confirm('Delete this proposal?')) {
+                                                                const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
+                                                                setFormData({ ...formData, proposals: updatedProposals });
+                                                                handleSave({ ...formData, proposals: updatedProposals }, true);
+                                                            }
+                                                        }}
+                                                        className="text-red-600 hover:text-red-700"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
+
+                                                {/* Workflow Stages */}
+                                                <div className="space-y-3">
+                                                    <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
+                                                    {proposal.stages.map((stage, stageIndex) => {
+                                                        const currentStage = proposal.stages[proposal.stages.findIndex(s => s.status === 'in-progress') || 0];
+                                                        const canApprove = stage.canApprove && 
+                                                            (stage.status === 'pending' || stage.status === 'in-progress') &&
+                                                            (stageIndex === 0 || proposal.stages[stageIndex - 1].status === 'approved');
+                                                        const statusColor = 
+                                                            stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
+                                                            stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                            'bg-gray-100 text-gray-600 border-gray-300';
+                                                        
+                                                        return (
+                                                            <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
+                                                                <div className="flex justify-between items-start">
+                                                                    <div className="flex-1">
+                                                                        <div className="flex items-center gap-2 mb-1">
+                                                                            <span className="font-medium text-sm">{stageIndex + 1}.</span>
+                                                                            <span className="font-medium text-sm">{stage.name}</span>
+                                                                        </div>
+                                                                        <div className="text-xs text-gray-600 ml-6">
+                                                                            <span className="mr-3"><i className="fas fa-building mr-1"></i>{stage.department}</span>
+                                                                            <span><i className="fas fa-user mr-1"></i>{stage.assignee}</span>
+                                                                        </div>
+                                                                        {stage.comments && (
+                                                                            <div className="mt-2 p-2 bg-white rounded text-xs text-gray-700">
+                                                                                <strong>Comments:</strong> {stage.comments}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        {canApprove && (
+                                                                            <>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                            if (idx === stageIndex) {
+                                                                                                return { ...s, status: 'in-progress' };
+                                                                                            }
+                                                                                            return s;
+                                                                                        });
+                                                                                        const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                            idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                        );
+                                                                                        setFormData({ ...formData, proposals: updatedProposals });
+                                                                                        handleSave({ ...formData, proposals: updatedProposals }, true);
+                                                                                    }}
+                                                                                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                                                                                >
+                                                                                    Start
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const comments = prompt('Enter comments (optional):');
+                                                                                        if (comments !== null) {
+                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                if (idx === stageIndex) {
+                                                                                                    return { ...s, status: 'approved', comments };
+                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                    return { ...s, status: 'in-progress' };
+                                                                                                }
+                                                                                                return s;
+                                                                                            });
+                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                            );
+                                                                                            setFormData({ ...formData, proposals: updatedProposals });
+                                                                                            handleSave({ ...formData, proposals: updatedProposals }, true);
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                >
+                                                                                    Approve
+                                                                                </button>
+                                                                            </>
+                                                                        )}
+                                                                        {stage.status === 'approved' && (
+                                                                            <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                <i className="fas fa-check mr-1"></i>Approved
+                                                                            </span>
+                                                                        )}
+                                                                        {stage.status === 'in-progress' && (
+                                                                            <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
+                                                                                <i className="fas fa-clock mr-1"></i>In Progress
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
                                 )}
                             </div>

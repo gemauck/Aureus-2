@@ -86,10 +86,13 @@ async function handler(req, res) {
     const accessToken = signAccessToken(payload)
     const refreshToken = signRefreshToken(payload)
 
-    // Update last login
+    // Update last login and last seen timestamps
     await prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() }
+      data: { 
+        lastLoginAt: new Date(),
+        lastSeenAt: new Date()
+      }
     })
 
     // Set refresh token cookie

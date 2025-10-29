@@ -300,6 +300,78 @@ router.delete('/notices/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ============ TEAM TASKS ============
+
+// Get all tasks (optionally filtered by team)
+router.get('/tasks', authenticateToken, async (req, res) => {
+  try {
+    const { team } = req.query;
+    const where = team ? { team } : {};
+    
+    const tasks = await prisma.teamTask.findMany({
+      where,
+      orderBy: { updatedAt: 'desc' }
+    });
+    
+    res.json({ data: { tasks } });
+  } catch (error) {
+    console.error('Error fetching team tasks:', error);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+// Create task
+router.post('/tasks', authenticateToken, async (req, res) => {
+  try {
+    const taskData = {
+      ...req.body,
+      ownerId: getOwnerId(req)
+    };
+    
+    const task = await prisma.teamTask.create({
+      data: taskData
+    });
+    
+    res.json({ data: { task } });
+  } catch (error) {
+    console.error('Error creating team task:', error);
+    res.status(500).json({ error: 'Failed to create task' });
+  }
+});
+
+// Update task
+router.put('/tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const task = await prisma.teamTask.update({
+      where: { id },
+      data: req.body
+    });
+    
+    res.json({ data: { task } });
+  } catch (error) {
+    console.error('Error updating team task:', error);
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+// Delete task
+router.delete('/tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    await prisma.teamTask.delete({
+      where: { id }
+    });
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting team task:', error);
+    res.status(500).json({ error: 'Failed to delete task' });
+  }
+});
+
 // ============ WORKFLOW EXECUTIONS ============
 
 // Get all executions (optionally filtered by workflowId or team)

@@ -91,6 +91,7 @@ model Client {
   contracts     String        @default("[]")
   activityLog   String        @default("[]")
   billingTerms  String        @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
+  proposals     String        @default("[]")
   ownerId       String?
   owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
   projects      Project[]
@@ -333,6 +334,22 @@ model WorkflowExecution {
   updatedAt      DateTime @updatedAt
 }
 
+model TeamTask {
+  id          String   @id @default(cuid())
+  team        String // Team ID (management, technical, etc.)
+  title       String
+  description String   @default("")
+  status      String   @default("todo") // todo, in-progress, completed, blocked
+  priority    String   @default("Medium") // Low, Medium, High, Critical
+  assigneeId  String?
+  dueDate     DateTime?
+  tags        String   @default("[]")
+  attachments String   @default("[]")
+  ownerId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // Manufacturing Models
 model InventoryItem {
   id            String   @id @default(cuid())
@@ -428,5 +445,26 @@ model StockMovement {
   @@index([date])
   @@index([type])
   @@index([sku])
+  @@index([ownerId])
+}
+
+model Supplier {
+  id            String   @id @default(cuid())
+  code          String   @default("")
+  name          String
+  contactPerson String   @default("")
+  email         String   @default("")
+  phone         String   @default("")
+  website       String   @default("")
+  address       String   @default("")
+  paymentTerms  String   @default("Net 30")
+  status        String   @default("active") // active, inactive
+  notes         String   @default("")
+  ownerId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([name])
+  @@index([status])
   @@index([ownerId])
 }

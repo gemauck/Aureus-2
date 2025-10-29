@@ -223,25 +223,53 @@ const Projects = () => {
         setShowModal(true);
     };
 
-    const handleEditProject = (project) => {
-        setSelectedProject(project);
-        setShowModal(true);
+    const handleEditProject = async (project) => {
+        try {
+            // Fetch full project data for editing
+            const response = await window.DatabaseAPI.getProject(project.id);
+            const fullProject = response?.data?.project || response?.project || response?.data;
+            
+            if (!fullProject) {
+                throw new Error('Failed to fetch project details');
+            }
+            
+            // Normalize client field
+            const normalizedProject = {
+                ...fullProject,
+                client: fullProject.clientName || fullProject.client || ''
+            };
+            
+            setSelectedProject(normalizedProject);
+            setShowModal(true);
+        } catch (error) {
+            console.error('Error loading project for editing:', error);
+            alert('Error loading project: ' + error.message);
+        }
     };
 
-    const handleViewProject = (project) => {
+    const handleViewProject = async (project) => {
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!ProjectDetail);
         try {
+            // Fetch full project data from API for detail view
+            const response = await window.DatabaseAPI.getProject(project.id);
+            const fullProject = response?.data?.project || response?.project || response?.data;
+            
+            if (!fullProject) {
+                throw new Error('Failed to fetch project details');
+            }
+            
             // Parse JSON string fields from database before passing to ProjectDetail
             const normalizedProject = {
-                ...project,
-                taskLists: typeof project.taskLists === 'string' ? JSON.parse(project.taskLists || '[]') : (project.taskLists || []),
-                tasks: typeof project.tasksList === 'string' ? JSON.parse(project.tasksList || '[]') : (project.tasks || project.tasksList || []),
-                customFieldDefinitions: typeof project.customFieldDefinitions === 'string' ? JSON.parse(project.customFieldDefinitions || '[]') : (project.customFieldDefinitions || []),
-                documents: typeof project.documents === 'string' ? JSON.parse(project.documents || '[]') : (project.documents || []),
-                comments: typeof project.comments === 'string' ? JSON.parse(project.comments || '[]') : (project.comments || []),
-                activityLog: typeof project.activityLog === 'string' ? JSON.parse(project.activityLog || '[]') : (project.activityLog || []),
-                team: typeof project.team === 'string' ? JSON.parse(project.team || '[]') : (project.team || [])
+                ...fullProject,
+                client: fullProject.clientName || fullProject.client || '',
+                taskLists: typeof fullProject.taskLists === 'string' ? JSON.parse(fullProject.taskLists || '[]') : (fullProject.taskLists || []),
+                tasks: typeof fullProject.tasksList === 'string' ? JSON.parse(fullProject.tasksList || '[]') : (fullProject.tasks || fullProject.tasksList || []),
+                customFieldDefinitions: typeof fullProject.customFieldDefinitions === 'string' ? JSON.parse(fullProject.customFieldDefinitions || '[]') : (fullProject.customFieldDefinitions || []),
+                documents: typeof fullProject.documents === 'string' ? JSON.parse(fullProject.documents || '[]') : (fullProject.documents || []),
+                comments: typeof fullProject.comments === 'string' ? JSON.parse(fullProject.comments || '[]') : (fullProject.comments || []),
+                activityLog: typeof fullProject.activityLog === 'string' ? JSON.parse(fullProject.activityLog || '[]') : (fullProject.activityLog || []),
+                team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || [])
             };
             console.log('Normalized project for ProjectDetail:', normalizedProject);
             setViewingProject(normalizedProject);
@@ -738,7 +766,7 @@ const Projects = () => {
                                         </div>
                                         <div className="flex items-center text-xs text-gray-600">
                                             <i className="fas fa-tasks mr-2 w-3 text-[10px]"></i>
-                                            {project.tasks?.length || 0} tasks • {countAllSubtasks(project.tasks?.flatMap(t => t.subtasks || []))} subtasks
+                                            {project.tasksCount || 0} tasks
                                         </div>
                                     </div>
                                 </div>

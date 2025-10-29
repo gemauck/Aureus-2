@@ -37,8 +37,9 @@ server {
 
 # HTTPS server
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;          # modern nginx prefers enabling http2 separately
+    listen [::]:443 ssl;     # modern nginx prefers enabling http2 separately
+    http2 on;                # enable HTTP/2 using the dedicated directive
     server_name DOMAIN_PLACEHOLDER www.DOMAIN_PLACEHOLDER;
 
     # SSL certificates
@@ -61,11 +62,9 @@ server {
     # Large file uploads
     client_max_body_size 50M;
     
-    # HTTP/2 optimizations - prevents protocol errors
-    http2_max_field_size 16k;
-    http2_max_header_size 32k;
-    http2_max_requests 1000;
-    http2_recv_buffer_size 256k;
+    # Header and connection tuning for large headers and many requests
+    large_client_header_buffers 8 32k;
+    keepalive_requests 1000;
 
     # Proxy to Node.js app
     location / {
@@ -150,7 +149,13 @@ if nginx -t; then
 else
     echo "   ❌ Configuration test failed!"
     echo "   Restoring backup..."
-    cp /etc/nginx/sites-available/$APP_NAME.backup.* /etc/nginx/sites-available/$APP_NAME
+    LATEST_BACKUP=$(ls -t /etc/nginx/sites-available/${APP_NAME}.backup.* 2>/dev/null | head -n1)
+    if [ -n "$LATEST_BACKUP" ]; then
+        cp -f "$LATEST_BACKUP" /etc/nginx/sites-available/$APP_NAME
+        echo "   ↩️  Restored from $LATEST_BACKUP"
+    else
+        echo "   ⚠️  No backup found to restore. Please fix config manually."
+    fi
     exit 1
 fi
 

@@ -562,6 +562,43 @@ const DatabaseAPI = {
         return response;
     },
 
+    // MANUFACTURING OPERATIONS - SUPPLIERS
+    async getSuppliers() {
+        console.log('📡 Fetching suppliers from database...');
+        const response = await this.makeRequest('/manufacturing/suppliers');
+        console.log('✅ Suppliers fetched from database:', response.data?.suppliers?.length || 0);
+        return response;
+    },
+
+    async createSupplier(supplierData) {
+        console.log('📡 Creating supplier in database...');
+        const response = await this.makeRequest('/manufacturing/suppliers', {
+            method: 'POST',
+            body: JSON.stringify(supplierData)
+        });
+        console.log('✅ Supplier created in database');
+        return response;
+    },
+
+    async updateSupplier(id, supplierData) {
+        console.log(`📡 Updating supplier ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(supplierData)
+        });
+        console.log('✅ Supplier updated in database');
+        return response;
+    },
+
+    async deleteSupplier(id) {
+        console.log(`📡 Deleting supplier ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/suppliers/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Supplier deleted from database');
+        return response;
+    },
+
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');
