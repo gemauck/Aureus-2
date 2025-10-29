@@ -2252,7 +2252,8 @@ const Clients = React.memo(() => {
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && (() => {
-                console.log('🎯 RENDERING PipelineView component NOW!');
+                console.log('🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
+                console.log('🎯🎯🎯 Current clients:', clients.length, clients.map(c => ({ name: c.name, opps: c.opportunities?.length || 0 })));
                 return <PipelineView />;
             })()}
             {viewMode === 'client-detail' && <ClientDetailView />}
