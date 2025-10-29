@@ -260,6 +260,11 @@ const Clients = React.memo(() => {
         }, 1000);
     }, []);
 
+    // Keep leadsCount in sync with leads.length
+    useEffect(() => {
+        setLeadsCount(leads.length);
+    }, [leads.length]);
+
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
         const mapDbClient = (c) => {
@@ -979,20 +984,46 @@ const Clients = React.memo(() => {
         console.log('Lead status from form:', leadFormData.status);
         console.log('Lead stage from form:', leadFormData.stage);
         
+        // Validate required fields
+        if (!leadFormData || !leadFormData.name || leadFormData.name.trim() === '') {
+            console.error('❌ Lead name is required but empty');
+            alert('Please enter an Entity Name to save the lead.');
+            return;
+        }
+        
         try {
             const token = window.storage?.getToken?.();
             
             if (selectedLead) {
                 // Update existing lead with ALL fields from form data
+                // Explicitly ensure contacts, followUps, comments, and notes are included
                 const updatedLead = { 
                     ...selectedLead, 
                     ...leadFormData,
                     // Ensure critical fields are preserved
                     status: leadFormData.status,
-                    stage: leadFormData.stage
+                    stage: leadFormData.stage,
+                    // Explicitly include these fields to ensure they're saved
+                    contacts: Array.isArray(leadFormData.contacts) ? leadFormData.contacts : (selectedLead.contacts || []),
+                    followUps: Array.isArray(leadFormData.followUps) ? leadFormData.followUps : (selectedLead.followUps || []),
+                    comments: Array.isArray(leadFormData.comments) ? leadFormData.comments : (selectedLead.comments || []),
+                    notes: leadFormData.notes !== undefined ? leadFormData.notes : (selectedLead.notes || ''),
+                    // Preserve other fields
+                    sites: Array.isArray(leadFormData.sites) ? leadFormData.sites : (selectedLead.sites || []),
+                    contracts: Array.isArray(leadFormData.contracts) ? leadFormData.contracts : (selectedLead.contracts || []),
+                    activityLog: Array.isArray(leadFormData.activityLog) ? leadFormData.activityLog : (selectedLead.activityLog || []),
+                    projectIds: Array.isArray(leadFormData.projectIds) ? leadFormData.projectIds : (selectedLead.projectIds || [])
                 };
                 
-                console.log('🔄 Updated lead object:', { id: updatedLead.id, status: updatedLead.status, stage: updatedLead.stage });
+                console.log('🔄 Updated lead object:', { 
+                    id: updatedLead.id, 
+                    status: updatedLead.status, 
+                    stage: updatedLead.stage,
+                    contactsCount: Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 0,
+                    followUpsCount: Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 0,
+                    hasNotes: !!updatedLead.notes,
+                    commentsCount: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 0
+                });
                 
                 // Update local state immediately for responsive UI
                 const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
@@ -1002,7 +1033,9 @@ const Clients = React.memo(() => {
                 if (token && window.api?.updateLead) {
                     try {
                         console.log('🌐 Calling API to update lead:', updatedLead.id);
-                        console.log('🌐 Payload to API:', { status: updatedLead.status, stage: updatedLead.stage });
+                        console.log('🌐 Payload includes - contacts:', Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array', 
+                                   'followUps:', Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 'not array',
+                                   'notes length:', updatedLead.notes ? updatedLead.notes.length : 0);
                         
                         const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                         console.log('✅ Lead updated in database');
@@ -1021,6 +1054,13 @@ const Clients = React.memo(() => {
                 }
                 console.log('✅ Lead updated');
             } else {
+                // Validate name for new leads
+                if (!leadFormData.name || leadFormData.name.trim() === '') {
+                    console.error('❌ Cannot create lead without a name');
+                    alert('Please enter an Entity Name to create a lead.');
+                    return;
+                }
+                
                 // Create new lead
                 // Get current user info
                 const user = window.storage?.getUser?.() || {};
@@ -1032,6 +1072,7 @@ const Clients = React.memo(() => {
                 
                 const newLead = {
                     ...leadFormData,
+                    name: leadFormData.name.trim(), // Ensure name is trimmed
                     id: Date.now().toString(), // Generate local ID
                     type: 'lead', // Ensure it's marked as a lead
                     lastContact: new Date().toISOString().split('T')[0],
@@ -1050,31 +1091,67 @@ const Clients = React.memo(() => {
                     try {
                         console.log('🌐 Calling API to create lead:', newLead);
                         const apiResponse = await window.api.createLead(newLead);
-                        const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        
+                        // Ensure savedLead has all required fields including type
+                        if (savedLead && savedLead.id) {
+                            savedLead = {
+                                ...savedLead,
+                                type: savedLead.type || 'lead', // Ensure type is set
+                                name: savedLead.name || newLead.name || '',
+                                industry: savedLead.industry || newLead.industry || 'Other',
+                                status: savedLead.status || newLead.status || 'Potential',
+                                stage: savedLead.stage || newLead.stage || 'Awareness',
+                                contacts: savedLead.contacts || newLead.contacts || [],
+                                firstContactDate: savedLead.firstContactDate || savedLead.createdAt ? new Date(savedLead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                                lastContact: savedLead.lastContact || savedLead.updatedAt ? new Date(savedLead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+                            };
+                        }
+                        
                         console.log('✅ Lead created in database:', savedLead);
                         
                         // Use the saved lead from database (with proper ID)
                         if (savedLead && savedLead.id) {
                             const updatedLeads = [...leads, savedLead];
                             setLeads(updatedLeads);
+                            setLeadsCount(updatedLeads.length); // Update count immediately
                             console.log('✅ New lead created and saved to database');
                         } else {
                             // Fallback to local lead if API doesn't return proper response
                             const updatedLeads = [...leads, newLead];
                             setLeads(updatedLeads);
+                            setLeadsCount(updatedLeads.length); // Update count immediately
                             console.log('✅ New lead created locally (API fallback)');
                         }
                     } catch (apiError) {
                         console.error('❌ API error creating lead:', apiError);
-                        // Fallback to local creation
+                        const errorMessage = apiError?.message || apiError?.response?.data?.error || 'Unknown error';
+                        console.error('❌ Full API error details:', {
+                            message: apiError.message,
+                            response: apiError.response,
+                            data: apiError.response?.data,
+                            status: apiError.response?.status
+                        });
+                        
+                        // Check if it's a validation error
+                        if (errorMessage.includes('name required') || errorMessage.includes('name is required')) {
+                            alert('Error: Lead name is required. Please make sure the Entity Name field is filled in.');
+                            return; // Don't fallback to local creation for validation errors
+                        }
+                        
+                        // For other errors, fallback to local creation
+                        alert(`Warning: Could not save lead to server (${errorMessage}). Saved locally only.`);
                         const updatedLeads = [...leads, newLead];
                         setLeads(updatedLeads);
+                        setLeadsCount(updatedLeads.length); // Update count immediately
                         console.log('✅ New lead created locally (API fallback)');
                     }
                 } else {
                     // No token or API, create locally only
+                    console.log('⚠️ No authentication token - saving lead locally only');
                     const updatedLeads = [...leads, newLead];
                     setLeads(updatedLeads);
+                    setLeadsCount(updatedLeads.length); // Update count immediately
                     console.log('✅ New lead created locally (no authentication)');
                 }
                 
@@ -1093,7 +1170,9 @@ const Clients = React.memo(() => {
             }
         } catch (error) {
             console.error('❌ Error saving lead:', error);
-            alert('Failed to save lead: ' + error.message);
+            const errorMessage = error?.message || 'Unknown error';
+            console.error('❌ Full error details:', error);
+            alert(`Failed to save lead: ${errorMessage}\n\nCheck the browser console for more details.`);
         }
     };
 
@@ -1143,6 +1222,7 @@ const Clients = React.memo(() => {
             // Update local state
             const updatedLeads = leads.filter(l => l.id !== leadId);
             setLeads(updatedLeads);
+            setLeadsCount(updatedLeads.length); // Update count immediately
             console.log('✅ Lead deleted, new count:', updatedLeads.length);
             
             // Force a refresh to ensure API data is loaded (if authenticated)

@@ -152,8 +152,9 @@ const DatabaseAPI = {
 
     async updateLead(id, leadData) {
         console.log(`📡 Updating lead ${id} in database...`);
+        console.log(`📦 Lead data being sent:`, JSON.stringify(leadData, null, 2));
         const response = await this.makeRequest(`/leads/${id}`, {
-            method: 'PUT',
+            method: 'PATCH',
             body: JSON.stringify(leadData)
         });
         console.log('✅ Lead updated in database');

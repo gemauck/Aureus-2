@@ -477,11 +477,31 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        onSave({
-            ...formData,
-            projectIds: selectedProjectIds,
-            lastContact: new Date().toISOString().split('T')[0]
-        });
+        
+        // Validate required fields
+        if (!formData.name || formData.name.trim() === '') {
+            alert('Please enter an Entity Name');
+            return;
+        }
+        
+        if (!onSave) {
+            console.error('❌ onSave callback is not defined');
+            alert('Error: Save function is not available. Please refresh the page.');
+            return;
+        }
+        
+        console.log('💾 Submitting lead form:', formData);
+        
+        try {
+            onSave({
+                ...formData,
+                projectIds: selectedProjectIds,
+                lastContact: new Date().toISOString().split('T')[0]
+            });
+        } catch (error) {
+            console.error('❌ Error in handleSubmit:', error);
+            alert('Error saving lead: ' + (error.message || 'Unknown error'));
+        }
     };
 
     const leadProjects = allProjects?.filter(p => selectedProjectIds.includes(p.id)) || [];
@@ -696,7 +716,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
                                         value={formData.notes}
-                                        onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                                        onChange={(e) => {
+                                            const updated = {...formData, notes: e.target.value};
+                                            setFormData(updated);
+                                            formDataRef.current = updated;
+                                        }}
+                                        onBlur={() => {
+                                            // Auto-save notes when user leaves the field
+                                            if (lead && formDataRef.current) {
+                                                const latest = {...formDataRef.current};
+                                                onSave(latest, true);
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         rows="3"
                                         placeholder="General information about this lead..."
@@ -1569,7 +1600,18 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                             </label>
                                             <textarea
                                                 value={formData.notes}
-                                                onChange={(e) => setFormData({...formData, notes: e.target.value})}
+                                                onChange={(e) => {
+                                                    const updated = {...formData, notes: e.target.value};
+                                                    setFormData(updated);
+                                                    formDataRef.current = updated;
+                                                }}
+                                                onBlur={() => {
+                                                    // Auto-save notes when user leaves the field
+                                                    if (lead && formDataRef.current) {
+                                                        const latest = {...formDataRef.current};
+                                                        onSave(latest, true);
+                                                    }
+                                                }}
                                                 rows={4}
                                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                                                 placeholder="Add notes about this lead..."
