@@ -14,34 +14,42 @@ const AuthProvider = ({ children }) => {
     const refreshUser = useCallback(async () => {
         try {
             if (!window.storage || !window.storage.getToken) {
+                console.error('🚨 refreshUser: No storage or getToken available');
                 return;
             }
             
             const token = window.storage.getToken();
             if (token && window.api && window.api.me) {
+                console.log('🔄 refreshUser: Calling API.me()...');
                 const meResponse = await window.api.me();
+                console.error('🚨 refreshUser: API.me() response:', meResponse);
                 if (meResponse) {
                     // Extract user from response (API returns { user: {...} } or direct user object)
                     const user = meResponse.user || meResponse;
+                    console.error('🚨 refreshUser: Extracted user:', user, 'Role:', user?.role);
                     if (user) {
                         storage.setUser(user);
                         setUser(user);
+                        console.log('✅ refreshUser: User updated, role:', user.role);
                         return user;
                     }
                 }
             } else {
+                console.warn('🚨 refreshUser: No token or API.me available, falling back to storage');
                 // Fallback to storage
                 const storedUser = storage.getUser();
                 if (storedUser) {
+                    console.log('🔄 refreshUser: Using stored user, role:', storedUser.role);
                     setUser(storedUser);
                     return storedUser;
                 }
             }
         } catch (err) {
-            console.warn('Refresh user failed:', err.message);
+            console.error('🚨 refreshUser: Error:', err, err.message, err.stack);
             // Fallback to storage
             const storedUser = storage.getUser();
             if (storedUser) {
+                console.log('🔄 refreshUser: Error fallback to stored user, role:', storedUser.role);
                 setUser(storedUser);
                 return storedUser;
             }
