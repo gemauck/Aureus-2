@@ -44,8 +44,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 lastSavedClientId.current = client.id;
             }
             
-            // Only update formData if user hasn't edited or if client changed
-            if (!hasUserEditedForm.current || clientIdChanged) {
+            // Only update formData if client ID changed (new client) OR form hasn't been edited
+            // If form has been edited and same client, completely skip to preserve optimistic updates
+            if (clientIdChanged || !hasUserEditedForm.current) {
                 const parsedClient = {
                     ...client,
                     contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
@@ -66,33 +67,38 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     })
                 };
                 
-                // Preserve local changes if they're more recent (have more items)
-                setFormData(prevFormData => {
-                    const newFormData = {
-                        ...parsedClient,
-                        // Preserve contacts, sites, opportunities if local state has more items
-                        contacts: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0) 
-                            ? prevFormData.contacts 
-                            : parsedClient.contacts,
-                        sites: (prevFormData?.sites?.length || 0) > (parsedClient.sites?.length || 0) 
-                            ? prevFormData.sites 
-                            : parsedClient.sites,
-                        opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
-                            ? prevFormData.opportunities 
-                            : parsedClient.opportunities
-                    };
-                    return newFormData;
-                });
-                
-                console.log('🔄 Setting initial formData from client prop:', {
-                    contactsCount: parsedClient.contacts?.length,
-                    sitesCount: parsedClient.sites?.length,
-                    contractsCount: parsedClient.contracts?.length,
-                    commentsCount: parsedClient.comments?.length,
-                    hasUserEdited: hasUserEditedForm.current
-                });
+                if (clientIdChanged) {
+                    // New client - set formData fresh
+                    console.log('🔄 New client - setting formData fresh:', {
+                        contactsCount: parsedClient.contacts?.length,
+                        sitesCount: parsedClient.sites?.length
+                    });
+                    setFormData(parsedClient);
+                } else {
+                    // Same client, form not edited - preserve contacts/sites/opportunities if local has more
+                    setFormData(prevFormData => {
+                        const newFormData = {
+                            ...parsedClient,
+                            // Preserve contacts, sites, opportunities if local state has more items
+                            contacts: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0) 
+                                ? prevFormData.contacts 
+                                : parsedClient.contacts,
+                            sites: (prevFormData?.sites?.length || 0) > (parsedClient.sites?.length || 0) 
+                                ? prevFormData.sites 
+                                : parsedClient.sites,
+                            opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
+                                ? prevFormData.opportunities 
+                                : parsedClient.opportunities
+                        };
+                        console.log('🔄 Preserving local changes:', {
+                            contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
+                            contactsCount: newFormData.contacts?.length
+                        });
+                        return newFormData;
+                    });
+                }
             } else {
-                console.log('⏭️ Skipping formData reset - user has edited the form');
+                console.log('⏭️ Skipping formData reset - user has edited the form and client ID unchanged');
             }
         }
     }, [client]);
@@ -319,6 +325,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     // Load full client data from database to get latest comments, followUps, activityLog
     const loadClientFromDatabase = async (clientId) => {
         try {
+            // Skip if form has been edited to preserve optimistic updates
+            if (hasUserEditedForm.current) {
+                console.log('⏭️ Skipping client reload - form has been edited (preserving optimistic updates)');
+                return;
+            }
+            
             // Don't reload if auto-saving is in progress
             if (isAutoSavingRef.current) {
                 console.log('⚠️ Skipping client reload - auto-save in progress');
@@ -357,15 +369,26 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 console.log('📝 Parsed client data - Comments:', parsedClient.comments?.length, 'FollowUps:', parsedClient.followUps?.length, 'ActivityLog:', parsedClient.activityLog?.length);
                 
                 // Update formData with the fresh data from database
-                setFormData(prevFormData => ({
-                    ...prevFormData,
-                    comments: parsedClient.comments,
-                    followUps: parsedClient.followUps,
-                    activityLog: parsedClient.activityLog,
-                    contracts: parsedClient.contracts
-                }));
+                // IMPORTANT: Only update comments, followUps, activityLog, contracts
+                // DO NOT update contacts or sites - those are managed separately
+                setFormData(prevFormData => {
+                    const updated = {
+                        ...prevFormData,
+                        comments: parsedClient.comments,
+                        followUps: parsedClient.followUps,
+                        activityLog: parsedClient.activityLog,
+                        contracts: parsedClient.contracts
+                        // Explicitly preserve contacts and sites from current state
+                    };
+                    console.log('🔄 Updated formData (preserving contacts/sites):', {
+                        contactsCount: updated.contacts?.length,
+                        sitesCount: updated.sites?.length,
+                        commentsCount: updated.comments?.length
+                    });
+                    return updated;
+                });
                 
-                console.log('✅ FormData updated with fresh database data');
+                console.log('✅ FormData updated with fresh database data (contacts/sites preserved)');
             }
         } catch (error) {
             console.error('❌ Error loading client from database:', error);
