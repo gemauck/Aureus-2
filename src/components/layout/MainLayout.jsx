@@ -158,7 +158,7 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
-        { id: 'hr', label: 'HR', icon: 'fa-id-card' },
+        { id: 'hr', label: 'HR', icon: 'fa-id-card', adminOnly: true },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
@@ -217,8 +217,8 @@ const MainLayout = () => {
 
     // Redirect non-admin users away from admin-only pages
     React.useEffect(() => {
-        if (currentPage === 'users' && !isAdmin) {
-            console.warn('Access denied: Users page requires admin role');
+        if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
+            console.warn(`Access denied: ${currentPage} page requires admin role`);
             navigateToPage('dashboard');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -255,6 +255,18 @@ const MainLayout = () => {
                 case 'time': 
                     return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
                 case 'hr': 
+                    // Additional check before rendering (in case redirect didn't fire yet)
+                    if (!isAdmin) {
+                        return (
+                            <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                <div className="text-center">
+                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access the HR page.</p>
+                                </div>
+                            </div>
+                        );
+                    }
                     return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
                 case 'manufacturing': 
                     return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
