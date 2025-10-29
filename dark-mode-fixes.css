@@ -538,3 +538,73 @@
         animation: none !important;
     }
 }
+
+/* Light mode safeguards (ensure readable text when not using .dark) */
+html:not(.dark) h1,
+html:not(.dark) h1 *,
+html:not(.dark) .text-gray-900 {
+    color: #111827 !important; /* Tailwind gray-900 */
+}
+
+/* Force "Clients and Leads" heading to be dark in light mode */
+html:not(.dark) h1.text-gray-900,
+html:not(.dark) h1[class*="text-gray-900"],
+body:not(.dark) h1.text-gray-900,
+body:not(.dark) div h1 {
+    color: #111827 !important;
+}
+
+/* Even more specific - target the exact heading */
+html:not(.dark) div.flex h1,
+html:not(.dark) div.flex div h1,
+html:not(.dark) .space-y-6 h1,
+html:not(.dark) .space-y-6 div h1 {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+}
+
+/* Ultra-specific: Target "Clients and Leads" heading - highest priority */
+html:not(.dark) h1.text-2xl,
+html:not(.dark) h1.font-bold,
+html:not(.dark) div.flex div.flex-1 div h1,
+html:not(.dark) div[class*="flex"] div[class*="flex"] h1,
+html:not(.dark) .space-y-6 div.flex h1 {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+}
+
+/* Force color even if inline style exists but wrong */
+body:not(.dark) h1,
+html:not(.dark) body h1 {
+    color: #111827 !important;
+}
+
+/* Direct targeting of Clients and Leads heading - maximum specificity - ONLY in light mode */
+html:not(.dark) #clients-leads-heading,
+body:not(.dark) #clients-leads-heading,
+html:not(.dark) h1#clients-leads-heading,
+body:not(.dark) h1#clients-leads-heading,
+html:not(.dark) div#clients-leads-heading,
+body:not(.dark) div#clients-leads-heading {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+}
+
+/* Override any dark mode classes on the heading in light mode */
+html:not(.dark) #clients-leads-heading.text-gray-100,
+html:not(.dark) #clients-leads-heading[class*="text-gray-100"],
+html:not(.dark) #clients-leads-heading.dark\\:text-gray-100 {
+    color: #111827 !important;
+    -webkit-text-fill-color: #111827 !important;
+}
+
+/* Ensure input fields are readable in light mode - only override if no inline style */
+html:not(.dark) input[type="text"]:not([style*="color"]):not([style*="background"]),
+html:not(.dark) input[type="search"]:not([style*="color"]):not([style*="background"]) {
+    color: #111827 !important;
+}
+
+/* Ensure select dropdowns are readable in light mode - only if not styled inline */
+html:not(.dark) select:not([style*="color"]):not([style*="background"]) {
+    color: #111827 !important;
+}
