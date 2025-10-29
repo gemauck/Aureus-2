@@ -19,6 +19,8 @@ const UserManagement = () => {
     const [showPermissionsModal, setShowPermissionsModal] = useState(false);
     const [editingUserPermissions, setEditingUserPermissions] = useState(null);
     const [selectedPermissions, setSelectedPermissions] = useState([]);
+    const [showEditUserModal, setShowEditUserModal] = useState(false);
+    const [editingUser, setEditingUser] = useState(null);
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
@@ -780,6 +782,16 @@ const UserManagement = () => {
                                             <div className="flex items-center gap-3">
                                                 <button
                                                     onClick={() => {
+                                                        setEditingUser(user);
+                                                        setShowEditUserModal(true);
+                                                    }}
+                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                                    title="Edit User"
+                                                >
+                                                    <i className="fas fa-edit"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
                                                         // Parse user permissions
                                                         let userPermissions = [];
                                                         if (user.permissions) {
@@ -1231,6 +1243,152 @@ const UserManagement = () => {
                         setPasswordModalData(null);
                     }}
                 />
+            )}
+
+            {/* Edit User Modal */}
+            {showEditUserModal && editingUser && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className={`rounded-xl p-6 max-w-md w-full ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <i className="fas fa-user-edit mr-2 text-green-600"></i>
+                                Edit User - {editingUser.name}
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowEditUserModal(false);
+                                    setEditingUser(null);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <form onSubmit={async (e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.target);
+                            const userData = {
+                                name: formData.get('name'),
+                                email: formData.get('email'),
+                                role: formData.get('role'),
+                                status: formData.get('status'),
+                                department: formData.get('department'),
+                                phone: formData.get('phone')
+                            };
+                            
+                            const success = await handleEditUser(editingUser.id, userData);
+                            if (success) {
+                                setShowEditUserModal(false);
+                                setEditingUser(null);
+                            }
+                        }} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    defaultValue={editingUser.name}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Email <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="email"
+                                    name="email"
+                                    defaultValue={editingUser.email}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    required
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Role <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    name="role"
+                                    defaultValue={editingUser.role || 'user'}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    required
+                                >
+                                    <option value="user">User</option>
+                                    <option value="manager">Manager</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Change the user's role to grant or revoke permissions
+                                </p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Status
+                                </label>
+                                <select
+                                    name="status"
+                                    defaultValue={editingUser.status || 'active'}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="suspended">Suspended</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Department
+                                </label>
+                                <input
+                                    type="text"
+                                    name="department"
+                                    defaultValue={editingUser.department || ''}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                    Phone
+                                </label>
+                                <input
+                                    type="tel"
+                                    name="phone"
+                                    defaultValue={editingUser.phone || ''}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowEditUserModal(false);
+                                        setEditingUser(null);
+                                    }}
+                                    className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                >
+                                    <i className="fas fa-save mr-2"></i>
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
 
             {/* Permissions Management Modal */}
