@@ -224,7 +224,8 @@ const Dashboard = () => {
         });
 
     // Pipeline stats - Include both Leads and Client Opportunities
-    const qualifiedLeads = leads.filter(l => l.status === 'Qualified').length;
+    // Since status is always 'active', use stage or just count all leads as qualified
+    const qualifiedLeads = leads.filter(l => l.stage === 'Qualified' || l.stage === 'Consideration' || l.stage === 'Proposal' || l.stage === 'Negotiation').length || leads.length;
     const leadsPipelineValue = leads.reduce((sum, l) => sum + l.value, 0);
     const leadsWeightedValue = leads.reduce((sum, l) => sum + (l.value * l.probability / 100), 0);
     

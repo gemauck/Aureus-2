@@ -2248,8 +2248,10 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={async () => {
-                        console.log('🖱️🖱️🖱️ PIPELINE TAB CLICKED - FORCING OPPORTUNITY LOAD!');
+                        console.log('🖱️🖱️🖱️🖱️🖱️ PIPELINE TAB CLICKED! 🖱️🖱️🖱️🖱️🖱️');
+                        console.log('🔍 Current viewMode BEFORE click:', viewMode);
                         setViewMode('pipeline');
+                        console.log('🔍 viewMode set to "pipeline"');
                         
                         // IMMEDIATELY load opportunities for all clients when Pipeline tab is clicked
                         if (!window.api?.getOpportunitiesByClient) {
