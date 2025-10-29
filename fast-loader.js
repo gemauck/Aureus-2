@@ -1,17 +1,37 @@
-// Simple app mount script - waits for App component and mounts
+// Fast app mount script - waits for components and mounts
 (function() {
     let mounted = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 60; // 15 seconds (60 * 250ms)
+    
+    function checkComponents() {
+        return {
+            React: !!window.React,
+            ReactDOM: !!window.ReactDOM,
+            App: !!window.App,
+            MainLayout: !!window.MainLayout,
+            ThemeProvider: !!window.ThemeProvider,
+            AuthProvider: !!window.AuthProvider,
+            DataProvider: !!window.DataProvider
+        };
+    }
     
     function mountApp() {
-        if (window.__appMounted || mounted) return;
+        if (window.__appMounted || mounted) return true;
         
-        if (!window.React || !window.ReactDOM || !window.App) {
+        const components = checkComponents();
+        const allReady = Object.values(components).every(v => v);
+        
+        if (!allReady) {
             return false;
         }
         
         try {
             const root = document.getElementById('root');
-            if (!root) return false;
+            if (!root) {
+                console.error('❌ Root element not found');
+                return false;
+            }
             
             mounted = true;
             window.__appMounted = true;
@@ -25,55 +45,96 @@
                 reactRoot.render(window.React.createElement(window.App));
             }
             
+            console.log('✅ App mounted successfully');
             return true;
         } catch (error) {
-            console.error('Mount error:', error);
+            console.error('❌ Mount error:', error);
             mounted = false;
             window.__appMounted = false;
             return false;
         }
     }
     
-    // Wait for App to load and mount
-    function startMount() {
+    function tryMount() {
+        attempts++;
+        
         if (mountApp()) {
-            return;
+            return true;
         }
         
-        // Simple retry - check a few times
-        let attempts = 0;
-        const maxAttempts = 20;
+        // Log progress every 10 attempts
+        if (attempts % 10 === 0) {
+            const components = checkComponents();
+            const missing = Object.entries(components)
+                .filter(([k, v]) => !v)
+                .map(([k]) => k);
+            console.log(`⏳ Waiting for components... (${attempts}/${MAX_ATTEMPTS}) Missing:`, missing.join(', '));
+        }
         
-        const checkInterval = setInterval(() => {
-            attempts++;
+        // Show error if max attempts reached
+        if (attempts >= MAX_ATTEMPTS) {
+            const components = checkComponents();
+            const missing = Object.entries(components)
+                .filter(([k, v]) => !v)
+                .map(([k]) => k);
             
-            if (mountApp() || attempts >= maxAttempts) {
-                clearInterval(checkInterval);
-                
-                if (!mounted && attempts >= maxAttempts) {
-                    const root = document.getElementById('root');
-                    if (root) {
-                        root.innerHTML = `
-                            <div style="padding: 40px; text-align: center;">
-                                <h2>Loading Application...</h2>
-                                <p>If this persists, please refresh the page.</p>
-                                <button onclick="location.reload()" style="padding: 12px 24px; background: #0284c7; color: white; border: none; border-radius: 6px; cursor: pointer; margin-top: 10px;">
-                                    Reload Page
-                                </button>
-                            </div>
-                        `;
-                    }
-                }
+            const root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = `
+                    <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #f7fafc;">
+                        <div style="text-align: center; padding: 40px; background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 500px;">
+                            <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+                            <div style="font-size: 24px; font-weight: 600; color: #e53e3e; margin-bottom: 16px;">Loading Failed</div>
+                            <div style="font-size: 14px; color: #4a5568; margin-bottom: 24px;">Missing: <strong>${missing.join(', ')}</strong></div>
+                            <button onclick="location.reload()" style="padding: 12px 32px; background: #3182ce; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: 600;">Reload Page</button>
+                        </div>
+                    </div>
+                `;
             }
-        }, 250);
+            return true;
+        }
+        
+        return false;
     }
     
-    // Start after DOM is ready and Babel has had time to process
+    // Wait for Babel to be ready before starting
+    function startChecking() {
+        // Check if Babel is ready
+        if (typeof Babel !== 'undefined' && (window.BabelReady || typeof window.BabelReady !== 'undefined')) {
+            const checkInterval = setInterval(() => {
+                if (tryMount()) {
+                    clearInterval(checkInterval);
+                }
+            }, 250);
+        } else {
+            // Wait for babelready event
+            window.addEventListener('babelready', () => {
+                const checkInterval = setInterval(() => {
+                    if (tryMount()) {
+                        clearInterval(checkInterval);
+                    }
+                }, 250);
+            }, { once: true });
+            
+            // Fallback: start checking after a delay even if Babel event doesn't fire
+            setTimeout(() => {
+                if (!mounted) {
+                    const checkInterval = setInterval(() => {
+                        if (tryMount()) {
+                            clearInterval(checkInterval);
+                        }
+                    }, 250);
+                }
+            }, 2000);
+        }
+    }
+    
+    // Start after DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(startMount, 1000);
+            setTimeout(startChecking, 500);
         });
     } else {
-        setTimeout(startMount, 1000);
+        setTimeout(startChecking, 500);
     }
 })();
