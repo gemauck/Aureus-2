@@ -26,6 +26,20 @@ const MainLayout = () => {
     const [showSettingsPortal, setShowSettingsPortal] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
+    
+    // Debug user object immediately
+    React.useEffect(() => {
+        console.error('🚨 DEBUG: MainLayout user object:', {
+            user,
+            hasUser: !!user,
+            userId: user?.id,
+            userEmail: user?.email,
+            userName: user?.name,
+            userRole: user?.role,
+            userRoleLower: user?.role?.toLowerCase(),
+            userKeys: user ? Object.keys(user) : []
+        });
+    }, [user]);
 
     // Update URL when page changes
     const navigateToPage = (page) => {
@@ -177,12 +191,14 @@ const MainLayout = () => {
             return true;
         });
         
-        console.log('🔍 Menu filtering result:', {
+        console.error('🚨 DEBUG: Menu filtering result:', {
             userRole,
             hasUser,
+            user: { id: user?.id, email: user?.email, role: user?.role },
             menuItemsCount: filtered.length,
             menuLabels: filtered.map(i => i.label),
-            hasUsersMenu: filtered.some(i => i.id === 'users')
+            hasUsersMenu: filtered.some(i => i.id === 'users'),
+            allMenuItems: allMenuItems.map(i => ({ id: i.id, label: i.label, adminOnly: i.adminOnly }))
         });
         
         return filtered;

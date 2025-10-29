@@ -90,7 +90,7 @@ const DashboardFallback = () => {
             </div>
 
             {/* Basic Statistics Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                     <div className="flex items-center justify-between">
                         <div>
@@ -122,20 +122,6 @@ const DashboardFallback = () => {
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Invoices</p>
-                            <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                {basicData.invoices}
-                            </p>
-                        </div>
-                        <div className="w-10 h-10 bg-yellow-500 rounded-lg flex items-center justify-center">
-                            <i className="fas fa-file-invoice text-white"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                    <div className="flex items-center justify-between">
-                        <div>
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Leads</p>
                             <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {basicData.leads}
@@ -153,7 +139,7 @@ const DashboardFallback = () => {
                 <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-3`}>
                     System Status
                 </h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                         <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {basicData.clients}
@@ -171,12 +157,6 @@ const DashboardFallback = () => {
                             {basicData.projects}
                         </div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Projects</div>
-                    </div>
-                    <div>
-                        <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {basicData.invoices}
-                        </div>
-                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Invoices</div>
                     </div>
                 </div>
             </div>
