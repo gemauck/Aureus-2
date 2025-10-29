@@ -13,8 +13,11 @@ async function handler(req, res) {
                 return unauthorized(res, 'Authentication required')
             }
             
-            // For now, allow all authenticated users to see basic user info
-            // TODO: Implement proper role-based access control
+            // Only admins can access user list
+            const userRole = req.user?.role?.toLowerCase();
+            if (userRole !== 'admin') {
+                return unauthorized(res, 'Admin access required to view users')
+            }
 
             // Get all users with HR fields
             const users = await prisma.user.findMany({
