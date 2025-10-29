@@ -495,7 +495,7 @@ const DashboardLive = () => {
                         <div>
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</p>
                             <p className={`text-xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                {Array.isArray(dashboardData.leads) ? dashboardData.leads.filter(l => l.status === 'New' || l.status === 'Qualified' || l.status === 'Contacted').length : 0}
+                                {Array.isArray(dashboardData.leads) ? dashboardData.leads.length : 0}
                             </p>
                             <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                                 {dashboardData.stats.totalLeads} total
