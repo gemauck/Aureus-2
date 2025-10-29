@@ -263,11 +263,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 contactsCount: updatedContacts.length,
                 activityLogCount: updatedActivityLog.length,
                 hasContacts: Array.isArray(updatedContacts),
-                hasActivityLog: Array.isArray(updatedActivityLog)
+                hasActivityLog: Array.isArray(updatedActivityLog),
+                contacts: updatedContacts,
+                activityLog: updatedActivityLog
             });
             
             // Save contact changes immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            // Ensure onSave completes - it's async
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Contact save completed successfully');
+                } catch (error) {
+                    console.error('❌ Error saving contact:', error);
+                    alert('Failed to save contact. Please try again.');
+                }
+            })();
             
             // Switch to contacts tab to show the added contact
             handleTabChange('contacts');
@@ -346,7 +357,15 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             });
             
             // Save contact changes immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Contact update saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving contact update:', error);
+                    alert('Failed to save contact update. Please try again.');
+                }
+            })();
             
             // Stay in contacts tab
             handleTabChange('contacts');
@@ -378,7 +397,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             setFormData(updatedFormData);
             
             // Save contact deletion immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Contact deletion saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving contact deletion:', error);
+                }
+            })();
             
             // Stay in contacts tab
             handleTabChange('contacts');
@@ -442,11 +468,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 followUpsCount: updatedFollowUps.length,
                 activityLogCount: updatedActivityLog.length,
                 hasFollowUps: Array.isArray(updatedFollowUps),
-                hasActivityLog: Array.isArray(updatedActivityLog)
+                hasActivityLog: Array.isArray(updatedActivityLog),
+                followUps: updatedFollowUps,
+                activityLog: updatedActivityLog
             });
             
             // Save follow-up changes immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            // Ensure onSave completes - it's async
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Follow-up save completed successfully');
+                } catch (error) {
+                    console.error('❌ Error saving follow-up:', error);
+                    alert('Failed to save follow-up. Please try again.');
+                }
+            })();
             
             setNewFollowUp({
                 date: '',
@@ -501,7 +538,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             });
             
             // Save follow-up toggle immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Follow-up toggle saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving follow-up toggle:', error);
+                }
+            })();
         } catch (error) {
             console.error('❌ Error toggling follow-up:', error);
             alert('Failed to toggle follow-up: ' + error.message);
@@ -518,7 +562,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             setFormData(updatedFormData);
             
             // Save follow-up deletion immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Follow-up deletion saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving follow-up deletion:', error);
+                }
+            })();
         }
     };
 
@@ -624,7 +675,15 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             }
             
             // Save comment changes immediately
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Comment save completed successfully');
+                } catch (error) {
+                    console.error('❌ Error saving comment:', error);
+                    alert('Failed to save comment. Please try again.');
+                }
+            })();
             
             setNewComment('');
             setNewNoteTags([]);
@@ -691,7 +750,14 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             setFormData(updatedFormData);
             
             // Save comment deletion immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            (async () => {
+                try {
+                    await onSave(updatedFormData, true);
+                    console.log('✅ Comment deletion saved successfully');
+                } catch (error) {
+                    console.error('❌ Error saving comment deletion:', error);
+                }
+            })();
         }
     };
 
@@ -1593,7 +1659,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                     <div className="flex items-center gap-2">
                                                         <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                                                             <span className="text-primary-600 font-semibold text-xs">
-                                                                {comment.createdBy?.charAt(0) || 'U'}
+                                                                {(comment.createdBy || comment.author || 'U').charAt(0).toUpperCase()}
                                                             </span>
                                                         </div>
                                                         <div>

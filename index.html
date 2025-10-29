@@ -325,9 +325,11 @@
     <script src="./dist/src/components/dashboard/DashboardDatabaseFirst.js"></script>
     <!-- Load Client modals BEFORE Clients component to avoid race condition -->
     <script src="./dist/src/components/clients/ClientDetailModal.js"></script>
-    <script src="./dist/src/components/clients/LeadDetailModal.js"></script>
+    <script src="./dist/src/components/clients/LeadDetailModal.js?v=4002"></script>
     <!-- Load ONLY the main Clients.jsx with Pipeline fixes -->
     <script src="./dist/src/components/clients/Clients.js?v=4001"></script>
+    <!-- Pipeline Component - Load early for fast access -->
+    <script src="./dist/src/components/clients/Pipeline.js"></script>
     <!-- REMOVED ClientsCached and ClientsDatabaseFirst to prevent conflicts -->
     
     <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
