@@ -143,8 +143,8 @@ const Teams = () => {
                 setNotices(savedNotices);
                 setWorkflowExecutions(savedExecutions);
                 
-                // Delay rendering to prevent renderer crash
-                setTimeout(() => setIsReady(true), 100);
+                // Delay rendering significantly to prevent renderer crash
+                setTimeout(() => setIsReady(true), 500);
             } catch (error) {
                 console.error('❌ Teams: Error loading data:', error);
                 setIsReady(true); // Show error state
@@ -368,13 +368,24 @@ const Teams = () => {
         setShowDocumentViewModal(true);
     };
 
-    // Show loading state initially to prevent renderer crash
+    // Show minimal loading state to prevent renderer crash
     if (!isReady) {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-primary-600 mx-auto mb-4"></div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">Loading Teams...</p>
+            <div className="p-4">
+                <div className="text-center py-12">
+                    <i className="fas fa-users text-4xl text-gray-300 mb-3"></i>
+                    <p className="text-sm text-gray-500">Loading Teams module...</p>
+                </div>
+            </div>
+        );
+    }
+    
+    // Additional safety check - if data arrays are too large, show warning
+    if (documents.length > 1000 || workflows.length > 1000 || checklists.length > 1000 || notices.length > 1000) {
+        return (
+            <div className="p-4">
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800">⚠️ Too much data to display. Please contact support.</p>
                 </div>
             </div>
         );
