@@ -2,6 +2,33 @@
 const { useState } = React;
 
 const HR = () => {
+    const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
+    
+    // Check if current user is admin (case-insensitive) - strict check
+    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    
+    // Show access denied message if user is not admin
+    if (!isAdmin) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">You need administrator privileges to access the HR page.</p>
+                    <button
+                        onClick={() => {
+                            // Navigate to dashboard
+                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'dashboard' } }));
+                        }}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                    >
+                        Go to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    
     const [currentTab, setCurrentTab] = useState('employees');
 
     // Get HR components from window
