@@ -294,10 +294,12 @@
     <script defer src="./dist/src/utils/localStorage.js"></script>
     <script defer src="./dist/src/utils/dataService.js"></script>
     
+    <!-- Critical utilities that must load BEFORE components -->
+    <script src="./dist/src/utils/authStorage.js"></script>
+    
     <!-- Persistence Hook and Common Components -->
     <script defer src="./dist/src/hooks/usePersistence.js"></script>
     <script src="./dist/src/components/common/SyncStatus.js"></script>
-    <script defer src="./dist/src/utils/authStorage.js"></script>
     <!-- Use only one databaseAPI - the new version -->
     <script defer src="./dist/src/utils/databaseAPI-new.js?v=1002"></script>
     <script defer src="./dist/src/utils/cache-manager.js"></script>
