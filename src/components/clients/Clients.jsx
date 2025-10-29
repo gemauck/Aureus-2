@@ -200,10 +200,18 @@ const Clients = React.memo(() => {
         loadClients();
         loadProjects();
         
-        // IMMEDIATELY try to load leads from localStorage first (DashboardLive might have stored them)
+        // IMMEDIATELY try to load leads from localStorage first (from multiple sources)
         const tryLoadLeadsFromStorage = () => {
             try {
-                const cachedLeads = window.storage?.getLeads?.();
+                // Try separate leads key first (most common)
+                let cachedLeads = window.storage?.getLeads?.();
+                
+                // If not found in separate key, try extracting from clients array
+                if (!cachedLeads || cachedLeads.length === 0) {
+                    const allClients = safeStorage.getClients() || [];
+                    cachedLeads = allClients.filter(c => c.type === 'lead');
+                }
+                
                 if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
                     console.log(`⚡ Loading ${cachedLeads.length} leads from localStorage immediately`);
                     setLeads(cachedLeads);
@@ -528,9 +536,24 @@ const Clients = React.memo(() => {
                     }
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     
-                    // Show clients and leads immediately (faster UX!)
+                    // Show clients immediately
                     setClients(clientsOnly);
-                    setLeads(leadsOnly);
+                    
+                    // Only update leads if API returned leads (preserve cached leads if API returns 0)
+                    if (leadsOnly.length > 0 || leads.length === 0) {
+                        setLeads(leadsOnly);
+                        setLeadsCount(leadsOnly.length);
+                        
+                        // Save leads to localStorage for instant load next time
+                        if (window.storage?.setLeads) {
+                            window.storage.setLeads(leadsOnly);
+                            console.log(`✅ Saved ${leadsOnly.length} leads to localStorage`);
+                        }
+                    } else {
+                        console.log(`⚡ Preserving ${leads.length} cached leads (API returned 0 leads)`);
+                    }
+                    
+                    // Save clients to localStorage
                     safeStorage.setClients(clientsOnly);
                     
                     // Only load opportunities in background when Pipeline is active
