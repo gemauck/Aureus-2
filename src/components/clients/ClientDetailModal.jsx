@@ -64,6 +64,25 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         notes: ''
                     })
                 };
+                
+                // Preserve local changes if they're more recent (have more items)
+                setFormData(prevFormData => {
+                    const newFormData = {
+                        ...parsedClient,
+                        // Preserve contacts, sites, opportunities if local state has more items
+                        contacts: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0) 
+                            ? prevFormData.contacts 
+                            : parsedClient.contacts,
+                        sites: (prevFormData?.sites?.length || 0) > (parsedClient.sites?.length || 0) 
+                            ? prevFormData.sites 
+                            : parsedClient.sites,
+                        opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
+                            ? prevFormData.opportunities 
+                            : parsedClient.opportunities
+                    };
+                    return newFormData;
+                });
+                
                 console.log('🔄 Setting initial formData from client prop:', {
                     contactsCount: parsedClient.contacts?.length,
                     sitesCount: parsedClient.sites?.length,
@@ -71,7 +90,6 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     commentsCount: parsedClient.comments?.length,
                     hasUserEdited: hasUserEditedForm.current
                 });
-                setFormData(parsedClient);
             } else {
                 console.log('⏭️ Skipping formData reset - user has edited the form');
             }
@@ -241,6 +259,18 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
     useEffect(() => {
         if (client) {
+            const clientIdChanged = client.id !== lastSavedClientId.current;
+            
+            // Update lastSavedClientId if client changed
+            if (clientIdChanged) {
+                lastSavedClientId.current = client.id;
+                // Reset edit flag when switching clients
+                hasUserEditedForm.current = false;
+            }
+            
+            // Only load from database if client ID changed (new client) or form hasn't been edited
+            const shouldLoadFromDatabase = clientIdChanged || !hasUserEditedForm.current;
+            
             // Parse all JSON strings from API response
             const parsedClient = {
                 ...client,
@@ -259,18 +289,29 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 comments: parsedClient.comments?.length,
                 contracts: parsedClient.contracts?.length,
                 contacts: parsedClient.contacts?.length,
-                sites: parsedClient.sites?.length
+                sites: parsedClient.sites?.length,
+                shouldLoadFromDatabase,
+                hasUserEdited: hasUserEditedForm.current
             });
             
-            setFormData(parsedClient);
+            // Only set formData if we should load (new client or not edited)
+            if (shouldLoadFromDatabase) {
+                setFormData(parsedClient);
+            }
             
-            // Load data from database (will override initial data if logged in)
-            loadOpportunitiesFromDatabase(client.id);
-            loadContactsFromDatabase(client.id);
-            loadSitesFromDatabase(client.id);
-            
-            // Reload the full client data from database to get comments, followUps, activityLog
-            loadClientFromDatabase(client.id);
+            // Load data from database ONLY if client changed or form hasn't been edited
+            // This prevents overwriting optimistic updates
+            if (shouldLoadFromDatabase) {
+                console.log('📡 Loading data from database (client changed or form not edited)');
+                loadOpportunitiesFromDatabase(client.id);
+                loadContactsFromDatabase(client.id);
+                loadSitesFromDatabase(client.id);
+                
+                // Reload the full client data from database to get comments, followUps, activityLog
+                loadClientFromDatabase(client.id);
+            } else {
+                console.log('⏭️ Skipping database load - form has been edited and client ID unchanged');
+            }
         }
     }, [client]);
     
@@ -347,12 +388,24 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             console.log('📋 Contact data:', contacts);
             
             // Update formData with contacts from database - force new object reference
+            // Use functional update to ensure we get the latest state
             setFormData(prevFormData => {
+                const currentContacts = prevFormData?.contacts || [];
+                const dbContacts = contacts || [];
+                
+                // If local state has more contacts than DB, preserve local (optimistic update in progress)
+                // Otherwise use DB data
+                const contactsToUse = currentContacts.length > dbContacts.length ? currentContacts : dbContacts;
+                
                 const newFormData = {
                     ...prevFormData,
-                    contacts: [...contacts] // Create new array reference
+                    contacts: [...contactsToUse] // Create new array reference
                 };
-                console.log('🔄 Updated formData with contacts:', newFormData.contacts?.length);
+                console.log('🔄 Updated formData with contacts:', {
+                    current: currentContacts.length,
+                    fromDB: dbContacts.length,
+                    using: contactsToUse.length
+                });
                 return newFormData;
             });
         } catch (error) {
@@ -377,12 +430,24 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             console.log('📋 Site data:', sites);
             
             // Update formData with sites from database - force new object reference
+            // Use functional update to ensure we get the latest state
             setFormData(prevFormData => {
+                const currentSites = prevFormData?.sites || [];
+                const dbSites = sites || [];
+                
+                // If local state has more sites than DB, preserve local (optimistic update in progress)
+                // Otherwise use DB data
+                const sitesToUse = currentSites.length > dbSites.length ? currentSites : dbSites;
+                
                 const newFormData = {
                     ...prevFormData,
-                    sites: [...sites] // Create new array reference
+                    sites: [...sitesToUse] // Create new array reference
                 };
-                console.log('🔄 Updated formData with sites:', newFormData.sites?.length);
+                console.log('🔄 Updated formData with sites:', {
+                    current: currentSites.length,
+                    fromDB: dbSites.length,
+                    using: sitesToUse.length
+                });
                 return newFormData;
             });
         } catch (error) {
@@ -450,18 +515,34 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             console.log('👤 Extracted contact:', savedContact);
             
             if (savedContact && savedContact.id) {
-                // Reload contacts from database to get fresh data
-                await loadContactsFromDatabase(formData.id);
+                // Mark form as edited to prevent useEffect from resetting formData
+                hasUserEditedForm.current = true;
+                
+                // Store clientId to avoid stale closure
+                const clientId = formData.id;
+                
+                // Optimistically update UI immediately
+                setFormData(prev => {
+                    const currentContacts = prev.contacts || [];
+                    // Check if contact already exists to avoid duplicates
+                    const contactExists = currentContacts.some(c => c.id === savedContact.id);
+                    if (contactExists) {
+                        console.log('⚠️ Contact already in state, skipping optimistic update');
+                        return prev;
+                    }
+                    console.log('✅ Optimistic update: adding contact to state', savedContact.id);
+                    return {
+                        ...prev,
+                        contacts: [...currentContacts, savedContact]
+                    };
+                });
                 
                 logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
                 
-                alert('✅ Contact saved to database successfully!');
+                // Switch to contacts tab immediately
+                handleTabChange('contacts');
                 
-                // Switch to contacts tab
-                setTimeout(() => {
-                    handleTabChange('contacts');
-                }, 100);
-                
+                // Close form and reset
                 setNewContact({
                     name: '',
                     role: '',
@@ -473,6 +554,14 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     siteId: null
                 });
                 setShowContactForm(false);
+                
+                // Reload contacts from database after a short delay to reconcile
+                setTimeout(async () => {
+                    await loadContactsFromDatabase(clientId);
+                    console.log('✅ Contact reconciliation complete');
+                }, 500);
+                
+                alert('✅ Contact saved to database successfully!');
                 
                 console.log('✅ Contact created and saved to database:', savedContact.id);
             } else {
@@ -844,18 +933,34 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             const savedSite = response?.data?.site || response?.site || response;
             
             if (savedSite && savedSite.id) {
-                // Reload sites from database to get fresh data
-                await loadSitesFromDatabase(formData.id);
+                // Mark form as edited to prevent useEffect from resetting formData
+                hasUserEditedForm.current = true;
+                
+                // Store clientId to avoid stale closure
+                const clientId = formData.id;
+                
+                // Optimistically update UI immediately
+                setFormData(prev => {
+                    const currentSites = prev.sites || [];
+                    // Check if site already exists to avoid duplicates
+                    const siteExists = currentSites.some(s => s.id === savedSite.id);
+                    if (siteExists) {
+                        console.log('⚠️ Site already in state, skipping optimistic update');
+                        return prev;
+                    }
+                    console.log('✅ Optimistic update: adding site to state', savedSite.id);
+                    return {
+                        ...prev,
+                        sites: [...currentSites, savedSite]
+                    };
+                });
                 
                 logActivity('Site Added', `Added site: ${newSite.name}`);
                 
-                alert('✅ Site saved to database successfully!');
+                // Switch to sites tab immediately
+                handleTabChange('sites');
                 
-                // Switch to sites tab
-                setTimeout(() => {
-                    handleTabChange('sites');
-                }, 100);
-                
+                // Close form and reset
                 setNewSite({
                     name: '',
                     address: '',
@@ -868,6 +973,14 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     gpsCoordinates: ''
                 });
                 setShowSiteForm(false);
+                
+                // Reload sites from database after a short delay to reconcile
+                setTimeout(async () => {
+                    await loadSitesFromDatabase(clientId);
+                    console.log('✅ Site reconciliation complete');
+                }, 500);
+                
+                alert('✅ Site saved to database successfully!');
                 
                 console.log('✅ Site created and saved to database:', savedSite.id);
             } else {
