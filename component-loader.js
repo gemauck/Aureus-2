@@ -61,6 +61,7 @@
         'components/clients/ClientsMobile.jsx',
         'components/clients/ClientsMobileOptimized.jsx',
         'components/clients/BulkOperations.jsx',
+        'components/clients/Pipeline.jsx', // Load Pipeline BEFORE PipelineIntegration
         'components/clients/PipelineIntegration.js',
         
         // Projects

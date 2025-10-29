@@ -2,7 +2,36 @@
 if (window.debug && !window.debug.performanceMode) {
     console.log('🔍 App.jsx: Script is executing...');
 }
+
+// Check for invitation page BEFORE any providers are initialized
+const checkInvitationRoute = () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname;
+    return pathname === '/accept-invitation' && urlParams.get('token');
+};
+
 const AppContent = () => {
+    // Check invitation route FIRST, before any auth/data loading
+    const urlParams = new URLSearchParams(window.location.search);
+    const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
+    
+    // Show invitation page immediately if token is present - bypass all auth checks
+    if (isInvitationPage) {
+        if (window.AcceptInvitation) {
+            return <window.AcceptInvitation />;
+        } else {
+            // Component not loaded yet - show loading
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
+                    <div className="text-white text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <p>Loading invitation...</p>
+                    </div>
+                </div>
+            );
+        }
+    }
+
     const { user, loading: authLoading } = window.useAuth();
     const { initialLoadComplete, globalLoading } = window.useData();
 
@@ -52,6 +81,29 @@ const AppContent = () => {
 
 // App wrapper with all providers
 const App = () => {
+    // Check for invitation route BEFORE wrapping in providers
+    const urlParams = new URLSearchParams(window.location.search);
+    const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
+    
+    // If invitation page, render it directly without providers (no auth needed)
+    if (isInvitationPage) {
+        if (window.AcceptInvitation) {
+            return <window.AcceptInvitation />;
+        }
+        // If component not loaded, use ThemeProvider only (for dark mode support)
+        return (
+            <window.ThemeProvider>
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
+                    <div className="text-white text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <p>Loading invitation page...</p>
+                    </div>
+                </div>
+            </window.ThemeProvider>
+        );
+    }
+    
+    // Normal app with all providers
     return (
         <window.ThemeProvider>
             <window.AuthProvider>

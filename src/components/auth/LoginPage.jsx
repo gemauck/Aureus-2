@@ -55,11 +55,14 @@ const LoginPage = () => {
                                 )}
 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                    <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1.5">
                                         Email Address
                                     </label>
                                     <input
+                                        id="email"
                                         type="email"
+                                        name="email"
+                                        autoComplete="email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -68,11 +71,14 @@ const LoginPage = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1.5">
                                         Password
                                     </label>
                                     <input
+                                        id="password"
                                         type="password"
+                                        name="password"
+                                        autoComplete="current-password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"

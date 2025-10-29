@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { createContext, useContext, useState, useEffect } = React;
+const { createContext, useContext, useState, useEffect, useCallback } = React;
 
 // Get storage from window
 const storage = window.storage;
@@ -10,6 +10,40 @@ const AuthContext = createContext();
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+
+    const refreshUser = useCallback(async () => {
+        try {
+            if (!window.storage || !window.storage.getToken) {
+                return;
+            }
+            
+            const token = window.storage.getToken();
+            if (token && window.api && window.api.me) {
+                const me = await window.api.me();
+                if (me) {
+                    storage.setUser(me);
+                    setUser(me);
+                    return me;
+                }
+            } else {
+                // Fallback to storage
+                const storedUser = storage.getUser();
+                if (storedUser) {
+                    setUser(storedUser);
+                    return storedUser;
+                }
+            }
+        } catch (err) {
+            console.warn('Refresh user failed:', err.message);
+            // Fallback to storage
+            const storedUser = storage.getUser();
+            if (storedUser) {
+                setUser(storedUser);
+                return storedUser;
+            }
+        }
+        return null;
+    }, []);
 
     useEffect(() => {
         const init = async () => {
@@ -76,6 +110,47 @@ const AuthProvider = ({ children }) => {
         };
         init();
     }, []);
+
+    // Heartbeat effect - send periodic pings to track online status
+    useEffect(() => {
+        if (!user || !window.api || !window.api.heartbeat) {
+            return;
+        }
+
+        // Send initial heartbeat
+        window.api.heartbeat();
+
+        // Set up interval to send heartbeats every 2 minutes (120000ms)
+        const heartbeatInterval = setInterval(() => {
+            if (user && window.storage?.getToken?.()) {
+                window.api.heartbeat();
+            }
+        }, 120000); // 2 minutes
+
+        // Also send heartbeat on visibility change (when user returns to tab)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && user && window.storage?.getToken?.()) {
+                window.api.heartbeat();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        // Cleanup
+        return () => {
+            clearInterval(heartbeatInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [user]);
+
+    // Listen for user data updates
+    useEffect(() => {
+        const handleUserUpdate = () => {
+            refreshUser();
+        };
+
+        window.addEventListener('userDataUpdated', handleUserUpdate);
+        return () => window.removeEventListener('userDataUpdated', handleUserUpdate);
+    }, [refreshUser]);
 
     const login = async (email, password) => {
         try {
@@ -192,7 +267,7 @@ const AuthProvider = ({ children }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, loginWithGoogle, loginWithMicrosoft, logout, loading }}>
+        <AuthContext.Provider value={{ user, login, loginWithGoogle, loginWithMicrosoft, logout, loading, refreshUser }}>
             {children}
         </AuthContext.Provider>
     );

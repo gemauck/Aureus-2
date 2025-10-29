@@ -118,18 +118,43 @@ const MainLayout = () => {
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
     const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
 
-    const menuItems = [
+    // Filter menu items based on user role
+    const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
         { id: 'clients', label: 'Clients', icon: 'fa-users' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
-        { id: 'users', label: 'Users', icon: 'fa-user-cog' },
+        { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
         { id: 'hr', label: 'HR', icon: 'fa-id-card' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar' },
     ];
+
+    // Filter menu items based on user role (admin-only items)
+    const menuItems = allMenuItems.filter(item => {
+        if (item.adminOnly) {
+            const userRole = user?.role?.toLowerCase();
+            return userRole === 'admin';
+        }
+        return true;
+    });
+
+    // Check if user is admin (case-insensitive)
+    const isAdmin = React.useMemo(() => {
+        const userRole = user?.role?.toLowerCase();
+        return userRole === 'admin';
+    }, [user?.role]);
+
+    // Redirect non-admin users away from admin-only pages
+    React.useEffect(() => {
+        if (currentPage === 'users' && !isAdmin) {
+            console.warn('Access denied: Users page requires admin role');
+            navigateToPage('dashboard');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [currentPage, isAdmin]);
 
     // Memoize the render function to prevent unnecessary re-renders
     const renderPage = React.useMemo(() => {
@@ -144,6 +169,18 @@ const MainLayout = () => {
                 case 'teams': 
                     return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
                 case 'users': 
+                    // Additional check before rendering (in case redirect didn't fire yet)
+                    if (!isAdmin) {
+                        return (
+                            <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                <div className="text-center">
+                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access this page.</p>
+                                </div>
+                            </div>
+                        );
+                    }
                     return <ErrorBoundary key="users"><Users /></ErrorBoundary>;
                 case 'account': 
                     return <ErrorBoundary key="account"><Account /></ErrorBoundary>;

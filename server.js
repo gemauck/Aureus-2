@@ -173,6 +173,68 @@ app.all('/api/users/invite', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for invitation endpoints (no auth required)
+app.all('/api/users/invitation-details', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'invitation-details.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in invitation-details handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+app.all('/api/users/accept-invitation', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'accept-invitation.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in accept-invitation handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
+// Explicit mapping for invitation management (update, delete, resend /api/users/invitation/[id])
+app.all('/api/users/invitation/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'invitation.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in invitation handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for opportunities by client endpoint
 app.all('/api/opportunities/client/:clientId', async (req, res, next) => {
   try {

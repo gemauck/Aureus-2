@@ -1,5 +1,5 @@
 // Settings Portal Component - Modal/dropdown for account settings
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 
 const SettingsPortal = ({ isOpen, onClose }) => {
     const [activeTab, setActiveTab] = useState('profile');
@@ -26,17 +26,22 @@ const SettingsPortal = ({ isOpen, onClose }) => {
     ];
 
     useEffect(() => {
-        if (user && isOpen) {
-            setProfile({
-                name: user.name || '',
-                email: user.email || '',
-                phone: user.phone || '',
-                department: user.department || '',
-                jobTitle: user.jobTitle || ''
-            });
-            loadProfile();
+        if (isOpen) {
+            // Always load fresh data from server when modal opens
+            if (user && user.id) {
+                loadProfile();
+            } else {
+                // If user isn't loaded yet, wait a bit and try again
+                const timer = setTimeout(() => {
+                    const storedUser = window.storage?.getUser?.();
+                    if (storedUser && storedUser.id) {
+                        loadProfile();
+                    }
+                }, 100);
+                return () => clearTimeout(timer);
+            }
         }
-    }, [user, isOpen]);
+    }, [isOpen, user, loadProfile]);
 
     useEffect(() => {
         // Close on Escape key
@@ -49,70 +54,158 @@ const SettingsPortal = ({ isOpen, onClose }) => {
         return () => document.removeEventListener('keydown', handleEscape);
     }, [isOpen, onClose]);
 
-    const loadProfile = async () => {
+    const loadProfile = useCallback(async () => {
         try {
             setIsLoading(true);
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('No authentication token available');
+                setIsLoading(false);
+                return;
+            }
+
             const response = await fetch('/api/me', {
                 headers: {
-                    'Authorization': `Bearer ${window.storage.getToken()}`
+                    'Authorization': `Bearer ${token}`
                 }
             });
             
             if (response.ok) {
                 const data = await response.json();
                 if (data.user) {
-                    setProfile({
+                    const updatedProfile = {
                         name: data.user.name || '',
                         email: data.user.email || '',
                         phone: data.user.phone || '',
                         department: data.user.department || '',
                         jobTitle: data.user.jobTitle || ''
-                    });
+                    };
+                    setProfile(updatedProfile);
+                    
+                    // Also update storage with fresh data
+                    if (window.storage && window.storage.setUser) {
+                        window.storage.setUser(data.user);
+                    }
+                    // Notify auth context to refresh
+                    window.dispatchEvent(new CustomEvent('userDataUpdated'));
                 }
+            } else {
+                console.error('Failed to load profile:', response.status, response.statusText);
             }
         } catch (error) {
             console.error('Error loading profile:', error);
         } finally {
             setIsLoading(false);
         }
-    };
+    }, []);
 
     const handleProfileSave = async () => {
         setIsLoading(true);
         setSaveStatus('Saving...');
         
         try {
+            if (!user || !user.id) {
+                setSaveStatus('User information not available');
+                setIsLoading(false);
+                return;
+            }
+
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                setSaveStatus('Authentication required. Please log in again.');
+                setIsLoading(false);
+                return;
+            }
+
+            console.log('💾 Saving profile:', profile);
             const response = await fetch(`/api/users/${user.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.storage.getToken()}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify(profile)
             });
 
-            const data = await response.json();
+            console.log('📡 Profile save response status:', response.status);
+            let data;
+            try {
+                data = await response.json();
+                console.log('📡 Profile save response data:', data);
+            } catch (parseError) {
+                console.error('Error parsing response:', parseError);
+                setSaveStatus('Error: Invalid response from server');
+                setIsLoading(false);
+                return;
+            }
 
-            if (response.ok) {
+            if (response.ok && (data.success || data.user)) {
                 setSaveStatus('Profile updated successfully!');
-                // Update user in auth context
-                if (window.storage && window.storage.setUser) {
-                    window.storage.setUser({ ...user, ...profile });
+                
+                // Reload fresh user data from server
+                try {
+                    const meResponse = await fetch('/api/me', {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    if (meResponse.ok) {
+                        const meData = await meResponse.json();
+                        console.log('🔄 Refreshed user data:', meData);
+                        if (meData.user || meData.data?.user) {
+                            const updatedUser = meData.user || meData.data.user;
+                            // Update storage with fresh data from server
+                            if (window.storage && window.storage.setUser) {
+                                window.storage.setUser(updatedUser);
+                            }
+                            // Update local profile state with fresh data
+                            setProfile({
+                                name: updatedUser.name || '',
+                                email: updatedUser.email || '',
+                                phone: updatedUser.phone || '',
+                                department: updatedUser.department || '',
+                                jobTitle: updatedUser.jobTitle || ''
+                            });
+                            // Notify auth context to refresh
+                            window.dispatchEvent(new CustomEvent('userDataUpdated'));
+                        }
+                    }
+                } catch (refreshError) {
+                    console.error('Error refreshing user data:', refreshError);
+                    // Fallback to using response data if available
+                    if (data.user) {
+                        if (window.storage && window.storage.setUser) {
+                            window.storage.setUser(data.user);
+                        }
+                        setProfile({
+                            name: data.user.name || '',
+                            email: data.user.email || '',
+                            phone: data.user.phone || '',
+                            department: data.user.department || '',
+                            jobTitle: data.user.jobTitle || ''
+                        });
+                        window.dispatchEvent(new CustomEvent('userDataUpdated'));
+                    } else {
+                        // Final fallback to using updated profile data
+                        if (window.storage && window.storage.setUser) {
+                            window.storage.setUser({ ...user, ...profile });
+                        }
+                    }
                 }
+
                 setTimeout(() => {
                     setSaveStatus('');
-                    // Refresh auth context
-                    if (window.useAuth && window.useAuth.refresh) {
-                        window.useAuth.refresh();
-                    }
                 }, 2000);
             } else {
-                setSaveStatus(data.message || 'Failed to update profile');
-                setTimeout(() => setSaveStatus(''), 3000);
+                const errorMsg = data.message || data.error?.message || data.error || 'Failed to update profile';
+                console.error('❌ Profile update failed:', errorMsg);
+                setSaveStatus(errorMsg);
+                setTimeout(() => setSaveStatus(''), 5000);
             }
         } catch (error) {
             console.error('Error updating profile:', error);
-            setSaveStatus('Error updating profile');
+            setSaveStatus('Error updating profile: ' + error.message);
             setTimeout(() => setSaveStatus(''), 3000);
         } finally {
             setIsLoading(false);
@@ -138,32 +231,51 @@ const SettingsPortal = ({ isOpen, onClose }) => {
         }
 
         try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                setSaveStatus('Authentication required. Please log in again.');
+                setIsLoading(false);
+                return;
+            }
+
+            console.log('🔐 Changing password for user:', user?.id);
             const response = await fetch('/api/users/change-password', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${window.storage.getToken()}`
+                    'Authorization': `Bearer ${token}`
                 },
                 body: JSON.stringify({
-                    currentPassword: passwordForm.currentPassword,
-                    newPassword: passwordForm.newPassword
+                    currentPassword: passwordForm.currentPassword.trim(),
+                    newPassword: passwordForm.newPassword.trim()
                 })
             });
 
-            const data = await response.json();
+            console.log('📡 Password change response status:', response.status);
+            let data;
+            try {
+                data = await response.json();
+                console.log('📡 Password change response data:', data);
+            } catch (parseError) {
+                console.error('Error parsing response:', parseError);
+                setSaveStatus('Error: Invalid response from server');
+                setIsLoading(false);
+                return;
+            }
 
-            if (response.ok) {
+            if (response.ok && (data.success || data.message)) {
                 setSaveStatus('Password changed successfully!');
                 setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
                 setTimeout(() => setSaveStatus(''), 3000);
             } else {
-                const errorMessage = data.error || data.message || 'Failed to change password';
+                const errorMessage = data.error?.message || data.error || data.message || 'Failed to change password';
+                console.error('❌ Password change failed:', errorMessage);
                 setSaveStatus(errorMessage);
                 setTimeout(() => setSaveStatus(''), 5000);
             }
         } catch (error) {
-            console.error('Error changing password:', error);
-            setSaveStatus('Network error: ' + error.message);
+            console.error('❌ Error changing password:', error);
+            setSaveStatus('Network error: ' + (error.message || 'Unknown error'));
             setTimeout(() => setSaveStatus(''), 5000);
         } finally {
             setIsLoading(false);
@@ -406,7 +518,14 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                                 {saveStatus}
                             </div>
                         )}
-                        {renderTabContent()}
+                        {isLoading && !saveStatus ? (
+                            <div className="flex items-center justify-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                                <span className={`ml-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Loading...</span>
+                            </div>
+                        ) : (
+                            renderTabContent()
+                        )}
                     </div>
                 </div>
             </div>

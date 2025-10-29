@@ -42,6 +42,7 @@ async function handler(req, res) {
                     emergencyContact: true,
                     createdAt: true,
                     lastLoginAt: true,
+                    lastSeenAt: true,
                     invitedBy: true
                 },
                 orderBy: { createdAt: 'desc' }

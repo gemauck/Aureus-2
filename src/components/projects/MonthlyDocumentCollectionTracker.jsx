@@ -192,13 +192,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleSaveSection = (sectionData) => {
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
 
         if (editingSection) {
             setSections(sections.map(s => 
@@ -249,13 +243,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleDeleteSection = (sectionId) => {
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
         
         const section = sections.find(s => s.id === sectionId);
         if (confirm(`Delete section "${section.name}" and all its documents?`)) {
@@ -293,13 +281,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleSaveDocument = (documentData) => {
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
         
         const section = sections.find(s => s.id === editingSectionId);
         
@@ -373,13 +355,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleDeleteDocument = (sectionId, documentId) => {
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
         
         const section = sections.find(s => s.id === sectionId);
         const document = section?.documents.find(d => d.id === documentId);
@@ -415,13 +391,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     const handleUpdateStatus = (sectionId, documentId, month, status) => {
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
 
         // Get section and document names for audit trail
         const section = sections.find(s => s.id === sectionId);
@@ -476,13 +446,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         if (!commentText.trim()) return;
 
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system',
-            role: user?.role || 'System'
-        };
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system', role: 'System' };
 
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {
