@@ -5,7 +5,6 @@ const DashboardFallback = () => {
     const [basicData, setBasicData] = useState({
         clients: 0,
         projects: 0,
-        invoices: 0,
         leads: 0
     });
     const [isLoading, setIsLoading] = useState(true);
@@ -32,9 +31,6 @@ const DashboardFallback = () => {
                     fetch('/api/projects', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }).catch(() => null),
-                    fetch('/api/invoices', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    }).catch(() => null),
                     fetch('/api/leads', {
                         headers: { 'Authorization': `Bearer ${token}` }
                     }).catch(() => null)
@@ -42,7 +38,7 @@ const DashboardFallback = () => {
 
                 const responses = await Promise.all(requests);
                 
-                let clients = 0, projects = 0, invoices = 0, leads = 0;
+                let clients = 0, projects = 0, leads = 0;
 
                 for (let i = 0; i < responses.length; i++) {
                     const response = responses[i];
@@ -52,8 +48,7 @@ const DashboardFallback = () => {
                             switch (i) {
                                 case 0: clients = data.data?.clients?.length || 0; break;
                                 case 1: projects = data.data?.length || 0; break;
-                                case 2: invoices = data.data?.length || 0; break;
-                                case 3: leads = data.data?.length || 0; break;
+                                case 2: leads = data.data?.length || 0; break;
                             }
                         } catch (e) {
                             console.warn('Failed to parse response:', e);
@@ -61,7 +56,7 @@ const DashboardFallback = () => {
                     }
                 }
 
-                setBasicData({ clients, projects, invoices, leads });
+                setBasicData({ clients, projects, leads });
             } catch (error) {
                 console.warn('Basic data loading failed:', error);
             } finally {
