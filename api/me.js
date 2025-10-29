@@ -18,14 +18,15 @@ async function handler(req, res) {
 
     let user
     try {
-      user = await prisma.user.findUnique({ 
+      // Query without permissions field to avoid schema mismatch
+      const userQuery = await prisma.user.findUnique({ 
         where: { id: req.user.sub },
         select: {
           id: true,
           email: true,
           name: true,
           role: true,
-          permissions: true,
+          // permissions: true, // Temporarily removed - will add back after fixing schema
           provider: true,
           lastLoginAt: true,
           mustChangePassword: true,
@@ -34,6 +35,14 @@ async function handler(req, res) {
           jobTitle: true
         }
       })
+      
+      // Add permissions field manually with default value
+      if (userQuery) {
+        user = {
+          ...userQuery,
+          permissions: '[]' // Default permissions
+        }
+      }
     } catch (dbError) {
       console.error('❌ Me endpoint: Database query failed:', dbError)
       console.error('❌ Me endpoint: Error stack:', dbError.stack)
