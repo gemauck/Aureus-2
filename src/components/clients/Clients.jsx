@@ -1,15 +1,24 @@
 // Get dependencies from window
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
-const storage = window.storage || {};
-// Don't access these at module level - they might not be loaded yet
-// Access them at runtime inside functions
-
+// Don't capture window.storage at module load; resolve at call time to avoid stale reference
 // Safe storage helper functions
 const safeStorage = {
-    getClients: () => storage.getClients ? storage.getClients() : null,
-    setClients: (data) => storage.setClients ? storage.setClients(data) : null,
-    getProjects: () => storage.getProjects ? storage.getProjects() : null,
-    setProjects: (data) => storage.setProjects ? storage.setProjects(data) : null,
+    getClients: () => {
+        const s = window.storage || {};
+        return typeof s.getClients === 'function' ? s.getClients() : null;
+    },
+    setClients: (data) => {
+        const s = window.storage || {};
+        return typeof s.setClients === 'function' ? s.setClients(data) : null;
+    },
+    getProjects: () => {
+        const s = window.storage || {};
+        return typeof s.getProjects === 'function' ? s.getProjects() : null;
+    },
+    setProjects: (data) => {
+        const s = window.storage || {};
+        return typeof s.setProjects === 'function' ? s.setProjects(data) : null;
+    }
 };
 
 // Performance optimization: Memoized client data processor
