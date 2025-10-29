@@ -694,6 +694,7 @@ const Clients = React.memo(() => {
                             taxExempt: false,
                             notes: ''
                         }),
+                        proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                         type: lead.type || 'lead',
                         ownerId: lead.ownerId || null,
                         createdAt: lead.createdAt,
