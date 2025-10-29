@@ -1327,51 +1327,58 @@ const Clients = React.memo(() => {
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
         
-        // Load opportunities immediately when PipelineView renders
+        // Load opportunities immediately when PipelineView renders - DIRECT APPROACH
         useEffect(() => {
             const loadOpps = async () => {
-                if (clients.length === 0) return;
-                if (!window.api?.getOpportunitiesByClient) return;
-                
-                // Check if ANY client is missing opportunities
-                const needsLoading = clients.some(c => !c.opportunities || c.opportunities.length === 0);
-                if (!needsLoading) {
-                    const total = clients.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                    console.log(`✅ Pipeline: All clients already have opportunities (${total} total)`);
+                if (!window.api?.getOpportunitiesByClient) {
+                    console.error('❌ getOpportunitiesByClient not available');
                     return;
                 }
                 
-                console.log(`📡 PipelineView: Loading opportunities for ${clients.length} clients...`);
+                if (clients.length === 0) {
+                    console.warn('⚠️ No clients yet, will retry...');
+                    return;
+                }
+                
+                console.log(`🚀🚀🚀 PIPELINE: FORCING OPPORTUNITY LOAD FOR ${clients.length} CLIENTS`);
+                
+                // FORCE LOAD opportunities for ALL clients, even if they already have some
                 try {
                     const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
-                        // Skip if client already has opportunities
-                        if (client.opportunities && client.opportunities.length > 0) {
-                            return client;
-                        }
-                        
                         try {
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                             const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            
                             if (opportunities.length > 0) {
-                                console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
+                                console.log(`✅✅✅ Loaded ${opportunities.length} opportunities for ${client.name}:`, 
+                                    opportunities.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
                             }
+                            
+                            // ALWAYS return with opportunities, replacing any existing ones
                             return { ...client, opportunities };
                         } catch (error) {
-                            console.error(`❌ Failed to load opportunities for ${client.name}:`, error);
+                            console.error(`❌ Failed for ${client.name}:`, error);
                             return { ...client, opportunities: client.opportunities || [] };
                         }
                     }));
                     
                     const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                    console.log(`✅ PipelineView: Loaded ${totalOpps} total opportunities`);
+                    console.log(`✅✅✅ PIPELINE: LOADED ${totalOpps} TOTAL OPPORTUNITIES ACROSS ${clients.length} CLIENTS`);
+                    
+                    // Update state and cache
                     setClients(clientsWithOpportunities);
                     safeStorage.setClients(clientsWithOpportunities);
                 } catch (error) {
-                    console.error('❌ PipelineView: Failed to load opportunities:', error);
+                    console.error('❌ PipelineView: CRITICAL ERROR loading opportunities:', error);
                 }
             };
             
-            loadOpps();
+            // Wait a bit for clients to load, then fetch opportunities
+            const timer = setTimeout(() => {
+                loadOpps();
+            }, 500);
+            
+            return () => clearTimeout(timer);
         }, [clients.length]); // Re-run when clients are loaded
         
         console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
