@@ -219,60 +219,63 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     };
 
     // Helper function to safely get current user info
+    // This function will NEVER throw an error - it always returns a valid user object
     const getCurrentUser = () => {
         const defaultUser = { name: 'System', email: 'system', id: 'system', role: 'System' };
         
-        // Try to get user from storage using multiple methods
-        if (window.storage) {
-            // Method 1: Try getUserInfo() if it exists
-            if (typeof window.storage.getUserInfo === 'function') {
-                try {
-                    const userInfo = window.storage.getUserInfo();
-                    if (userInfo && userInfo.name) {
-                        return userInfo;
-                    }
-                } catch (error) {
-                    console.warn('Error calling storage.getUserInfo():', error);
-                }
-            }
-            
-            // Method 2: Try getUser() and build info object
-            if (typeof window.storage.getUser === 'function') {
+        try {
+            // Method 1: Try getUser() first (more reliable)
+            if (window.storage && typeof window.storage.getUser === 'function') {
                 try {
                     const user = window.storage.getUser();
                     if (user) {
                         return {
                             name: user.name || user.email || 'System',
                             email: user.email || 'system',
-                            id: user.id || user._id || 'system',
+                            id: user.id || user._id || user.email || 'system',
                             role: user.role || 'System'
                         };
                     }
                 } catch (error) {
-                    console.warn('Error calling storage.getUser():', error);
+                    // Silently continue to next method
                 }
             }
             
-            // Method 3: Try to parse from localStorage directly
+            // Method 2: Try getUserInfo() if it exists
+            if (window.storage && typeof window.storage.getUserInfo === 'function') {
+                try {
+                    const userInfo = window.storage.getUserInfo();
+                    if (userInfo && (userInfo.name || userInfo.email)) {
+                        return userInfo;
+                    }
+                } catch (error) {
+                    // Silently continue to next method
+                }
+            }
+            
+            // Method 3: Try to parse from localStorage directly (most reliable)
             try {
                 const userData = localStorage.getItem('abcotronics_user');
                 if (userData) {
                     const user = JSON.parse(userData);
-                    if (user) {
+                    if (user && (user.name || user.email)) {
                         return {
                             name: user.name || user.email || 'System',
                             email: user.email || 'system',
-                            id: user.id || user._id || 'system',
+                            id: user.id || user._id || user.email || 'system',
                             role: user.role || 'System'
                         };
                     }
                 }
             } catch (error) {
-                console.warn('Error parsing user from localStorage:', error);
+                // Silently continue
             }
+        } catch (error) {
+            // Catch any unexpected errors
+            console.warn('Unexpected error in getCurrentUser:', error);
         }
         
-        // Return default user if all methods fail
+        // Always return a valid user object - never throw
         return defaultUser;
     };
 

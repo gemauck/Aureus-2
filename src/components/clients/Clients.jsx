@@ -216,11 +216,15 @@ const Clients = React.memo(() => {
             return false;
         };
         
-        // Try localStorage first (instant)
+        // Try localStorage first (instant) - this sets the state immediately
         const loadedFromStorage = tryLoadLeadsFromStorage();
         
-        // Also load leads from API (runs in parallel, refreshes data)
+        // Load leads from API in background (non-blocking, will skip if localStorage check passes)
+        // Add a small delay to ensure React state has updated from localStorage
         const loadLeadsOnBoot = async () => {
+            // Small delay to let React process the localStorage state update
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
             try {
                 const token = window.storage?.getToken?.();
                 if (!token || !window.api?.getLeads) {
@@ -233,7 +237,8 @@ const Clients = React.memo(() => {
                     return;
                 }
                 
-                console.log('📡 Loading leads from API on boot...');
+                // loadLeads() will check localStorage again and skip API call if data exists
+                console.log('📡 Checking for leads updates from API (will skip if already cached)...');
                 // Set timestamp before call to prevent immediate re-throttle
                 lastLeadsApiCallTimestamp = Date.now();
                 await loadLeads(false);
@@ -248,7 +253,8 @@ const Clients = React.memo(() => {
             }
         };
         
-        // Load leads from API immediately (non-blocking)
+        // Load leads from API in background with small delay (non-blocking)
+        // loadLeads() will check localStorage first and skip if data already exists
         loadLeadsOnBoot();
         
         // Also retry localStorage after a delay in case DashboardLive stores them
@@ -575,15 +581,22 @@ const Clients = React.memo(() => {
         try {
             console.log('🔍 loadLeads() called, forceRefresh:', forceRefresh, 'current leads.length:', leads.length);
             
-            // Skip API call if we recently called it AND we have data (unless force refresh)
-            // Note: On boot, leads.length will be 0, so this check won't skip the API call
+            // Check localStorage first to avoid unnecessary API calls if data is already loaded
             if (!forceRefresh) {
+                const cachedLeads = window.storage?.getLeads?.();
+                if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0 && leads.length === 0) {
+                    console.log(`⚡ Leads already in localStorage (${cachedLeads.length} leads), skipping API call to avoid duplicate load`);
+                    setLeads(cachedLeads);
+                    setLeadsCount(cachedLeads.length);
+                    return; // Use cached data, skip API call
+                }
+                
                 const now = Date.now();
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
-                // Only skip if we have data AND called recently
-                if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
-                    console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leads.length} leads already loaded)`);
+                // Only skip if we have data AND called recently (check both state and localStorage)
+                if (timeSinceLastCall < API_CALL_INTERVAL && (leads.length > 0 || (cachedLeads && cachedLeads.length > 0))) {
+                    console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leads.length || cachedLeads?.length || 0} leads already loaded)`);
                     return; // Use cached data, skip API call
                 }
             } else {
