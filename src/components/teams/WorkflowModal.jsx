@@ -314,7 +314,7 @@ const WorkflowModal = ({ isOpen, onClose, team, workflow, onSave }) => {
                             <button
                                 type="button"
                                 onClick={handleAddTag}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                             >
                                 Add
                             </button>
@@ -324,7 +324,7 @@ const WorkflowModal = ({ isOpen, onClose, team, workflow, onSave }) => {
                                 {formData.tags.map(tag => (
                                     <span
                                         key={tag}
-                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1"
+                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1 dark:bg-primary-900/50 dark:text-primary-300"
                                     >
                                         {tag}
                                         <button
