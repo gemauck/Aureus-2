@@ -171,7 +171,6 @@ const DashboardDatabaseFirst = () => {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-                    <p className="text-gray-600">Last updated: {lastUpdated.toLocaleTimeString()}</p>
                 </div>
                 {/* Refresh button removed - data persists automatically */}
             </div>

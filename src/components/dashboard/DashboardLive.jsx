@@ -424,15 +424,6 @@ const DashboardLive = () => {
                         <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             Welcome {userName}
                         </h1>
-                        <div className="flex items-center space-x-2">
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                Last updated: {lastUpdated.toLocaleTimeString()}
-                            </p>
-                            <div className={`flex items-center space-x-1 ${getConnectionStatusColor()}`}>
-                                <i className={`fas ${getConnectionStatusIcon()} text-xs`}></i>
-                                <span className="text-xs font-medium capitalize">{connectionStatus}</span>
-                            </div>
-                        </div>
                     </div>
                     {SectionCommentWidget && (
                         <SectionCommentWidget 
