@@ -194,8 +194,8 @@ const MainLayout = () => {
         
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
-                // Allow if admin OR temporarily if we're refreshing role (fallback)
-                return userRole === 'admin' || (refreshingRole && hasUser && !userRole);
+                // Strict admin-only access - no fallbacks
+                return userRole === 'admin';
             }
             return true;
         });
@@ -214,12 +214,11 @@ const MainLayout = () => {
         return filtered;
     }, [user?.role, user?.id, user?.email, refreshingRole]);
 
-    // Check if user is admin (case-insensitive)
+    // Check if user is admin (case-insensitive) - strict check, no fallbacks
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        // Allow temporarily if refreshing role (fallback for undefined role during refresh)
-        return userRole === 'admin' || (refreshingRole && user && !user.role);
-    }, [user?.role, refreshingRole]);
+        return userRole === 'admin';
+    }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages
     React.useEffect(() => {
