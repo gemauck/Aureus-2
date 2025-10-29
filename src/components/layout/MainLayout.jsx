@@ -135,38 +135,38 @@ const MainLayout = () => {
         try {
             switch(currentPage) {
                 case 'dashboard': 
-                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+                    return <ErrorBoundary key="dashboard"><Dashboard /></ErrorBoundary>;
                 case 'clients': 
-                    return <ErrorBoundary><Clients /></ErrorBoundary>;
+                    return <ErrorBoundary key="clients"><Clients /></ErrorBoundary>;
                 case 'projects': 
-                    return <ErrorBoundary><Projects /></ErrorBoundary>;
+                    return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
                 case 'teams': 
-                    return <ErrorBoundary><Teams /></ErrorBoundary>;
+                    return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
                 case 'users': 
-                    return <ErrorBoundary><Users /></ErrorBoundary>;
+                    return <ErrorBoundary key="users"><Users /></ErrorBoundary>;
                 case 'account': 
-                    return <ErrorBoundary><Account /></ErrorBoundary>;
+                    return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
                 case 'time': 
-                    return <ErrorBoundary><TimeTracking /></ErrorBoundary>;
+                    return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
                 case 'hr': 
-                    return <ErrorBoundary><HR /></ErrorBoundary>;
+                    return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
                 case 'manufacturing': 
-                    return <ErrorBoundary><Manufacturing /></ErrorBoundary>;
+                    return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
                 case 'tools': 
-                    return <ErrorBoundary><Tools /></ErrorBoundary>;
+                    return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
                 case 'reports': 
-                    return <ErrorBoundary><Reports /></ErrorBoundary>;
+                    return <ErrorBoundary key="reports"><Reports /></ErrorBoundary>;
                 case 'settings': 
-                    return <ErrorBoundary><Settings /></ErrorBoundary>;
+                    return <ErrorBoundary key="settings"><Settings /></ErrorBoundary>;
                 case 'documents': 
-                    return <div className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
+                    return <div key="documents" className="text-center py-12 text-gray-500">Documents module - Coming soon!</div>;
                 default: 
-                    return <ErrorBoundary><Dashboard /></ErrorBoundary>;
+                    return <ErrorBoundary key="default"><Dashboard /></ErrorBoundary>;
             }
         } catch (error) {
             console.error('❌ MainLayout: Error rendering page:', error);
             return (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                <div key="error" className="bg-red-50 border border-red-200 rounded-lg p-6">
                     <h2 className="text-lg font-semibold text-red-800 mb-2">Error Loading Page</h2>
                     <p className="text-sm text-red-600 mb-3">There was an error loading the {currentPage} page.</p>
                     <p className="text-xs text-red-500 mb-4">Error: {error.message}</p>
