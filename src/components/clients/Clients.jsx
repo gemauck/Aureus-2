@@ -184,13 +184,24 @@ const Clients = React.memo(() => {
         }
     };
 
-    // Load clients and leads from API immediately on mount
+    // Load clients (fast) and projects on mount; defer leads until needed
     useEffect(() => {
         console.log('🚀 Clients component mounted - loading data...');
         loadClients();
-        loadLeads();
         loadProjects(); // Load projects too
     }, []);
+
+    // Load leads only when user navigates to Leads or Pipeline
+    useEffect(() => {
+        if ((viewMode === 'leads' || viewMode === 'pipeline')) {
+            // Avoid spamming API: only load if empty or throttled interval passed
+            const now = Date.now();
+            const recentlyCalled = (now - lastLeadsApiCallTimestamp) < API_CALL_INTERVAL;
+            if (!recentlyCalled || (Array.isArray(leads) && leads.length === 0)) {
+                loadLeads();
+            }
+        }
+    }, [viewMode]);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
@@ -538,8 +549,6 @@ const Clients = React.memo(() => {
             
             const apiResponse = await window.api.getLeads(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
-            
-            console.log('🔍 RAW LEADS FROM API:', JSON.stringify(rawLeads, null, 2));
             
             // Map database fields to UI expected format with JSON parsing
             const mappedLeads = rawLeads.map(lead => {
