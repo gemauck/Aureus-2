@@ -103,17 +103,17 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
+                <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between dark:bg-slate-800 dark:border-slate-700">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                             {document ? 'Edit Document' : 'Add New Document'}
                         </h3>
-                        <p className="text-xs text-gray-600">{team.name}</p>
+                        <p className="text-xs text-gray-600 dark:text-slate-400">{team.name}</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition"
+                        className="text-gray-400 hover:text-gray-600 transition dark:text-slate-400 dark:hover:text-slate-200"
                     >
                         <i className="fas fa-times text-lg"></i>
                     </button>
@@ -122,7 +122,7 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Title */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                             Document Title *
                         </label>
                         <input
@@ -131,7 +131,7 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                             value={formData.title}
                             onChange={handleChange}
                             required
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             placeholder="e.g., Customer Onboarding Process"
                         />
                     </div>
@@ -139,14 +139,14 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                     {/* Category and Version */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                                 Category
                             </label>
                             <select
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             >
                                 {categories.map(cat => (
                                     <option key={cat} value={cat}>{cat}</option>
@@ -154,7 +154,7 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                                 Version
                             </label>
                             <input
@@ -162,7 +162,7 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                                 name="version"
                                 value={formData.version}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                 placeholder="1.0"
                             />
                         </div>
@@ -209,13 +209,13 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                                 value={tagInput}
                                 onChange={(e) => setTagInput(e.target.value)}
                                 onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                                 placeholder="Add tag and press Enter"
                             />
                             <button
                                 type="button"
                                 onClick={handleAddTag}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                             >
                                 Add
                             </button>
@@ -225,13 +225,13 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                                 {formData.tags.map(tag => (
                                     <span
                                         key={tag}
-                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1"
+                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1 dark:bg-primary-900/50 dark:text-primary-300"
                                     >
                                         {tag}
                                         <button
                                             type="button"
                                             onClick={() => handleRemoveTag(tag)}
-                                            className="hover:text-primary-900"
+                                            className="hover:text-primary-900 dark:hover:text-primary-200"
                                         >
                                             <i className="fas fa-times text-xs"></i>
                                         </button>
@@ -243,10 +243,10 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
 
                     {/* File Attachment */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                             Attachments
                         </label>
-                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center dark:border-slate-600">
                             <input
                                 type="file"
                                 id="fileUpload"
@@ -258,18 +258,18 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                                 htmlFor="fileUpload"
                                 className="cursor-pointer"
                             >
-                                <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
-                                <p className="text-sm text-gray-600">
+                                <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2 dark:text-slate-400"></i>
+                                <p className="text-sm text-gray-600 dark:text-slate-300">
                                     Click to upload or drag and drop
                                 </p>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs text-gray-500 dark:text-slate-400">
                                     PDF, Word, Excel, Images (Max 10MB)
                                 </p>
                             </label>
                             {selectedFile && (
-                                <div className="mt-3 p-2 bg-gray-50 rounded text-left">
-                                    <p className="text-xs text-gray-700 font-medium">{selectedFile.name}</p>
-                                    <p className="text-xs text-gray-500">
+                                <div className="mt-3 p-2 bg-gray-50 rounded text-left dark:bg-slate-700">
+                                    <p className="text-xs text-gray-700 font-medium dark:text-slate-200">{selectedFile.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-slate-400">
                                         {(selectedFile.size / 1024).toFixed(2)} KB
                                     </p>
                                 </div>
@@ -277,11 +277,11 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                         </div>
                         {formData.attachments.length > 0 && (
                             <div className="mt-2 space-y-1">
-                                <p className="text-xs font-medium text-gray-700">Existing Attachments:</p>
+                                <p className="text-xs font-medium text-gray-700 dark:text-slate-300">Existing Attachments:</p>
                                 {formData.attachments.map((att, idx) => (
-                                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs">
-                                        <span className="text-gray-700">{att.name}</span>
-                                        <span className="text-gray-500">{(att.size / 1024).toFixed(2)} KB</span>
+                                    <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                        <span className="text-gray-700 dark:text-slate-200">{att.name}</span>
+                                        <span className="text-gray-500 dark:text-slate-400">{(att.size / 1024).toFixed(2)} KB</span>
                                     </div>
                                 ))}
                             </div>
@@ -289,11 +289,11 @@ const DocumentModal = ({ isOpen, onClose, team, document, onSave }) => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 pt-4 border-t border-gray-200">
+                    <div className="flex gap-2 pt-4 border-t border-gray-200 dark:border-slate-700">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                         >
                             Cancel
                         </button>

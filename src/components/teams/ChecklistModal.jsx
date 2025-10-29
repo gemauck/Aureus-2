@@ -130,17 +130,17 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-                <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
+            <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
+                <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between dark:bg-slate-800 dark:border-slate-700">
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                             {checklist ? 'Edit Checklist' : 'Create New Checklist'}
                         </h3>
-                        <p className="text-xs text-gray-600">{team.name}</p>
+                        <p className="text-xs text-gray-600 dark:text-slate-400">{team.name}</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 transition"
+                        className="text-gray-400 hover:text-gray-600 transition dark:text-slate-400 dark:hover:text-slate-200"
                     >
                         <i className="fas fa-times text-lg"></i>
                     </button>
@@ -149,7 +149,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {/* Title */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                             Checklist Title *
                         </label>
                         <input
@@ -158,7 +158,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                             value={formData.title}
                             onChange={handleChange}
                             required
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             placeholder="e.g., New Employee Onboarding"
                         />
                     </div>
@@ -166,14 +166,14 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                     {/* Category and Frequency */}
                     <div className="grid grid-cols-2 gap-3">
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                                 Category
                             </label>
                             <select
                                 name="category"
                                 value={formData.category}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             >
                                 {categories.map(cat => (
                                     <option key={cat} value={cat}>{cat}</option>
@@ -181,14 +181,14 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                            <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                                 Frequency
                             </label>
                             <select
                                 name="frequency"
                                 value={formData.frequency}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             >
                                 {frequencies.map(freq => (
                                     <option key={freq} value={freq}>{freq}</option>
@@ -199,7 +199,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
 
                     {/* Description */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                             Description
                         </label>
                         <textarea
@@ -301,7 +301,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
 
                     {/* Tags */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                        <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-slate-300">
                             Tags
                         </label>
                         <div className="flex gap-2 mb-2">
@@ -316,7 +316,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                             <button
                                 type="button"
                                 onClick={handleAddTag}
-                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
+                                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
                             >
                                 Add
                             </button>
@@ -326,7 +326,7 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                                 {formData.tags.map(tag => (
                                     <span
                                         key={tag}
-                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1"
+                                        className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs flex items-center gap-1 dark:bg-primary-900/50 dark:text-primary-300"
                                     >
                                         {tag}
                                         <button
@@ -343,11 +343,11 @@ const ChecklistModal = ({ isOpen, onClose, team, checklist, onSave }) => {
                     </div>
 
                     {/* Actions */}
-                    <div className="flex gap-2 pt-4 border-t border-gray-200">
+                    <div className="flex gap-2 pt-4 border-t border-gray-200 dark:border-slate-700">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm"
+                            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
                         >
                             Cancel
                         </button>
