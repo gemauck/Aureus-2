@@ -213,31 +213,65 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             return;
         }
         
-        const updatedContacts = [...(Array.isArray(formData.contacts) ? formData.contacts : []), {
-            ...newContact,
-            id: Date.now()
-        }];
-        
-        const updatedFormData = {...formData, contacts: updatedContacts};
-        setFormData(updatedFormData);
-        logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
-        
-        // Save contact changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        // Switch to contacts tab to show the added contact
-        handleTabChange('contacts');
-        
-        setNewContact({
-            name: '',
-            role: '',
-            department: '',
-            email: '',
-            phone: '',
-            town: '',
-            isPrimary: false
-        });
-        setShowContactForm(false);
+        try {
+            // Get current user info for activity log
+            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            const newContactId = Date.now();
+            const updatedContacts = [...(Array.isArray(formData.contacts) ? formData.contacts : []), {
+                ...newContact,
+                id: newContactId
+            }];
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Contact Added',
+                description: `Added contact: ${newContact.name}${newContact.email ? ' (' + newContact.email + ')' : ''}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: newContactId
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            
+            const updatedFormData = {
+                ...formData, 
+                contacts: updatedContacts,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            console.log('💾 Saving contact with updatedFormData:', {
+                contactsCount: updatedContacts.length,
+                activityLogCount: updatedActivityLog.length,
+                hasContacts: Array.isArray(updatedContacts),
+                hasActivityLog: Array.isArray(updatedActivityLog)
+            });
+            
+            // Save contact changes immediately - stay in edit mode
+            onSave(updatedFormData, true);
+            
+            // Switch to contacts tab to show the added contact
+            handleTabChange('contacts');
+            
+            setNewContact({
+                name: '',
+                role: '',
+                department: '',
+                email: '',
+                phone: '',
+                town: '',
+                isPrimary: false
+            });
+            setShowContactForm(false);
+        } catch (error) {
+            console.error('❌ Error adding contact:', error);
+            alert('Failed to add contact: ' + error.message);
+        }
     };
 
     const handleEditContact = (contact) => {
@@ -297,26 +331,60 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             return;
         }
         
-        const updatedFollowUps = [...(Array.isArray(formData.followUps) ? formData.followUps : []), {
-            ...newFollowUp,
-            id: Date.now(),
-            createdAt: new Date().toISOString()
-        }];
-        
-        const updatedFormData = {...formData, followUps: updatedFollowUps};
-        setFormData(updatedFormData);
-        logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`);
-        
-        // Save follow-up changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        setNewFollowUp({
-            date: '',
-            time: '',
-            type: 'Call',
-            description: '',
-            completed: false
-        });
+        try {
+            // Get current user info for activity log
+            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            const newFollowUpId = Date.now();
+            const updatedFollowUps = [...(Array.isArray(formData.followUps) ? formData.followUps : []), {
+                ...newFollowUp,
+                id: newFollowUpId,
+                createdAt: new Date().toISOString()
+            }];
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Follow-up Added',
+                description: `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: newFollowUpId
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            
+            const updatedFormData = {
+                ...formData, 
+                followUps: updatedFollowUps,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            console.log('💾 Saving follow-up with updatedFormData:', {
+                followUpsCount: updatedFollowUps.length,
+                activityLogCount: updatedActivityLog.length,
+                hasFollowUps: Array.isArray(updatedFollowUps),
+                hasActivityLog: Array.isArray(updatedActivityLog)
+            });
+            
+            // Save follow-up changes immediately - stay in edit mode
+            onSave(updatedFormData, true);
+            
+            setNewFollowUp({
+                date: '',
+                time: '',
+                type: 'Call',
+                description: '',
+                completed: false
+            });
+        } catch (error) {
+            console.error('❌ Error adding follow-up:', error);
+            alert('Failed to add follow-up: ' + error.message);
+        }
     };
 
     const handleToggleFollowUp = (followUpId) => {
@@ -435,23 +503,33 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const logActivity = (type, description, relatedId = null) => {
-        // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
-        
-        const activity = {
-            id: Date.now(),
-            type,
-            description,
-            timestamp: new Date().toISOString(),
-            user: currentUser.name,
-            userId: currentUser.id,
-            userEmail: currentUser.email,
-            relatedId
-        };
-        setFormData({
-            ...formData,
-            activityLog: [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity]
-        });
+        try {
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            const activity = {
+                id: Date.now(),
+                type,
+                description,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId
+            };
+            
+            // Use functional update to ensure we have latest formData
+            setFormData(prevFormData => {
+                const updatedActivityLog = [...(Array.isArray(prevFormData.activityLog) ? prevFormData.activityLog : []), activity];
+                return {
+                    ...prevFormData,
+                    activityLog: updatedActivityLog
+                };
+            });
+        } catch (error) {
+            console.error('❌ Error logging activity:', error);
+            // Don't throw - just log the error so the save can continue
+        }
     };
 
     const handleDeleteComment = (commentId) => {
