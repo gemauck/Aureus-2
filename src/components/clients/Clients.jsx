@@ -187,25 +187,26 @@ const Clients = React.memo(() => {
 
     // Load clients, leads, and projects on mount (boot up)
     useEffect(() => {
-        loadClients();
+        // Load clients (which includes leads via listClients API) and projects immediately
+        loadClients(); // This already loads leads from listClients response
         loadProjects();
         
-        // Load full leads data immediately on boot (not just count)
-        // This ensures leads are ready when user navigates to leads/pipeline views
+        // Also load leads separately for freshness (runs in parallel, non-blocking)
+        // Note: Leads are also loaded from listClients, but this ensures we have the latest
         const loadLeadsOnBoot = async () => {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token || !window.api?.getLeads) return;
                 
-                // Load full leads data immediately
-                await loadLeads();
+                // Load leads - will skip if recently called (throttle), but on boot leads.length === 0 so it will run
+                await loadLeads(false);
             } catch (error) {
-                // Silent fail - will retry when user navigates to leads tab
+                // Silent fail - leads already loaded from clients API
             }
         };
         
-        // Load leads after a brief delay to not block initial render
-        setTimeout(() => loadLeadsOnBoot(), 100);
+        // Load leads in parallel (non-blocking)
+        loadLeadsOnBoot();
     }, []);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
@@ -511,13 +512,14 @@ const Clients = React.memo(() => {
     // Load leads from database only
     const loadLeads = async (forceRefresh = false) => {
         try {
-            // Skip API call if we recently called it AND we have data (unless force refresh)
+            // Skip API call if we recently called it AND we have data (unless force refresh or on boot)
             if (!forceRefresh) {
                 const now = Date.now();
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
+                // On boot, leads.length will be 0, so this check won't skip the API call
+                // Only skip if we have data AND called recently
                 if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
-                    console.log(`⚡ Skipping Leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
                     return; // Use cached data, skip API call
                 }
                 lastLeadsApiCallTimestamp = now;
