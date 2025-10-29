@@ -214,8 +214,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
         
         try {
-            // Get current user info for activity log
-            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            // Get current user info for activity log - handle different storage API structures
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
+                }
+            }
             
             const newContactId = Date.now();
             const updatedContacts = [...(Array.isArray(formData.contacts) ? formData.contacts : []), {
@@ -282,8 +296,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
     const handleUpdateContact = () => {
         try {
-            // Get current user info for activity log
-            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            // Get current user info for activity log - handle different storage API structures
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
+                }
+            }
             
             const contacts = Array.isArray(formData.contacts) ? formData.contacts : [];
             const updatedContacts = contacts.map(c => 
@@ -364,8 +392,22 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
         
         try {
-            // Get current user info for activity log
-            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            // Get current user info for activity log - handle different storage API structures
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
+                }
+            }
             
             const newFollowUpId = Date.now();
             const updatedFollowUps = [...(Array.isArray(formData.followUps) ? formData.followUps : []), {
@@ -1555,9 +1597,9 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                             </span>
                                                         </div>
                                                         <div>
-                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy}</div>
+                                                            <div className="font-medium text-gray-900 text-sm">{comment.createdBy || comment.author || 'User'}{comment.createdByEmail || comment.authorEmail ? ` (${comment.createdByEmail || comment.authorEmail})` : ''}</div>
                                                             <div className="text-xs text-gray-500">
-                                                                {new Date(comment.createdAt).toLocaleString()}
+                                                                {new Date(comment.createdAt || comment.timestamp || comment.date).toLocaleString()}
                                                             </div>
                                                         </div>
                                                     </div>
