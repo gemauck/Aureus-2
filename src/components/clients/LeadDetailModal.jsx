@@ -596,8 +596,23 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
     const logActivity = (type, description, relatedId = null) => {
         try {
-            // Get current user info
-            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            // Get current user info - handle different storage API structures
+            let currentUser = { name: 'System', email: 'system', id: 'system' };
+            
+            if (window.storage) {
+                if (typeof window.storage.getUserInfo === 'function') {
+                    currentUser = window.storage.getUserInfo() || currentUser;
+                } else if (typeof window.storage.getUser === 'function') {
+                    const user = window.storage.getUser();
+                    if (user) {
+                        currentUser = {
+                            name: user.name || 'System',
+                            email: user.email || 'system',
+                            id: user.id || 'system'
+                        };
+                    }
+                }
+            }
             
             const activity = {
                 id: Date.now(),
