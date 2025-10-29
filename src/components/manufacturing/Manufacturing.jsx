@@ -4,6 +4,15 @@ const { useAuth } = window;
 
 const Manufacturing = () => {
   const { user } = useAuth();
+  
+  // Helper function to safely call DatabaseAPI methods
+  const safeCallAPI = async (methodName, ...args) => {
+    if (!window.DatabaseAPI || typeof window.DatabaseAPI[methodName] !== 'function') {
+      console.error(`window.DatabaseAPI.${methodName} is not available`);
+      throw new Error(`DatabaseAPI method ${methodName} is not available`);
+    }
+    return await window.DatabaseAPI[methodName](...args);
+  };
   const [activeTab, setActiveTab] = useState('dashboard');
   const [inventory, setInventory] = useState([]);
   const [boms, setBoms] = useState([]);
@@ -19,53 +28,123 @@ const Manufacturing = () => {
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [categories, setCategories] = useState(['components', 'packaging', 'accessories', 'finished_goods', 'work_in_progress']);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [showCategoryInput, setShowCategoryInput] = useState(false);
 
   // Load data from API
   useEffect(() => {
     const loadData = async () => {
       try {
         // Load inventory
-        if (window.DatabaseAPI) {
-          const invResponse = await window.DatabaseAPI.getInventory();
-          const invData = invResponse?.data?.inventory || [];
-          setInventory(invData.map(item => ({
-            ...item,
-            id: item.id
-          })));
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.getInventory === 'function') {
+          try {
+            const invResponse = await window.DatabaseAPI.getInventory();
+            const invData = invResponse?.data?.inventory || [];
+            setInventory(invData.map(item => ({
+              ...item,
+              id: item.id
+            })));
+          } catch (error) {
+            console.error('Error loading inventory:', error);
+            setInventory([]);
+          }
+        } else {
+          console.warn('window.DatabaseAPI.getInventory is not available');
+          setInventory([]);
+        }
 
-          // Load BOMs
-          const bomResponse = await window.DatabaseAPI.getBOMs();
-          const bomData = bomResponse?.data?.boms || [];
-          setBoms(bomData.map(bom => ({
-            ...bom,
-            id: bom.id,
-            components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
-          })));
+        // Load BOMs
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.getBOMs === 'function') {
+          try {
+            const bomResponse = await window.DatabaseAPI.getBOMs();
+            const bomData = bomResponse?.data?.boms || [];
+            setBoms(bomData.map(bom => ({
+              ...bom,
+              id: bom.id,
+              components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
+            })));
+          } catch (error) {
+            console.error('Error loading BOMs:', error);
+            setBoms([]);
+          }
+        } else {
+          console.warn('window.DatabaseAPI.getBOMs is not available');
+          setBoms([]);
+        }
 
-          // Load production orders
-          const ordersResponse = await window.DatabaseAPI.getProductionOrders();
-          const ordersData = ordersResponse?.data?.productionOrders || [];
-          setProductionOrders(ordersData.map(order => ({
-            ...order,
-            id: order.id
-          })));
+        // Load production orders
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.getProductionOrders === 'function') {
+          try {
+            const ordersResponse = await window.DatabaseAPI.getProductionOrders();
+            const ordersData = ordersResponse?.data?.productionOrders || [];
+            setProductionOrders(ordersData.map(order => ({
+              ...order,
+              id: order.id
+            })));
+          } catch (error) {
+            console.error('Error loading production orders:', error);
+            setProductionOrders([]);
+          }
+        } else {
+          console.warn('window.DatabaseAPI.getProductionOrders is not available');
+          setProductionOrders([]);
+        }
 
-          // Load stock movements
-          const movementsResponse = await window.DatabaseAPI.getStockMovements();
-          const movementsData = movementsResponse?.data?.movements || [];
-          setMovements(movementsData.map(movement => ({
-            ...movement,
-            id: movement.id
-          })));
+        // Load stock movements
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.getStockMovements === 'function') {
+          try {
+            const movementsResponse = await window.DatabaseAPI.getStockMovements();
+            const movementsData = movementsResponse?.data?.movements || [];
+            setMovements(movementsData.map(movement => ({
+              ...movement,
+              id: movement.id
+            })));
+          } catch (error) {
+            console.error('Error loading stock movements:', error);
+            setMovements([]);
+          }
+        } else {
+          console.warn('window.DatabaseAPI.getStockMovements is not available');
+          setMovements([]);
         }
 
         // Load stock locations from localStorage (not persisted to DB yet)
         const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
         setStockLocations(loadedLocations);
 
-        // Load suppliers from localStorage (not persisted to DB yet)
-        const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
-        setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
+        // Load suppliers from database
+        if (window.DatabaseAPI && window.DatabaseAPI.getSuppliers) {
+          try {
+            const suppliersResponse = await window.DatabaseAPI.getSuppliers();
+            const suppliersData = suppliersResponse?.data?.suppliers || [];
+            setSuppliers(suppliersData.map(supplier => ({
+              ...supplier,
+              id: supplier.id,
+              createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
+              updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
+            })));
+          } catch (error) {
+            console.error('Error loading suppliers:', error);
+            // Fallback to localStorage if database fails
+            const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
+            setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
+          }
+        } else {
+          // Fallback to localStorage if DatabaseAPI not available
+          const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
+          setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
+        }
+
+        // Load categories from localStorage (with deduplication)
+        const defaultCategories = ['components', 'packaging', 'accessories', 'finished_goods', 'work_in_progress'];
+        const loadedCategories = JSON.parse(localStorage.getItem('inventory_categories') || '[]');
+        if (loadedCategories.length > 0) {
+          // Merge with defaults, removing duplicates
+          const allCategories = [...new Set([...defaultCategories, ...loadedCategories])];
+          setCategories(allCategories);
+          localStorage.setItem('inventory_categories', JSON.stringify(allCategories));
+        }
       } catch (error) {
         console.error('Error loading manufacturing data:', error);
       }
@@ -655,7 +734,7 @@ const Manufacturing = () => {
 
   const openAddItemModal = () => {
     setFormData({
-      sku: '',
+      sku: '', // Will be auto-generated by backend
       name: '',
       category: 'components',
       type: 'raw_material',
@@ -663,10 +742,9 @@ const Manufacturing = () => {
       unit: 'pcs',
       reorderPoint: 0,
       reorderQty: 0,
-      location: '',
       unitCost: 0,
       supplier: '',
-      status: 'in_stock'
+      status: 'in_stock' // Will be auto-calculated by backend
     });
     setModalType('add_item');
     setShowModal(true);
@@ -706,26 +784,35 @@ const Manufacturing = () => {
 
   const handleSaveItem = async () => {
     try {
-      const totalValue = (parseFloat(formData.quantity) || 0) * (parseFloat(formData.unitCost) || 0);
+      // Don't include quantity in update (it's read-only)
+      // Don't include SKU in create (auto-generated) or update (read-only)
+      // Don't include location (removed)
+      // Don't include status (auto-calculated)
       const itemData = {
-        ...formData,
-        quantity: parseFloat(formData.quantity) || 0,
-        unitCost: parseFloat(formData.unitCost) || 0,
+        name: formData.name,
+        category: formData.category,
+        type: formData.type,
+        unit: formData.unit,
         reorderPoint: parseFloat(formData.reorderPoint) || 0,
         reorderQty: parseFloat(formData.reorderQty) || 0,
-        totalValue,
-        lastRestocked: formData.lastRestocked || new Date().toISOString().split('T')[0]
+        unitCost: parseFloat(formData.unitCost) || 0,
+        supplier: formData.supplier || ''
       };
 
       if (selectedItem?.id) {
-        // Update existing
-        const response = await window.DatabaseAPI.updateInventoryItem(selectedItem.id, itemData);
+        // Update existing - don't send quantity or SKU
+        const response = await safeCallAPI('updateInventoryItem', selectedItem.id, itemData);
         if (response?.data?.item) {
           setInventory(inventory.map(item => item.id === selectedItem.id ? response.data.item : item));
         }
       } else {
-        // Create new
-        const response = await window.DatabaseAPI.createInventoryItem(itemData);
+        // Create new - include quantity for initial stock, but not SKU (auto-generated)
+        const createData = {
+          ...itemData,
+          quantity: parseFloat(formData.quantity) || 0,
+          lastRestocked: new Date().toISOString().split('T')[0]
+        };
+        const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
           setInventory([...inventory, { ...response.data.item, id: response.data.item.id }]);
         }
@@ -740,10 +827,35 @@ const Manufacturing = () => {
     }
   };
 
+  const handleAddCategory = () => {
+    const trimmedName = newCategoryName.trim().toLowerCase().replace(/\s+/g, '_');
+    if (trimmedName && !categories.includes(trimmedName)) {
+      const updatedCategories = [...categories, trimmedName];
+      setCategories(updatedCategories);
+      localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+      setFormData({ ...formData, category: trimmedName });
+      setNewCategoryName('');
+      setShowCategoryInput(false);
+    } else if (categories.includes(trimmedName)) {
+      alert('Category already exists!');
+    }
+  };
+
+  const handleDeleteCategory = (categoryToDelete) => {
+    if (confirm(`Are you sure you want to delete category "${categoryToDelete}"? This will only remove it from the list. Items using this category will keep it.`)) {
+      const updatedCategories = categories.filter(cat => cat !== categoryToDelete);
+      setCategories(updatedCategories);
+      localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+      if (formData.category === categoryToDelete) {
+        setFormData({ ...formData, category: 'components' });
+      }
+    }
+  };
+
   const handleDeleteItem = async (itemId) => {
     if (confirm('Are you sure you want to delete this item?')) {
       try {
-        await window.DatabaseAPI.deleteInventoryItem(itemId);
+        await safeCallAPI('deleteInventoryItem', itemId);
         const updatedInventory = inventory.filter(item => item.id !== itemId);
         setInventory(updatedInventory);
         setShowModal(false);
@@ -774,7 +886,7 @@ const Manufacturing = () => {
 
       if (selectedItem?.id) {
         // Update existing
-        const response = await window.DatabaseAPI.updateBOM(selectedItem.id, bomData);
+        const response = await safeCallAPI('updateBOM', selectedItem.id, bomData);
         if (response?.data?.bom) {
           const updatedBom = {
             ...response.data.bom,
@@ -784,7 +896,7 @@ const Manufacturing = () => {
         }
       } else {
         // Create new
-        const response = await window.DatabaseAPI.createBOM(bomData);
+        const response = await safeCallAPI('createBOM', bomData);
         if (response?.data?.bom) {
           const newBom = {
             ...response.data.bom,
@@ -807,7 +919,7 @@ const Manufacturing = () => {
   const handleDeleteBom = async (bomId) => {
     if (confirm('Are you sure you want to delete this BOM?')) {
       try {
-        await window.DatabaseAPI.deleteBOM(bomId);
+        await safeCallAPI('deleteBOM', bomId);
         const updatedBoms = boms.filter(bom => bom.id !== bomId);
         setBoms(updatedBoms);
         setShowModal(false);
@@ -821,7 +933,7 @@ const Manufacturing = () => {
   const handleDeleteProductionOrder = async (orderId) => {
     if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
       try {
-        await window.DatabaseAPI.deleteProductionOrder(orderId);
+        await safeCallAPI('deleteProductionOrder', orderId);
         const updatedOrders = productionOrders.filter(order => order.id !== orderId);
         setProductionOrders(updatedOrders);
       } catch (error) {
@@ -834,7 +946,7 @@ const Manufacturing = () => {
   const handleDeleteMovement = async (movementId) => {
     if (confirm('Are you sure you want to delete this stock movement? This will affect audit trail.')) {
       try {
-        await window.DatabaseAPI.deleteStockMovement(movementId);
+        await safeCallAPI('deleteStockMovement', movementId);
         const updatedMovements = movements.filter(movement => movement.id !== movementId);
         setMovements(updatedMovements);
       } catch (error) {
@@ -868,30 +980,80 @@ const Manufacturing = () => {
     setShowModal(true);
   };
 
-  const handleSaveSupplier = () => {
-    const newSupplier = {
-      ...formData,
-      id: selectedItem?.id || `SUP${String(suppliers.length + 1).padStart(3, '0')}`,
-      createdAt: selectedItem?.createdAt || new Date().toISOString().split('T')[0],
-      updatedAt: new Date().toISOString().split('T')[0]
-    };
+  const handleSaveSupplier = async () => {
+    try {
+      const supplierData = {
+        code: formData.code || '',
+        name: formData.name,
+        contactPerson: formData.contactPerson || '',
+        email: formData.email || '',
+        phone: formData.phone || '',
+        website: formData.website || '',
+        address: formData.address || '',
+        paymentTerms: formData.paymentTerms || 'Net 30',
+        status: formData.status || 'active',
+        notes: formData.notes || ''
+      };
 
-    if (selectedItem) {
-      // Edit existing
-      setSuppliers(suppliers.map(supplier => supplier.id === selectedItem.id ? newSupplier : supplier));
-    } else {
-      // Add new
-      setSuppliers([...suppliers, newSupplier]);
+      let savedSupplier;
+      if (selectedItem && window.DatabaseAPI && window.DatabaseAPI.updateSupplier) {
+        // Update existing supplier
+        const response = await window.DatabaseAPI.updateSupplier(selectedItem.id, supplierData);
+        savedSupplier = response?.data?.supplier;
+      } else if (window.DatabaseAPI && window.DatabaseAPI.createSupplier) {
+        // Create new supplier
+        const response = await window.DatabaseAPI.createSupplier(supplierData);
+        savedSupplier = response?.data?.supplier;
+      } else {
+        // Fallback to localStorage if DatabaseAPI not available
+        const newSupplier = {
+          ...supplierData,
+          id: selectedItem?.id || `SUP${String(suppliers.length + 1).padStart(3, '0')}`,
+          createdAt: selectedItem?.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: new Date().toISOString().split('T')[0]
+        };
+
+        let updatedSuppliers;
+        if (selectedItem) {
+          updatedSuppliers = suppliers.map(supplier => supplier.id === selectedItem.id ? newSupplier : supplier);
+        } else {
+          updatedSuppliers = [...suppliers, newSupplier];
+        }
+
+        setSuppliers(updatedSuppliers);
+        localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+
+        setShowModal(false);
+        setSelectedItem(null);
+        setFormData({});
+        return;
+      }
+
+      // Refresh suppliers list from database
+      if (window.DatabaseAPI && window.DatabaseAPI.getSuppliers) {
+        const suppliersResponse = await window.DatabaseAPI.getSuppliers();
+        const suppliersData = suppliersResponse?.data?.suppliers || [];
+        setSuppliers(suppliersData.map(supplier => ({
+          ...supplier,
+          id: supplier.id,
+          createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
+        })));
+      }
+
+      setShowModal(false);
+      setSelectedItem(null);
+      setFormData({});
+    } catch (error) {
+      console.error('Error saving supplier:', error);
+      alert(`Failed to save supplier: ${error.message}`);
     }
-
-    setShowModal(false);
-    setSelectedItem(null);
-    setFormData({});
   };
 
-  const handleDeleteSupplier = (supplierId) => {
+  const handleDeleteSupplier = async (supplierId) => {
     // Check if supplier is used in any inventory items
-    const isUsed = inventory.some(item => item.supplier === suppliers.find(s => s.id === supplierId)?.name);
+    const supplier = suppliers.find(s => s.id === supplierId);
+    const isUsed = inventory.some(item => item.supplier === supplier?.name);
     
     if (isUsed) {
       alert('Cannot delete supplier: This supplier is assigned to one or more inventory items. Please update those items first.');
@@ -899,10 +1061,30 @@ const Manufacturing = () => {
     }
 
     if (confirm('Are you sure you want to delete this supplier?')) {
-      const updatedSuppliers = suppliers.filter(supplier => supplier.id !== supplierId);
-      setSuppliers(updatedSuppliers);
-      localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
-      setShowModal(false);
+      try {
+        if (window.DatabaseAPI && window.DatabaseAPI.deleteSupplier) {
+          await window.DatabaseAPI.deleteSupplier(supplierId);
+          
+          // Refresh suppliers list from database
+          const suppliersResponse = await window.DatabaseAPI.getSuppliers();
+          const suppliersData = suppliersResponse?.data?.suppliers || [];
+          setSuppliers(suppliersData.map(s => ({
+            ...s,
+            id: s.id,
+            createdAt: s.createdAt || new Date().toISOString().split('T')[0],
+            updatedAt: s.updatedAt || new Date().toISOString().split('T')[0]
+          })));
+        } else {
+          // Fallback to localStorage
+          const updatedSuppliers = suppliers.filter(s => s.id !== supplierId);
+          setSuppliers(updatedSuppliers);
+          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+        }
+        setShowModal(false);
+      } catch (error) {
+        console.error('Error deleting supplier:', error);
+        alert(`Failed to delete supplier: ${error.message}`);
+      }
     }
   };
 
@@ -931,7 +1113,7 @@ const Manufacturing = () => {
         createdBy: user?.name || 'System'
       };
 
-      const response = await window.DatabaseAPI.createProductionOrder(orderData);
+      const response = await safeCallAPI('createProductionOrder', orderData);
       if (response?.data?.order) {
         setProductionOrders([...productionOrders, { ...response.data.order, id: response.data.order.id }]);
       }
@@ -953,7 +1135,7 @@ const Manufacturing = () => {
         completedDate: formData.status === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
-      const response = await window.DatabaseAPI.updateProductionOrder(selectedItem.id, orderData);
+      const response = await safeCallAPI('updateProductionOrder', selectedItem.id, orderData);
       if (response?.data?.order) {
         setProductionOrders(productionOrders.map(order => 
           order.id === selectedItem.id ? response.data.order : order
@@ -1025,16 +1207,18 @@ const Manufacturing = () => {
             </div>
             <div className="p-4">
               <div className="grid grid-cols-2 gap-4">
-                {/* SKU */}
+                {/* SKU - Read-only, auto-generated */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
-                  <input
-                    type="text"
-                    value={formData.sku || ''}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., GPS-MOD-001"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                  {modalType === 'edit_item' && formData.sku ? (
+                    <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-mono">
+                      {formData.sku}
+                    </div>
+                  ) : (
+                    <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-500 italic">
+                      Auto-generated (SKU0001, SKU0002, ...)
+                    </div>
+                  )}
                 </div>
 
                 {/* Name */}
@@ -1049,20 +1233,76 @@ const Manufacturing = () => {
                   />
                 </div>
 
-                {/* Category */}
+                {/* Category - with create/delete functionality */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                  <select
-                    value={formData.category || 'components'}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="components">Components</option>
-                    <option value="packaging">Packaging</option>
-                    <option value="accessories">Accessories</option>
-                    <option value="finished_goods">Finished Goods</option>
-                    <option value="work_in_progress">Work in Progress</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.category || 'components'}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      {categories.map(cat => (
+                        <option key={cat} value={cat}>
+                          {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => setShowCategoryInput(!showCategoryInput)}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                      title="Add new category"
+                    >
+                      <i className="fas fa-plus"></i>
+                    </button>
+                  </div>
+                  {showCategoryInput && (
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                        className="flex-1 px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="New category name..."
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCategory}
+                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowCategoryInput(false); setNewCategoryName(''); }}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {categories.length > 1 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {categories.filter(cat => cat !== formData.category).map(cat => (
+                        <span
+                          key={cat}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 rounded border border-gray-300"
+                        >
+                          {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCategory(cat)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete category"
+                          >
+                            <i className="fas fa-times text-xs"></i>
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Type */}
@@ -1079,15 +1319,28 @@ const Manufacturing = () => {
                   </select>
                 </div>
 
-                {/* Quantity */}
+                {/* Quantity - Read-only for edits, editable for new items */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
-                  <input
-                    type="number"
-                    value={formData.quantity || 0}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Starting Quantity {modalType === 'add_item' ? '*' : ''}
+                  </label>
+                  {modalType === 'edit_item' ? (
+                    <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700">
+                      {formData.quantity || 0} {formData.unit || 'pcs'}
+                      <span className="ml-2 text-xs text-gray-500 italic">
+                        (Update via stock movements/purchase orders)
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      min="0"
+                      value={formData.quantity || 0}
+                      onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Initial stock quantity"
+                    />
+                  )}
                 </div>
 
                 {/* Unit */}
@@ -1128,21 +1381,6 @@ const Manufacturing = () => {
                     onChange={(e) => setFormData({ ...formData, reorderQty: parseInt(e.target.value) || 0 })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
-                  <select
-                    value={formData.location || ''}
-                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">Select location...</option>
-                    {stockLocations.filter(loc => loc.status === 'active').map(loc => (
-                      <option key={loc.id} value={loc.name}>{loc.name} ({loc.code})</option>
-                    ))}
-                  </select>
                 </div>
 
                 {/* Unit Cost */}
@@ -1186,19 +1424,25 @@ const Manufacturing = () => {
                   </div>
                 </div>
 
-                {/* Status */}
+                {/* Status - Auto-calculated, read-only */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                  <select
-                    value={formData.status || 'in_stock'}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="in_stock">In Stock</option>
-                    <option value="low_stock">Low Stock</option>
-                    <option value="out_of_stock">Out of Stock</option>
-                    <option value="in_production">In Production</option>
-                  </select>
+                  <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700">
+                    {modalType === 'edit_item' ? (
+                      <>
+                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(formData.status || 'in_stock')}`}>
+                          {formData.status === 'in_stock' ? 'In Stock' : 
+                           formData.status === 'low_stock' ? 'Low Stock' : 
+                           formData.status === 'out_of_stock' ? 'Out of Stock' : 
+                           formData.status === 'in_production' ? 'In Production' : 
+                           formData.status || 'In Stock'}
+                        </span>
+                        <span className="ml-2 text-xs text-gray-500 italic">(Auto-calculated)</span>
+                      </>
+                    ) : (
+                      <span className="text-gray-500 italic">Will be calculated based on quantity and reorder point</span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Total Value (Calculated) */}
