@@ -2150,6 +2150,7 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
+                        alert('PIPELINE TAB CLICKED! Check console now!');
                         console.log('🖱️🖱️🖱️ PIPELINE TAB CLICKED - Setting viewMode to pipeline');
                         console.log('🖱️ Current viewMode:', viewMode);
                         console.log('🖱️ Current clients:', clients.length);
