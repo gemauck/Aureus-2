@@ -159,37 +159,59 @@ const Teams = () => {
         };
     };
 
-    // Filter data by selected team
-    const filteredDocuments = selectedTeam 
-        ? documents.filter(d => d.team === selectedTeam.id)
-        : documents;
+    // Filter data by selected team - memoized to avoid recalculation
+    const filteredDocuments = useMemo(() => {
+        return selectedTeam 
+            ? documents.filter(d => d.team === selectedTeam.id)
+            : documents;
+    }, [selectedTeam, documents]);
     
-    const filteredWorkflows = selectedTeam 
-        ? workflows.filter(w => w.team === selectedTeam.id)
-        : workflows;
+    const filteredWorkflows = useMemo(() => {
+        return selectedTeam 
+            ? workflows.filter(w => w.team === selectedTeam.id)
+            : workflows;
+    }, [selectedTeam, workflows]);
     
-    const filteredChecklists = selectedTeam 
-        ? checklists.filter(c => c.team === selectedTeam.id)
-        : checklists;
+    const filteredChecklists = useMemo(() => {
+        return selectedTeam 
+            ? checklists.filter(c => c.team === selectedTeam.id)
+            : checklists;
+    }, [selectedTeam, checklists]);
     
-    const filteredNotices = selectedTeam 
-        ? notices.filter(n => n.team === selectedTeam.id)
-        : notices;
+    const filteredNotices = useMemo(() => {
+        return selectedTeam 
+            ? notices.filter(n => n.team === selectedTeam.id)
+            : notices;
+    }, [selectedTeam, notices]);
 
-    // Search functionality
-    const searchFilter = (items, searchFields) => {
-        if (!searchTerm) return items;
-        return items.filter(item => 
-            searchFields.some(field => 
-                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-        );
-    };
+    // Search functionality - memoized
+    const searchFilter = useMemo(() => {
+        return (items, searchFields) => {
+            if (!searchTerm) return items;
+            return items.filter(item => 
+                searchFields.some(field => 
+                    item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
+                )
+            );
+        };
+    }, [searchTerm]);
 
-    const displayDocuments = searchFilter(filteredDocuments, ['title', 'category', 'description']);
-    const displayWorkflows = searchFilter(filteredWorkflows, ['title', 'description']);
-    const displayChecklists = searchFilter(filteredChecklists, ['title', 'description']);
-    const displayNotices = searchFilter(filteredNotices, ['title', 'content']);
+    const displayDocuments = useMemo(() => 
+        searchFilter(filteredDocuments, ['title', 'category', 'description']), 
+        [searchFilter, filteredDocuments]
+    );
+    const displayWorkflows = useMemo(() => 
+        searchFilter(filteredWorkflows, ['title', 'description']), 
+        [searchFilter, filteredWorkflows]
+    );
+    const displayChecklists = useMemo(() => 
+        searchFilter(filteredChecklists, ['title', 'description']), 
+        [searchFilter, filteredChecklists]
+    );
+    const displayNotices = useMemo(() => 
+        searchFilter(filteredNotices, ['title', 'content']), 
+        [searchFilter, filteredNotices]
+    );
 
     // Recent activity across all teams - memoized to avoid recalculation on every render
     const recentActivity = useMemo(() => {
