@@ -374,6 +374,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     // Load contacts from database
     const loadContactsFromDatabase = async (clientId) => {
         try {
+            // Skip loading if form has been edited to preserve optimistic updates
+            if (hasUserEditedForm.current) {
+                console.log('⏭️ Skipping contact load - form has been edited (preserving optimistic updates)');
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.log('⚠️ No authentication token, skipping contact loading');
@@ -388,26 +394,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             console.log('📋 Contact data:', contacts);
             
             // Update formData with contacts from database - force new object reference
-            // Use functional update to ensure we get the latest state
-            setFormData(prevFormData => {
-                const currentContacts = prevFormData?.contacts || [];
-                const dbContacts = contacts || [];
-                
-                // If local state has more contacts than DB, preserve local (optimistic update in progress)
-                // Otherwise use DB data
-                const contactsToUse = currentContacts.length > dbContacts.length ? currentContacts : dbContacts;
-                
-                const newFormData = {
-                    ...prevFormData,
-                    contacts: [...contactsToUse] // Create new array reference
-                };
-                console.log('🔄 Updated formData with contacts:', {
-                    current: currentContacts.length,
-                    fromDB: dbContacts.length,
-                    using: contactsToUse.length
-                });
-                return newFormData;
-            });
+            // Since we skip this when form is edited, we can safely use DB data here
+            setFormData(prevFormData => ({
+                ...prevFormData,
+                contacts: [...contacts] // Create new array reference
+            }));
+            console.log('🔄 Updated formData with contacts:', contacts.length);
         } catch (error) {
             console.error('❌ Error loading contacts from database:', error);
         }
@@ -416,6 +408,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     // Load sites from database
     const loadSitesFromDatabase = async (clientId) => {
         try {
+            // Skip loading if form has been edited to preserve optimistic updates
+            if (hasUserEditedForm.current) {
+                console.log('⏭️ Skipping site load - form has been edited (preserving optimistic updates)');
+                return;
+            }
+            
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.log('⚠️ No authentication token, skipping site loading');
@@ -430,26 +428,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             console.log('📋 Site data:', sites);
             
             // Update formData with sites from database - force new object reference
-            // Use functional update to ensure we get the latest state
-            setFormData(prevFormData => {
-                const currentSites = prevFormData?.sites || [];
-                const dbSites = sites || [];
-                
-                // If local state has more sites than DB, preserve local (optimistic update in progress)
-                // Otherwise use DB data
-                const sitesToUse = currentSites.length > dbSites.length ? currentSites : dbSites;
-                
-                const newFormData = {
-                    ...prevFormData,
-                    sites: [...sitesToUse] // Create new array reference
-                };
-                console.log('🔄 Updated formData with sites:', {
-                    current: currentSites.length,
-                    fromDB: dbSites.length,
-                    using: sitesToUse.length
-                });
-                return newFormData;
-            });
+            // Since we skip this when form is edited, we can safely use DB data here
+            setFormData(prevFormData => ({
+                ...prevFormData,
+                sites: [...sites] // Create new array reference
+            }));
+            console.log('🔄 Updated formData with sites:', sites.length);
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
         }
@@ -555,13 +539,11 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowContactForm(false);
                 
-                // Reload contacts from database after a short delay to reconcile
-                setTimeout(async () => {
-                    await loadContactsFromDatabase(clientId);
-                    console.log('✅ Contact reconciliation complete');
-                }, 500);
-                
                 alert('✅ Contact saved to database successfully!');
+                
+                // Don't reload from database - optimistic update is sufficient
+                // The contact is already in state and will persist
+                // If user wants fresh data, they can refresh the page or navigate away and back
                 
                 console.log('✅ Contact created and saved to database:', savedContact.id);
             } else {
@@ -974,13 +956,11 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 });
                 setShowSiteForm(false);
                 
-                // Reload sites from database after a short delay to reconcile
-                setTimeout(async () => {
-                    await loadSitesFromDatabase(clientId);
-                    console.log('✅ Site reconciliation complete');
-                }, 500);
-                
                 alert('✅ Site saved to database successfully!');
+                
+                // Don't reload from database - optimistic update is sufficient
+                // The site is already in state and will persist
+                // If user wants fresh data, they can refresh the page or navigate away and back
                 
                 console.log('✅ Site created and saved to database:', savedSite.id);
             } else {
