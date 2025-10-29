@@ -1374,7 +1374,7 @@ const Clients = React.memo(() => {
     // Filter leads
     const filteredLeads = leads.filter(lead => {
         const matchesSearch = searchTerm === '' || 
-            lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            lead.name.toLowerCase().includes(searchTerm.toLowerCase());
             // Contact search removed for leads
         
         const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
