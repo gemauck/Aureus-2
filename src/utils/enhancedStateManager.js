@@ -392,9 +392,18 @@ class EnhancedStateManager {
         
         if (!response.ok) {
             if (response.status === 401) {
-                // Token expired
+                // Token expired - clear auth data and redirect to login
                 window.storage.removeToken();
                 window.storage.removeUser();
+                
+                // Stop live data sync if active
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.stop();
+                }
+                
+                // Redirect to login screen
+                window.location.hash = '#/login';
+                window.location.reload();
                 throw new Error('Authentication expired');
             }
             throw new Error(`Server error: ${response.status} ${response.statusText}`);

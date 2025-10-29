@@ -89,6 +89,15 @@ const DatabaseAPI = {
                     // Token expired, clear auth data
                     if (window.storage?.removeToken) window.storage.removeToken();
                     if (window.storage?.removeUser) window.storage.removeUser();
+                    
+                    // Stop live data sync if active
+                    if (window.LiveDataSync) {
+                        window.LiveDataSync.stop();
+                    }
+                    
+                    // Redirect to login screen
+                    window.location.hash = '#/login';
+                    window.location.reload();
                     throw new Error('Authentication expired. Please log in again.');
                 }
                 

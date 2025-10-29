@@ -34,8 +34,18 @@ async function request(path, options = {}) {
     if (!res.ok) {
       // Handle specific error cases
       if (res.status === 401) {
+        // Clear auth data
         if (window.storage?.removeToken) window.storage.removeToken();
         if (window.storage?.removeUser) window.storage.removeUser();
+        
+        // Stop live data sync if active
+        if (window.LiveDataSync) {
+          window.LiveDataSync.stop();
+        }
+        
+        // Redirect to login screen
+        window.location.hash = '#/login';
+        window.location.reload();
       }
       
       throw new Error(data?.error?.message || `Request failed with status ${res.status}`)
