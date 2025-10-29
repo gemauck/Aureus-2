@@ -523,46 +523,75 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const handleAddComment = () => {
         if (!newComment.trim()) return;
         
-        // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
-        
-        const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {
-            id: Date.now(),
-            text: newComment,
-            tags: Array.isArray(newNoteTags) ? newNoteTags : [],
-            attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
-            createdAt: new Date().toISOString(),
-            createdBy: currentUser.name,
-            createdByEmail: currentUser.email,
-            createdById: currentUser.id
-        }];
-        
-        const updatedFormData = {...formData, comments: updatedComments};
-        setFormData(updatedFormData);
-        logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
-        
-        // Log to audit trail
-        if (window.AuditLogger) {
-            window.AuditLogger.log(
-                'comment',
-                'leads',
-                {
-                    action: 'Comment Added',
-                    leadId: formData.id,
-                    leadName: formData.name || formData.companyName,
-                    commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
-                },
-                currentUser
-            );
+        try {
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            const commentId = Date.now();
+            const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {
+                id: commentId,
+                text: newComment,
+                tags: Array.isArray(newNoteTags) ? newNoteTags : [],
+                attachments: Array.isArray(newNoteAttachments) ? newNoteAttachments : [],
+                createdAt: new Date().toISOString(),
+                createdBy: currentUser.name,
+                createdByEmail: currentUser.email,
+                createdById: currentUser.id
+            }];
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Comment Added',
+                description: `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: commentId
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            
+            const updatedFormData = {
+                ...formData, 
+                comments: updatedComments,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            console.log('💾 Saving comment with updatedFormData:', {
+                commentsCount: updatedComments.length,
+                activityLogCount: updatedActivityLog.length
+            });
+            
+            // Log to audit trail
+            if (window.AuditLogger) {
+                window.AuditLogger.log(
+                    'comment',
+                    'leads',
+                    {
+                        action: 'Comment Added',
+                        leadId: formData.id,
+                        leadName: formData.name || formData.companyName,
+                        commentPreview: newComment.substring(0, 50) + (newComment.length > 50 ? '...' : '')
+                    },
+                    currentUser
+                );
+            }
+            
+            // Save comment changes immediately
+            onSave(updatedFormData, true);
+            
+            setNewComment('');
+            setNewNoteTags([]);
+            setNewNoteTagsInput('');
+            setNewNoteAttachments([]);
+        } catch (error) {
+            console.error('❌ Error adding comment:', error);
+            alert('Failed to add comment: ' + error.message);
         }
-        
-        // Save comment changes immediately
-        onSave(updatedFormData, true);
-        
-        setNewComment('');
-        setNewNoteTags([]);
-        setNewNoteTagsInput('');
-        setNewNoteAttachments([]);
     };
 
     const logActivity = (type, description, relatedId = null) => {
