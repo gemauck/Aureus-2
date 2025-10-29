@@ -149,14 +149,22 @@ const Teams = () => {
         loadData();
     }, []);
 
-    // Get counts for selected team
+    // Get counts for selected team - memoized per team to avoid recalculation
+    const teamCountsCache = useMemo(() => {
+        const cache = {};
+        TEAMS.forEach(team => {
+            cache[team.id] = {
+                documents: documents.filter(d => d.team === team.id).length,
+                workflows: workflows.filter(w => w.team === team.id).length,
+                checklists: checklists.filter(c => c.team === team.id).length,
+                notices: notices.filter(n => n.team === team.id).length
+            };
+        });
+        return cache;
+    }, [documents, workflows, checklists, notices]);
+
     const getTeamCounts = (teamId) => {
-        return {
-            documents: documents.filter(d => d.team === teamId).length,
-            workflows: workflows.filter(w => w.team === teamId).length,
-            checklists: checklists.filter(c => c.team === teamId).length,
-            notices: notices.filter(n => n.team === teamId).length
-        };
+        return teamCountsCache[teamId] || { documents: 0, workflows: 0, checklists: 0, notices: 0 };
     };
 
     // Filter data by selected team - memoized to avoid recalculation
