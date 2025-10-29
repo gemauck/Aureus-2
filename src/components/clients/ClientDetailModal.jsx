@@ -1038,6 +1038,12 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         opportunities: freshOpportunities
                     }));
                     console.log('✅ Reloaded opportunities from database:', freshOpportunities.length);
+                    
+                    // Trigger a window event to notify Pipeline view that opportunities changed
+                    window.dispatchEvent(new CustomEvent('opportunitiesUpdated', { 
+                        detail: { clientId: formData.id, opportunities: freshOpportunities } 
+                    }));
+                    console.log('📡 Dispatched opportunitiesUpdated event for Pipeline refresh');
                 } catch (error) {
                     console.error('❌ Failed to reload opportunities:', error);
                 }
