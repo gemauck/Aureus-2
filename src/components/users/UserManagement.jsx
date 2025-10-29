@@ -16,6 +16,9 @@ const UserManagement = () => {
     const [editingInvitation, setEditingInvitation] = useState(null);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [passwordModalData, setPasswordModalData] = useState(null);
+    const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+    const [editingUserPermissions, setEditingUserPermissions] = useState(null);
+    const [selectedPermissions, setSelectedPermissions] = useState([]);
     const [newInvitation, setNewInvitation] = useState({
         email: '',
         name: '',
@@ -774,12 +777,39 @@ const UserManagement = () => {
                                             )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <button
-                                                onClick={() => handleDeleteUser(user.id, user.name)}
-                                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                            >
-                                                <i className="fas fa-trash"></i>
-                                            </button>
+                                            <div className="flex items-center gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        // Parse user permissions
+                                                        let userPermissions = [];
+                                                        if (user.permissions) {
+                                                            try {
+                                                                if (typeof user.permissions === 'string') {
+                                                                    userPermissions = JSON.parse(user.permissions);
+                                                                } else if (Array.isArray(user.permissions)) {
+                                                                    userPermissions = user.permissions;
+                                                                }
+                                                            } catch (e) {
+                                                                userPermissions = [];
+                                                            }
+                                                        }
+                                                        setEditingUserPermissions(user);
+                                                        setSelectedPermissions(userPermissions);
+                                                        setShowPermissionsModal(true);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    title="Manage Permissions"
+                                                >
+                                                    <i className="fas fa-key"></i>
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteUser(user.id, user.name)}
+                                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                                    title="Delete User"
+                                                >
+                                                    <i className="fas fa-trash"></i>
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))
@@ -1201,6 +1231,164 @@ const UserManagement = () => {
                         setPasswordModalData(null);
                     }}
                 />
+            )}
+
+            {/* Permissions Management Modal */}
+            {showPermissionsModal && editingUserPermissions && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className={`rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto ${isDark ? 'bg-gray-800' : 'bg-white'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                                <i className="fas fa-key mr-2 text-blue-600"></i>
+                                Manage Permissions - {editingUserPermissions.name || editingUserPermissions.email}
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowPermissionsModal(false);
+                                    setEditingUserPermissions(null);
+                                    setSelectedPermissions([]);
+                                }}
+                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                            >
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+
+                        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
+                            <p className="text-sm text-blue-800 dark:text-blue-200">
+                                <i className="fas fa-info-circle mr-2"></i>
+                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | Custom permissions override role-based permissions.
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* All Available Permissions organized by category */}
+                            {Object.entries({
+                                'General': [
+                                    { id: 'view_all', label: 'View All Data', description: 'Can view all data in the system' },
+                                    { id: 'view_assigned', label: 'View Assigned', description: 'Can view only assigned items' },
+                                    { id: 'edit_assigned', label: 'Edit Assigned', description: 'Can edit assigned items' }
+                                ],
+                                'Administration': [
+                                    { id: 'manage_users', label: 'Manage Users', description: 'Can create, edit, and delete users' },
+                                    { id: 'manage_roles', label: 'Manage Roles', description: 'Can modify user roles' },
+                                    { id: 'system_settings', label: 'System Settings', description: 'Can access system settings' }
+                                ],
+                                'Projects': [
+                                    { id: 'view_projects', label: 'View Projects', description: 'Can view projects' },
+                                    { id: 'edit_projects', label: 'Edit Projects', description: 'Can create and edit projects' },
+                                    { id: 'manage_tasks', label: 'Manage Tasks', description: 'Can create and manage tasks' },
+                                    { id: 'delete_projects', label: 'Delete Projects', description: 'Can delete projects' }
+                                ],
+                                'CRM': [
+                                    { id: 'view_clients', label: 'View Clients', description: 'Can view clients' },
+                                    { id: 'edit_clients', label: 'Edit Clients', description: 'Can create and edit clients' },
+                                    { id: 'manage_leads', label: 'Manage Leads', description: 'Can manage leads and opportunities' }
+                                ],
+                                'Finance': [
+                                    { id: 'view_invoices', label: 'View Invoices', description: 'Can view invoices' },
+                                    { id: 'manage_invoicing', label: 'Manage Invoicing', description: 'Can create and manage invoices' },
+                                    { id: 'manage_expenses', label: 'Manage Expenses', description: 'Can manage expenses' },
+                                    { id: 'approve_expenses', label: 'Approve Expenses', description: 'Can approve expense reports' }
+                                ],
+                                'Operations': [
+                                    { id: 'time_tracking', label: 'Time Tracking', description: 'Can track time on projects' },
+                                    { id: 'view_team', label: 'View Team', description: 'Can view team information' },
+                                    { id: 'manage_team', label: 'Manage Team', description: 'Can manage team members' }
+                                ],
+                                'Reporting': [
+                                    { id: 'view_reports', label: 'View Reports', description: 'Can view system reports' },
+                                    { id: 'export_data', label: 'Export Data', description: 'Can export data from the system' }
+                                ]
+                            }).map(([category, permissions]) => (
+                                <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                                    <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">
+                                        {category}
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {permissions.map((permission) => (
+                                            <label
+                                                key={permission.id}
+                                                className="flex items-start p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedPermissions.includes(permission.id)}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedPermissions([...selectedPermissions, permission.id]);
+                                                        } else {
+                                                            setSelectedPermissions(selectedPermissions.filter(p => p !== permission.id));
+                                                        }
+                                                    }}
+                                                    className="mt-1 mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                                />
+                                                <div className="flex-1">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                                        {permission.label}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {permission.description}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-6 flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        const token = window.storage?.getToken?.();
+                                        const response = await fetch('/api/users', {
+                                            method: 'PUT',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${token}`
+                                            },
+                                            body: JSON.stringify({
+                                                userId: editingUserPermissions.id,
+                                                permissions: JSON.stringify(selectedPermissions)
+                                            })
+                                        });
+
+                                        const data = await response.json();
+                                        
+                                        if (response.ok) {
+                                            alert('Permissions updated successfully');
+                                            await loadUsers();
+                                            setShowPermissionsModal(false);
+                                            setEditingUserPermissions(null);
+                                            setSelectedPermissions([]);
+                                        } else {
+                                            alert(data.message || 'Failed to update permissions');
+                                        }
+                                    } catch (error) {
+                                        console.error('Error updating permissions:', error);
+                                        alert('Failed to update permissions: ' + error.message);
+                                    }
+                                }}
+                                className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+                            >
+                                <i className="fas fa-save mr-2"></i>
+                                Save Permissions
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowPermissionsModal(false);
+                                    setEditingUserPermissions(null);
+                                    setSelectedPermissions([]);
+                                }}
+                                className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

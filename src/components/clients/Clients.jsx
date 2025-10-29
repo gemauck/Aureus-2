@@ -1,5 +1,6 @@
 // Get dependencies from window
 const { useState, useEffect, useMemo, useCallback, useRef } = React;
+const SectionCommentWidget = window.SectionCommentWidget;
 // Don't capture window.storage at module load; resolve at call time to avoid stale reference
 // Safe storage helper functions
 const safeStorage = {
@@ -2114,9 +2115,19 @@ const Clients = React.memo(() => {
                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
                         <i className="fas fa-users text-white text-lg"></i>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clients and Leads</h1>
-                        <p className="text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                    <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Clients and Leads</h1>
+                                <p className="text-gray-600 dark:text-gray-400">Manage clients and leads</p>
+                            </div>
+                            {SectionCommentWidget && (
+                                <SectionCommentWidget 
+                                    sectionId="clients-main"
+                                    sectionName="Clients and Leads"
+                                />
+                            )}
+                        </div>
                     </div>
                 </div>
                 

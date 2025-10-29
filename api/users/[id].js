@@ -91,6 +91,7 @@ async function handler(req, res) {
                     email: true,
                     name: true,
                     role: true,
+                    permissions: true,
                     status: true,
                     department: true,
                     jobTitle: true,

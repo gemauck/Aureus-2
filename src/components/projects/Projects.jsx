@@ -3,6 +3,7 @@ const { useState, useEffect } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
+const SectionCommentWidget = window.SectionCommentWidget;
 
 const Projects = () => {
     const { logout } = window.useAuth();
@@ -538,9 +539,17 @@ const Projects = () => {
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
-                <div>
-                    <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
-                    <p className="text-xs text-gray-600">Manage and track all your projects</p>
+                <div className="flex-1 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-lg font-semibold text-gray-900">Projects</h1>
+                        <p className="text-xs text-gray-600">Manage and track all your projects</p>
+                    </div>
+                    {SectionCommentWidget && (
+                        <SectionCommentWidget 
+                            sectionId="projects-main"
+                            sectionName="Projects"
+                        />
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button 

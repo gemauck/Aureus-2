@@ -306,6 +306,26 @@ const api = {
     const res = await request(`/sites/client/${clientId}/${siteId}`, { method: 'DELETE' })
     return res
   },
+
+  // Feedback/Comments
+  async getFeedback(options = {}) {
+    const params = new URLSearchParams()
+    if (options.pageUrl) params.append('pageUrl', options.pageUrl)
+    if (options.section) params.append('section', options.section)
+    if (options.includeUser) params.append('includeUser', 'true')
+    
+    const query = params.toString()
+    const res = await request(`/feedback${query ? `?${query}` : ''}`)
+    return res
+  },
+
+  async submitFeedback(data) {
+    const res = await request('/feedback', { 
+      method: 'POST', 
+      body: JSON.stringify(data) 
+    })
+    return res
+  },
 }
 
 // Expose globally for prototype

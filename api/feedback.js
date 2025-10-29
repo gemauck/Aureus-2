@@ -8,13 +8,64 @@ import { withLogging } from './_lib/logger.js'
 async function handler(req, res) {
   try {
     const pathSegments = req.url.split('/').filter(Boolean)
+    
+    // Parse query parameters safely
+    const parseQueryParams = (urlString) => {
+      const params = {}
+      const queryIndex = urlString.indexOf('?')
+      if (queryIndex === -1) return params
+      
+      const queryString = urlString.substring(queryIndex + 1)
+      queryString.split('&').forEach(param => {
+        const [key, value] = param.split('=')
+        if (key) {
+          params[decodeURIComponent(key)] = value ? decodeURIComponent(value) : ''
+        }
+      })
+      return params
+    }
 
-    // GET /api/feedback -> list latest feedback (admin only soon; for now allow authenticated)
+    const queryParams = parseQueryParams(req.url)
+
+    // GET /api/feedback -> list feedback with optional filtering
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'feedback') {
       try {
+        const pageUrl = queryParams.pageUrl
+        const section = queryParams.section
+        const includeUser = queryParams.includeUser === 'true'
+
+        const where = {}
+        if (pageUrl) where.pageUrl = pageUrl
+        if (section) where.section = section
+
+        const selectFields = {
+          id: true,
+          userId: true,
+          pageUrl: true,
+          section: true,
+          message: true,
+          type: true,
+          severity: true,
+          meta: true,
+          createdAt: true
+        }
+
+        if (includeUser) {
+          selectFields.user = {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              avatar: true
+            }
+          }
+        }
+
         const feedback = await prisma.feedback.findMany({
+          where,
+          select: selectFields,
           orderBy: { createdAt: 'desc' },
-          take: 200
+          take: pageUrl && section ? 50 : 200 // More results for specific sections
         })
         return ok(res, feedback)
       } catch (e) {
