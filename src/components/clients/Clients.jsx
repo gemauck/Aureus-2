@@ -1492,28 +1492,6 @@ const Clients = React.memo(() => {
                     <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
                         <div className="flex items-center justify-between mb-1">
                             <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Active Opportunities</div>
-                            <button
-                                onClick={async () => {
-                                    if (window.api?.getOpportunitiesByClient) {
-                                        const clientsWithOpps = await Promise.all(clients.map(async (client) => {
-                                            try {
-                                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                                const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                                return { ...client, opportunities: opps };
-                                            } catch (error) {
-                                                console.error(`❌ Failed to refresh opportunities for ${client.name}:`, error);
-                                                return { ...client, opportunities: client.opportunities || [] };
-                                            }
-                                        }));
-                                        setClients(clientsWithOpps);
-                                        safeStorage.setClients(clientsWithOpps);
-                                    }
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700 hover:underline"
-                                title="Refresh opportunities"
-                            >
-                                <i className="fas fa-sync-alt"></i> Refresh
-                            </button>
                         </div>
                         <div className="text-2xl font-bold text-primary-600">{activeOpportunities.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Client expansions</div>
