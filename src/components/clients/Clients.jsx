@@ -2157,18 +2157,32 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={async () => {
-                        console.log('🖱️ PIPELINE TAB CLICKED');
+                        console.log('🖱️🖱️🖱️ PIPELINE TAB CLICKED - FORCING OPPORTUNITY LOAD!');
                         setViewMode('pipeline');
                         
                         // IMMEDIATELY load opportunities for all clients when Pipeline tab is clicked
-                        if (window.api?.getOpportunitiesByClient && clients.length > 0) {
-                            console.log(`📡 Loading opportunities for ${clients.length} clients...`);
+                        if (!window.api?.getOpportunitiesByClient) {
+                            console.error('❌ getOpportunitiesByClient NOT AVAILABLE!');
+                            return;
+                        }
+                        
+                        if (clients.length === 0) {
+                            console.warn('⚠️ No clients to load opportunities for');
+                            return;
+                        }
+                        
+                        console.log(`🚀🚀🚀 FORCE LOADING opportunities for ${clients.length} clients NOW!`);
+                        try {
                             const clientsWithOpps = await Promise.all(clients.map(async (client) => {
                                 try {
+                                    console.log(`📡 Fetching opportunities for ${client.name} (${client.id})...`);
                                     const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                                     const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
                                     if (opportunities.length > 0) {
-                                        console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
+                                        console.log(`✅✅✅ Loaded ${opportunities.length} opps for ${client.name}:`, 
+                                            opportunities.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
+                                    } else {
+                                        console.log(`📭 No opportunities for ${client.name}`);
                                     }
                                     return { ...client, opportunities };
                                 } catch (error) {
@@ -2178,9 +2192,15 @@ const Clients = React.memo(() => {
                             }));
                             
                             const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            console.log(`✅ Pipeline: Loaded ${totalOpps} total opportunities`);
+                            console.log(`🎉🎉🎉 PIPELINE: LOADED ${totalOpps} TOTAL OPPORTUNITIES!`);
+                            console.log(`🎉 Clients with opportunities:`, clientsWithOpps.filter(c => c.opportunities && c.opportunities.length > 0).map(c => ({ 
+                                name: c.name, 
+                                count: c.opportunities.length 
+                            })));
                             setClients(clientsWithOpps);
                             safeStorage.setClients(clientsWithOpps);
+                        } catch (error) {
+                            console.error('❌ CRITICAL ERROR loading opportunities:', error);
                         }
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
