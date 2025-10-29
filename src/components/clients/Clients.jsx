@@ -1040,11 +1040,18 @@ const Clients = React.memo(() => {
                         const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                         console.log('✅ Lead updated in database');
                         console.log('✅ API response:', apiResponse);
+                        console.log('✅ Saved lead data:', {
+                            contacts: Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array',
+                            followUps: Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 'not array',
+                            notes: updatedLead.notes ? updatedLead.notes.length : 0,
+                            comments: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 'not array'
+                        });
                         
-                        // Refresh leads from database to ensure consistency (FORCE refresh to bypass cache)
-                        setTimeout(() => {
-                        loadLeads(true); // Force refresh to bypass API throttling
-                        }, 500);
+                        // Don't immediately refresh - let the UI use the updated local state
+                        // Only refresh if user manually refreshes page
+                        // setTimeout(() => {
+                        //     loadLeads(true); // Force refresh to bypass API throttling
+                        // }, 500);
                     } catch (apiError) {
                         console.error('❌ API error updating lead:', apiError);
                         // Local update already applied
