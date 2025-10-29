@@ -281,31 +281,63 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleUpdateContact = () => {
-        const contacts = Array.isArray(formData.contacts) ? formData.contacts : [];
-        const updatedContacts = contacts.map(c => 
-            c.id === editingContact.id ? {...newContact, id: c.id} : c
-        );
-        const updatedFormData = {...formData, contacts: updatedContacts};
-        setFormData(updatedFormData);
-        logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
-        
-        // Save contact changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
-        
-        // Stay in contacts tab
-        handleTabChange('contacts');
-        
-        setEditingContact(null);
-        setNewContact({
-            name: '',
-            role: '',
-            department: '',
-            email: '',
-            phone: '',
-            town: '',
-            isPrimary: false
-        });
-        setShowContactForm(false);
+        try {
+            // Get current user info for activity log
+            const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            const contacts = Array.isArray(formData.contacts) ? formData.contacts : [];
+            const updatedContacts = contacts.map(c => 
+                c.id === editingContact.id ? {...newContact, id: c.id} : c
+            );
+            
+            // Create activity log entry
+            const activity = {
+                id: Date.now(),
+                type: 'Contact Updated',
+                description: `Updated contact: ${newContact.name}`,
+                timestamp: new Date().toISOString(),
+                user: currentUser.name,
+                userId: currentUser.id,
+                userEmail: currentUser.email,
+                relatedId: editingContact.id
+            };
+            
+            const updatedActivityLog = [...(Array.isArray(formData.activityLog) ? formData.activityLog : []), activity];
+            
+            const updatedFormData = {
+                ...formData, 
+                contacts: updatedContacts,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            console.log('💾 Saving contact update with updatedFormData:', {
+                contactsCount: updatedContacts.length,
+                activityLogCount: updatedActivityLog.length
+            });
+            
+            // Save contact changes immediately - stay in edit mode
+            onSave(updatedFormData, true);
+            
+            // Stay in contacts tab
+            handleTabChange('contacts');
+            
+            setEditingContact(null);
+            setNewContact({
+                name: '',
+                role: '',
+                department: '',
+                email: '',
+                phone: '',
+                town: '',
+                isPrimary: false
+            });
+            setShowContactForm(false);
+        } catch (error) {
+            console.error('❌ Error updating contact:', error);
+            alert('Failed to update contact: ' + error.message);
+        }
     };
 
     const handleDeleteContact = (contactId) => {
@@ -388,19 +420,50 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     };
 
     const handleToggleFollowUp = (followUpId) => {
-        const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
-        const followUp = followUps.find(f => f.id === followUpId);
-        const updatedFollowUps = followUps.map(f => 
-            f.id === followUpId ? {...f, completed: !f.completed} : f
-        );
-        const updatedFormData = {...formData, followUps: updatedFollowUps};
-        setFormData(updatedFormData);
-        if (followUp && !followUp.completed) {
-            logActivity('Follow-up Completed', `Completed: ${followUp.description}`);
+        try {
+            const followUps = Array.isArray(formData.followUps) ? formData.followUps : [];
+            const followUp = followUps.find(f => f.id === followUpId);
+            const updatedFollowUps = followUps.map(f => 
+                f.id === followUpId ? {...f, completed: !f.completed} : f
+            );
+            
+            let updatedActivityLog = Array.isArray(formData.activityLog) ? formData.activityLog : [];
+            
+            // Add activity log entry if completing follow-up
+            if (followUp && !followUp.completed) {
+                const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+                const activity = {
+                    id: Date.now(),
+                    type: 'Follow-up Completed',
+                    description: `Completed: ${followUp.description}`,
+                    timestamp: new Date().toISOString(),
+                    user: currentUser.name,
+                    userId: currentUser.id,
+                    userEmail: currentUser.email,
+                    relatedId: followUpId
+                };
+                updatedActivityLog = [...updatedActivityLog, activity];
+            }
+            
+            const updatedFormData = {
+                ...formData, 
+                followUps: updatedFollowUps,
+                activityLog: updatedActivityLog
+            };
+            
+            setFormData(updatedFormData);
+            
+            console.log('💾 Saving follow-up toggle with updatedFormData:', {
+                followUpsCount: updatedFollowUps.length,
+                activityLogCount: updatedActivityLog.length
+            });
+            
+            // Save follow-up toggle immediately - stay in edit mode
+            onSave(updatedFormData, true);
+        } catch (error) {
+            console.error('❌ Error toggling follow-up:', error);
+            alert('Failed to toggle follow-up: ' + error.message);
         }
-        
-        // Save follow-up toggle immediately - stay in edit mode
-        onSave(updatedFormData, true);
     };
 
     const handleDeleteFollowUp = (followUpId) => {
