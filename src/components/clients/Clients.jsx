@@ -2389,6 +2389,7 @@ const Clients = React.memo(() => {
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' ? (() => {
+                console.log('🚀🚀🚀🚀🚀 CONSOLE TEST - YOU SHOULD SEE THIS IF PIPELINE IS RENDERING! 🚀🚀🚀🚀🚀');
                 console.log('🎯🎯🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
                 console.log('🎯🎯🎯🎯🎯 Current clients:', clients.length);
                 
