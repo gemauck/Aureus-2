@@ -2149,17 +2149,32 @@ const Clients = React.memo(() => {
                     Leads ({leads.length})
                 </button>
                 <button
-                    onClick={() => {
-                        alert('PIPELINE TAB CLICKED! Check console now!');
-                        console.log('🖱️🖱️🖱️ PIPELINE TAB CLICKED - Setting viewMode to pipeline');
-                        console.log('🖱️ Current viewMode:', viewMode);
-                        console.log('🖱️ Current clients:', clients.length);
+                    onClick={async () => {
+                        console.log('🖱️ PIPELINE TAB CLICKED');
                         setViewMode('pipeline');
-                        // Force reload opportunities when clicking pipeline tab
-                        setTimeout(() => {
-                            console.log('⏰ Pipeline tab clicked - triggering opportunity reload...');
-                            console.log('⏰ viewMode after set:', viewMode);
-                        }, 100);
+                        
+                        // IMMEDIATELY load opportunities for all clients when Pipeline tab is clicked
+                        if (window.api?.getOpportunitiesByClient && clients.length > 0) {
+                            console.log(`📡 Loading opportunities for ${clients.length} clients...`);
+                            const clientsWithOpps = await Promise.all(clients.map(async (client) => {
+                                try {
+                                    const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                    const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                                    if (opportunities.length > 0) {
+                                        console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
+                                    }
+                                    return { ...client, opportunities };
+                                } catch (error) {
+                                    console.error(`❌ Failed to load opportunities for ${client.name}:`, error);
+                                    return { ...client, opportunities: client.opportunities || [] };
+                                }
+                            }));
+                            
+                            const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            console.log(`✅ Pipeline: Loaded ${totalOpps} total opportunities`);
+                            setClients(clientsWithOpps);
+                            safeStorage.setClients(clientsWithOpps);
+                        }
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
