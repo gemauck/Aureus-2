@@ -174,6 +174,19 @@ async function handler(req, res) {
                 return unauthorized(res, 'Unauthorized to update this user')
             }
 
+            // Only admins can change roles
+            if (updateData.role !== undefined && updateData.role !== null) {
+                // Get current user from database to check role
+                const currentUserRecord = await prisma.user.findUnique({
+                    where: { id: currentUserId },
+                    select: { role: true }
+                })
+                
+                if (!currentUserRecord || currentUserRecord.role !== 'admin') {
+                    return unauthorized(res, 'Only administrators can change user roles')
+                }
+            }
+
             // Filter out fields that shouldn't be updated via this endpoint
             const {
                 passwordHash,

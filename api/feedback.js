@@ -166,13 +166,24 @@ async function handler(req, res) {
 
     // POST /api/feedback -> create
     if (req.method === 'POST' && pathSegments.length === 1 && pathSegments[0] === 'feedback') {
-      const body = await parseJsonBody(req)
+      // Try req.body first (Express already parsed it), fallback to parseJsonBody
+      let body = req.body
+      if (!body || Object.keys(body).length === 0) {
+        body = await parseJsonBody(req)
+      }
+      
       const message = (body.message || '').trim()
       const pageUrl = (body.pageUrl || '').trim()
       const section = (body.section || '').trim()
 
       if (!message) return badRequest(res, 'message required')
       if (!pageUrl) return badRequest(res, 'pageUrl required')
+
+      // Convert meta object to JSON string if it's an object
+      let metaValue = body.meta || null
+      if (metaValue && typeof metaValue === 'object') {
+        metaValue = JSON.stringify(metaValue)
+      }
 
       const record = {
         userId: req.user?.sub || null,
@@ -181,7 +192,7 @@ async function handler(req, res) {
         message,
         type: body.type || 'feedback',
         severity: body.severity || 'medium',
-        meta: body.meta || null
+        meta: metaValue
       }
 
       try {
