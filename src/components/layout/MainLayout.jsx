@@ -200,16 +200,11 @@ const MainLayout = () => {
             return true;
         });
         
-        console.error('🚨 DEBUG: Menu filtering result:', {
-            userRole,
-            hasUser,
-            refreshingRole,
-            user: { id: user?.id, email: user?.email, role: user?.role },
-            menuItemsCount: filtered.length,
-            menuLabels: filtered.map(i => i.label),
-            hasUsersMenu: filtered.some(i => i.id === 'users'),
-            allMenuItems: allMenuItems.map(i => ({ id: i.id, label: i.label, adminOnly: i.adminOnly }))
-        });
+        // Log only if Users menu visibility changes for debugging
+        const hasUsersMenu = filtered.some(i => i.id === 'users');
+        if (hasUsersMenu && userRole !== 'admin') {
+            console.warn('⚠️ WARNING: Users menu visible but user is not admin!', { userRole, hasUsersMenu });
+        }
         
         return filtered;
     }, [user?.role, user?.id, user?.email, refreshingRole]);
