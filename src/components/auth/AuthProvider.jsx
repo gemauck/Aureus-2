@@ -24,8 +24,8 @@ const AuthProvider = ({ children }) => {
                 const meResponse = await window.api.me();
                 console.error('🚨 refreshUser: API.me() response:', meResponse);
                 if (meResponse) {
-                    // Extract user from response (API returns { user: {...} } or direct user object)
-                    const user = meResponse.user || meResponse;
+                    // Extract user from response (API returns { data: { user: {...} } } or { user: {...} } or direct user object)
+                    const user = meResponse.data?.user || meResponse.user || meResponse.data || meResponse;
                     console.error('🚨 refreshUser: Extracted user:', user, 'Role:', user?.role);
                     if (user) {
                         storage.setUser(user);
@@ -77,8 +77,8 @@ const AuthProvider = ({ children }) => {
                         try {
                             const meResponse = await window.api.me();
                             if (meResponse) {
-                                // Extract user from response
-                                const user = meResponse.user || meResponse;
+                                // Extract user from response (API returns { data: { user: {...} } })
+                                const user = meResponse.data?.user || meResponse.user || meResponse.data || meResponse;
                                 if (user) {
                                     storage.setUser(user);
                                     setUser(user);
@@ -137,7 +137,7 @@ const AuthProvider = ({ children }) => {
                             ]);
                             if (meResponse) {
                                 // Extract user from response (API returns { user: {...} } or direct user object)
-                                const user = meResponse.user || meResponse;
+                                const user = meResponse.data?.user || meResponse.user || meResponse.data || meResponse;
                                 if (user) {
                                     storage.setUser(user);
                                     setUser(user);
