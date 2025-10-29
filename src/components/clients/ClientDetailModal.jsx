@@ -19,6 +19,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
+    // Track optimistic updates separately to prevent overwrites
+    const optimisticContacts = useRef([]);
+    const optimisticSites = useRef([]);
+    
     // Update tab when initialTab prop changes
     useEffect(() => {
         setActiveTab(initialTab);
@@ -273,6 +277,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 lastSavedClientId.current = client.id;
                 // Reset edit flag when switching clients
                 hasUserEditedForm.current = false;
+                // Clear optimistic updates when switching clients
+                optimisticContacts.current = [];
+                optimisticSites.current = [];
+                console.log('🔄 Cleared optimistic updates for new client');
             }
             
             // Only load from database if client ID changed (new client) or form hasn't been edited
@@ -529,6 +537,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
+                // Add to optimistic contacts ref - this persists even if formData gets reset
+                const currentOptimistic = optimisticContacts.current || [];
+                const contactExistsInOptimistic = currentOptimistic.some(c => c.id === savedContact.id);
+                if (!contactExistsInOptimistic) {
+                    optimisticContacts.current = [...currentOptimistic, savedContact];
+                    console.log('✅ Added to optimisticContacts ref:', {
+                        contactId: savedContact.id,
+                        optimisticCount: optimisticContacts.current.length
+                    });
+                }
+                
                 // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
                     const currentContacts = prev.contacts || [];
@@ -539,11 +558,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         return prev;
                     }
                     const updatedContacts = [...currentContacts, savedContact];
-                    console.log('✅ Optimistic update: adding contact to state', {
+                    console.log('✅ Optimistic update: adding contact to formData', {
                         contactId: savedContact.id,
                         previousCount: currentContacts.length,
-                        newCount: updatedContacts.length,
-                        contacts: updatedContacts
+                        newCount: updatedContacts.length
                     });
                     const newFormData = {
                         ...prev,
@@ -957,6 +975,17 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
+                // Add to optimistic sites ref - this persists even if formData gets reset
+                const currentOptimistic = optimisticSites.current || [];
+                const siteExistsInOptimistic = currentOptimistic.some(s => s.id === savedSite.id);
+                if (!siteExistsInOptimistic) {
+                    optimisticSites.current = [...currentOptimistic, savedSite];
+                    console.log('✅ Added to optimisticSites ref:', {
+                        siteId: savedSite.id,
+                        optimisticCount: optimisticSites.current.length
+                    });
+                }
+                
                 // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
                     const currentSites = prev.sites || [];
@@ -967,11 +996,10 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                         return prev;
                     }
                     const updatedSites = [...currentSites, savedSite];
-                    console.log('✅ Optimistic update: adding site to state', {
+                    console.log('✅ Optimistic update: adding site to formData', {
                         siteId: savedSite.id,
                         previousCount: currentSites.length,
-                        newCount: updatedSites.length,
-                        sites: updatedSites
+                        newCount: updatedSites.length
                     });
                     const newFormData = {
                         ...prev,
@@ -1682,12 +1710,31 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
                                 <div className="space-y-2">
                                     {(() => {
-                                        // Show all contacts without filtering
-                                        const allContacts = formData.contacts || [];
+                                        // Merge formData contacts with optimistic contacts
+                                        const formContacts = formData.contacts || [];
+                                        const optimistic = optimisticContacts.current || [];
                                         
-                                        console.log('🖼️ RENDER: Contacts to display:', allContacts.length);
-                                        console.log('🖼️ RENDER: formData.contacts:', formData.contacts);
-                                        console.log('🖼️ RENDER: Full formData keys:', Object.keys(formData));
+                                        // Merge and deduplicate by ID
+                                        const contactMap = new Map();
+                                        
+                                        // Add formData contacts first
+                                        formContacts.forEach(contact => {
+                                            if (contact?.id) contactMap.set(contact.id, contact);
+                                        });
+                                        
+                                        // Add optimistic contacts (will overwrite if duplicate ID)
+                                        optimistic.forEach(contact => {
+                                            if (contact?.id) contactMap.set(contact.id, contact);
+                                        });
+                                        
+                                        const allContacts = Array.from(contactMap.values());
+                                        
+                                        console.log('🖼️ RENDER: Contacts to display:', {
+                                            formContactsCount: formContacts.length,
+                                            optimisticCount: optimistic.length,
+                                            mergedCount: allContacts.length,
+                                            refreshTrigger: refreshTrigger
+                                        });
 
                                         return allContacts.length === 0 ? (
                                             <div className="text-center py-8 text-gray-500 text-sm">
@@ -1978,13 +2025,33 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                 )}
 
                                 <div className="space-y-2">
-                                    {(!formData.sites || formData.sites.length === 0) ? (
-                                        <div className="text-center py-8 text-gray-500 text-sm">
-                                            <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
-                                            <p>No sites added yet</p>
-                                        </div>
-                                    ) : (
-                                        formData.sites.map(site => (
+                                    {(() => {
+                                        // Merge formData sites with optimistic sites
+                                        const formSites = formData.sites || [];
+                                        const optimistic = optimisticSites.current || [];
+                                        
+                                        // Merge and deduplicate by ID
+                                        const siteMap = new Map();
+                                        
+                                        // Add formData sites first
+                                        formSites.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
+                                        // Add optimistic sites (will overwrite if duplicate ID)
+                                        optimistic.forEach(site => {
+                                            if (site?.id) siteMap.set(site.id, site);
+                                        });
+                                        
+                                        const allSites = Array.from(siteMap.values());
+                                        
+                                        return allSites.length === 0 ? (
+                                            <div className="text-center py-8 text-gray-500 text-sm">
+                                                <i className="fas fa-map-marker-alt text-3xl mb-2"></i>
+                                                <p>No sites added yet</p>
+                                            </div>
+                                        ) : (
+                                            allSites.map(site => (
                                             <div key={site.id} className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} border rounded-lg p-4 hover:border-primary-300 transition-all duration-200 hover:shadow-md`}>
                                                 <div className="flex justify-between items-start mb-3">
                                                     <div className="flex items-center gap-2">
@@ -2118,8 +2185,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                                     </div>
                                                 )}
                                             </div>
-                                        ))
-                                    )}
+                                            ))
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
