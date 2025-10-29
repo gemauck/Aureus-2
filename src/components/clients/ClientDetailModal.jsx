@@ -970,8 +970,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             }
             
             console.log('🌐 Creating opportunity via API:', opportunityData);
+            console.log('🔍 API method available?', typeof window.api?.createOpportunity);
+            
             const response = await window.api.createOpportunity(opportunityData);
+            console.log('📥 API response:', response);
+            
             const savedOpportunity = response?.data?.opportunity || response?.opportunity || response;
+            console.log('📋 Parsed savedOpportunity:', savedOpportunity);
             
             if (savedOpportunity && savedOpportunity.id) {
                 // Get current user info
@@ -1043,7 +1048,13 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             }
         } catch (error) {
             console.error('❌ Error creating opportunity:', error);
-            alert('❌ Error saving opportunity to database: ' + error.message);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response,
+                data: error.data
+            });
+            alert('❌ Error saving opportunity to database: ' + (error.message || 'Unknown error'));
         }
     };
 
