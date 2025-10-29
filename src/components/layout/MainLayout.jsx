@@ -214,25 +214,17 @@ const MainLayout = () => {
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        const hasUser = !!user && user !== null && user !== undefined;
-        // Allow access if admin OR if user exists but role is undefined (fallback)
-        return userRole === 'admin' || (!userRole && hasUser);
+        return userRole === 'admin';
     }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages
     React.useEffect(() => {
-        if (currentPage === 'users') {
-            const userRole = user?.role?.toLowerCase();
-            const hasUser = !!user && user !== null && user !== undefined;
-            const canAccess = userRole === 'admin' || (!userRole && hasUser);
-            
-            if (!canAccess) {
-                console.warn('Access denied: Users page requires admin role');
-                navigateToPage('dashboard');
-            }
+        if (currentPage === 'users' && !isAdmin) {
+            console.warn('Access denied: Users page requires admin role');
+            navigateToPage('dashboard');
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, user?.role]);
+    }, [currentPage, isAdmin]);
 
     // Memoize the render function to prevent unnecessary re-renders
     const renderPage = React.useMemo(() => {
@@ -248,11 +240,7 @@ const MainLayout = () => {
                     return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
                 case 'users': 
                     // Additional check before rendering (in case redirect didn't fire yet)
-                    const userRoleForCheck = user?.role?.toLowerCase();
-                    const hasUserForCheck = !!user && user !== null && user !== undefined;
-                    const canAccessUsers = userRoleForCheck === 'admin' || (!userRoleForCheck && hasUserForCheck);
-                    
-                    if (!canAccessUsers) {
+                    if (!isAdmin) {
                         return (
                             <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
                                 <div className="text-center">
