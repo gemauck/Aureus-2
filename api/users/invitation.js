@@ -8,7 +8,12 @@ import { authRequired } from '../_lib/authRequired.js'
 import crypto from 'crypto'
 
 async function handler(req, res) {
-    const invitationId = req.url.split('/').pop()
+    // Extract invitation ID from Express route params or URL
+    let invitationId = req.params?.id
+    if (!invitationId) {
+        const urlPart = req.url.split('/').pop()
+        invitationId = urlPart ? urlPart.split('?')[0] : null
+    }
     
     // Update invitation (PUT)
     if (req.method === 'PUT') {
@@ -59,7 +64,15 @@ async function handler(req, res) {
     // Delete invitation (DELETE)
     if (req.method === 'DELETE') {
         try {
+            console.log('🗑️ Delete invitation request:', { 
+                invitationId, 
+                url: req.url, 
+                params: req.params,
+                method: req.method 
+            });
+            
             if (!invitationId) {
+                console.error('❌ No invitation ID provided');
                 return badRequest(res, 'Invitation ID is required')
             }
             
@@ -69,14 +82,21 @@ async function handler(req, res) {
             })
             
             if (!invitation) {
+                console.error('❌ Invitation not found:', invitationId);
                 return badRequest(res, 'Invitation not found')
             }
+            
+            console.log('✅ Found invitation to delete:', { 
+                id: invitation.id, 
+                email: invitation.email,
+                status: invitation.status 
+            });
             
             await prisma.invitation.delete({
                 where: { id: invitationId }
             })
             
-            console.log('✅ Invitation deleted:', invitationId)
+            console.log('✅ Invitation deleted successfully:', invitationId)
             
             return ok(res, {
                 success: true,
@@ -84,7 +104,8 @@ async function handler(req, res) {
             })
             
         } catch (error) {
-            console.error('Delete invitation error:', error)
+            console.error('❌ Delete invitation error:', error)
+            console.error('Error stack:', error.stack);
             return serverError(res, 'Failed to delete invitation', error.message)
         }
     }

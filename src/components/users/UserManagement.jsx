@@ -2,6 +2,11 @@
 const { useState, useEffect } = React;
 
 const UserManagement = () => {
+    const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
+    
+    // Check if current user is admin (case-insensitive)
+    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
+    
     const [users, setUsers] = useState([]);
     const [invitations, setInvitations] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -485,12 +490,27 @@ const UserManagement = () => {
     };
 
     const handleDeleteInvitation = async (invitationId, email) => {
+        console.log('🗑️ Delete invitation clicked:', { invitationId, email });
+        
+        if (!invitationId) {
+            console.error('❌ No invitation ID provided');
+            alert('Error: Invitation ID is missing');
+            return;
+        }
+
         if (!confirm(`Are you sure you want to delete the invitation for ${email}?`)) {
             return;
         }
 
         try {
             const token = window.storage?.getToken?.();
+            if (!token) {
+                console.error('❌ No token available');
+                alert('Authentication error: Please refresh the page and try again');
+                return;
+            }
+
+            console.log('📤 Sending DELETE request to:', `/api/users/invitation/${invitationId}`);
             const response = await fetch(`/api/users/invitation/${invitationId}`, {
                 method: 'DELETE',
                 headers: {
@@ -498,17 +518,37 @@ const UserManagement = () => {
                 }
             });
 
+            console.log('📡 Response status:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ Error response:', errorText);
+                let errorData;
+                try {
+                    errorData = JSON.parse(errorText);
+                } catch (e) {
+                    errorData = { message: errorText || 'Failed to delete invitation' };
+                }
+                alert(errorData.message || `Failed to delete invitation (Status: ${response.status})`);
+                return;
+            }
+
             const data = await response.json();
+            console.log('✅ Delete response:', data);
 
             if (response.ok) {
                 alert('Invitation deleted successfully');
-                loadUsers();
+                await loadUsers();
             } else {
                 alert(data.message || 'Failed to delete invitation');
             }
         } catch (error) {
-            console.error('Error deleting invitation:', error);
-            alert('Failed to delete invitation');
+            console.error('❌ Error deleting invitation:', error);
+            console.error('Error details:', {
+                message: error.message,
+                stack: error.stack
+            });
+            alert(`Failed to delete invitation: ${error.message}`);
         }
     };
 
@@ -546,10 +586,60 @@ const UserManagement = () => {
         return new Date(dateString).toLocaleDateString();
     };
 
+    // Check if user is online (last seen within last 5 minutes)
+    const isUserOnline = (user) => {
+        if (!user.lastSeenAt) return false;
+        const lastSeen = new Date(user.lastSeenAt);
+        const now = new Date();
+        const diffMinutes = (now - lastSeen) / (1000 * 60);
+        return diffMinutes <= 5;
+    };
+
+    // Format last seen time
+    const formatLastSeen = (user) => {
+        if (!user.lastSeenAt) return 'Never';
+        if (isUserOnline(user)) return 'Online';
+        
+        const lastSeen = new Date(user.lastSeenAt);
+        const now = new Date();
+        const diffMs = now - lastSeen;
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        if (diffMinutes < 1) return 'Just now';
+        if (diffMinutes < 60) return `${diffMinutes}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        return lastSeen.toLocaleDateString();
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+        );
+    }
+
+    // Show access denied message if user is not admin
+    if (!isAdmin) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                    <p className="text-gray-600 dark:text-gray-400 mb-4">You need administrator privileges to access the Users page.</p>
+                    <button
+                        onClick={() => {
+                            // Navigate to dashboard
+                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'dashboard' } }));
+                        }}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                    >
+                        Go to Dashboard
+                    </button>
+                </div>
             </div>
         );
     }
@@ -635,7 +725,7 @@ const UserManagement = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Role</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last Login</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last Seen</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
@@ -651,11 +741,21 @@ const UserManagement = () => {
                                     <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <div className="flex items-center">
-                                                <div className="h-10 w-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-                                                    <i className="fas fa-user text-gray-600 dark:text-gray-400"></i>
+                                                <div className="relative">
+                                                    <div className="h-10 w-10 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
+                                                        <i className="fas fa-user text-gray-600 dark:text-gray-400"></i>
+                                                    </div>
+                                                    {isUserOnline(user) && (
+                                                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-800"></div>
+                                                    )}
                                                 </div>
                                                 <div className="ml-4">
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</div>
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="text-sm font-medium text-gray-900 dark:text-white">{user.name}</div>
+                                                        {isUserOnline(user) && (
+                                                            <span className="text-xs text-green-600 dark:text-green-400 font-medium">●</span>
+                                                        )}
+                                                    </div>
                                                     <div className="text-sm text-gray-500 dark:text-gray-400">{user.email}</div>
                                                 </div>
                                             </div>
@@ -666,8 +766,12 @@ const UserManagement = () => {
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             {getStatusBadge(user.status)}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                            {formatDate(user.lastLoginAt)}
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            {isUserOnline(user) ? (
+                                                <span className="text-sm text-green-600 dark:text-green-400 font-medium">Online</span>
+                                            ) : (
+                                                <span className="text-sm text-gray-500 dark:text-gray-400">{formatLastSeen(user)}</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <button
@@ -704,7 +808,12 @@ const UserManagement = () => {
                             </thead>
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                 {invitations.filter(inv => inv.status === 'pending').map((invitation) => (
-                                    <tr key={invitation.id}>
+                                    <tr key={invitation.id} onClick={(e) => {
+                                        // Prevent row click from interfering with button clicks
+                                        if (e.target.closest('button')) {
+                                            return;
+                                        }
+                                    }}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white">
                                             {invitation.email}
                                         </td>
@@ -717,28 +826,76 @@ const UserManagement = () => {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                                             {formatDate(invitation.expiresAt)}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                            <div className="flex items-center justify-end gap-2">
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                                                 <button
-                                                    onClick={() => handleEditInvitation(invitation)}
-                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleEditInvitation(invitation);
+                                                    }}
+                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20"
                                                     title="Edit"
+                                                    type="button"
                                                 >
                                                     <i className="fas fa-edit"></i>
                                                 </button>
                                                 <button
-                                                    onClick={() => handleResendInvitation(invitation.id)}
-                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        handleResendInvitation(invitation.id);
+                                                    }}
+                                                    className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300 px-2 py-1 rounded hover:bg-green-50 dark:hover:bg-green-900/20"
                                                     title="Resend"
+                                                    type="button"
                                                 >
                                                     <i className="fas fa-paper-plane"></i>
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDeleteInvitation(invitation.id, invitation.email)}
-                                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                                                    title="Delete"
+                                                    onClick={(e) => {
+                                                        console.log('🔴 CLICK EVENT FIRED');
+                                                        console.log('🔴 Event target:', e.target);
+                                                        console.log('🔴 Current target:', e.currentTarget);
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        e.cancelBubble = true;
+                                                        console.log('🔴 Delete button clicked for invitation:', invitation);
+                                                        console.log('🔴 Invitation ID:', invitation?.id);
+                                                        console.log('🔴 Invitation Email:', invitation?.email);
+                                                        alert(`Testing delete for: ${invitation?.email || 'unknown'}`);
+                                                        if (!invitation || !invitation.id) {
+                                                            console.error('❌ Invalid invitation object:', invitation);
+                                                            alert('Error: Invalid invitation data');
+                                                            return;
+                                                        }
+                                                        handleDeleteInvitation(invitation.id, invitation.email);
+                                                    }}
+                                                    onMouseDown={(e) => {
+                                                        console.log('🖱️ MOUSE DOWN EVENT');
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        e.cancelBubble = true;
+                                                        console.log('🖱️ Delete button mouse down');
+                                                    }}
+                                                    onTouchStart={(e) => {
+                                                        console.log('👆 TOUCH START EVENT');
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        e.cancelBubble = true;
+                                                        console.log('👆 Delete button touch start');
+                                                    }}
+                                                    className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 cursor-pointer px-3 py-2 rounded hover:bg-red-50 dark:hover:bg-red-900/20 border border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 min-w-[40px] min-h-[40px] flex items-center justify-center"
+                                                    title="Delete Invitation"
+                                                    type="button"
+                                                    style={{ 
+                                                        pointerEvents: 'auto', 
+                                                        zIndex: 10,
+                                                        position: 'relative',
+                                                        display: 'inline-flex'
+                                                    }}
                                                 >
-                                                    <i className="fas fa-trash"></i>
+                                                    <i className="fas fa-trash text-sm"></i>
                                                 </button>
                                             </div>
                                         </td>
