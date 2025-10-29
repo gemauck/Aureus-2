@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 const storage = window.storage || {};
 // Don't access these at module level - they might not be loaded yet
 // Access them at runtime inside functions
@@ -274,8 +274,8 @@ const Clients = React.memo(() => {
                         setClients(clientsWithOpportunities);
                         safeStorage.setClients(clientsWithOpportunities);
                     } else {
-                        setClients(processed);
-                        safeStorage.setClients(processed);
+                    setClients(processed);
+                    safeStorage.setClients(processed);
                     }
                     
                     lastLiveDataClientsHash = dataHash;
@@ -344,29 +344,26 @@ const Clients = React.memo(() => {
                     client.type === 'client'
                 );
                 if (filteredCachedClients.length > 0) {
-                    // ALWAYS load fresh opportunities for cached clients to ensure we have the latest data
+                    // Show cached clients IMMEDIATELY without waiting for opportunities (much faster!)
+                    setClients(filteredCachedClients);
+                    
+                    // Load opportunities in the background after showing cached data
                     if (window.api?.getOpportunitiesByClient) {
-                        console.log(`📡 Clients: Loading opportunities for ${filteredCachedClients.length} cached clients...`);
-                        const clientsWithOpps = await Promise.all(filteredCachedClients.map(async (client) => {
+                        Promise.all(filteredCachedClients.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                const opportunities = oppResponse?.data?.opportunities || [];
-                                if (opportunities.length > 0) {
-                                    console.log(`✅ Clients: Loaded ${opportunities.length} opportunities for ${client.name}`);
-                                }
-                                return { ...client, opportunities };
+                                return { client, opportunities: oppResponse?.data?.opportunities || [] };
                             } catch (error) {
-                                console.warn(`⚠️ Failed to load opportunities for ${client.name}:`, error);
-                                return { ...client, opportunities: [] };
+                                return { client, opportunities: [] };
                             }
-                        }));
-                        const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                        console.log(`✅ Clients: Loaded ${totalOpps} total opportunities for ${clientsWithOpps.length} cached clients`);
-                        setClients(clientsWithOpps);
-                        safeStorage.setClients(clientsWithOpps); // Update cache with opportunities
-                    } else {
-                        console.warn(`⚠️ Clients: getOpportunitiesByClient not available, using cached clients without opportunities`);
-                        setClients(filteredCachedClients);
+                        })).then(clientsWithOpps => {
+                            const updated = filteredCachedClients.map(client => {
+                                const found = clientsWithOpps.find(c => c.client.id === client.id);
+                                return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
+                            });
+                            setClients(updated);
+                            safeStorage.setClients(updated);
+                        });
                     }
                 }
                 // Log if any leads were filtered out from cache
@@ -392,21 +389,24 @@ const Clients = React.memo(() => {
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
             if (timeSinceLastCall < API_CALL_INTERVAL && clients.length > 0) {
-                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call) - Total: ${((performance.now() - loadStartTime).toFixed(1))}ms`);
-                // Even if we skip, ensure opportunities are loaded for existing clients
+                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+                // Refresh opportunities in background without blocking
                 if (window.api?.getOpportunitiesByClient) {
-                    console.log(`📡 Clients: Loading opportunities for ${clients.length} existing clients (after skip)...`);
-                    const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
+                    Promise.all(clients.map(async (client) => {
                         try {
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            const opportunities = oppResponse?.data?.opportunities || [];
-                            return { ...client, opportunities };
+                            return { client, opportunities: oppResponse?.data?.opportunities || [] };
                         } catch (error) {
-                            return { ...client, opportunities: [] };
+                            return { client, opportunities: [] };
                         }
-                    }));
-                    setClients(clientsWithOpportunities);
-                    safeStorage.setClients(clientsWithOpportunities);
+                    })).then(clientsWithOpps => {
+                        const updated = clients.map(client => {
+                            const found = clientsWithOpps.find(c => c.client.id === client.id);
+                            return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
+                        });
+                        setClients(updated);
+                        safeStorage.setClients(updated);
+                    });
                 }
                 return; // Use cached data, skip API call
             }
@@ -443,72 +443,33 @@ const Clients = React.memo(() => {
                         console.warn(`⚠️ Found ${missingType.length} records with invalid/missing type:`, missingType.map(c => ({ id: c.id, name: c.name, type: c.type })));
                     }
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
-                    const processEndTime = performance.now();
                     
-                    // First, let's try loading ALL opportunities to see what we have
-                    let allOpportunities = [];
-                    try {
-                        if (window.DatabaseAPI?.getOpportunities) {
-                            const allOppsResponse = await window.DatabaseAPI.getOpportunities();
-                            allOpportunities = allOppsResponse?.data?.opportunities || [];
-                            console.log(`📊 Clients: Found ${allOpportunities.length} total opportunities in database`);
-                        }
-                    } catch (e) {
-                        console.warn('⚠️ Could not load all opportunities:', e);
-                    }
+                    // Show clients and leads immediately (faster UX!)
+                    setClients(clientsOnly);
+                    setLeads(leadsOnly);
+                    safeStorage.setClients(clientsOnly);
                     
-                    // Load opportunities for each client
+                    // Load opportunities in background (non-blocking for faster initial render)
                     if (window.api?.getOpportunitiesByClient) {
-                        console.log(`📡 Clients: Loading opportunities for ${clientsOnly.length} clients...`);
-                        const clientsWithOpportunities = await Promise.all(clientsOnly.map(async (client) => {
+                        Promise.all(clientsOnly.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                console.log(`📥 Clients: API response for ${client.name}:`, oppResponse);
-                                const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                if (opportunities.length > 0) {
-                                    console.log(`✅ Clients: Loaded ${opportunities.length} opportunities for ${client.name}:`, opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage })));
-                                } else {
-                                    // Check if opportunities exist in allOpportunities for this client
-                                    const matchingOpps = allOpportunities.filter(o => o.clientId === client.id);
-                                    if (matchingOpps.length > 0) {
-                                        console.log(`⚠️ Clients: Found ${matchingOpps.length} opportunities in allOpportunities for ${client.name} but API returned none`);
-                                        return { ...client, opportunities: matchingOpps };
-                                    }
-                                }
-                                return { ...client, opportunities };
+                                return { client, opportunities: oppResponse?.data?.opportunities || oppResponse?.opportunities || [] };
                             } catch (error) {
-                                console.error(`❌ Failed to load opportunities for client ${client.name} (${client.id}):`, error);
-                                // Try to use opportunities from allOpportunities if API call failed
-                                const matchingOpps = allOpportunities.filter(o => o.clientId === client.id);
-                                if (matchingOpps.length > 0) {
-                                    console.log(`✅ Clients: Using ${matchingOpps.length} opportunities from allOpportunities for ${client.name}`);
-                                    return { ...client, opportunities: matchingOpps };
-                                }
-                                return { ...client, opportunities: [] };
+                                return { client, opportunities: [] };
                             }
-                        }));
-                        
-                        const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                        console.log(`✅ Clients: Loaded ${totalOpps} total opportunities across ${clientsWithOpportunities.length} clients`);
-                        
-                        // Update state with clients that have opportunities
-                        setClients(clientsWithOpportunities);
-                        setLeads(leadsOnly);
-                        console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
-                        console.log(`✅ State updated: clients=${clientsWithOpportunities.length}, leads=${leadsOnly.length}`);
-                        
-                        // Save processed data to localStorage
-                        safeStorage.setClients(clientsWithOpportunities);
-                    } else {
-                        console.warn(`⚠️ Clients: getOpportunitiesByClient API method not available`);
-                        // Update state with fresh API data
-                        setClients(clientsOnly);
-                        setLeads(leadsOnly);
-                        console.log(`⚡ Processing: ${(processEndTime - processStartTime).toFixed(1)}ms`);
-                        console.log(`✅ State updated: clients=${clientsOnly.length}, leads=${leadsOnly.length}`);
-                        
-                        // Save processed data to localStorage
-                        safeStorage.setClients(clientsOnly);
+                        })).then(clientsWithOpps => {
+                            const updated = clientsOnly.map(client => {
+                                const found = clientsWithOpps.find(c => c.client.id === client.id);
+                                return { ...client, opportunities: found?.opportunities || [] };
+                            });
+                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            if (totalOpps > 0) {
+                                console.log(`✅ Loaded ${totalOpps} opportunities for ${clientsOnly.length} clients`);
+                            }
+                            setClients(updated);
+                            safeStorage.setClients(updated);
+                        });
                     }
                     
                     const loadEndTime = performance.now();
@@ -1438,10 +1399,10 @@ const Clients = React.memo(() => {
                     }
                     
                     return {
-                        ...opp,
-                        clientName: client.name,
-                        clientId: client.id,
-                        type: 'opportunity',
+                    ...opp,
+                    clientName: client.name,
+                    clientId: client.id,
+                    type: 'opportunity',
                         stage: normalizedStage, // Use normalized stage
                         status: opp.status || 'Active', // Default to Active if no status
                         title: opp.title || opp.name || 'Untitled Opportunity',
