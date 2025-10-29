@@ -2150,11 +2150,14 @@ const Clients = React.memo(() => {
                 </button>
                 <button
                     onClick={() => {
-                        console.log('🖱️ PIPELINE TAB CLICKED - Setting viewMode to pipeline');
+                        console.log('🖱️🖱️🖱️ PIPELINE TAB CLICKED - Setting viewMode to pipeline');
+                        console.log('🖱️ Current viewMode:', viewMode);
+                        console.log('🖱️ Current clients:', clients.length);
                         setViewMode('pipeline');
                         // Force reload opportunities when clicking pipeline tab
                         setTimeout(() => {
                             console.log('⏰ Pipeline tab clicked - triggering opportunity reload...');
+                            console.log('⏰ viewMode after set:', viewMode);
                         }, 100);
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
@@ -2251,11 +2254,21 @@ const Clients = React.memo(() => {
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
-            {viewMode === 'pipeline' && (() => {
-                console.log('🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
-                console.log('🎯🎯🎯 Current clients:', clients.length, clients.map(c => ({ name: c.name, opps: c.opportunities?.length || 0 })));
-                return <PipelineView />;
-            })()}
+            {viewMode === 'pipeline' ? (() => {
+                console.log('🎯🎯🎯🎯🎯 RENDERING PipelineView component NOW! viewMode=', viewMode);
+                console.log('🎯🎯🎯🎯🎯 Current clients:', clients.length);
+                if (clients.length > 0) {
+                    console.log('🎯🎯🎯🎯🎯 Client opportunities:', clients.map(c => ({ name: c.name, opps: c.opportunities?.length || 0, hasOpps: !!(c.opportunities) })));
+                }
+                try {
+                    return <PipelineView />;
+                } catch (error) {
+                    console.error('❌ ERROR RENDERING PipelineView:', error);
+                    return <div>Error rendering Pipeline: {error.message}</div>;
+                }
+            })() : (
+                console.log('🚫 NOT rendering PipelineView, viewMode is:', viewMode) || null
+            )}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>
