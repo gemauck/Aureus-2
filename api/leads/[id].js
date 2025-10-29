@@ -56,18 +56,18 @@ async function handler(req, res) {
         lastContact: body.lastContact ? new Date(body.lastContact) : undefined,
         address: body.address,
         website: body.website,
-        notes: body.notes,
-        contacts: body.contacts !== undefined ? (typeof body.contacts === 'string' ? body.contacts : JSON.stringify(body.contacts)) : undefined,
-        followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(body.followUps)) : undefined,
-        projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(body.projectIds)) : undefined,
-        comments: body.comments !== undefined ? (typeof body.comments === 'string' ? body.comments : JSON.stringify(body.comments)) : undefined,
-        sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(body.sites)) : undefined,
-        contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(body.contracts)) : undefined,
-        activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(body.activityLog)) : undefined,
+        notes: body.notes !== undefined ? String(body.notes || '') : undefined,
+        contacts: body.contacts !== undefined ? (typeof body.contacts === 'string' ? body.contacts : JSON.stringify(Array.isArray(body.contacts) ? body.contacts : [])) : undefined,
+        followUps: body.followUps !== undefined ? (typeof body.followUps === 'string' ? body.followUps : JSON.stringify(Array.isArray(body.followUps) ? body.followUps : [])) : undefined,
+        projectIds: body.projectIds !== undefined ? (typeof body.projectIds === 'string' ? body.projectIds : JSON.stringify(Array.isArray(body.projectIds) ? body.projectIds : [])) : undefined,
+        comments: body.comments !== undefined ? (typeof body.comments === 'string' ? body.comments : JSON.stringify(Array.isArray(body.comments) ? body.comments : [])) : undefined,
+        sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : [])) : undefined,
+        contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : [])) : undefined,
+        activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
         billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined
       }
 
-      // Remove undefined values
+      // Remove undefined values (but keep empty strings and empty arrays as JSON strings)
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
           delete updateData[key]
@@ -76,6 +76,10 @@ async function handler(req, res) {
 
       console.log('🔍 Updating lead with data:', updateData)
       console.log('🔍 Update contains status:', updateData.status)
+      console.log('🔍 Update contains contacts:', updateData.contacts ? `${typeof updateData.contacts} (length: ${updateData.contacts.length})` : 'not included')
+      console.log('🔍 Update contains followUps:', updateData.followUps ? `${typeof updateData.followUps} (length: ${updateData.followUps.length})` : 'not included')
+      console.log('🔍 Update contains notes:', updateData.notes !== undefined ? `string (length: ${updateData.notes.length})` : 'not included')
+      console.log('🔍 Update contains comments:', updateData.comments ? `${typeof updateData.comments} (length: ${updateData.comments.length})` : 'not included')
       console.log('🔍 Lead ID to update:', id)
       
       try {
