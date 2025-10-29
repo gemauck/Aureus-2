@@ -30,6 +30,7 @@ const DashboardLive = () => {
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
     const [liveSyncStatus, setLiveSyncStatus] = useState('disconnected');
     const { isDark } = window.useTheme();
+    const [userName, setUserName] = useState('User');
 
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
@@ -317,6 +318,19 @@ const DashboardLive = () => {
         };
     }, []);
 
+    // Load user name
+    useEffect(() => {
+        const user = window.storage?.getUser?.();
+        if (user?.name) {
+            setUserName(user.name);
+        } else if (window.storage?.getUserInfo) {
+            const userInfo = window.storage.getUserInfo();
+            if (userInfo?.name) {
+                setUserName(userInfo.name);
+            }
+        }
+    }, []);
+
     // Initial load
     useEffect(() => {
         loadDashboardData();
@@ -408,7 +422,7 @@ const DashboardLive = () => {
                 <div className="flex-1 flex items-center justify-between">
                     <div>
                         <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            Live Dashboard
+                            Welcome {userName}
                         </h1>
                         <div className="flex items-center space-x-2">
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
