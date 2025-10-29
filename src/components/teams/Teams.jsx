@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 const storage = window.storage;
 const DocumentModal = window.DocumentModal;
 const WorkflowModal = window.WorkflowModal;
@@ -7,44 +7,8 @@ const ChecklistModal = window.ChecklistModal;
 const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
 
-const Teams = () => {
-    // Check if modal components are loaded
-    console.log('🔍 Teams: Checking modal components...');
-    console.log('  - DocumentModal:', typeof window.DocumentModal);
-    console.log('  - WorkflowModal:', typeof window.WorkflowModal);
-    console.log('  - ChecklistModal:', typeof window.ChecklistModal);
-    console.log('  - NoticeModal:', typeof window.NoticeModal);
-    console.log('  - WorkflowExecutionModal:', typeof window.WorkflowExecutionModal);
-    
-    const [activeTab, setActiveTab] = useState('overview');
-    const [selectedTeam, setSelectedTeam] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    
-    // Modal states
-    const [showDocumentModal, setShowDocumentModal] = useState(false);
-    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
-    const [showChecklistModal, setShowChecklistModal] = useState(false);
-    const [showNoticeModal, setShowNoticeModal] = useState(false);
-    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
-    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
-    
-    // Data states
-    const [documents, setDocuments] = useState([]);
-    const [workflows, setWorkflows] = useState([]);
-    const [checklists, setChecklists] = useState([]);
-    const [notices, setNotices] = useState([]);
-    const [workflowExecutions, setWorkflowExecutions] = useState([]);
-    
-    // Edit states
-    const [editingDocument, setEditingDocument] = useState(null);
-    const [editingWorkflow, setEditingWorkflow] = useState(null);
-    const [editingChecklist, setEditingChecklist] = useState(null);
-    const [editingNotice, setEditingNotice] = useState(null);
-    const [executingWorkflow, setExecutingWorkflow] = useState(null);
-    const [viewingDocument, setViewingDocument] = useState(null);
-
-    // Team definitions
-    const teams = [
+// Team definitions - defined outside component to avoid recreation on every render
+const TEAMS = [
         { 
             id: 'management', 
             name: 'Management', 
@@ -109,7 +73,45 @@ const Teams = () => {
             description: 'Regulatory compliance and risk management',
             members: 0
         }
-    ];
+];
+
+const Teams = () => {
+    const [activeTab, setActiveTab] = useState('overview');
+    const [selectedTeam, setSelectedTeam] = useState(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    
+    // Modal states
+    const [showDocumentModal, setShowDocumentModal] = useState(false);
+    const [showWorkflowModal, setShowWorkflowModal] = useState(false);
+    const [showChecklistModal, setShowChecklistModal] = useState(false);
+    const [showNoticeModal, setShowNoticeModal] = useState(false);
+    const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
+    const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
+    
+    // Data states
+    const [documents, setDocuments] = useState([]);
+    const [workflows, setWorkflows] = useState([]);
+    const [checklists, setChecklists] = useState([]);
+    const [notices, setNotices] = useState([]);
+    const [workflowExecutions, setWorkflowExecutions] = useState([]);
+    
+    // Edit states
+    const [editingDocument, setEditingDocument] = useState(null);
+    const [editingWorkflow, setEditingWorkflow] = useState(null);
+    const [editingChecklist, setEditingChecklist] = useState(null);
+    const [editingNotice, setEditingNotice] = useState(null);
+    const [executingWorkflow, setExecutingWorkflow] = useState(null);
+    const [viewingDocument, setViewingDocument] = useState(null);
+
+    // Check modal components on mount only
+    useEffect(() => {
+        console.log('🔍 Teams: Checking modal components...');
+        console.log('  - DocumentModal:', typeof window.DocumentModal);
+        console.log('  - WorkflowModal:', typeof window.WorkflowModal);
+        console.log('  - ChecklistModal:', typeof window.ChecklistModal);
+        console.log('  - NoticeModal:', typeof window.NoticeModal);
+        console.log('  - WorkflowExecutionModal:', typeof window.WorkflowExecutionModal);
+    }, []);
 
     // Load data from data service
     useEffect(() => {
@@ -189,15 +191,17 @@ const Teams = () => {
     const displayChecklists = searchFilter(filteredChecklists, ['title', 'description']);
     const displayNotices = searchFilter(filteredNotices, ['title', 'content']);
 
-    // Recent activity across all teams
-    const recentActivity = [
-        ...documents.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
-        ...workflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
-        ...checklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
-        ...notices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
-    ]
-        .sort((a, b) => new Date(b.createdAt || b.updatedAt || b.date) - new Date(a.createdAt || a.updatedAt || a.date))
-        .slice(0, 10);
+    // Recent activity across all teams - memoized to avoid recalculation on every render
+    const recentActivity = useMemo(() => {
+        return [
+            ...documents.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
+            ...workflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
+            ...checklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
+            ...notices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
+        ]
+            .sort((a, b) => new Date(b.createdAt || b.updatedAt || b.date) - new Date(a.createdAt || a.updatedAt || a.date))
+            .slice(0, 10);
+    }, [documents, workflows, checklists, notices]);
 
     // Save handlers
     const handleSaveDocument = async (documentData) => {
@@ -459,7 +463,7 @@ const Teams = () => {
 					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
 						<h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Department Teams</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {teams.map(team => {
+                            {TEAMS.map(team => {
                                 const counts = getTeamCounts(team.id);
                                 return (
                                     <button
@@ -492,7 +496,7 @@ const Teams = () => {
                         {recentActivity.length > 0 ? (
                             <div className="space-y-2">
                                 {recentActivity.map((item, idx) => {
-                                    const team = teams.find(t => t.id === item.team);
+                                    const team = TEAMS.find(t => t.id === item.team);
                                     return (
 										<div key={idx} className="flex items-center gap-3 py-2 border-b last:border-b-0 dark:border-slate-700">
 											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 dark:bg-slate-700`}>
