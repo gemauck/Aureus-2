@@ -192,20 +192,40 @@ const Clients = React.memo(() => {
         loadProjects();
         
         // Also load leads separately for freshness (runs in parallel, non-blocking)
-        // Note: Leads are also loaded from listClients, but this ensures we have the latest
+        // This ensures leads are always refreshed even if not in cache
         const loadLeadsOnBoot = async () => {
             try {
                 const token = window.storage?.getToken?.();
-                if (!token || !window.api?.getLeads) return;
+                if (!token || !window.api?.getLeads) {
+                    // Try to load from localStorage as fallback
+                    const cachedLeads = window.storage?.getLeads?.();
+                    if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
+                        setLeads(cachedLeads);
+                        setLeadsCount(cachedLeads.length);
+                    }
+                    return;
+                }
                 
-                // Load leads - will skip if recently called (throttle), but on boot leads.length === 0 so it will run
+                // Load leads from API - ensure it runs (force on boot if needed)
+                // Set timestamp before call to prevent immediate re-throttle
+                lastLeadsApiCallTimestamp = Date.now();
                 await loadLeads(false);
             } catch (error) {
-                // Silent fail - leads already loaded from clients API
+                console.error('❌ Failed to load leads on boot:', error);
+                // Try localStorage as fallback
+                try {
+                    const cachedLeads = window.storage?.getLeads?.();
+                    if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
+                        setLeads(cachedLeads);
+                        setLeadsCount(cachedLeads.length);
+                    }
+                } catch (e) {
+                    // Silent fail
+                }
             }
         };
         
-        // Load leads in parallel (non-blocking)
+        // Load leads immediately in parallel (critical for fast loading)
         loadLeadsOnBoot();
     }, []);
 
@@ -356,37 +376,42 @@ const Clients = React.memo(() => {
             const cachedClients = safeStorage.getClients();
             
             if (cachedClients && cachedClients.length > 0) {
-                // Filter cached data to ensure no leads or invalid types are included
+                // Separate clients and leads from cache
                 const filteredCachedClients = cachedClients.filter(client => 
                     client.type === 'client'
                 );
+                const cachedLeads = cachedClients.filter(client => 
+                    client.type === 'lead'
+                );
+                
+                // Show cached clients IMMEDIATELY
                 if (filteredCachedClients.length > 0) {
-                    // Show cached clients IMMEDIATELY without waiting for opportunities (much faster!)
                     setClients(filteredCachedClients);
-                    
-                    // Only load opportunities in background if Pipeline view is active
-                    if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
-                        Promise.all(filteredCachedClients.map(async (client) => {
-                            try {
-                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                return { client, opportunities: oppResponse?.data?.opportunities || [] };
-                            } catch (error) {
-                                return { client, opportunities: [] };
-                            }
-                        })).then(clientsWithOpps => {
-                            const updated = filteredCachedClients.map(client => {
-                                const found = clientsWithOpps.find(c => c.client.id === client.id);
-                                return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
-                            });
-                            setClients(updated);
-                            safeStorage.setClients(updated);
-                        });
-                    }
                 }
-                // Log if any leads were filtered out from cache
-                const filteredOut = cachedClients.length - filteredCachedClients.length;
-                if (filteredOut > 0) {
-                    console.log(`⚠️ Filtered out ${filteredOut} leads/invalid types from cached data`);
+                
+                // Show cached leads IMMEDIATELY (this is critical for fast loading!)
+                if (cachedLeads.length > 0) {
+                    setLeads(cachedLeads);
+                    setLeadsCount(cachedLeads.length);
+                }
+                
+                // Only load opportunities in background if Pipeline view is active
+                if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient && filteredCachedClients.length > 0) {
+                    Promise.all(filteredCachedClients.map(async (client) => {
+                        try {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            return { client, opportunities: oppResponse?.data?.opportunities || [] };
+                        } catch (error) {
+                            return { client, opportunities: [] };
+                        }
+                    })).then(clientsWithOpps => {
+                        const updated = filteredCachedClients.map(client => {
+                            const found = clientsWithOpps.find(c => c.client.id === client.id);
+                            return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
+                        });
+                        setClients(updated);
+                        safeStorage.setClients(updated);
+                    });
                 }
             }
             
@@ -512,17 +537,16 @@ const Clients = React.memo(() => {
     // Load leads from database only
     const loadLeads = async (forceRefresh = false) => {
         try {
-            // Skip API call if we recently called it AND we have data (unless force refresh or on boot)
+            // Skip API call if we recently called it AND we have data (unless force refresh)
+            // Note: On boot, leads.length will be 0, so this check won't skip the API call
             if (!forceRefresh) {
                 const now = Date.now();
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
-                // On boot, leads.length will be 0, so this check won't skip the API call
                 // Only skip if we have data AND called recently
                 if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
                     return; // Use cached data, skip API call
                 }
-                lastLeadsApiCallTimestamp = now;
             } else {
                 // Force refresh - clear all caches and bypass timestamp check
                 console.log('🔄 FORCE REFRESH: Resetting API call timestamp to bypass cache');
@@ -598,6 +622,15 @@ const Clients = React.memo(() => {
                 
             setLeads(mappedLeads);
             setLeadsCount(mappedLeads.length); // Update count badge immediately
+            
+            // Persist leads to localStorage for fast loading on next boot
+            if (window.storage?.setLeads) {
+                try {
+                    window.storage.setLeads(mappedLeads);
+                } catch (e) {
+                    // Silent fail - localStorage might be full
+                }
+            }
             
             if (forceRefresh) {
                 // Count leads by status for accurate reporting
