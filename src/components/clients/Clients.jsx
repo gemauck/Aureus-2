@@ -1322,78 +1322,26 @@ const Clients = React.memo(() => {
 
     // Pipeline View Component
     const PipelineView = () => {
-        console.log('🎯🎯🎯 PipelineView FUNCTION CALLED - Component is rendering!');
+        // Minimal log to confirm render only
+        console.log('🎯 PipelineView rendering');
         
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
+        const [didDrag, setDidDrag] = useState(false);
+        const reloadTimerRef = useRef(null);
         
-        // Load opportunities immediately when PipelineView renders - DIRECT APPROACH
-        useEffect(() => {
-            const loadOpps = async () => {
-                if (!window.api?.getOpportunitiesByClient) {
-                    console.error('❌ getOpportunitiesByClient not available');
-                    return;
-                }
-                
-                if (clients.length === 0) {
-                    console.warn('⚠️ No clients yet, will retry...');
-                    return;
-                }
-                
-                console.log(`🚀🚀🚀 PIPELINE: FORCING OPPORTUNITY LOAD FOR ${clients.length} CLIENTS`);
-                
-                // FORCE LOAD opportunities for ALL clients, even if they already have some
-                try {
-                    const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
-                        try {
-                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                            
-                            if (opportunities.length > 0) {
-                                console.log(`✅✅✅ Loaded ${opportunities.length} opportunities for ${client.name}:`, 
-                                    opportunities.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
-                            }
-                            
-                            // ALWAYS return with opportunities, replacing any existing ones
-                            return { ...client, opportunities };
-                        } catch (error) {
-                            console.error(`❌ Failed for ${client.name}:`, error);
-                            return { ...client, opportunities: client.opportunities || [] };
-                        }
-                    }));
-                    
-                    const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                    console.log(`✅✅✅ PIPELINE: LOADED ${totalOpps} TOTAL OPPORTUNITIES ACROSS ${clients.length} CLIENTS`);
-                    
-                    // Update state and cache
-                    setClients(clientsWithOpportunities);
-                    safeStorage.setClients(clientsWithOpportunities);
-                } catch (error) {
-                    console.error('❌ PipelineView: CRITICAL ERROR loading opportunities:', error);
-                }
-            };
-            
-            // Wait a bit for clients to load, then fetch opportunities
-            const timer = setTimeout(() => {
-                loadOpps();
-            }, 500);
-            
-            return () => clearTimeout(timer);
-        }, [clients.length]); // Re-run when clients are loaded
+        // Remove forced reload on render to avoid duplicate loading and jank
         
-        // Also reload when Pipeline tab is clicked or viewMode changes to pipeline
+        // Debounced reload when Pipeline tab is clicked or viewMode changes
         useEffect(() => {
             if (viewMode === 'pipeline' && clients.length > 0) {
-                console.log('🔄 Pipeline: ViewMode changed to pipeline, reloading opportunities...');
-                const timer = setTimeout(async () => {
+                if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+                reloadTimerRef.current = setTimeout(async () => {
                     if (window.api?.getOpportunitiesByClient) {
                         const clientsWithOpps = await Promise.all(clients.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
                                 const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                if (opportunities.length > 0) {
-                                    console.log(`✅ Reloaded ${opportunities.length} opportunities for ${client.name}`);
-                                }
                                 return { ...client, opportunities };
                             } catch (error) {
                                 console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
@@ -1403,8 +1351,10 @@ const Clients = React.memo(() => {
                         setClients(clientsWithOpps);
                         safeStorage.setClients(clientsWithOpps);
                     }
-                }, 100);
-                return () => clearTimeout(timer);
+                }, 300);
+                return () => {
+                    if (reloadTimerRef.current) clearTimeout(reloadTimerRef.current);
+                };
             }
         }, [viewMode, clients.length]);
         
@@ -1595,6 +1545,7 @@ const Clients = React.memo(() => {
         });
 
         const handleDragStart = (item, type) => {
+            setDidDrag(true);
             console.log('🎯 DRAG START:', type, item?.id, item?.title || item?.name);
             setDraggedItem(item);
             setDraggedType(type);
@@ -1660,6 +1611,8 @@ const Clients = React.memo(() => {
 
             setDraggedItem(null);
             setDraggedType(null);
+            // Small delay to distinguish drag from click
+            setTimeout(() => setDidDrag(false), 50);
             // No need to trigger full reload - state already updated and API call made
         };
 
@@ -1838,7 +1791,6 @@ const Clients = React.memo(() => {
                                     ))}
                                     
                                     {stageOpps.map((opp, idx) => {
-                                        console.log(`🎯 Rendering opportunity ${idx + 1}/${stageOpps.length} in stage ${stage}:`, opp.title || opp.name);
                                         const client = clients.find(c => c.id === opp.clientId);
                                         return (
                                             <div 
@@ -1846,7 +1798,13 @@ const Clients = React.memo(() => {
                                                 draggable
                                                 onDragStart={() => handleDragStart(opp, 'opportunity')}
                                                 onDragEnd={handleDragEnd}
-                                                onClick={() => handleOpenClient(client)}
+                                                onClick={(e) => {
+                                                    if (didDrag) {
+                                                        e.preventDefault();
+                                                        return;
+                                                    }
+                                                    handleOpenClient(client);
+                                                }}
                                                 className={`${isDark ? 'bg-gray-700 border-gray-600' : 'bg-white border-gray-200'} rounded-lg p-3 border shadow-sm hover:shadow-md cursor-move transition ${
                                                     draggedItem?.id === opp.id ? 'opacity-50' : ''
                                                 }`}
