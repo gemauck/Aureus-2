@@ -1381,6 +1381,61 @@ const Clients = React.memo(() => {
             return () => clearTimeout(timer);
         }, [clients.length]); // Re-run when clients are loaded
         
+        // Also reload when Pipeline tab is clicked or viewMode changes to pipeline
+        useEffect(() => {
+            if (viewMode === 'pipeline' && clients.length > 0) {
+                console.log('🔄 Pipeline: ViewMode changed to pipeline, reloading opportunities...');
+                const timer = setTimeout(async () => {
+                    if (window.api?.getOpportunitiesByClient) {
+                        const clientsWithOpps = await Promise.all(clients.map(async (client) => {
+                            try {
+                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                                if (opportunities.length > 0) {
+                                    console.log(`✅ Reloaded ${opportunities.length} opportunities for ${client.name}`);
+                                }
+                                return { ...client, opportunities };
+                            } catch (error) {
+                                console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
+                                return { ...client, opportunities: client.opportunities || [] };
+                            }
+                        }));
+                        setClients(clientsWithOpps);
+                        safeStorage.setClients(clientsWithOpps);
+                    }
+                }, 100);
+                return () => clearTimeout(timer);
+            }
+        }, [viewMode, clients.length]);
+        
+        // Listen for opportunity updates from ClientDetailModal
+        useEffect(() => {
+            const handleOpportunitiesUpdated = async (event) => {
+                const { clientId, opportunities } = event.detail;
+                console.log('🔄 Pipeline: Received opportunitiesUpdated event for client:', clientId);
+                
+                if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
+                    // Reload opportunities for all clients to ensure Pipeline view is up-to-date
+                    const clientsWithOpps = await Promise.all(clients.map(async (client) => {
+                        try {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            return { ...client, opportunities: opps };
+                        } catch (error) {
+                            console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
+                            return { ...client, opportunities: client.opportunities || [] };
+                        }
+                    }));
+                    setClients(clientsWithOpps);
+                    safeStorage.setClients(clientsWithOpps);
+                    console.log('✅ Pipeline: Updated clients after opportunity creation');
+                }
+            };
+            
+            window.addEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
+            return () => window.removeEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
+        }, [viewMode, clients.length]);
+        
         console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
         console.log('🔍 Pipeline View - Sample clients:', clients.slice(0, 3).map(c => ({ 
             name: c.name, 
