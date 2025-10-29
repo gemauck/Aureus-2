@@ -187,46 +187,68 @@ const Clients = React.memo(() => {
 
     // Load clients, leads, and projects on mount (boot up)
     useEffect(() => {
-        // Load clients (which includes leads via listClients API) and projects immediately
-        loadClients(); // This already loads leads from listClients response
+        // Load clients and projects immediately
+        loadClients();
         loadProjects();
         
-        // Also load leads separately for freshness (runs in parallel, non-blocking)
-        // This ensures leads are always refreshed even if not in cache
+        // IMMEDIATELY try to load leads from localStorage first (DashboardLive might have stored them)
+        const tryLoadLeadsFromStorage = () => {
+            try {
+                const cachedLeads = window.storage?.getLeads?.();
+                if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
+                    console.log(`⚡ Loading ${cachedLeads.length} leads from localStorage immediately`);
+                    setLeads(cachedLeads);
+                    setLeadsCount(cachedLeads.length);
+                    return true;
+                }
+            } catch (e) {
+                // Silent fail
+            }
+            return false;
+        };
+        
+        // Try localStorage first (instant)
+        const loadedFromStorage = tryLoadLeadsFromStorage();
+        
+        // Also load leads from API (runs in parallel, refreshes data)
         const loadLeadsOnBoot = async () => {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token || !window.api?.getLeads) {
-                    // Try to load from localStorage as fallback
-                    const cachedLeads = window.storage?.getLeads?.();
-                    if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
-                        setLeads(cachedLeads);
-                        setLeadsCount(cachedLeads.length);
+                    // If we didn't load from storage, try one more time after a short delay
+                    if (!loadedFromStorage) {
+                        setTimeout(() => {
+                            tryLoadLeadsFromStorage();
+                        }, 500);
                     }
                     return;
                 }
                 
-                // Load leads from API - ensure it runs (force on boot if needed)
+                console.log('📡 Loading leads from API on boot...');
                 // Set timestamp before call to prevent immediate re-throttle
                 lastLeadsApiCallTimestamp = Date.now();
                 await loadLeads(false);
             } catch (error) {
                 console.error('❌ Failed to load leads on boot:', error);
                 // Try localStorage as fallback
-                try {
-                    const cachedLeads = window.storage?.getLeads?.();
-                    if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
-                        setLeads(cachedLeads);
-                        setLeadsCount(cachedLeads.length);
-                    }
-                } catch (e) {
-                    // Silent fail
+                if (!loadedFromStorage) {
+                    setTimeout(() => {
+                        tryLoadLeadsFromStorage();
+                    }, 500);
                 }
             }
         };
         
-        // Load leads immediately in parallel (critical for fast loading)
+        // Load leads from API immediately (non-blocking)
         loadLeadsOnBoot();
+        
+        // Also retry localStorage after a delay in case DashboardLive stores them
+        setTimeout(() => {
+            if (leads.length === 0) {
+                console.log('🔄 Retrying leads load from localStorage...');
+                tryLoadLeadsFromStorage();
+            }
+        }, 1000);
     }, []);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
@@ -537,6 +559,8 @@ const Clients = React.memo(() => {
     // Load leads from database only
     const loadLeads = async (forceRefresh = false) => {
         try {
+            console.log('🔍 loadLeads() called, forceRefresh:', forceRefresh, 'current leads.length:', leads.length);
+            
             // Skip API call if we recently called it AND we have data (unless force refresh)
             // Note: On boot, leads.length will be 0, so this check won't skip the API call
             if (!forceRefresh) {
@@ -545,6 +569,7 @@ const Clients = React.memo(() => {
                 
                 // Only skip if we have data AND called recently
                 if (timeSinceLastCall < API_CALL_INTERVAL && leads.length > 0) {
+                    console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leads.length} leads already loaded)`);
                     return; // Use cached data, skip API call
                 }
             } else {
@@ -578,8 +603,10 @@ const Clients = React.memo(() => {
                 console.log('🔍 Loading leads from API... (FORCED REFRESH - bypassing all caches)');
             }
             
+            console.log('📡 Calling getLeads API...');
             const apiResponse = await window.api.getLeads(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
+            console.log(`📥 Received ${rawLeads.length} leads from API`);
             
             // Map database fields to UI expected format with JSON parsing
             const mappedLeads = rawLeads.map(lead => {
