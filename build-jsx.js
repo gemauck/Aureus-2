@@ -81,13 +81,13 @@ function copyJSFile(srcPath) {
       if (content.includes('defaultExport')) {
         exposeStatements += '\nif (typeof defaultExport !== "undefined") { window.GoogleCalendarService = defaultExport; }';
       }
-      // Remove the duplicate window.window = window if it exists
-      content = content.replace(/\nwindow\.window = window;\n?/g, '\n');
       content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}\n})();`;
+      // Clean up any duplicate window.window assignments
+      content = content.replace(/window\.window\s*=\s*window[;\n]*/g, '');
     } else {
-      // Still wrap in IIFE but remove duplicate window.window
-      content = content.replace(/\nwindow\.window = window;\n?/g, '\n');
       content = `(() => {\n${content}\n})();`;
+      // Clean up any duplicate window.window assignments
+      content = content.replace(/window\.window\s*=\s*window[;\n]*/g, '');
     }
   }
   
