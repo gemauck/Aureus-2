@@ -62,11 +62,15 @@ function copyJSFile(srcPath) {
     content = content.replace(/export\s+default\s+function\s+(\w+)/g, 'function $1');
     content = content.replace(/export\s+default\s+class\s+(\w+)/g, 'class $1');
     // Handle export default identifier (but not function/class)
-    // Skip if it's already window.something
-    content = content.replace(/export\s+default\s+(?!window\.)(\w+);/g, 'const defaultExport = $1;');
-    content = content.replace(/export\s+default\s+(?!window\.)([^;]+);/g, 'const defaultExport = $1;');
-    // If it's window.something, just remove the export
-    content = content.replace(/export\s+default\s+(window\.\w+);/g, '// Exported: $1');
+    // Special case: export default window.GoogleCalendarService
+    if (content.includes('export default window.')) {
+      // Just remove the export statement if it's already on window
+      content = content.replace(/export\s+default\s+window\.\w+;/g, '// Already exported to window');
+    } else {
+      // Skip if it's already window.something
+      content = content.replace(/export\s+default\s+(?!window\.)(\w+);/g, 'const defaultExport = $1;');
+      content = content.replace(/export\s+default\s+(?!window\.)([^;]+);/g, 'const defaultExport = $1;');
+    }
     
     // Wrap in IIFE and expose to window
     if (exportsToExpose.length > 0 || content.includes('defaultExport')) {
