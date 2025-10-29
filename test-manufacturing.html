@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manufacturing Section Test Suite</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .controls {
+            padding: 20px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
+        .output {
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            background: #1e1e1e;
+            color: #d4d4d4;
+        }
+        
+        .output .log-info {
+            color: #569cd6;
+        }
+        
+        .output .log-success {
+            color: #4ec9b0;
+        }
+        
+        .output .log-error {
+            color: #f48771;
+        }
+        
+        .output .log-warn {
+            color: #dcdcaa;
+        }
+        
+        .summary {
+            padding: 20px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+        }
+        
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #6c757d;
+            margin-bottom: 8px;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .stat-card.success .value {
+            color: #28a745;
+        }
+        
+        .stat-card.error .value {
+            color: #dc3545;
+        }
+        
+        .stat-card.warning .value {
+            color: #ffc107;
+        }
+        
+        .status {
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        .status.running {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.complete {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .scroll-indicator {
+            position: sticky;
+            bottom: 0;
+            background: linear-gradient(to top, #1e1e1e, transparent);
+            height: 40px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 Manufacturing Section Test Suite</h1>
+            <p>Comprehensive Functionality & Persistence Testing</p>
+        </div>
+        
+        <div class="controls">
+            <button class="btn-primary" onclick="runTests()">
+                <span id="run-icon">▶</span>
+                Run All Tests
+            </button>
+            <button class="btn-secondary" onclick="clearOutput()">
+                🗑️ Clear Output
+            </button>
+            <button class="btn-danger" onclick="clearLocalStorage()">
+                ⚠️ Clear All Data
+            </button>
+        </div>
+        
+        <div id="summary" class="summary" style="display: none;">
+            <div class="summary-stats" id="summary-stats"></div>
+            <div id="status" class="status">Ready</div>
+        </div>
+        
+        <div class="output" id="output">
+            <div class="log-info">Test suite loaded. Click "Run All Tests" to begin.</div>
+            <div class="log-info">The test suite will test:</div>
+            <div class="log-info">  • Inventory CRUD operations and persistence</div>
+            <div class="log-info">  • BOM management and calculations</div>
+            <div class="log-info">  • Production order workflows</div>
+            <div class="log-info">  • Stock movements tracking</div>
+            <div class="log-info">  • Stock location management</div>
+            <div class="log-info">  • End-to-end integration tests</div>
+        </div>
+    </div>
+    
+    <script src="test-manufacturing-functionality.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        const summary = document.getElementById('summary');
+        const summaryStats = document.getElementById('summary-stats');
+        const status = document.getElementById('status');
+        const runIcon = document.getElementById('run-icon');
+        
+        let originalConsoleLog = console.log;
+        
+        // Override console.log to capture output
+        function captureLog(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `log-${type}`;
+            
+            // Format message with emoji detection
+            if (message.startsWith('✅')) {
+                div.className = 'log-success';
+            } else if (message.startsWith('❌')) {
+                div.className = 'log-error';
+            } else if (message.startsWith('⚠️')) {
+                div.className = 'log-warn';
+            } else {
+                div.className = 'log-info';
+            }
+            
+            div.textContent = message;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+            
+            // Also log to actual console
+            originalConsoleLog(message);
+        }
+        
+        function clearOutput() {
+            output.innerHTML = '<div class="log-info">Output cleared.</div>';
+            summary.style.display = 'none';
+        }
+        
+        function clearLocalStorage() {
+            if (confirm('Are you sure you want to clear ALL manufacturing data from localStorage?')) {
+                localStorage.removeItem('manufacturing_inventory');
+                localStorage.removeItem('manufacturing_boms');
+                localStorage.removeItem('production_orders');
+                localStorage.removeItem('stock_movements');
+                localStorage.removeItem('stock_locations');
+                localStorage.removeItem('location_inventory');
+                localStorage.removeItem('stock_transfers');
+                captureLog('✅ All manufacturing data cleared from localStorage', 'success');
+            }
+        }
+        
+        async function runTests() {
+            // Clear previous output
+            output.innerHTML = '';
+            summary.style.display = 'none';
+            runIcon.innerHTML = '<span class="loading"></span>';
+            status.textContent = 'Running Tests...';
+            status.className = 'status running';
+            
+            // Show status
+            summary.style.display = 'block';
+            
+            try {
+                // Override testResults console to use our capture function
+                const originalTestLog = window.log;
+                window.log = captureLog;
+                
+                // Run tests
+                const result = await runAllTests();
+                
+                // Restore original log
+                window.log = originalTestLog;
+                
+                // Display summary
+                displaySummary(result);
+                
+                runIcon.innerHTML = '▶';
+                status.textContent = result.success ? 'All Tests Passed!' : 'Some Tests Failed';
+                status.className = result.success ? 'status complete' : 'status error';
+                
+            } catch (error) {
+                captureLog(`❌ Test execution error: ${error.message}`, 'error');
+                console.error(error);
+                
+                runIcon.innerHTML = '▶';
+                status.textContent = 'Test Execution Failed';
+                status.className = 'status error';
+            }
+        }
+        
+        function displaySummary(result) {
+            if (!result || !result.summary) return;
+            
+            const stats = result.summary;
+            
+            summaryStats.innerHTML = `
+                <div class="stat-card">
+                    <h3>Total Tests</h3>
+                    <div class="value">${stats.total}</div>
+                </div>
+                <div class="stat-card success">
+                    <h3>Passed</h3>
+                    <div class="value">${stats.passed}</div>
+                </div>
+                <div class="stat-card error">
+                    <h3>Failed</h3>
+                    <div class="value">${stats.failed}</div>
+                </div>
+                <div class="stat-card warning">
+                    <h3>Warnings</h3>
+                    <div class="value">${stats.warnings}</div>
+                </div>
+                <div class="stat-card ${stats.passRate === '100.0%' ? 'success' : 'warning'}">
+                    <h3>Pass Rate</h3>
+                    <div class="value">${stats.passRate}</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Duration</h3>
+                    <div class="value">${stats.duration}</div>
+                </div>
+            `;
+        }
+        
+        // Initialize
+        console.log('Test suite interface ready');
+    </script>
+</body>
+</html>

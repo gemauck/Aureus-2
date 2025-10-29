@@ -11,7 +11,7 @@ async function handler(req, res) {
     try {
         console.log('🎯 Processing invitation acceptance...')
         
-        const { token, password, name } = req.body || {}
+        const { token, password, name, phone = '', department = '', jobTitle = '' } = req.body || {}
         
         if (!token || !password || !name) {
             return badRequest(res, 'Token, password, and name are required')
@@ -56,7 +56,10 @@ async function handler(req, res) {
                 role: invitation.role,
                 status: 'active',
                 provider: 'local',
-                invitedBy: invitation.invitedBy
+                invitedBy: invitation.invitedBy,
+                phone: phone.trim() || '',
+                department: department.trim() || '',
+                jobTitle: jobTitle.trim() || ''
             }
         })
 

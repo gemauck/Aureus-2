@@ -5,6 +5,7 @@ const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
 
 const Projects = () => {
+    const { logout } = window.useAuth();
     const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
@@ -51,9 +52,11 @@ const Projects = () => {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token) {
-                    console.warn('⚠️ Projects: No authentication token found');
+                    console.warn('⚠️ Projects: No authentication token found - logging out');
                     setProjects([]);
                     setIsLoading(false);
+                    await logout();
+                    window.location.hash = '#/login';
                     return;
                 }
 
@@ -263,7 +266,9 @@ const Projects = () => {
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                alert('No authentication token found. Please log in.');
+                console.warn('⚠️ Projects: No authentication token found - logging out');
+                await logout();
+                window.location.hash = '#/login';
                 return;
             }
 
@@ -402,7 +407,9 @@ const Projects = () => {
         try {
             const token = window.storage?.getToken?.();
             if (!token) {
-                alert('No authentication token found. Please log in.');
+                console.warn('⚠️ Projects: No authentication token found - logging out');
+                await logout();
+                window.location.hash = '#/login';
                 return;
             }
 

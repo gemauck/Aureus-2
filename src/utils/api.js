@@ -80,6 +80,18 @@ const api = {
     return res
   },
 
+  // Heartbeat to track online status
+  async heartbeat() {
+    try {
+      const res = await request('/users/heartbeat', { method: 'POST' })
+      return res
+    } catch (error) {
+      // Silently fail heartbeat errors to avoid console spam
+      console.warn('Heartbeat failed:', error.message)
+      return null
+    }
+  },
+
   // Clients
   async listClients() {
     const res = await request('/clients')

@@ -6,24 +6,79 @@ import nodemailer from 'nodemailer';
 // - SMTP_URL (e.g. smtp://user:pass@smtp.gmail.com:587)
 // - or granular: SMTP_HOST, SMTP_PORT, SMTP_SECURE, SMTP_USER, SMTP_PASS
 // - or GMAIL_USER, GMAIL_APP_PASSWORD for Gmail App Password auth
+// - For SendGrid: Use HTTP API when SMTP_HOST=smtp.sendgrid.net (avoids port blocking)
 
 let transporter = null;
 let transporterInitialized = false;
+let useSendGridHTTP = false;
+
+// Send email via SendGrid HTTP API (bypasses SMTP port blocking)
+async function sendViaSendGridAPI(mailOptions, apiKey) {
+    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            personalizations: [{
+                to: [{ email: mailOptions.to }],
+                subject: mailOptions.subject
+            }],
+            from: { email: mailOptions.from, name: mailOptions.fromName || 'Abcotronics' },
+            reply_to: mailOptions.replyTo ? { email: mailOptions.replyTo } : undefined,
+            content: [
+                // SendGrid requires text/plain first, then text/html
+                mailOptions.text ? {
+                    type: 'text/plain',
+                    value: mailOptions.text
+                } : undefined,
+                mailOptions.html ? {
+                    type: 'text/html',
+                    value: mailOptions.html
+                } : {
+                    type: 'text/plain',
+                    value: mailOptions.text || mailOptions.html
+                }
+            ].filter(Boolean)
+        })
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    return {
+        success: true,
+        messageId: `sendgrid-${Date.now()}`,
+        response
+    };
+}
 
 function getTransporter() {
     // Create transporter lazily to ensure env vars are loaded
     if (!transporterInitialized) {
         transporterInitialized = true;
         
+        const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+        const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        
+        // Use SendGrid HTTP API if host is sendgrid and we have API key
+        if (host === 'smtp.sendgrid.net' && pass && pass.startsWith('SG.')) {
+            console.log('📧 Using SendGrid HTTP API (bypasses SMTP port blocking)');
+            useSendGridHTTP = true;
+            transporter = { useHTTP: true }; // Flag to use HTTP API
+            return transporter;
+        }
+        
         if (process.env.SMTP_URL) {
             transporter = nodemailer.createTransport(process.env.SMTP_URL);
         } else {
-            const host = process.env.SMTP_HOST || 'smtp.gmail.com';
             const port = Number(process.env.SMTP_PORT || 587);
             const secure = String(process.env.SMTP_SECURE || 'false') === 'true' || port === 465;
 
             const user = process.env.SMTP_USER || process.env.GMAIL_USER;
-            const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
 
             console.log('📧 Initializing email transporter...', {
                 host,
@@ -36,32 +91,36 @@ function getTransporter() {
             transporter = nodemailer.createTransport({
                 host,
                 port,
-                secure,
+                secure, // true for 465, false for 587 (STARTTLS)
                 auth: user && pass ? { user, pass } : undefined,
                 tls: {
                     // Do not fail on invalid certs for development
                     rejectUnauthorized: false
                 },
-                connectionTimeout: 10000, // 10 seconds
-                greetingTimeout: 10000,
-                socketTimeout: 10000
+                connectionTimeout: 30000, // 30 seconds for cloud servers
+                greetingTimeout: 30000,
+                socketTimeout: 30000,
+                debug: process.env.NODE_ENV === 'development', // Enable debug output
+                logger: process.env.NODE_ENV === 'development' // Enable logging
             });
 
-            // Verify connection configuration asynchronously
-            transporter.verify((error, success) => {
-                if (error) {
-                    console.error('❌ Email service configuration error:', error);
-                    console.error('❌ Email service details:', {
-                        message: error.message,
-                        code: error.code,
-                        command: error.command,
-                        response: error.response
-                    });
-                    console.error('⚠️ Email sending will fail. Check your SMTP configuration in environment variables.');
-                } else {
-                    console.log('✅ Email service ready to send messages');
-                }
-            });
+            // Verify connection configuration asynchronously (skip for SendGrid HTTP)
+            if (host !== 'smtp.sendgrid.net') {
+                transporter.verify((error, success) => {
+                    if (error) {
+                        console.error('❌ Email service configuration error:', error);
+                        console.error('❌ Email service details:', {
+                            message: error.message,
+                            code: error.code,
+                            command: error.command,
+                            response: error.response
+                        });
+                        console.error('⚠️ Email sending will fail. Check your SMTP configuration in environment variables.');
+                    } else {
+                        console.log('✅ Email service ready to send messages');
+                    }
+                });
+            }
         }
     }
     
@@ -164,14 +223,24 @@ export const sendInvitationEmail = async (invitationData) => {
         checkEmailConfiguration();
         
         const emailTransporter = getTransporter();
+        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
         
         console.log('📧 Sending email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
-            subject: mailOptions.subject
+            subject: mailOptions.subject,
+            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP'
         });
         
-        const result = await emailTransporter.sendMail(mailOptions);
+        // Use SendGrid HTTP API if configured
+        let result;
+        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+            mailOptions.fromName = 'Abcotronics ERP';
+            result = await sendViaSendGridAPI(mailOptions, apiKey);
+        } else {
+            result = await emailTransporter.sendMail(mailOptions);
+        }
+        
         console.log('✅ Invitation email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
@@ -190,6 +259,8 @@ export const sendInvitationEmail = async (invitationData) => {
         } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
             errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
         } else if (error.message.includes('configuration incomplete')) {
+            errorMessage = error.message;
+        } else if (error.message.includes('SendGrid API error')) {
             errorMessage = error.message;
         }
         

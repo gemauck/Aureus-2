@@ -24,6 +24,7 @@ model User {
   invitedBy          String?
   mustChangePassword Boolean   @default(false)
   lastLoginAt        DateTime?
+  lastSeenAt         DateTime?
 
   // HR/Employee Fields
   employeeNumber   String?   @unique

@@ -22,13 +22,12 @@ async function handler(req, res) {
             newPasswordLength: newPassword?.length
         })
         
-        if (!currentPassword || !newPassword || 
-            typeof currentPassword !== 'string' || 
+        // New password is always required
+        if (!newPassword || 
             typeof newPassword !== 'string' ||
-            currentPassword.trim() === '' || 
             newPassword.trim() === '') {
-            console.log('❌ Invalid password data')
-            return badRequest(res, 'Current password and new password are required')
+            console.log('❌ Invalid password data: new password required')
+            return badRequest(res, 'New password is required')
         }
 
         if (newPassword.length < 8) {
@@ -51,13 +50,24 @@ async function handler(req, res) {
             return unauthorized(res, 'User not found')
         }
 
-        // Verify current password
+        // Verify current password (required for users with passwordHash)
         if (user.passwordHash) {
-            const valid = await bcrypt.compare(currentPassword, user.passwordHash)
+            // If user has a password, current password is required
+            if (!currentPassword || 
+                typeof currentPassword !== 'string' ||
+                currentPassword.trim() === '') {
+                console.log('❌ Current password required for users with existing password')
+                return badRequest(res, 'Current password is required')
+            }
+            const valid = await bcrypt.compare(currentPassword.trim(), user.passwordHash)
             if (!valid) {
                 console.log('❌ Current password is incorrect')
                 return unauthorized(res, 'Current password is incorrect')
             }
+            console.log('✅ Current password verified')
+        } else {
+            // Users without passwordHash (OAuth users or new users) can set password without current password
+            console.log('🔄 Setting password for user without existing password:', user.email)
         }
 
         // Hash new password
