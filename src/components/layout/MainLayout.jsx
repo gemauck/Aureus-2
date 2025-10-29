@@ -113,26 +113,16 @@ const MainLayout = () => {
         return <div className="text-center py-12 text-gray-500">Users component loading...</div>;
     });
     
-    // Log component availability immediately
-    console.log('🔍 MainLayout: Component check', {
-        hasUserManagement: typeof window.UserManagement !== 'undefined',
-        hasUsers: typeof window.Users !== 'undefined',
-        UserManagementType: typeof window.UserManagement,
-        UsersType: typeof window.Users,
-        currentUser: user,
-        userRole: user?.role
-    });
-    
-    // Log component availability on mount
+    // Log component availability on mount (only in debug mode)
     React.useEffect(() => {
-        console.log('🔍 MainLayout: Mounted, users component check', {
-            hasUserManagement: typeof window.UserManagement !== 'undefined',
-            hasUsers: typeof window.Users !== 'undefined',
-            UserManagementType: typeof window.UserManagement,
-            UsersType: typeof window.Users,
-            currentUser: user,
-            userRole: user?.role
-        });
+        if (window.debug && !window.debug.performanceMode) {
+            console.log('🔍 MainLayout: Users component check', {
+                hasUserManagement: typeof window.UserManagement !== 'undefined',
+                hasUsers: typeof window.Users !== 'undefined',
+                currentUser: user,
+                userRole: user?.role
+            });
+        }
     }, []);
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
@@ -161,38 +151,30 @@ const MainLayout = () => {
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
         
-        // FORCE SHOW USERS MENU FOR DEBUGGING - Remove this after fixing
-        console.warn('🚨 DEBUG MODE: Forcing Users menu to show regardless of role');
-        console.log('🔍 MainLayout: Filtering menu items', { 
-            userRole, 
-            hasRole: !!user?.role,
-            userRoleRaw: user?.role,
-            userObject: user,
-            allMenuItemsCount: allMenuItems.length,
-            allMenuItems: allMenuItems.map(i => ({ id: i.id, label: i.label, adminOnly: i.adminOnly }))
-        });
+        // If user doesn't have a role yet, try to refresh from API
+        if (user && !user.role && window.useAuth) {
+            const { refreshUser } = window.useAuth();
+            if (refreshUser) {
+                console.log('🔄 User missing role, refreshing from API...');
+                refreshUser();
+            }
+        }
         
-        // Temporarily show ALL menu items including Users (bypass role check)
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 const shouldShow = userRole === 'admin';
-                console.warn(`🚨 DEBUG: ${item.label} - adminOnly=${item.adminOnly}, wouldShow=${shouldShow}, userRole="${userRole}", BUT FORCING TO SHOW`);
-                return true; // FORCE SHOW FOR DEBUGGING
+                return shouldShow;
             }
             return true;
         });
         
-        console.warn('🔍 MainLayout: Filtered menu items:', filtered.map(i => i.label));
-        console.warn('🔍 MainLayout: Filtered count:', filtered.length, 'of', allMenuItems.length);
         return filtered;
     }, [user?.role]);
 
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        const adminCheck = userRole === 'admin';
-        console.log('🔍 MainLayout: Admin check', { userRole, isAdmin: adminCheck, userRoleRaw: user?.role });
-        return adminCheck;
+        return userRole === 'admin';
     }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages
@@ -304,15 +286,7 @@ const MainLayout = () => {
 
                 {/* Menu Items */}
                 <nav className="flex-1 overflow-y-auto sidebar-scrollbar py-2">
-                    {React.useMemo(() => {
-                        console.log('🔍 MainLayout: Rendering menu items', {
-                            menuItemsCount: menuItems.length,
-                            menuItemIds: menuItems.map(i => i.id),
-                            menuItemLabels: menuItems.map(i => i.label),
-                            hasUsers: menuItems.some(i => i.id === 'users')
-                        });
-                        return menuItems;
-                    }, [menuItems]).map(item => (
+                    {menuItems.map(item => (
                         <button
                             key={item.id}
                             onClick={() => navigateToPage(item.id)}
