@@ -182,18 +182,7 @@ const MainLayout = () => {
         
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
-                const shouldShow = userRole === 'admin';
-                // Temporary fallback: If user exists (regardless of properties) but role is undefined, show menu
-                // This allows access while role is being set in database or refreshed from API
-                if (!userRole && hasUser) {
-                    console.error('⚠️ User role undefined but user object exists, showing Users menu as fallback', {
-                        user,
-                        hasUser,
-                        userKeys: user ? Object.keys(user) : []
-                    });
-                    return true;
-                }
-                return shouldShow;
+                return userRole === 'admin';
             }
             return true;
         });
