@@ -62,11 +62,11 @@ function copyJSFile(srcPath) {
     content = content.replace(/export\s+default\s+function\s+(\w+)/g, 'function $1');
     content = content.replace(/export\s+default\s+class\s+(\w+)/g, 'class $1');
     // Handle export default identifier (but not function/class)
-    // Special case: export default window.GoogleCalendarService
-    if (content.includes('export default window.')) {
-      // Just remove the export statement if it's already on window
-      content = content.replace(/export\s+default\s+window\.\w+;/g, '// Already exported to window');
-    } else {
+    // Special case: export default window.GoogleCalendarService - just comment it out
+    content = content.replace(/export\s+default\s+window\.\w+;?/g, '// Already exported to window');
+    
+    // Only process other export defaults if we haven't already handled them
+    if (!content.includes('// Already exported to window')) {
       // Skip if it's already window.something
       content = content.replace(/export\s+default\s+(?!window\.)(\w+);/g, 'const defaultExport = $1;');
       content = content.replace(/export\s+default\s+(?!window\.)([^;]+);/g, 'const defaultExport = $1;');
@@ -81,8 +81,12 @@ function copyJSFile(srcPath) {
       if (content.includes('defaultExport')) {
         exposeStatements += '\nif (typeof defaultExport !== "undefined") { window.GoogleCalendarService = defaultExport; }';
       }
+      // Remove the duplicate window.window = window if it exists
+      content = content.replace(/\nwindow\.window = window;\n?/g, '\n');
       content = `(() => {\n${content}\n\n// Expose to window\n${exposeStatements}\n})();`;
     } else {
+      // Still wrap in IIFE but remove duplicate window.window
+      content = content.replace(/\nwindow\.window = window;\n?/g, '\n');
       content = `(() => {\n${content}\n})();`;
     }
   }
