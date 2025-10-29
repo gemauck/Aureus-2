@@ -1622,32 +1622,30 @@ const Clients = React.memo(() => {
         return (
             <div className="space-y-6">
                 {/* Stats */}
-                <div className="grid grid-cols-4 gap-4">
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                <div className="flex gap-4">
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
                         <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Leads</div>
                         <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{activeLeads.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>New prospects</div>
                     </div>
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
                         <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Active Opportunities</div>
-                        <div className="text-2xl font-bold text-primary-600">{activeOpportunities.length}</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-primary-600'}`}>{activeOpportunities.length}</div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Client expansions</div>
                     </div>
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
                         <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Pipeline Value</div>
-                        <div className="text-2xl font-bold text-green-600">
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-green-600'}`}>
                             R {(activeLeads.reduce((sum, lead) => sum + (lead.value || 0), 0) + activeOpportunities.reduce((sum, opp) => sum + (opp.value || 0), 0)).toLocaleString('en-ZA')}
                         </div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>Total potential</div>
                     </div>
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4 flex items-center justify-between`}>
-                        <div>
-                            <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Conversion Rate</div>
-                            <div className="text-2xl font-bold text-purple-600">
-                                {activeLeads.length > 0 ? Math.round((activeLeads.filter(l => l.stage === 'Action').length / activeLeads.length) * 100) : 0}%
-                            </div>
-                            <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>To action stage</div>
+                    <div className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg shadow-sm border p-4`}>
+                        <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-1`}>Conversion Rate</div>
+                        <div className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-purple-600'}`}>
+                            {activeLeads.length > 0 ? Math.round((activeLeads.filter(l => l.stage === 'Action').length / activeLeads.length) * 100) : 0}%
                         </div>
+                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-1`}>To action stage</div>
                     </div>
                 </div>
 
