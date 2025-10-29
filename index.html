@@ -497,11 +497,13 @@
         window.Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback;
         
         // 🚀 Choose Clients version based on architecture setting
+        // PRIORITIZE the main Clients.jsx component (has Pipeline opportunity fixes)
         if (window.USE_LOAD_ONCE_ARCHITECTURE) {
-            // ClientsCached automatically registers as window.Clients
+            // Use main Clients.jsx (has latest Pipeline fixes) with fallback
             window.Clients = window.Clients || window.ClientsSimple;
         } else {
-            window.Clients = window.ClientsDatabaseFirst || window.Clients || window.ClientsSimple;
+            // Use main Clients.jsx first (has latest Pipeline fixes)
+            window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple;
         }
         // Use the main Projects component (has latest fixes) with fallback
         window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;

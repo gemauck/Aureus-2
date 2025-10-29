@@ -2288,6 +2288,8 @@ const Clients = React.memo(() => {
     );
 });
 
+// Force register as the main Clients component (overrides ClientsCached if it loaded first)
 window.Clients = Clients;
+console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes)');
 
 
