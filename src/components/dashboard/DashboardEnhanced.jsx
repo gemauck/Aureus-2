@@ -7,7 +7,6 @@ const DashboardEnhanced = () => {
     const [leads, setLeads] = useState([]);
     const [projects, setProjects] = useState([]);
     const [timeEntries, setTimeEntries] = useState([]);
-    const [invoices, setInvoices] = useState([]);
     const [recentActivity, setRecentActivity] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [selectedTimeRange, setSelectedTimeRange] = useState('30d');
@@ -24,13 +23,11 @@ const DashboardEnhanced = () => {
                     // Load from localStorage only (projects are database-only)
                     const savedClients = (storage && typeof storage.getClients === 'function') ? storage.getClients() || [] : [];
                     const savedTimeEntries = (storage && typeof storage.getTimeEntries === 'function') ? storage.getTimeEntries() || [] : [];
-                    const savedInvoices = (storage && typeof storage.getInvoices === 'function') ? storage.getInvoices() || [] : [];
 
                     setClients(savedClients);
                     setLeads([]); // Leads are database-only
                     setProjects([]); // Projects are database-only
                     setTimeEntries(savedTimeEntries);
-                    setInvoices(savedInvoices);
                 } else {
                     // Try to load from API
                     try {

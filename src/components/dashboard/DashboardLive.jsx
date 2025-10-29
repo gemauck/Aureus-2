@@ -6,19 +6,13 @@ const DashboardLive = () => {
         clients: [],
         leads: [],
         projects: [],
-        invoices: [],
         timeEntries: [],
         users: [],
         stats: {
             totalClients: 0,
             totalLeads: 0,
             totalProjects: 0,
-            totalInvoices: 0,
-            totalRevenue: 0,
             activeProjects: 0,
-            pendingInvoices: 0,
-            overdueInvoices: 0,
-            overdueAmount: 0,
             hoursThisMonth: 0,
             hoursLastMonth: 0,
             pipelineValue: 0,
@@ -61,7 +55,6 @@ const DashboardLive = () => {
                 : (allClients.filter(c => c.type === 'lead') || []);
             
             const cachedProjects = window.storage?.getProjects?.() || [];
-            const cachedInvoices = window.storage?.getInvoices?.() || [];
             const cachedTimeEntries = window.storage?.getTimeEntries?.() || [];
             const cachedUsers = window.storage?.getUsers?.() || [];
 
@@ -82,12 +75,6 @@ const DashboardLive = () => {
             const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
             const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
-            const overdueInvoices = cachedInvoices.filter(inv => {
-                const dueDate = new Date(inv.dueDate);
-                return inv.status === 'Unpaid' && dueDate < now;
-            });
-            const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
-
             const pipelineValue = cachedLeads.reduce((sum, lead) => sum + (lead.value || 0), 0);
             const weightedPipeline = cachedLeads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
 
@@ -95,12 +82,7 @@ const DashboardLive = () => {
                 totalClients: cachedClients.length,
                 totalLeads: cachedLeads.length,
                 totalProjects: cachedProjects.length,
-                totalInvoices: cachedInvoices.length,
-                totalRevenue: cachedInvoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
                 activeProjects: cachedProjects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                pendingInvoices: cachedInvoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
-                overdueInvoices: overdueInvoices.length,
-                overdueAmount: overdueAmount,
                 hoursThisMonth: hoursThisMonth,
                 hoursLastMonth: hoursLastMonth,
                 pipelineValue: pipelineValue,
@@ -112,7 +94,6 @@ const DashboardLive = () => {
                 clients: cachedClients,
                 leads: cachedLeads,
                 projects: cachedProjects,
-                invoices: cachedInvoices,
                 timeEntries: cachedTimeEntries,
                 users: cachedUsers,
                 stats: cachedStats
@@ -151,10 +132,6 @@ const DashboardLive = () => {
                     console.warn('Project sync failed:', err);
                     return { data: [] };
                 }),
-                window.DatabaseAPI.getInvoices().catch(err => {
-                    console.warn('Invoice sync failed:', err);
-                    return { data: [] };
-                }),
                 window.DatabaseAPI.getTimeEntries().catch(err => {
                     console.warn('Time entry sync failed:', err);
                     return { data: [] };
@@ -167,7 +144,7 @@ const DashboardLive = () => {
 
             // Update with fresh API data when available
             Promise.allSettled(syncPromises).then((results) => {
-                const [clientsRes, leadsRes, projectsRes, invoicesRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+                const [clientsRes, leadsRes, projectsRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
 
                 // Get clients from clients API
                 const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients.filter(c => c.type === 'client' || !c.type) : cachedClients;
@@ -185,7 +162,6 @@ const DashboardLive = () => {
                 // Handle different API response formats
                 const projects = Array.isArray(projectsRes.data?.projects) ? projectsRes.data.projects : 
                                 Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
-                const invoices = Array.isArray(invoicesRes.data) ? invoicesRes.data : cachedInvoices;
                 const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
                 const users = Array.isArray(usersRes.data?.users) ? usersRes.data.users : 
                              Array.isArray(usersRes.data) ? usersRes.data : cachedUsers;
@@ -203,12 +179,6 @@ const DashboardLive = () => {
                 const freshHoursThisMonth = freshThisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
                 const freshHoursLastMonth = freshLastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
-                const freshOverdueInvoices = invoices.filter(inv => {
-                    const dueDate = new Date(inv.dueDate);
-                    return inv.status === 'Unpaid' && dueDate < now;
-                });
-                const freshOverdueAmount = freshOverdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
-
                 const freshPipelineValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
                 const freshWeightedPipeline = leads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
 
@@ -216,12 +186,7 @@ const DashboardLive = () => {
                     totalClients: clients.length,
                     totalLeads: leads.length,
                     totalProjects: projects.length,
-                    totalInvoices: invoices.length,
-                    totalRevenue: invoices.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
                     activeProjects: projects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                    pendingInvoices: invoices.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
-                    overdueInvoices: freshOverdueInvoices.length,
-                    overdueAmount: freshOverdueAmount,
                     hoursThisMonth: freshHoursThisMonth,
                     hoursLastMonth: freshHoursLastMonth,
                     pipelineValue: freshPipelineValue,
@@ -233,7 +198,6 @@ const DashboardLive = () => {
                     clients,
                     leads,
                     projects,
-                    invoices,
                     timeEntries,
                     users,
                     stats: freshStats
@@ -319,7 +283,6 @@ const DashboardLive = () => {
         const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
         const timeEntriesArray = Array.isArray(data.timeEntries) ? data.timeEntries : [];
-        const invoicesArray = Array.isArray(data.invoices) ? data.invoices : [];
         
         const thisMonthEntries = timeEntriesArray.filter(entry => {
             const entryDate = new Date(entry.date);
@@ -333,12 +296,6 @@ const DashboardLive = () => {
         const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
         const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
 
-        const overdueInvoices = invoicesArray.filter(inv => {
-            const dueDate = new Date(inv.dueDate);
-            return inv.status === 'Unpaid' && dueDate < now;
-        });
-        const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.balance || 0), 0);
-
         // Ensure all data is arrays for safety
         const clientsArray = Array.isArray(data.clients) ? data.clients : [];
         const leadsArray = Array.isArray(data.leads) ? data.leads : [];
@@ -351,12 +308,7 @@ const DashboardLive = () => {
             totalClients: clientsArray.length,
             totalLeads: leadsArray.length,
             totalProjects: projectsArray.length,
-            totalInvoices: invoicesArray.length,
-            totalRevenue: invoicesArray.reduce((sum, invoice) => sum + (invoice.total || 0), 0),
             activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-            pendingInvoices: invoicesArray.filter(i => i.status === 'Pending' || i.status === 'Draft').length,
-            overdueInvoices: overdueInvoices.length,
-            overdueAmount: overdueAmount,
             hoursThisMonth: hoursThisMonth,
             hoursLastMonth: hoursLastMonth,
             pipelineValue: pipelineValue,
@@ -553,28 +505,6 @@ const DashboardLive = () => {
                 </div>
             </div>
 
-            {/* Alerts Row */}
-            {dashboardData.stats.overdueInvoices > 0 && (
-                <div className="grid grid-cols-1 gap-3">
-                    {/* Overdue Invoices Alert */}
-                    <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-4 text-white">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold">Overdue Invoices</h2>
-                            <i className="fas fa-exclamation-triangle text-xl opacity-80"></i>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs opacity-90">Overdue Count</span>
-                                <span className="text-2xl font-bold">{dashboardData.stats.overdueInvoices}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-2 border-t border-red-400">
-                                <span className="text-xs font-medium">Total Amount</span>
-                                <span className="text-xl font-bold">R {dashboardData.stats.overdueAmount.toLocaleString()}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Recent Activity & Data Tables */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
@@ -697,11 +627,11 @@ const DashboardLive = () => {
             </div>
 
             {/* System Status */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
-                    System Status
-                </h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
+                    <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>
+                        System Status
+                    </h2>
+                <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                         <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {dashboardData.stats.totalClients}
@@ -719,12 +649,6 @@ const DashboardLive = () => {
                             {dashboardData.stats.totalProjects}
                         </div>
                         <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Projects</div>
-                    </div>
-                    <div>
-                        <div className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {dashboardData.stats.totalInvoices}
-                        </div>
-                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Invoices</div>
                     </div>
                 </div>
             </div>

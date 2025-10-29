@@ -163,13 +163,19 @@ const MainLayout = () => {
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 const shouldShow = userRole === 'admin';
+                // Temporary: If user exists but role is undefined, show menu as fallback
+                // This allows access while role is being set in database
+                if (!userRole && user && user.id) {
+                    console.warn('⚠️ User role undefined, showing Users menu as fallback');
+                    return true;
+                }
                 return shouldShow;
             }
             return true;
         });
         
         return filtered;
-    }, [user?.role]);
+    }, [user?.role, user?.id]);
 
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {

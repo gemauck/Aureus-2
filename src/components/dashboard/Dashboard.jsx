@@ -244,9 +244,8 @@ const Dashboard = () => {
                 ))}
             </div>
 
-            {/* Pipeline & Outstanding Invoices Alert Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {/* Pipeline Summary */}
+            {/* Pipeline Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
                     <div className="flex items-center justify-between mb-3">
                         <h2 className="text-sm font-semibold">Sales Pipeline</h2>
@@ -271,29 +270,6 @@ const Dashboard = () => {
                         </div>
                     </div>
                 </div>
-
-                {/* Outstanding Invoices Alert - Only show if there are overdue invoices */}
-                {overdueInvoices.length > 0 && (
-                    <div className="bg-gradient-to-r from-red-500 to-red-600 rounded-lg p-4 text-white">
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold">Overdue Invoices</h2>
-                            <i className="fas fa-exclamation-triangle text-xl opacity-80"></i>
-                        </div>
-                        <div className="space-y-2">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs opacity-90">Overdue Count</span>
-                                <span className="text-2xl font-bold">{overdueInvoices.length}</span>
-                            </div>
-                            <div className="flex justify-between items-center pt-2 border-t border-red-400">
-                                <span className="text-xs font-medium">Total Amount</span>
-                                <span className="text-xl font-bold">R {overdueAmount.toLocaleString('en-ZA')}</span>
-                            </div>
-                            <button className="w-full mt-3 bg-white text-red-600 px-3 py-2 rounded-lg hover:bg-red-50 transition text-xs font-semibold">
-                                View Overdue Invoices
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -358,7 +334,7 @@ const Dashboard = () => {
                         <div className="text-center py-8">
                             <i className={`fas fa-history text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                             <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity in the last 30 days</p>
-                            <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>Time entries, invoices, and projects will appear here</p>
+                            <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>Time entries and projects will appear here</p>
                         </div>
                     )}
                 </div>
