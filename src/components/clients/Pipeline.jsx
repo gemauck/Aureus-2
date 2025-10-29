@@ -114,8 +114,11 @@ const Pipeline = () => {
                 const clientsWithOpportunities = await Promise.allSettled(apiClients.map(async (client) => {
                     try {
                         if (window.api?.getOpportunitiesByClient) {
+                            console.log(`🔍 Pipeline: Fetching opportunities for client ${client.name} (${client.id})...`);
                             const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            console.log(`📥 Pipeline: Raw API response for ${client.name}:`, oppResponse);
                             const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            console.log(`📊 Pipeline: Parsed ${opportunities.length} opportunities for ${client.name}:`, opportunities);
                             
                             // Ensure each opportunity has required fields with defaults
                             const validatedOpportunities = opportunities.map(opp => ({
@@ -129,7 +132,9 @@ const Pipeline = () => {
                             
                             if (validatedOpportunities.length > 0) {
                                 console.log(`✅ Pipeline: Loaded ${validatedOpportunities.length} opportunities for ${client.name}`, 
-                                    validatedOpportunities.map(o => ({ title: o.title, stage: o.stage, value: o.value })));
+                                    validatedOpportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, value: o.value })));
+                            } else {
+                                console.log(`📭 Pipeline: No opportunities for ${client.name}`);
                             }
                             return { ...client, opportunities: validatedOpportunities };
                         } else {
@@ -138,6 +143,7 @@ const Pipeline = () => {
                         }
                     } catch (error) {
                         console.error(`❌ Pipeline: Failed to load opportunities for client ${client.name} (${client.id}):`, error);
+                        console.error(`   Error details:`, error.message, error.stack);
                         // Return client with empty opportunities array so it still appears
                         return { ...client, opportunities: [] };
                     }

@@ -186,6 +186,7 @@ const Clients = React.memo(() => {
 
     // Load clients and leads from API immediately on mount
     useEffect(() => {
+        console.log('🚀 Clients component mounted - loading data...');
         loadClients();
         loadLeads();
         loadProjects(); // Load projects too
@@ -241,7 +242,7 @@ const Clients = React.memo(() => {
         };
 
         const subscriberId = 'clients-screen-live-sync';
-        const handler = (message) => {
+        const handler = async (message) => {
             if (message?.type === 'data' && Array.isArray(message.data)) {
                 if (message.dataType === 'clients') {
                     // Check if data changed to prevent unnecessary updates
@@ -254,8 +255,28 @@ const Clients = React.memo(() => {
                     
                     // Filter to only include actual clients (exclude leads and null types)
                     const processed = message.data.map(mapDbClient).filter(c => c.type === 'client');
-                    setClients(processed);
-                    safeStorage.setClients(processed);
+                    
+                    // Load opportunities for clients from LiveDataSync
+                    if (window.api?.getOpportunitiesByClient) {
+                        console.log(`📡 LiveDataSync: Loading opportunities for ${processed.length} clients...`);
+                        const clientsWithOpportunities = await Promise.all(processed.map(async (client) => {
+                            try {
+                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                const opportunities = oppResponse?.data?.opportunities || [];
+                                return { ...client, opportunities };
+                            } catch (error) {
+                                console.warn(`⚠️ LiveDataSync: Failed to load opportunities for ${client.id}:`, error);
+                                return { ...client, opportunities: [] };
+                            }
+                        }));
+                        const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                        console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients`);
+                        setClients(clientsWithOpportunities);
+                        safeStorage.setClients(clientsWithOpportunities);
+                    } else {
+                        setClients(processed);
+                        safeStorage.setClients(processed);
+                    }
                     
                     lastLiveDataClientsHash = dataHash;
                     lastLiveDataSyncTime = now;
@@ -312,6 +333,7 @@ const Clients = React.memo(() => {
 
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
+        console.log('🔄 Clients: loadClients() called');
         try {
             // IMMEDIATELY show cached data without waiting for API
             const cachedClients = safeStorage.getClients();
@@ -322,7 +344,30 @@ const Clients = React.memo(() => {
                     client.type === 'client'
                 );
                 if (filteredCachedClients.length > 0) {
-                    setClients(filteredCachedClients);
+                    // ALWAYS load fresh opportunities for cached clients to ensure we have the latest data
+                    if (window.api?.getOpportunitiesByClient) {
+                        console.log(`📡 Clients: Loading opportunities for ${filteredCachedClients.length} cached clients...`);
+                        const clientsWithOpps = await Promise.all(filteredCachedClients.map(async (client) => {
+                            try {
+                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                                const opportunities = oppResponse?.data?.opportunities || [];
+                                if (opportunities.length > 0) {
+                                    console.log(`✅ Clients: Loaded ${opportunities.length} opportunities for ${client.name}`);
+                                }
+                                return { ...client, opportunities };
+                            } catch (error) {
+                                console.warn(`⚠️ Failed to load opportunities for ${client.name}:`, error);
+                                return { ...client, opportunities: [] };
+                            }
+                        }));
+                        const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                        console.log(`✅ Clients: Loaded ${totalOpps} total opportunities for ${clientsWithOpps.length} cached clients`);
+                        setClients(clientsWithOpps);
+                        safeStorage.setClients(clientsWithOpps); // Update cache with opportunities
+                    } else {
+                        console.warn(`⚠️ Clients: getOpportunitiesByClient not available, using cached clients without opportunities`);
+                        setClients(filteredCachedClients);
+                    }
                 }
                 // Log if any leads were filtered out from cache
                 const filteredOut = cachedClients.length - filteredCachedClients.length;
@@ -348,6 +393,21 @@ const Clients = React.memo(() => {
             
             if (timeSinceLastCall < API_CALL_INTERVAL && clients.length > 0) {
                 console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call) - Total: ${((performance.now() - loadStartTime).toFixed(1))}ms`);
+                // Even if we skip, ensure opportunities are loaded for existing clients
+                if (window.api?.getOpportunitiesByClient) {
+                    console.log(`📡 Clients: Loading opportunities for ${clients.length} existing clients (after skip)...`);
+                    const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
+                        try {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            const opportunities = oppResponse?.data?.opportunities || [];
+                            return { ...client, opportunities };
+                        } catch (error) {
+                            return { ...client, opportunities: [] };
+                        }
+                    }));
+                    setClients(clientsWithOpportunities);
+                    safeStorage.setClients(clientsWithOpportunities);
+                }
                 return; // Use cached data, skip API call
             }
             
@@ -385,18 +445,51 @@ const Clients = React.memo(() => {
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     const processEndTime = performance.now();
                     
+                    // First, let's try loading ALL opportunities to see what we have
+                    let allOpportunities = [];
+                    try {
+                        if (window.DatabaseAPI?.getOpportunities) {
+                            const allOppsResponse = await window.DatabaseAPI.getOpportunities();
+                            allOpportunities = allOppsResponse?.data?.opportunities || [];
+                            console.log(`📊 Clients: Found ${allOpportunities.length} total opportunities in database`);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ Could not load all opportunities:', e);
+                    }
+                    
                     // Load opportunities for each client
                     if (window.api?.getOpportunitiesByClient) {
+                        console.log(`📡 Clients: Loading opportunities for ${clientsOnly.length} clients...`);
                         const clientsWithOpportunities = await Promise.all(clientsOnly.map(async (client) => {
                             try {
                                 const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                const opportunities = oppResponse?.data?.opportunities || [];
+                                console.log(`📥 Clients: API response for ${client.name}:`, oppResponse);
+                                const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                                if (opportunities.length > 0) {
+                                    console.log(`✅ Clients: Loaded ${opportunities.length} opportunities for ${client.name}:`, opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage })));
+                                } else {
+                                    // Check if opportunities exist in allOpportunities for this client
+                                    const matchingOpps = allOpportunities.filter(o => o.clientId === client.id);
+                                    if (matchingOpps.length > 0) {
+                                        console.log(`⚠️ Clients: Found ${matchingOpps.length} opportunities in allOpportunities for ${client.name} but API returned none`);
+                                        return { ...client, opportunities: matchingOpps };
+                                    }
+                                }
                                 return { ...client, opportunities };
                             } catch (error) {
-                                console.warn(`⚠️ Failed to load opportunities for client ${client.id}:`, error);
+                                console.error(`❌ Failed to load opportunities for client ${client.name} (${client.id}):`, error);
+                                // Try to use opportunities from allOpportunities if API call failed
+                                const matchingOpps = allOpportunities.filter(o => o.clientId === client.id);
+                                if (matchingOpps.length > 0) {
+                                    console.log(`✅ Clients: Using ${matchingOpps.length} opportunities from allOpportunities for ${client.name}`);
+                                    return { ...client, opportunities: matchingOpps };
+                                }
                                 return { ...client, opportunities: [] };
                             }
                         }));
+                        
+                        const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                        console.log(`✅ Clients: Loaded ${totalOpps} total opportunities across ${clientsWithOpportunities.length} clients`);
                         
                         // Update state with clients that have opportunities
                         setClients(clientsWithOpportunities);
@@ -407,6 +500,7 @@ const Clients = React.memo(() => {
                         // Save processed data to localStorage
                         safeStorage.setClients(clientsWithOpportunities);
                     } else {
+                        console.warn(`⚠️ Clients: getOpportunitiesByClient API method not available`);
                         // Update state with fresh API data
                         setClients(clientsOnly);
                         setLeads(leadsOnly);
@@ -556,6 +650,73 @@ const Clients = React.memo(() => {
     //         window.removeEventListener('clientsUpdated', handleStorageChange);
     //     };
     // }, []);
+    
+    // Load opportunities when switching to pipeline view
+    useEffect(() => {
+        const loadOpportunitiesForClients = async () => {
+            console.log('🔍 Pipeline useEffect triggered - clients:', clients.length, 'has API:', !!window.api?.getOpportunitiesByClient);
+            
+            if (clients.length === 0) {
+                console.warn('⚠️ Pipeline: No clients available yet, skipping opportunity load');
+                return;
+            }
+            
+            if (!window.api?.getOpportunitiesByClient) {
+                console.error('❌ Pipeline: getOpportunitiesByClient API method not available!');
+                return;
+            }
+            
+            // Check if any clients are missing opportunities
+            const clientsNeedingOpps = clients.filter(c => !c.opportunities || c.opportunities.length === 0);
+            const clientsWithOpps = clients.filter(c => c.opportunities && c.opportunities.length > 0);
+            
+            console.log(`📊 Pipeline: ${clientsWithOpps.length} clients already have opportunities, ${clientsNeedingOpps.length} need loading`);
+            
+            if (clientsNeedingOpps.length === 0 && clientsWithOpps.length > 0) {
+                const totalOpps = clients.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                console.log(`✅ Pipeline: All clients have opportunities loaded (${totalOpps} total)`);
+                return;
+            }
+            
+            console.log(`📡 Pipeline: Loading opportunities for ALL ${clients.length} clients...`);
+            const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
+                // Always fetch fresh opportunities, even if we have cached ones
+                try {
+                    console.log(`📡 Pipeline: Fetching opportunities for ${client.name} (${client.id})...`);
+                    const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                    const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                    if (opportunities.length > 0) {
+                        console.log(`✅ Pipeline: Loaded ${opportunities.length} opportunities for ${client.name}:`, opportunities.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
+                    }
+                    return { ...client, opportunities };
+                } catch (error) {
+                    console.error(`❌ Pipeline: Failed to load opportunities for ${client.name}:`, error);
+                    // Keep existing opportunities if fetch fails
+                    return { ...client, opportunities: client.opportunities || [] };
+                }
+            }));
+            
+            const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+            console.log(`✅ Pipeline: Loaded ${totalOpps} total opportunities across ${clientsWithOpportunities.length} clients`);
+            
+            // Update state and cache
+            setClients(clientsWithOpportunities);
+            safeStorage.setClients(clientsWithOpportunities);
+        };
+        
+        if (viewMode === 'pipeline') {
+            console.log('🔍 Pipeline view activated - loading opportunities...');
+            console.log(`🔍 Current clients state: ${clients.length} clients`);
+            console.log(`🔍 Sample client data:`, clients.length > 0 ? {
+                name: clients[0].name,
+                hasOpportunities: !!(clients[0].opportunities),
+                oppCount: clients[0].opportunities?.length || 0
+            } : 'No clients');
+            loadOpportunitiesForClients();
+        } else {
+            console.log(`🔍 viewMode is: ${viewMode} (not pipeline)`);
+        }
+    }, [viewMode, clients.length]); // Depend on clients.length to re-run when clients change
     
     // Refresh data when switching to pipeline view
     useEffect(() => {
@@ -859,7 +1020,12 @@ const Clients = React.memo(() => {
             } else {
                 // Create new lead
                 // Get current user info
-                const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+                const user = window.storage?.getUser?.() || {};
+                const currentUser = {
+                    name: user?.name || 'System',
+                    email: user?.email || 'system',
+                    id: user?.id || 'system'
+                };
                 
                 const newLead = {
                     ...leadFormData,
@@ -1133,9 +1299,18 @@ const Clients = React.memo(() => {
                 type: 'Lead Converted',
                 description: `Converted from lead to client`,
                 timestamp: new Date().toISOString(),
-                user: (window.storage?.getUserInfo() || { name: 'System' }).name,
-                userId: (window.storage?.getUserInfo() || { id: 'system' }).id,
-                userEmail: (window.storage?.getUserInfo() || { email: 'system' }).email
+                user: (() => {
+                    const u = window.storage?.getUser?.() || {};
+                    return u.name || 'System';
+                })(),
+                userId: (() => {
+                    const u = window.storage?.getUser?.() || {};
+                    return u.id || 'system';
+                })(),
+                userEmail: (() => {
+                    const u = window.storage?.getUser?.() || {};
+                    return u.email || 'system';
+                })()
             }]
         };
         setClients([...clients, newClient]);
@@ -1147,23 +1322,147 @@ const Clients = React.memo(() => {
 
     // Pipeline View Component
     const PipelineView = () => {
-        console.log('🔍 Pipeline View rendered - leads count:', leads.length);
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
+        
+        // Load opportunities immediately when PipelineView renders
+        useEffect(() => {
+            const loadOpps = async () => {
+                console.log('🚀 PipelineView MOUNTED - Loading opportunities immediately...');
+                console.log(`📊 Current state: ${clients.length} clients, ${leads.length} leads`);
+                
+                if (clients.length === 0) {
+                    console.warn('⚠️ No clients available in PipelineView');
+                    return;
+                }
+                
+                if (!window.api?.getOpportunitiesByClient) {
+                    console.error('❌ getOpportunitiesByClient not available!');
+                    return;
+                }
+                
+                // Check current opportunity status
+                const clientsWithOpps = clients.filter(c => c.opportunities && c.opportunities.length > 0);
+                const totalOpps = clients.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                console.log(`📊 Before load: ${clientsWithOpps.length} clients have ${totalOpps} opportunities`);
+                
+                // Fetch opportunities for all clients
+                try {
+                    const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
+                        try {
+                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
+                            const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                            if (opportunities.length > 0) {
+                                console.log(`✅ Loaded ${opportunities.length} opps for ${client.name}`);
+                            }
+                            return { ...client, opportunities };
+                        } catch (error) {
+                            console.error(`❌ Failed to load opportunities for ${client.name}:`, error);
+                            return { ...client, opportunities: client.opportunities || [] };
+                        }
+                    }));
+                    
+                    const newTotalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                    console.log(`✅ PipelineView: Loaded ${newTotalOpps} total opportunities`);
+                    setClients(clientsWithOpportunities);
+                    safeStorage.setClients(clientsWithOpportunities);
+                } catch (error) {
+                    console.error('❌ PipelineView: Failed to load opportunities:', error);
+                }
+            };
+            
+            loadOpps();
+        }, [clients.length]); // Re-run when clients count changes
+        
+        console.log('🔍 Pipeline View rendered - leads count:', leads.length, 'clients count:', clients.length);
+        console.log('🔍 Pipeline View - Sample clients:', clients.slice(0, 3).map(c => ({ 
+            name: c.name, 
+            hasOpportunities: !!(c.opportunities && Array.isArray(c.opportunities)),
+            oppCount: c.opportunities?.length || 0 
+        })));
 
-        const clientOpportunities = clients.reduce((acc, client) => {
+        // Extract opportunities from clients
+        let clientOpportunities = clients.reduce((acc, client) => {
             if (client.opportunities && Array.isArray(client.opportunities)) {
-                return acc.concat(client.opportunities.map(opp => ({
-                    ...opp,
-                    clientName: client.name,
-                    clientId: client.id,
-                    type: 'opportunity',
-                    stage: opp.stage || 'Awareness',
-                    status: opp.status || 'Active'
-                })));
+                const mapped = client.opportunities.map(opp => {
+                    // Normalize stage to match pipeline stages exactly
+                    let normalizedStage = 'Awareness'; // Default
+                    const originalStage = opp.stage;
+                    
+                    if (originalStage && typeof originalStage === 'string') {
+                        // Convert to title case and match to pipeline stages
+                        const stageMap = {
+                            'awareness': 'Awareness',
+                            'interest': 'Interest',
+                            'desire': 'Desire',
+                            'action': 'Action',
+                            'prospect': 'Awareness',
+                            'new': 'Awareness',
+                            'qualification': 'Interest',
+                            'proposal': 'Desire',
+                            'negotiation': 'Action'
+                        };
+                        normalizedStage = stageMap[originalStage.toLowerCase()] || 'Awareness';
+                    }
+                    
+                    if (originalStage !== normalizedStage && originalStage) {
+                        console.log(`🔄 Pipeline: Normalized stage "${originalStage}" → "${normalizedStage}" for ${opp.title || opp.name || 'opportunity'}`);
+                    }
+                    
+                    return {
+                        ...opp,
+                        clientName: client.name,
+                        clientId: client.id,
+                        type: 'opportunity',
+                        stage: normalizedStage, // Use normalized stage
+                        status: opp.status || 'Active', // Default to Active if no status
+                        title: opp.title || opp.name || 'Untitled Opportunity',
+                        value: Number(opp.value) || 0
+                    };
+                });
+                if (mapped.length > 0) {
+                    console.log(`📊 Pipeline: Extracted ${mapped.length} opportunities from ${client.name}:`, mapped.map(o => ({ id: o.id, title: o.title, stage: o.stage, status: o.status, value: o.value })));
+                }
+                return acc.concat(mapped);
             }
             return acc;
         }, []);
+        
+        // Fallback: If no opportunities found but clients exist, log detailed info
+        if (clientOpportunities.length === 0 && clients.length > 0) {
+            console.warn('⚠️ Pipeline: No opportunities found in clients array');
+            clients.forEach(client => {
+                if (client.opportunities) {
+                    console.log(`Client ${client.name} opportunities:`, {
+                        isArray: Array.isArray(client.opportunities),
+                        length: client.opportunities?.length,
+                        type: typeof client.opportunities
+                    });
+                } else {
+                    console.log(`Client ${client.name} has NO opportunities property`);
+                }
+            });
+        }
+        
+        console.log('🔍 Pipeline View - Client opportunities extracted:', clientOpportunities.length);
+        console.log('🔍 Pipeline View - Total clients:', clients.length);
+        console.log('🔍 Pipeline View - Clients with opportunities:', clients.filter(c => c.opportunities && Array.isArray(c.opportunities) && c.opportunities.length > 0).map(c => ({ 
+            name: c.name, 
+            oppCount: c.opportunities.length,
+            oppStages: c.opportunities.map(o => o.stage || 'NO_STAGE')
+        })));
+        if (clientOpportunities.length > 0) {
+            console.log('📋 Opportunity details:', clientOpportunities.map(o => ({ 
+                id: o.id, 
+                title: o.title || o.name, 
+                clientName: o.clientName, 
+                stage: o.stage, 
+                status: o.status,
+                hasStage: !!o.stage
+            })));
+        } else {
+            console.log('⚠️ No opportunities found. Clients with opportunities array:', clients.filter(c => c.opportunities && Array.isArray(c.opportunities) && c.opportunities.length > 0).map(c => ({ name: c.name, oppCount: c.opportunities.length })));
+        }
 
         // Filter active leads and opportunities only
         console.log('🔍 Pipeline Debug - All leads:', leads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
@@ -1182,11 +1481,24 @@ const Clients = React.memo(() => {
         });
         
         console.log('🔍 Pipeline Debug - Active leads (after stage filter):', activeLeads.map(l => ({ id: l.id, name: l.name, status: l.status, stage: l.stage })));
-        const activeOpportunities = clientOpportunities.filter(opp => 
-            opp.status !== 'Inactive' && 
-            opp.status !== 'Closed Lost' && 
-            opp.status !== 'Closed Won'
-        );
+        // Filter out inactive opportunities - include all opportunities that don't have an explicit inactive/closed status
+        const activeOpportunities = clientOpportunities.filter(opp => {
+            const status = opp.status || 'Active'; // Default to 'Active' if no status
+            const isActive = status !== 'Inactive' && status !== 'Closed Lost' && status !== 'Closed Won';
+            if (!isActive) {
+                console.log(`🚫 Filtered out inactive opportunity: ${opp.title || opp.name} (status: ${status})`);
+            }
+            return isActive;
+        });
+        
+        console.log(`🔍 Pipeline: Filtered opportunities - Total: ${clientOpportunities.length}, Active: ${activeOpportunities.length}`);
+        console.log(`🔍 Pipeline: Active opportunities by stage:`, {
+            'Awareness': activeOpportunities.filter(o => o.stage === 'Awareness').length,
+            'Interest': activeOpportunities.filter(o => o.stage === 'Interest').length,
+            'Desire': activeOpportunities.filter(o => o.stage === 'Desire').length,
+            'Action': activeOpportunities.filter(o => o.stage === 'Action').length,
+            'Unknown/Other': activeOpportunities.filter(o => !['Awareness', 'Interest', 'Desire', 'Action'].includes(o.stage)).map(o => o.stage)
+        });
 
         const handleDragStart = (item, type) => {
             setDraggedItem(item);
@@ -1290,6 +1602,11 @@ const Clients = React.memo(() => {
                         const stageOpps = activeOpportunities.filter(opp => opp.stage === stage);
                         const stageCount = stageLeads.length + stageOpps.length;
                         const isDraggedOver = draggedItem && draggedItem.stage !== stage;
+                        
+                        // Debug logging for each stage
+                        if (stageOpps.length > 0) {
+                            console.log(`📊 Kanban: Stage "${stage}" has ${stageOpps.length} opportunities:`, stageOpps.map(o => ({ id: o.id, title: o.title || o.name, stage: o.stage })));
+                        }
                         
                         const stageIcons = {
                             'Awareness': 'fa-eye',
@@ -1396,7 +1713,7 @@ const Clients = React.memo(() => {
                                                 }`}
                                             >
                                                 <div className="flex items-start justify-between gap-2 mb-2">
-                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.name}</div>
+                                                    <div className={`font-medium text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 flex-1`}>{opp.title || opp.name}</div>
                                                     <span className={`px-2 py-0.5 ${isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-700'} text-xs rounded-full font-medium shrink-0`}>OPP</span>
                                                 </div>
                                                 <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
@@ -1405,6 +1722,11 @@ const Clients = React.memo(() => {
                                                 </div>
                                                 <div className="flex items-center justify-between">
                                                     <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Existing client</span>
+                                                    {opp.value > 0 && (
+                                                        <span className={`text-xs font-medium ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                                                            R {opp.value.toLocaleString('en-ZA')}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
                                         );
@@ -1797,7 +2119,14 @@ const Clients = React.memo(() => {
                     Leads ({leads.length})
                 </button>
                 <button
-                    onClick={() => setViewMode('pipeline')}
+                    onClick={() => {
+                        console.log('🖱️ PIPELINE TAB CLICKED - Setting viewMode to pipeline');
+                        setViewMode('pipeline');
+                        // Force reload opportunities when clicking pipeline tab
+                        setTimeout(() => {
+                            console.log('⏰ Pipeline tab clicked - triggering opportunity reload...');
+                        }, 100);
+                    }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
                             ? 'bg-blue-600 text-white shadow-sm' 
@@ -1892,7 +2221,10 @@ const Clients = React.memo(() => {
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
-            {viewMode === 'pipeline' && <PipelineView />}
+            {viewMode === 'pipeline' && (() => {
+                console.log('🎯 RENDERING PipelineView component NOW!');
+                return <PipelineView />;
+            })()}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>

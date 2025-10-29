@@ -15,8 +15,12 @@ async function handler(req, res) {
       params: req.params
     })
     
-    // Parse the URL path (already has /api/ stripped by server)
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Parse the URL path (handle both /api/opportunities/... and /opportunities/...)
+    let pathSegments = req.url.split('/').filter(Boolean)
+    // Remove 'api' from the beginning if present
+    if (pathSegments[0] === 'api') {
+      pathSegments = pathSegments.slice(1)
+    }
     const id = req.params?.id || pathSegments[pathSegments.length - 1]
     
     console.log('🔍 Path analysis:', {
@@ -56,11 +60,20 @@ async function handler(req, res) {
     
     if (req.method === 'GET' && clientId) {
       try {
+        console.log('🔍 Opportunities API: Fetching opportunities for clientId:', clientId)
         const opportunities = await prisma.opportunity.findMany({ 
           where: { clientId },
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Client opportunities retrieved successfully:', opportunities.length, 'for client:', clientId)
+        if (opportunities.length > 0) {
+          console.log('📋 Opportunity details:', opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, clientId: o.clientId, status: o.status })))
+        } else {
+          console.log('⚠️ No opportunities found for client:', clientId)
+          // Check if ANY opportunities exist in database
+          const allOpps = await prisma.opportunity.findMany({ take: 5 })
+          console.log('📊 Total opportunities in database:', allOpps.length)
+        }
         return ok(res, { opportunities })
       } catch (dbError) {
         console.error('❌ Database error getting client opportunities:', dbError)
