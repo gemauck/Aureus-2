@@ -1005,8 +1005,9 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 
                 setFormData(updatedFormData);
                 
-                // Save activity log changes immediately
-                onSave(updatedFormData, true);
+                // DON'T call onSave here - it will overwrite the client with stale data!
+                // Instead, just update local state and let the user save when they're ready
+                // The opportunity is already in the database, so it will load on next fetch
                 
                 alert('✅ Opportunity saved to database successfully!');
                 
@@ -1022,6 +1023,19 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     notes: ''
                 });
                 setShowOpportunityForm(false);
+                
+                // Reload opportunities from database to ensure we have the latest
+                try {
+                    const oppResponse = await window.api.getOpportunitiesByClient(formData.id);
+                    const freshOpportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
+                    setFormData(prev => ({
+                        ...prev,
+                        opportunities: freshOpportunities
+                    }));
+                    console.log('✅ Reloaded opportunities from database:', freshOpportunities.length);
+                } catch (error) {
+                    console.error('❌ Failed to reload opportunities:', error);
+                }
                 
                 console.log('✅ Opportunity created and saved to database:', savedOpportunity.id);
             } else {
