@@ -6,7 +6,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         name: '',
         email: '',
         phone: '',
-        role: 'team_member',
+        role: 'user',
         department: '',
         status: 'Active',
         customPermissions: []
@@ -52,7 +52,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                 name: user.name || '',
                 email: user.email || '',
                 phone: user.phone || '',
-                role: user.role || 'team_member',
+                role: user.role || 'user',
                 department: user.department || '',
                 status: user.status || 'Active',
                 customPermissions: user.customPermissions || []

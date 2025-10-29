@@ -1,7 +1,7 @@
 export const UserRoles = Object.freeze({
   admin: 'admin',
   manager: 'manager',
-  member: 'member'
+  user: 'user'
 })
 
 export const TaskStatus = Object.freeze({

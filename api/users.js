@@ -71,7 +71,7 @@ async function handler(req, res) {
                 return unauthorized(res, 'Admin access required')
             }
 
-            const { name, email, role = 'member', department = '', phone = '', status = 'active' } = req.body || {}
+            const { name, email, role = 'user', department = '', phone = '', status = 'active' } = req.body || {}
             
             if (!name || !email) {
                 return badRequest(res, 'Name and email are required')

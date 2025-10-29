@@ -40,13 +40,13 @@ export const PERMISSIONS = {
 export const ROLE_PERMISSIONS = {
     admin: {
         name: 'Administrator',
-        description: 'Full system access',
+        description: 'Full system access - Can manage users and all system settings',
         permissions: ['all'], // Special case - admin has all permissions
         color: 'red'
     },
     manager: {
         name: 'Manager',
-        description: 'Manage projects and teams',
+        description: 'Manage projects, teams, and assigned resources',
         permissions: [
             PERMISSIONS.VIEW_ALL,
             PERMISSIONS.EDIT_PROJECTS,
@@ -58,49 +58,15 @@ export const ROLE_PERMISSIONS = {
         ],
         color: 'blue'
     },
-    accountant: {
-        name: 'Accountant',
-        description: 'Financial management',
-        permissions: [
-            PERMISSIONS.VIEW_ALL,
-            PERMISSIONS.MANAGE_INVOICING,
-            PERMISSIONS.VIEW_REPORTS,
-            PERMISSIONS.MANAGE_EXPENSES,
-            PERMISSIONS.APPROVE_EXPENSES,
-            PERMISSIONS.EXPORT_DATA
-        ],
-        color: 'green'
-    },
-    project_manager: {
-        name: 'Project Manager',
-        description: 'Manage assigned projects',
-        permissions: [
-            PERMISSIONS.VIEW_PROJECTS,
-            PERMISSIONS.EDIT_PROJECTS,
-            PERMISSIONS.MANAGE_TASKS,
-            PERMISSIONS.VIEW_TEAM,
-            PERMISSIONS.TIME_TRACKING,
-            PERMISSIONS.VIEW_CLIENTS
-        ],
-        color: 'purple'
-    },
-    team_member: {
-        name: 'Team Member',
-        description: 'Work on assigned tasks',
+    user: {
+        name: 'User',
+        description: 'Standard user with assigned task access',
         permissions: [
             PERMISSIONS.VIEW_ASSIGNED,
             PERMISSIONS.EDIT_ASSIGNED,
             PERMISSIONS.TIME_TRACKING
         ],
         color: 'orange'
-    },
-    viewer: {
-        name: 'Viewer',
-        description: 'Read-only access',
-        permissions: [
-            PERMISSIONS.VIEW_ASSIGNED
-        ],
-        color: 'gray'
     }
 };
 

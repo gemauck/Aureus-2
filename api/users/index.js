@@ -60,7 +60,7 @@ async function handler(req, res) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
-            const { name, email, role = 'member', department = '', phone = '', status = 'active' } = req.body || {}
+            const { name, email, role = 'user', department = '', phone = '', status = 'active' } = req.body || {}
             
             console.log('📝 Creating user with data:', { name, email, role, department, phone, status });
             

@@ -15,7 +15,7 @@ model User {
   name               String?
   passwordHash       String?
   provider           String    @default("local")
-  role               String    @default("member")
+  role               String    @default("user") // admin, manager, user (Admin > Manager > User hierarchy)
   status             String    @default("active") // active, suspended, inactive
   department         String    @default("")
   jobTitle           String    @default("")
@@ -61,7 +61,7 @@ model Team {
 model Membership {
   userId String
   teamId String
-  role   String @default("member")
+  role   String @default("user")
   user   User   @relation(fields: [userId], references: [id])
   team   Team   @relation(fields: [teamId], references: [id])
 
@@ -231,7 +231,7 @@ model Invitation {
   id         String    @id @default(cuid())
   email      String    @unique
   name       String
-  role       String    @default("user") // admin, manager, member, viewer
+  role       String    @default("user") // admin, manager, user (Admin > Manager > User hierarchy)
   token      String    @unique
   status     String    @default("pending") // pending, accepted, expired, cancelled
   invitedBy  String?
