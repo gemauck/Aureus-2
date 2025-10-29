@@ -17,44 +17,62 @@ const Manufacturing = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [stockLocations, setStockLocations] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
 
-  // Load data from localStorage
+  // Load data from API
   useEffect(() => {
-    const loadedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
-    const loadedBoms = JSON.parse(localStorage.getItem('manufacturing_boms') || '[]');
-    const loadedOrders = JSON.parse(localStorage.getItem('production_orders') || '[]');
-    const loadedMovements = JSON.parse(localStorage.getItem('stock_movements') || '[]');
-    const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
-    
-    // If localStorage is empty, clear it completely to ensure no old data persists
-    if (loadedInventory.length === 0) localStorage.removeItem('manufacturing_inventory');
-    if (loadedBoms.length === 0) localStorage.removeItem('manufacturing_boms');
-    if (loadedOrders.length === 0) localStorage.removeItem('production_orders');
-    if (loadedMovements.length === 0) localStorage.removeItem('stock_movements');
-    
-    setInventory(loadedInventory.length ? loadedInventory : getInitialInventory());
-    setBoms(loadedBoms.length ? loadedBoms : getInitialBoms());
-    setProductionOrders(loadedOrders.length ? loadedOrders : getInitialOrders());
-    setMovements(loadedMovements.length ? loadedMovements : getInitialMovements());
-    setStockLocations(loadedLocations);
+    const loadData = async () => {
+      try {
+        // Load inventory
+        if (window.DatabaseAPI) {
+          const invResponse = await window.DatabaseAPI.getInventory();
+          const invData = invResponse?.data?.inventory || [];
+          setInventory(invData.map(item => ({
+            ...item,
+            id: item.id
+          })));
+
+          // Load BOMs
+          const bomResponse = await window.DatabaseAPI.getBOMs();
+          const bomData = bomResponse?.data?.boms || [];
+          setBoms(bomData.map(bom => ({
+            ...bom,
+            id: bom.id,
+            components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
+          })));
+
+          // Load production orders
+          const ordersResponse = await window.DatabaseAPI.getProductionOrders();
+          const ordersData = ordersResponse?.data?.productionOrders || [];
+          setProductionOrders(ordersData.map(order => ({
+            ...order,
+            id: order.id
+          })));
+
+          // Load stock movements
+          const movementsResponse = await window.DatabaseAPI.getStockMovements();
+          const movementsData = movementsResponse?.data?.movements || [];
+          setMovements(movementsData.map(movement => ({
+            ...movement,
+            id: movement.id
+          })));
+        }
+
+        // Load stock locations from localStorage (not persisted to DB yet)
+        const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        setStockLocations(loadedLocations);
+
+        // Load suppliers from localStorage (not persisted to DB yet)
+        const loadedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
+        setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
+      } catch (error) {
+        console.error('Error loading manufacturing data:', error);
+      }
+    };
+
+    loadData();
   }, []);
-
-  // Save data to localStorage
-  useEffect(() => {
-    if (inventory.length) localStorage.setItem('manufacturing_inventory', JSON.stringify(inventory));
-  }, [inventory]);
-
-  useEffect(() => {
-    if (boms.length) localStorage.setItem('manufacturing_boms', JSON.stringify(boms));
-  }, [boms]);
-
-  useEffect(() => {
-    if (productionOrders.length) localStorage.setItem('production_orders', JSON.stringify(productionOrders));
-  }, [productionOrders]);
-
-  useEffect(() => {
-    if (movements.length) localStorage.setItem('stock_movements', JSON.stringify(movements));
-  }, [movements]);
 
   const getInitialInventory = () => [];
 
@@ -63,6 +81,8 @@ const Manufacturing = () => {
   const getInitialOrders = () => [];
 
   const getInitialMovements = () => [];
+
+  const getInitialSuppliers = () => [];
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-ZA', {
@@ -82,6 +102,7 @@ const Manufacturing = () => {
       completed: 'text-green-600 bg-green-50',
       cancelled: 'text-gray-600 bg-gray-50',
       active: 'text-green-600 bg-green-50',
+      inactive: 'text-gray-600 bg-gray-50',
       draft: 'text-gray-600 bg-gray-50',
       consumption: 'text-red-600 bg-red-50',
       receipt: 'text-green-600 bg-green-50',
@@ -683,132 +704,269 @@ const Manufacturing = () => {
     setShowModal(true);
   };
 
-  const handleSaveItem = () => {
-    const totalValue = formData.quantity * formData.unitCost;
-    const newItem = {
-      ...formData,
-      id: selectedItem?.id || `INV${String(inventory.length + 1).padStart(3, '0')}`,
-      totalValue,
-      lastRestocked: new Date().toISOString().split('T')[0]
-    };
+  const handleSaveItem = async () => {
+    try {
+      const totalValue = (parseFloat(formData.quantity) || 0) * (parseFloat(formData.unitCost) || 0);
+      const itemData = {
+        ...formData,
+        quantity: parseFloat(formData.quantity) || 0,
+        unitCost: parseFloat(formData.unitCost) || 0,
+        reorderPoint: parseFloat(formData.reorderPoint) || 0,
+        reorderQty: parseFloat(formData.reorderQty) || 0,
+        totalValue,
+        lastRestocked: formData.lastRestocked || new Date().toISOString().split('T')[0]
+      };
 
-    if (selectedItem) {
-      // Edit existing
-      setInventory(inventory.map(item => item.id === selectedItem.id ? newItem : item));
-    } else {
-      // Add new
-      setInventory([...inventory, newItem]);
+      if (selectedItem?.id) {
+        // Update existing
+        const response = await window.DatabaseAPI.updateInventoryItem(selectedItem.id, itemData);
+        if (response?.data?.item) {
+          setInventory(inventory.map(item => item.id === selectedItem.id ? response.data.item : item));
+        }
+      } else {
+        // Create new
+        const response = await window.DatabaseAPI.createInventoryItem(itemData);
+        if (response?.data?.item) {
+          setInventory([...inventory, { ...response.data.item, id: response.data.item.id }]);
+        }
+      }
+
+      setShowModal(false);
+      setSelectedItem(null);
+      setFormData({});
+    } catch (error) {
+      console.error('Error saving inventory item:', error);
+      alert('Failed to save inventory item. Please try again.');
     }
-
-    setShowModal(false);
-    setSelectedItem(null);
-    setFormData({});
   };
 
-  const handleDeleteItem = (itemId) => {
+  const handleDeleteItem = async (itemId) => {
     if (confirm('Are you sure you want to delete this item?')) {
-      const updatedInventory = inventory.filter(item => item.id !== itemId);
-      setInventory(updatedInventory);
-      localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
-      setShowModal(false);
+      try {
+        await window.DatabaseAPI.deleteInventoryItem(itemId);
+        const updatedInventory = inventory.filter(item => item.id !== itemId);
+        setInventory(updatedInventory);
+        setShowModal(false);
+      } catch (error) {
+        console.error('Error deleting inventory item:', error);
+        alert('Failed to delete inventory item. Please try again.');
+      }
     }
   };
 
-  const handleSaveBom = () => {
-    const totalMaterialCost = bomComponents.reduce((sum, comp) => sum + comp.totalCost, 0);
-    const totalCost = totalMaterialCost + parseFloat(formData.laborCost || 0) + parseFloat(formData.overheadCost || 0);
+  const handleSaveBom = async () => {
+    try {
+      const totalMaterialCost = bomComponents.reduce((sum, comp) => sum + (parseFloat(comp.totalCost) || 0), 0);
+      const laborCost = parseFloat(formData.laborCost || 0);
+      const overheadCost = parseFloat(formData.overheadCost || 0);
+      const totalCost = totalMaterialCost + laborCost + overheadCost;
 
-    const newBom = {
+      const bomData = {
+        ...formData,
+        components: bomComponents,
+        totalMaterialCost,
+        laborCost,
+        overheadCost,
+        totalCost,
+        estimatedTime: parseInt(formData.estimatedTime) || 0,
+        effectiveDate: formData.effectiveDate || new Date().toISOString().split('T')[0]
+      };
+
+      if (selectedItem?.id) {
+        // Update existing
+        const response = await window.DatabaseAPI.updateBOM(selectedItem.id, bomData);
+        if (response?.data?.bom) {
+          const updatedBom = {
+            ...response.data.bom,
+            components: Array.isArray(response.data.bom.components) ? response.data.bom.components : (typeof response.data.bom.components === 'string' ? JSON.parse(response.data.bom.components || '[]') : [])
+          };
+          setBoms(boms.map(bom => bom.id === selectedItem.id ? updatedBom : bom));
+        }
+      } else {
+        // Create new
+        const response = await window.DatabaseAPI.createBOM(bomData);
+        if (response?.data?.bom) {
+          const newBom = {
+            ...response.data.bom,
+            components: Array.isArray(response.data.bom.components) ? response.data.bom.components : (typeof response.data.bom.components === 'string' ? JSON.parse(response.data.bom.components || '[]') : [])
+          };
+          setBoms([...boms, newBom]);
+        }
+      }
+
+      setShowModal(false);
+      setSelectedItem(null);
+      setFormData({});
+      setBomComponents([]);
+    } catch (error) {
+      console.error('Error saving BOM:', error);
+      alert('Failed to save BOM. Please try again.');
+    }
+  };
+
+  const handleDeleteBom = async (bomId) => {
+    if (confirm('Are you sure you want to delete this BOM?')) {
+      try {
+        await window.DatabaseAPI.deleteBOM(bomId);
+        const updatedBoms = boms.filter(bom => bom.id !== bomId);
+        setBoms(updatedBoms);
+        setShowModal(false);
+      } catch (error) {
+        console.error('Error deleting BOM:', error);
+        alert('Failed to delete BOM. Please try again.');
+      }
+    }
+  };
+
+  const handleDeleteProductionOrder = async (orderId) => {
+    if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
+      try {
+        await window.DatabaseAPI.deleteProductionOrder(orderId);
+        const updatedOrders = productionOrders.filter(order => order.id !== orderId);
+        setProductionOrders(updatedOrders);
+      } catch (error) {
+        console.error('Error deleting production order:', error);
+        alert('Failed to delete production order. Please try again.');
+      }
+    }
+  };
+
+  const handleDeleteMovement = async (movementId) => {
+    if (confirm('Are you sure you want to delete this stock movement? This will affect audit trail.')) {
+      try {
+        await window.DatabaseAPI.deleteStockMovement(movementId);
+        const updatedMovements = movements.filter(movement => movement.id !== movementId);
+        setMovements(updatedMovements);
+      } catch (error) {
+        console.error('Error deleting stock movement:', error);
+        alert('Failed to delete stock movement. Please try again.');
+      }
+    }
+  };
+
+  const openAddSupplierModal = () => {
+    setFormData({
+      name: '',
+      code: '',
+      contactPerson: '',
+      email: '',
+      phone: '',
+      address: '',
+      website: '',
+      paymentTerms: 'Net 30',
+      notes: '',
+      status: 'active'
+    });
+    setModalType('add_supplier');
+    setShowModal(true);
+  };
+
+  const openEditSupplierModal = (supplier) => {
+    setFormData({ ...supplier });
+    setSelectedItem(supplier);
+    setModalType('edit_supplier');
+    setShowModal(true);
+  };
+
+  const handleSaveSupplier = () => {
+    const newSupplier = {
       ...formData,
-      id: selectedItem?.id || `BOM${String(boms.length + 1).padStart(3, '0')}`,
-      components: bomComponents,
-      totalMaterialCost,
-      laborCost: parseFloat(formData.laborCost || 0),
-      overheadCost: parseFloat(formData.overheadCost || 0),
-      totalCost
+      id: selectedItem?.id || `SUP${String(suppliers.length + 1).padStart(3, '0')}`,
+      createdAt: selectedItem?.createdAt || new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString().split('T')[0]
     };
 
     if (selectedItem) {
       // Edit existing
-      setBoms(boms.map(bom => bom.id === selectedItem.id ? newBom : bom));
+      setSuppliers(suppliers.map(supplier => supplier.id === selectedItem.id ? newSupplier : supplier));
     } else {
       // Add new
-      setBoms([...boms, newBom]);
+      setSuppliers([...suppliers, newSupplier]);
     }
 
     setShowModal(false);
     setSelectedItem(null);
     setFormData({});
-    setBomComponents([]);
   };
 
-  const handleDeleteBom = (bomId) => {
-    if (confirm('Are you sure you want to delete this BOM?')) {
-      const updatedBoms = boms.filter(bom => bom.id !== bomId);
-      setBoms(updatedBoms);
-      localStorage.setItem('manufacturing_boms', JSON.stringify(updatedBoms));
+  const handleDeleteSupplier = (supplierId) => {
+    // Check if supplier is used in any inventory items
+    const isUsed = inventory.some(item => item.supplier === suppliers.find(s => s.id === supplierId)?.name);
+    
+    if (isUsed) {
+      alert('Cannot delete supplier: This supplier is assigned to one or more inventory items. Please update those items first.');
+      return;
+    }
+
+    if (confirm('Are you sure you want to delete this supplier?')) {
+      const updatedSuppliers = suppliers.filter(supplier => supplier.id !== supplierId);
+      setSuppliers(updatedSuppliers);
+      localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
       setShowModal(false);
     }
   };
 
-  const handleDeleteProductionOrder = (orderId) => {
-    if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
-      const updatedOrders = productionOrders.filter(order => order.id !== orderId);
-      setProductionOrders(updatedOrders);
-      localStorage.setItem('production_orders', JSON.stringify(updatedOrders));
+  const handleSaveProductionOrder = async () => {
+    try {
+      const selectedBom = boms.find(b => b.id === formData.bomId);
+      if (!selectedBom) {
+        alert('Please select a BOM/Product');
+        return;
+      }
+
+      const totalCost = selectedBom.totalCost * (parseInt(formData.quantity) || 0);
+      const orderData = {
+        bomId: formData.bomId,
+        productSku: formData.productSku,
+        productName: formData.productName,
+        quantity: parseInt(formData.quantity) || 0,
+        quantityProduced: 0,
+        status: formData.status || 'in_progress',
+        priority: formData.priority || 'normal',
+        startDate: formData.startDate || new Date().toISOString().split('T')[0],
+        targetDate: formData.targetDate || null,
+        assignedTo: formData.assignedTo || '',
+        totalCost: totalCost,
+        notes: formData.notes || '',
+        createdBy: user?.name || 'System'
+      };
+
+      const response = await window.DatabaseAPI.createProductionOrder(orderData);
+      if (response?.data?.order) {
+        setProductionOrders([...productionOrders, { ...response.data.order, id: response.data.order.id }]);
+      }
+
+      setShowModal(false);
+      setFormData({});
+    } catch (error) {
+      console.error('Error saving production order:', error);
+      alert('Failed to save production order. Please try again.');
     }
   };
 
-  const handleDeleteMovement = (movementId) => {
-    if (confirm('Are you sure you want to delete this stock movement? This will affect audit trail.')) {
-      const updatedMovements = movements.filter(movement => movement.id !== movementId);
-      setMovements(updatedMovements);
-      localStorage.setItem('stock_movements', JSON.stringify(updatedMovements));
+  const handleUpdateProductionOrder = async () => {
+    try {
+      const orderData = {
+        ...formData,
+        quantity: parseInt(formData.quantity) || selectedItem.quantity,
+        quantityProduced: parseInt(formData.quantityProduced) || selectedItem.quantityProduced || 0,
+        completedDate: formData.status === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
+      };
+
+      const response = await window.DatabaseAPI.updateProductionOrder(selectedItem.id, orderData);
+      if (response?.data?.order) {
+        setProductionOrders(productionOrders.map(order => 
+          order.id === selectedItem.id ? response.data.order : order
+        ));
+      }
+
+      setShowModal(false);
+      setSelectedItem(null);
+      setFormData({});
+    } catch (error) {
+      console.error('Error updating production order:', error);
+      alert('Failed to update production order. Please try again.');
     }
-  };
-
-  const handleSaveProductionOrder = () => {
-    const selectedBom = boms.find(b => b.id === formData.bomId);
-    if (!selectedBom) return;
-
-    const totalCost = selectedBom.totalCost * formData.quantity;
-    const newOrder = {
-      id: `PO${String(productionOrders.length + 1).padStart(4, '0')}`,
-      bomId: formData.bomId,
-      productSku: formData.productSku,
-      productName: formData.productName,
-      quantity: formData.quantity,
-      quantityProduced: 0,
-      status: formData.status || 'in_progress',
-      priority: formData.priority || 'normal',
-      startDate: formData.startDate,
-      targetDate: formData.targetDate,
-      completedDate: null,
-      assignedTo: formData.assignedTo,
-      totalCost: totalCost,
-      notes: formData.notes || '',
-      createdAt: new Date().toISOString().split('T')[0],
-      createdBy: user?.name || 'System'
-    };
-
-    setProductionOrders([...productionOrders, newOrder]);
-    setShowModal(false);
-    setFormData({});
-  };
-
-  const handleUpdateProductionOrder = () => {
-    const updatedOrder = {
-      ...selectedItem,
-      ...formData,
-      completedDate: formData.status === 'completed' ? new Date().toISOString().split('T')[0] : selectedItem.completedDate
-    };
-
-    setProductionOrders(productionOrders.map(order => 
-      order.id === selectedItem.id ? updatedOrder : order
-    ));
-    setShowModal(false);
-    setSelectedItem(null);
-    setFormData({});
   };
 
   const addBomComponent = () => {
@@ -1002,13 +1160,30 @@ const Manufacturing = () => {
                 {/* Supplier */}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
-                  <input
-                    type="text"
-                    value={formData.supplier || ''}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., TechSupply SA"
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={formData.supplier || ''}
+                      onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">Select supplier...</option>
+                      {suppliers.filter(s => s.status === 'active').map(supplier => (
+                        <option key={supplier.id} value={supplier.name}>{supplier.name} {supplier.code ? `(${supplier.code})` : ''}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModal(false);
+                        setActiveTab('suppliers');
+                        setTimeout(() => openAddSupplierModal(), 100);
+                      }}
+                      className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                      title="Add new supplier"
+                    >
+                      <i className="fas fa-plus"></i>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Status */}
@@ -1763,7 +1938,424 @@ const Manufacturing = () => {
       );
     }
 
+    if (modalType === 'add_supplier' || modalType === 'edit_supplier') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">
+                {modalType === 'edit_supplier' ? 'Edit Supplier' : 'Add Supplier'}
+              </h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Supplier Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Name *</label>
+                  <input
+                    type="text"
+                    value={formData.name || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., TechSupply SA"
+                  />
+                </div>
+
+                {/* Supplier Code */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Code</label>
+                  <input
+                    type="text"
+                    value={formData.code || ''}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., TSS001"
+                  />
+                </div>
+
+                {/* Contact Person */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                  <input
+                    type="text"
+                    value={formData.contactPerson || ''}
+                    onChange={(e) => setFormData({ ...formData, contactPerson: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., John Doe"
+                  />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                  <input
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="supplier@example.com"
+                  />
+                </div>
+
+                {/* Phone */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="tel"
+                    value={formData.phone || ''}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="+27 11 123 4567"
+                  />
+                </div>
+
+                {/* Website */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
+                  <input
+                    type="url"
+                    value={formData.website || ''}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="https://www.example.com"
+                  />
+                </div>
+
+                {/* Payment Terms */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Payment Terms</label>
+                  <select
+                    value={formData.paymentTerms || 'Net 30'}
+                    onChange={(e) => setFormData({ ...formData, paymentTerms: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="Net 15">Net 15</option>
+                    <option value="Net 30">Net 30</option>
+                    <option value="Net 45">Net 45</option>
+                    <option value="Net 60">Net 60</option>
+                    <option value="Due on Receipt">Due on Receipt</option>
+                    <option value="Prepaid">Prepaid</option>
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={formData.status || 'active'}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                {/* Address */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <textarea
+                    value={formData.address || ''}
+                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Street address, City, Province, Postal Code"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={formData.notes || ''}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional notes about this supplier..."
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-between bg-gray-50">
+              <div>
+                {modalType === 'edit_supplier' && (
+                  <button
+                    onClick={() => handleDeleteSupplier(selectedItem.id)}
+                    className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
+                  >
+                    Delete Supplier
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
+                  className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSupplier}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  disabled={!formData.name}
+                >
+                  {modalType === 'edit_supplier' ? 'Update Supplier' : 'Add Supplier'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (modalType === 'view_supplier') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Supplier Details</h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              {selectedItem && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Supplier Name</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(selectedItem.status)}`}>
+                        {selectedItem.status}
+                      </span>
+                    </div>
+                    {selectedItem.code && (
+                      <div>
+                        <p className="text-xs text-gray-500">Supplier Code</p>
+                        <p className="text-sm text-gray-900">{selectedItem.code}</p>
+                      </div>
+                    )}
+                    {selectedItem.contactPerson && (
+                      <div>
+                        <p className="text-xs text-gray-500">Contact Person</p>
+                        <p className="text-sm text-gray-900">{selectedItem.contactPerson}</p>
+                      </div>
+                    )}
+                    {selectedItem.email && (
+                      <div>
+                        <p className="text-xs text-gray-500">Email</p>
+                        <p className="text-sm text-gray-900">{selectedItem.email}</p>
+                      </div>
+                    )}
+                    {selectedItem.phone && (
+                      <div>
+                        <p className="text-xs text-gray-500">Phone</p>
+                        <p className="text-sm text-gray-900">{selectedItem.phone}</p>
+                      </div>
+                    )}
+                    {selectedItem.website && (
+                      <div>
+                        <p className="text-xs text-gray-500">Website</p>
+                        <a href={selectedItem.website} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline">
+                          {selectedItem.website}
+                        </a>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Payment Terms</p>
+                      <p className="text-sm text-gray-900">{selectedItem.paymentTerms || 'Net 30'}</p>
+                    </div>
+                    {selectedItem.address && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500">Address</p>
+                        <p className="text-sm text-gray-900">{selectedItem.address}</p>
+                      </div>
+                    )}
+                    {selectedItem.notes && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500">Notes</p>
+                        <p className="text-sm text-gray-900">{selectedItem.notes}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Created</p>
+                      <p className="text-sm text-gray-900">{selectedItem.createdAt}</p>
+                    </div>
+                    {selectedItem.updatedAt && (
+                      <div>
+                        <p className="text-xs text-gray-500">Last Updated</p>
+                        <p className="text-sm text-gray-900">{selectedItem.updatedAt}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => openEditSupplierModal(selectedItem)}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Edit Supplier
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return null;
+  };
+
+  const SuppliersView = () => {
+    const filteredSuppliers = suppliers.filter(supplier => {
+      const matchesSearch = supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
+                           (supplier.code && supplier.code.toLowerCase().includes(supplierSearchTerm.toLowerCase())) ||
+                           (supplier.contactPerson && supplier.contactPerson.toLowerCase().includes(supplierSearchTerm.toLowerCase())) ||
+                           (supplier.email && supplier.email.toLowerCase().includes(supplierSearchTerm.toLowerCase()));
+      return matchesSearch;
+    });
+
+    // Count items per supplier
+    const getSupplierItemCount = (supplierName) => {
+      return inventory.filter(item => item.supplier === supplierName).length;
+    };
+
+    return (
+      <div className="space-y-3">
+        {/* Controls */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
+                <input
+                  type="text"
+                  placeholder="Search suppliers..."
+                  value={supplierSearchTerm}
+                  onChange={(e) => setSupplierSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
+                <i className="fas fa-download text-xs"></i>
+                Export
+              </button>
+              <button
+                onClick={openAddSupplierModal}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                Add Supplier
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Suppliers Table */}
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Code</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Contact Person</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Email</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Phone</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Payment Terms</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Inventory Items</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredSuppliers.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="px-3 py-8 text-center text-sm text-gray-500">
+                      {supplierSearchTerm ? 'No suppliers found matching your search.' : 'No suppliers added yet. Click "Add Supplier" to get started.'}
+                    </td>
+                  </tr>
+                ) : (
+                  filteredSuppliers.map(supplier => (
+                    <tr key={supplier.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{supplier.code || '-'}</td>
+                      <td className="px-3 py-2">
+                        <div className="text-sm font-medium text-gray-900">{supplier.name}</div>
+                        {supplier.website && (
+                          <a href={supplier.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
+                            {supplier.website}
+                          </a>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{supplier.contactPerson || '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{supplier.email || '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{supplier.phone || '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{supplier.paymentTerms || 'Net 30'}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-700">
+                          {getSupplierItemCount(supplier.name)} items
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(supplier.status)}`}>
+                          {supplier.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedItem(supplier); setModalType('view_supplier'); setShowModal(true); }}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            title="View Details"
+                          >
+                            <i className="fas fa-eye"></i>
+                          </button>
+                          <button
+                            onClick={() => openEditSupplierModal(supplier)}
+                            className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            title="Edit Supplier"
+                          >
+                            <i className="fas fa-edit"></i>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSupplier(supplier.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Delete Supplier"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const MovementsView = () => {
@@ -1874,6 +2466,7 @@ const Manufacturing = () => {
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
             { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
+            { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
           ].map(tab => (
             <button
@@ -1899,6 +2492,7 @@ const Manufacturing = () => {
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'movements' && <MovementsView />}
+        {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'locations' && window.StockLocations && (
           <window.StockLocations 
             inventory={inventory}

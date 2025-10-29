@@ -539,18 +539,21 @@ const Clients = React.memo(() => {
                     // Show clients immediately
                     setClients(clientsOnly);
                     
-                    // Only update leads if API returned leads (preserve cached leads if API returns 0)
-                    if (leadsOnly.length > 0 || leads.length === 0) {
+                    // Only update leads if they're mixed with clients in the API response
+                    // (Leads typically come from a separate getLeads() endpoint via loadLeads())
+                    if (leadsOnly.length > 0) {
+                        // API returned leads mixed with clients - use them
                         setLeads(leadsOnly);
                         setLeadsCount(leadsOnly.length);
-                        
-                        // Save leads to localStorage for instant load next time
+                        // Save to localStorage
                         if (window.storage?.setLeads) {
                             window.storage.setLeads(leadsOnly);
-                            console.log(`✅ Saved ${leadsOnly.length} leads to localStorage`);
+                            console.log(`✅ Saved ${leadsOnly.length} leads from clients API to localStorage`);
                         }
                     } else {
-                        console.log(`⚡ Preserving ${leads.length} cached leads (API returned 0 leads)`);
+                        // No leads in clients API - preserve current leads state (from separate getLeads() call or cache)
+                        // Don't overwrite leads here - let loadLeads() handle it
+                        console.log('⚡ No leads in clients API response, preserving current leads state');
                     }
                     
                     // Save clients to localStorage
