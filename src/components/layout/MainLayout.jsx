@@ -106,8 +106,8 @@ const MainLayout = () => {
     const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
     const Pipeline = window.Pipeline;
     const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
-    // Use Teams directly, skip TeamsEnhanced to avoid memory crashes
-    const Teams = window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
+    // Use TeamsSimple first to avoid crashes, fallback to full Teams if needed
+    const Teams = window.TeamsSimple || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
     const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
