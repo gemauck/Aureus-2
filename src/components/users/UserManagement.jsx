@@ -1206,4 +1206,10 @@ const UserManagement = () => {
     );
 };
 
-window.UserManagement = UserManagement;
+// Make available globally
+try {
+    window.UserManagement = UserManagement;
+    console.log('✅ UserManagement.jsx loaded and registered on window.UserManagement', typeof window.UserManagement);
+} catch (error) {
+    console.error('❌ UserManagement.jsx: Error registering component:', error, error.stack);
+}

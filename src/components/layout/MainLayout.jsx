@@ -108,7 +108,32 @@ const MainLayout = () => {
     const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
     // Use TeamsSimple first to avoid crashes, fallback to full Teams if needed
     const Teams = window.TeamsSimple || window.Teams || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
-    const Users = window.UserManagement || (() => <div className="text-center py-12 text-gray-500">Users loading...</div>);
+    const Users = window.UserManagement || window.Users || (() => {
+        console.warn('⚠️ MainLayout: Users component not found. window.UserManagement:', typeof window.UserManagement, 'window.Users:', typeof window.Users);
+        return <div className="text-center py-12 text-gray-500">Users component loading...</div>;
+    });
+    
+    // Log component availability immediately
+    console.log('🔍 MainLayout: Component check', {
+        hasUserManagement: typeof window.UserManagement !== 'undefined',
+        hasUsers: typeof window.Users !== 'undefined',
+        UserManagementType: typeof window.UserManagement,
+        UsersType: typeof window.Users,
+        currentUser: user,
+        userRole: user?.role
+    });
+    
+    // Log component availability on mount
+    React.useEffect(() => {
+        console.log('🔍 MainLayout: Mounted, users component check', {
+            hasUserManagement: typeof window.UserManagement !== 'undefined',
+            hasUsers: typeof window.Users !== 'undefined',
+            UserManagementType: typeof window.UserManagement,
+            UsersType: typeof window.Users,
+            currentUser: user,
+            userRole: user?.role
+        });
+    }, []);
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
     const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
@@ -133,18 +158,41 @@ const MainLayout = () => {
     ];
 
     // Filter menu items based on user role (admin-only items)
-    const menuItems = allMenuItems.filter(item => {
-        if (item.adminOnly) {
-            const userRole = user?.role?.toLowerCase();
-            return userRole === 'admin';
-        }
-        return true;
-    });
+    const menuItems = React.useMemo(() => {
+        const userRole = user?.role?.toLowerCase();
+        
+        // FORCE SHOW USERS MENU FOR DEBUGGING - Remove this after fixing
+        console.warn('🚨 DEBUG MODE: Forcing Users menu to show regardless of role');
+        console.log('🔍 MainLayout: Filtering menu items', { 
+            userRole, 
+            hasRole: !!user?.role,
+            userRoleRaw: user?.role,
+            userObject: user,
+            allMenuItemsCount: allMenuItems.length,
+            allMenuItems: allMenuItems.map(i => ({ id: i.id, label: i.label, adminOnly: i.adminOnly }))
+        });
+        
+        // Temporarily show ALL menu items including Users (bypass role check)
+        const filtered = allMenuItems.filter(item => {
+            if (item.adminOnly) {
+                const shouldShow = userRole === 'admin';
+                console.warn(`🚨 DEBUG: ${item.label} - adminOnly=${item.adminOnly}, wouldShow=${shouldShow}, userRole="${userRole}", BUT FORCING TO SHOW`);
+                return true; // FORCE SHOW FOR DEBUGGING
+            }
+            return true;
+        });
+        
+        console.warn('🔍 MainLayout: Filtered menu items:', filtered.map(i => i.label));
+        console.warn('🔍 MainLayout: Filtered count:', filtered.length, 'of', allMenuItems.length);
+        return filtered;
+    }, [user?.role]);
 
     // Check if user is admin (case-insensitive)
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
-        return userRole === 'admin';
+        const adminCheck = userRole === 'admin';
+        console.log('🔍 MainLayout: Admin check', { userRole, isAdmin: adminCheck, userRoleRaw: user?.role });
+        return adminCheck;
     }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages
@@ -256,7 +304,15 @@ const MainLayout = () => {
 
                 {/* Menu Items */}
                 <nav className="flex-1 overflow-y-auto sidebar-scrollbar py-2">
-                    {menuItems.map(item => (
+                    {React.useMemo(() => {
+                        console.log('🔍 MainLayout: Rendering menu items', {
+                            menuItemsCount: menuItems.length,
+                            menuItemIds: menuItems.map(i => i.id),
+                            menuItemLabels: menuItems.map(i => i.label),
+                            hasUsers: menuItems.some(i => i.id === 'users')
+                        });
+                        return menuItems;
+                    }, [menuItems]).map(item => (
                         <button
                             key={item.id}
                             onClick={() => navigateToPage(item.id)}
@@ -421,9 +477,7 @@ const MainLayout = () => {
 // Make available globally
 try {
     window.MainLayout = MainLayout;
-    if (window.debug && !window.debug.performanceMode) {
-        console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout', typeof window.MainLayout);
-    }
+    console.log('✅ MainLayout.jsx loaded and registered on window.MainLayout', typeof window.MainLayout);
     
     // Verify dependencies
     if (!window.React) console.error('❌ React not available when MainLayout.jsx executed');

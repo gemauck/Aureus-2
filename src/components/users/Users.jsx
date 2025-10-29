@@ -762,4 +762,9 @@ const Users = () => {
 };
 
 // Make available globally
-window.Users = Users;
+try {
+    window.Users = Users;
+    console.log('✅ Users.jsx loaded and registered on window.Users', typeof window.Users);
+} catch (error) {
+    console.error('❌ Users.jsx: Error registering component:', error, error.stack);
+}
