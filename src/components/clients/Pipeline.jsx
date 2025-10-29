@@ -346,11 +346,13 @@ const Pipeline = () => {
         // Search filter
         if (filters.search) {
             const searchLower = filters.search.toLowerCase();
-            items = items.filter(item => 
-                item.name.toLowerCase().includes(searchLower) ||
-                (item.clientName && item.clientName.toLowerCase().includes(searchLower)) ||
-                (item.contacts && item.contacts[0]?.name.toLowerCase().includes(searchLower))
-            );
+            items = items.filter(item => {
+                const matchesName = item.name.toLowerCase().includes(searchLower);
+                const matchesClientName = item.clientName && item.clientName.toLowerCase().includes(searchLower);
+                // Only search contacts for opportunities, not leads
+                const matchesContact = item.type !== 'lead' && item.contacts && item.contacts[0]?.name.toLowerCase().includes(searchLower);
+                return matchesName || matchesClientName || matchesContact;
+            });
         }
 
         // Value filters
@@ -579,15 +581,14 @@ const Pipeline = () => {
                 </div>
 
                 {/* Contact/Client */}
-                <div className="text-[10px] text-gray-600 mb-1.5 flex items-center gap-1">
-                    <i className={`fas ${item.type === 'lead' ? 'fa-user' : 'fa-building'} text-[9px]`}></i>
-                    <span className="truncate">
-                        {item.type === 'lead' 
-                            ? item.contacts?.[0]?.name || 'No contact'
-                            : item.clientName
-                        }
-                    </span>
-                </div>
+                {item.type !== 'lead' && (
+                    <div className="text-[10px] text-gray-600 mb-1.5 flex items-center gap-1">
+                        <i className={`fas fa-building text-[9px]`}></i>
+                        <span className="truncate">
+                            {item.clientName}
+                        </span>
+                    </div>
+                )}
 
                 {/* Value */}
                 <div className="flex items-center justify-between mb-1.5">
@@ -727,12 +728,11 @@ const Pipeline = () => {
                                     >
                                         <td className="px-4 py-3">
                                             <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                                            <div className="text-xs text-gray-500">
-                                                {item.type === 'lead' 
-                                                    ? item.contacts?.[0]?.name || 'No contact'
-                                                    : item.clientName
-                                                }
-                                            </div>
+                                            {item.type !== 'lead' && (
+                                                <div className="text-xs text-gray-500">
+                                                    {item.clientName}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 text-xs rounded-full font-medium ${
