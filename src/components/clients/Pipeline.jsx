@@ -90,8 +90,9 @@ const Pipeline = () => {
                 ...client,
                 opportunities: client.opportunities || []
             }));
+            const totalCachedOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
             setClients(clientsWithOpportunities);
-            console.log('⚡ Pipeline: Loaded cached data immediately:', clientsWithOpportunities.length, 'clients');
+            console.log(`⚡ Pipeline: Loaded cached data immediately: ${clientsWithOpportunities.length} clients, ${totalCachedOpps} opportunities`);
         }
         
         if (savedLeads.length > 0) {
@@ -102,6 +103,12 @@ const Pipeline = () => {
 
     const loadData = async () => {
         // Don't set loading state immediately - show cached data first
+        // Keep cached opportunities visible while API loads
+        const cachedClients = storage.getClients() || [];
+        const cachedOpportunities = cachedClients
+            .flatMap(c => (c.opportunities || []).map(opp => ({ ...opp, clientId: c.id })))
+            .filter(opp => opp.clientId); // Only keep opportunities with valid clientId
+        
         setIsLoading(true);
         
         try {
@@ -150,7 +157,9 @@ const Pipeline = () => {
                     
                     console.log(`✅ Pipeline: Loaded ${allOpportunities.length} opportunities from parallel fetch`);
                 } else {
-                    console.warn('⚠️ Pipeline: Failed to load opportunities from parallel fetch, opportunities will be empty');
+                    console.warn('⚠️ Pipeline: Failed to load opportunities from API, using cached opportunities');
+                    // Use cached opportunities if API fails
+                    allOpportunities = cachedOpportunities;
                 }
                 
                 // Attach opportunities to their respective clients
