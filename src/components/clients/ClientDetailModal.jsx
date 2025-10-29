@@ -8,7 +8,10 @@ const GoogleCalendarSync = window.GoogleCalendarSync;
 const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
-    const [refreshTrigger, setRefreshTrigger] = useState(0); // Force re-render after optimistic updates
+    
+    // Track optimistic updates in STATE (not refs) so React re-renders when they change
+    const [optimisticContacts, setOptimisticContacts] = useState([]);
+    const [optimisticSites, setOptimisticSites] = useState([]);
     
     // Track if user has edited the form to prevent unwanted resets
     const hasUserEditedForm = useRef(false);
@@ -18,10 +21,6 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
     const formDataRef = useRef(null);
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
-    
-    // Track optimistic updates separately to prevent overwrites
-    const optimisticContacts = useRef([]);
-    const optimisticSites = useRef([]);
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -278,8 +277,8 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Reset edit flag when switching clients
                 hasUserEditedForm.current = false;
                 // Clear optimistic updates when switching clients
-                optimisticContacts.current = [];
-                optimisticSites.current = [];
+                setOptimisticContacts([]);
+                setOptimisticSites([]);
                 console.log('🔄 Cleared optimistic updates for new client');
             }
             
@@ -537,16 +536,20 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
-                // Add to optimistic contacts ref - this persists even if formData gets reset
-                const currentOptimistic = optimisticContacts.current || [];
-                const contactExistsInOptimistic = currentOptimistic.some(c => c.id === savedContact.id);
-                if (!contactExistsInOptimistic) {
-                    optimisticContacts.current = [...currentOptimistic, savedContact];
-                    console.log('✅ Added to optimisticContacts ref:', {
+                // Add to optimistic contacts state - this triggers re-render and persists even if formData gets reset
+                setOptimisticContacts(prev => {
+                    const contactExists = prev.some(c => c.id === savedContact.id);
+                    if (contactExists) {
+                        console.log('⚠️ Contact already in optimistic state');
+                        return prev;
+                    }
+                    const updated = [...prev, savedContact];
+                    console.log('✅ Added to optimisticContacts state:', {
                         contactId: savedContact.id,
-                        optimisticCount: optimisticContacts.current.length
+                        optimisticCount: updated.length
                     });
-                }
+                    return updated;
+                });
                 
                 // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
@@ -571,9 +574,8 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     return newFormData;
                 });
                 
-                // Force re-render by incrementing refresh trigger
-                setRefreshTrigger(prev => prev + 1);
-                console.log('🔄 Refresh trigger incremented to force re-render');
+                // State update above will automatically trigger re-render
+                console.log('🔄 State updated - React will re-render automatically');
                 
                 logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
                 
@@ -975,16 +977,20 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 // Store clientId to avoid stale closure
                 const clientId = formData.id;
                 
-                // Add to optimistic sites ref - this persists even if formData gets reset
-                const currentOptimistic = optimisticSites.current || [];
-                const siteExistsInOptimistic = currentOptimistic.some(s => s.id === savedSite.id);
-                if (!siteExistsInOptimistic) {
-                    optimisticSites.current = [...currentOptimistic, savedSite];
-                    console.log('✅ Added to optimisticSites ref:', {
+                // Add to optimistic sites state - this triggers re-render and persists even if formData gets reset
+                setOptimisticSites(prev => {
+                    const siteExists = prev.some(s => s.id === savedSite.id);
+                    if (siteExists) {
+                        console.log('⚠️ Site already in optimistic state');
+                        return prev;
+                    }
+                    const updated = [...prev, savedSite];
+                    console.log('✅ Added to optimisticSites state:', {
                         siteId: savedSite.id,
-                        optimisticCount: optimisticSites.current.length
+                        optimisticCount: updated.length
                     });
-                }
+                    return updated;
+                });
                 
                 // Optimistically update UI immediately - use functional update to get latest state
                 setFormData(prev => {
@@ -1009,9 +1015,8 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                     return newFormData;
                 });
                 
-                // Force re-render by incrementing refresh trigger
-                setRefreshTrigger(prev => prev + 1);
-                console.log('🔄 Refresh trigger incremented to force re-render');
+                // State update above will automatically trigger re-render
+                console.log('🔄 State updated - React will re-render automatically');
                 
                 logActivity('Site Added', `Added site: ${newSite.name}`);
                 
@@ -1712,7 +1717,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     {(() => {
                                         // Merge formData contacts with optimistic contacts
                                         const formContacts = formData.contacts || [];
-                                        const optimistic = optimisticContacts.current || [];
+                                        const optimistic = optimisticContacts || [];
                                         
                                         // Merge and deduplicate by ID
                                         const contactMap = new Map();
@@ -1732,8 +1737,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                         console.log('🖼️ RENDER: Contacts to display:', {
                                             formContactsCount: formContacts.length,
                                             optimisticCount: optimistic.length,
-                                            mergedCount: allContacts.length,
-                                            refreshTrigger: refreshTrigger
+                                            mergedCount: allContacts.length
                                         });
 
                                         return allContacts.length === 0 ? (
@@ -2028,7 +2032,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                     {(() => {
                                         // Merge formData sites with optimistic sites
                                         const formSites = formData.sites || [];
-                                        const optimistic = optimisticSites.current || [];
+                                        const optimistic = optimisticSites || [];
                                         
                                         // Merge and deduplicate by ID
                                         const siteMap = new Map();
