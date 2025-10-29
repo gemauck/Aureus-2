@@ -196,8 +196,8 @@
     <div id="root"></div>
 
     <!-- React Production Builds - Much faster than development -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="window.React = React; window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready'));"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(!window.React) window.React = React; if(!window.ReactDOM) window.ReactDOM = ReactDOM;"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; }"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); }"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
@@ -298,7 +298,7 @@
     <script defer src="./dist/src/hooks/usePersistence.js"></script>
     <script src="./dist/src/components/common/SyncStatus.js"></script>
     <script defer src="./dist/src/utils/authStorage.js"></script>
-    <script defer src="./dist/src/utils/databaseAPI.js"></script>
+    <!-- Use only one databaseAPI - the new version -->
     <script defer src="./dist/src/utils/databaseAPI-new.js?v=1002"></script>
     <script defer src="./dist/src/utils/cache-manager.js"></script>
     <script defer src="./dist/src/utils/liveDataSync.js"></script>

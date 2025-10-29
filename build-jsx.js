@@ -19,7 +19,7 @@ console.log(`📦 Found ${jsFiles.length} JS files to copy`);
 
 const entryPoints = jsxFiles.map(file => path.join(__dirname, file));
 
-// Copy .js files to dist
+// Copy .js files to dist and wrap ES6 exports for browser
 function copyJSFile(srcPath) {
   const relativePath = path.relative(path.join(__dirname, 'src'), srcPath);
   const destPath = path.join(__dirname, 'dist', 'src', relativePath);
@@ -29,7 +29,34 @@ function copyJSFile(srcPath) {
     fs.mkdirSync(destDir, { recursive: true });
   }
   
-  fs.copyFileSync(srcPath, destPath);
+  // Read the file content
+  let content = fs.readFileSync(srcPath, 'utf8');
+  
+  // Check if file uses ES6 exports
+  if (content.includes('export ')) {
+    // Collect exports to expose to window
+    const exportsToExpose = [];
+    const exportMatches = content.matchAll(/export\s+(?:const|function|default\s+function)\s+(\w+)/g);
+    for (const match of exportMatches) {
+      exportsToExpose.push(match[1]);
+    }
+    
+    // Replace export statements
+    content = content.replace(/export\s+const\s+(\w+)/g, 'const $1');
+    content = content.replace(/export\s+default\s+function\s+(\w+)/g, 'function $1');
+    content = content.replace(/export\s+function\s+(\w+)/g, 'function $1');
+    content = content.replace(/export\s+default\s+(\w+)/g, 'const $1 = ');
+    
+    // Wrap in IIFE and expose to window
+    if (exportsToExpose.length > 0) {
+      const exposeStatements = exportsToExpose.map(exp => `window.${exp} = ${exp};`).join('\n');
+      content = `(() => {\n${content}\n${exposeStatements}\n})();`;
+    } else {
+      content = `(() => {\n${content}\n})();`;
+    }
+  }
+  
+  fs.writeFileSync(destPath, content, 'utf8');
 }
 
 try {
