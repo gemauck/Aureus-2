@@ -34,13 +34,10 @@ function toHandlerPath(urlPath) {
 
   const candidates = []
   
-  // Dynamic route matches first (e.g., /api/clients/123 -> api/clients/[id].js)
-  if (parts.length === 2) {
-    const dynamicFile = path.join(apiDir, parts[0], '[id].js')
-    candidates.push(dynamicFile)
-  }
+  // IMPORTANT: Check exact file matches BEFORE dynamic routes
+  // This ensures /api/users/heartbeat matches api/users/heartbeat.js, not api/users/[id].js
   
-  // Direct file matches (e.g., /api/leads -> api/leads.js)
+  // Direct file matches (e.g., /api/users/heartbeat -> api/users/heartbeat.js)
   const directFile = path.join(apiDir, `${parts.join('/')}.js`)
   candidates.push(directFile)
   
@@ -56,6 +53,13 @@ function toHandlerPath(urlPath) {
   if (parts.length === 1) {
     const singleFile = path.join(apiDir, `${parts[0]}.js`)
     candidates.push(singleFile)
+  }
+  
+  // Dynamic route matches LAST (e.g., /api/clients/123 -> api/clients/[id].js)
+  // Only checked after exact matches fail
+  if (parts.length === 2) {
+    const dynamicFile = path.join(apiDir, parts[0], '[id].js')
+    candidates.push(dynamicFile)
   }
   
   for (const candidate of candidates) {
