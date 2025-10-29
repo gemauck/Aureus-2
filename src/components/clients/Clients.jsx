@@ -185,45 +185,28 @@ const Clients = React.memo(() => {
         }
     };
 
-    // Load clients (fast) and projects on mount; load lightweight leads count
+    // Load clients, leads, and projects on mount (boot up)
     useEffect(() => {
         loadClients();
         loadProjects();
         
-        // Set leads count immediately if leads are already loaded
-        if (leads.length > 0) {
-            setLeadsCount(leads.length);
-        }
-        
-        // Load leads count from API (lightweight)
-        const loadLeadsCount = async () => {
+        // Load full leads data immediately on boot (not just count)
+        // This ensures leads are ready when user navigates to leads/pipeline views
+        const loadLeadsOnBoot = async () => {
             try {
                 const token = window.storage?.getToken?.();
                 if (!token || !window.api?.getLeads) return;
                 
-                const apiResponse = await window.api.getLeads();
-                const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
-                setLeadsCount(Array.isArray(rawLeads) ? rawLeads.length : 0);
+                // Load full leads data immediately
+                await loadLeads();
             } catch (error) {
-                // Silent fail - count will update when tab is clicked
+                // Silent fail - will retry when user navigates to leads tab
             }
         };
-        // Try immediately, then retry after short delay if API not ready
-        loadLeadsCount();
-        setTimeout(() => loadLeadsCount(), 200);
+        
+        // Load leads after a brief delay to not block initial render
+        setTimeout(() => loadLeadsOnBoot(), 100);
     }, []);
-
-    // Load leads only when user navigates to Leads or Pipeline
-    useEffect(() => {
-        if ((viewMode === 'leads' || viewMode === 'pipeline')) {
-            // Avoid spamming API: only load if empty or throttled interval passed
-            const now = Date.now();
-            const recentlyCalled = (now - lastLeadsApiCallTimestamp) < API_CALL_INTERVAL;
-            if (!recentlyCalled || (Array.isArray(leads) && leads.length === 0)) {
-                loadLeads();
-            }
-        }
-    }, [viewMode]);
 
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
@@ -612,7 +595,7 @@ const Clients = React.memo(() => {
                 });
                 
             setLeads(mappedLeads);
-            setLeadsCount(mappedLeads.length); // Update count badge
+            setLeadsCount(mappedLeads.length); // Update count badge immediately
             
             if (forceRefresh) {
                 // Count leads by status for accurate reporting
