@@ -12,8 +12,13 @@ export function signRefreshToken(payload) {
 
 export function verifyToken(token) {
   try {
+    if (!process.env.JWT_SECRET) {
+      console.error('❌ JWT_SECRET is not configured')
+      return null
+    }
     return jwt.verify(token, process.env.JWT_SECRET)
   } catch (error) {
+    console.error('❌ Token verification error:', error.message)
     return null
   }
 }

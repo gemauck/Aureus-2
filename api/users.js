@@ -10,52 +10,72 @@ async function handler(req, res) {
         try {
             // Check if user is authenticated (req.user is set by authRequired)
             if (!req.user) {
+                console.error('❌ Users endpoint: req.user is missing')
                 return unauthorized(res, 'Authentication required')
             }
             
             // Only admins can access user list
             const userRole = req.user?.role?.toLowerCase();
             if (userRole !== 'admin') {
+                console.log('⚠️ Users endpoint: Non-admin access attempt by:', req.user.sub)
                 return unauthorized(res, 'Admin access required to view users')
             }
 
-            // Get all users with HR fields
-            const users = await prisma.user.findMany({
-                select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    role: true,
-                    permissions: true,
-                    status: true,
-                    department: true,
-                    jobTitle: true,
-                    phone: true,
-                    // HR/Employee fields
-                    employeeNumber: true,
-                    position: true,
-                    employmentDate: true,
-                    idNumber: true,
-                    taxNumber: true,
-                    bankName: true,
-                    accountNumber: true,
-                    branchCode: true,
-                    salary: true,
-                    employmentStatus: true,
-                    address: true,
-                    emergencyContact: true,
-                    createdAt: true,
-                    lastLoginAt: true,
-                    lastSeenAt: true,
-                    invitedBy: true
-                },
-                orderBy: { createdAt: 'desc' }
-            })
+            console.log('✅ Users endpoint: Admin access granted, fetching users...')
 
-            // Get all invitations
-            const invitations = await prisma.invitation.findMany({
-                orderBy: { createdAt: 'desc' }
-            })
+            // Get all users with HR fields
+            let users = []
+            try {
+                users = await prisma.user.findMany({
+                    select: {
+                        id: true,
+                        email: true,
+                        name: true,
+                        role: true,
+                        permissions: true,
+                        status: true,
+                        department: true,
+                        jobTitle: true,
+                        phone: true,
+                        // HR/Employee fields
+                        employeeNumber: true,
+                        position: true,
+                        employmentDate: true,
+                        idNumber: true,
+                        taxNumber: true,
+                        bankName: true,
+                        accountNumber: true,
+                        branchCode: true,
+                        salary: true,
+                        employmentStatus: true,
+                        address: true,
+                        emergencyContact: true,
+                        createdAt: true,
+                        lastLoginAt: true,
+                        lastSeenAt: true,
+                        invitedBy: true
+                    },
+                    orderBy: { createdAt: 'desc' }
+                })
+                console.log(`✅ Users endpoint: Fetched ${users.length} users`)
+            } catch (userQueryError) {
+                console.error('❌ Users endpoint: Failed to query users:', userQueryError)
+                console.error('❌ Users endpoint: Error stack:', userQueryError.stack)
+                throw new Error(`Database query failed: ${userQueryError.message}`)
+            }
+
+            // Get all invitations (graceful if table missing)
+            let invitations = []
+            try {
+                invitations = await prisma.invitation.findMany({
+                    orderBy: { createdAt: 'desc' }
+                })
+                console.log(`✅ Users endpoint: Fetched ${invitations.length} invitations`)
+            } catch (invitationError) {
+                // If Invitation model/table isn't available yet, return empty list
+                console.warn('⚠️ Invitation table not accessible, returning empty list:', invitationError.message)
+                invitations = []
+            }
 
             return ok(res, {
                 users,
@@ -63,7 +83,8 @@ async function handler(req, res) {
             })
 
         } catch (error) {
-            console.error('Get users error:', error)
+            console.error('❌ Get users error:', error)
+            console.error('❌ Get users error stack:', error.stack)
             return serverError(res, 'Failed to get users', error.message)
         }
     }

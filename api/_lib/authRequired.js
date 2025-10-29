@@ -13,6 +13,12 @@ export function authRequired(handler) {
       
       console.log('🔍 Verifying token:', token.substring(0, 20) + '...')
       const payload = verifyToken(token)
+      
+      if (!payload || !payload.sub) {
+        console.log('❌ Invalid or expired token')
+        return unauthorized(res)
+      }
+      
       console.log('✅ Token verified for user:', payload.sub)
       req.user = payload
       return handler(req, res)
