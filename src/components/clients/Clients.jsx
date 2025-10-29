@@ -1627,7 +1627,7 @@ const Clients = React.memo(() => {
                         .catch(err => console.error('❌ Failed to update lead stage:', err));
                 }
             } else if (draggedType === 'opportunity') {
-                console.log('🎯🎯🎯 DROPPING OPPORTUNITY!', { draggedItem: draggedItem.id, targetStage, draggedItem });
+                console.log('🎯🎯🎯 DROPPING OPPORTUNITY!', { opportunityId: draggedItem.id, title: draggedItem.title, clientId: draggedItem.clientId, targetStage });
                 
                 const updatedClients = clients.map(client => {
                     if (client.id === draggedItem.clientId) {
