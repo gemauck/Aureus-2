@@ -24,6 +24,29 @@
     <link rel="preload" href="./dist/styles.css" as="style">
     <link rel="stylesheet" href="./dist/styles.css">
     
+    <!-- Early theme boot: default to light unless user chose dark or follow-system -->
+    <script>
+        (function() {
+            try {
+                var root = document.documentElement;
+                var storedTheme = localStorage.getItem('abcotronics_theme');
+                var followSystem = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+                // Default behavior: do NOT follow system unless user turned it on
+                if (!localStorage.getItem('abcotronics_use_system_theme')) {
+                    localStorage.setItem('abcotronics_use_system_theme', 'false');
+                }
+                var themeToApply = 'light';
+                if (storedTheme === 'dark') themeToApply = 'dark';
+                if (followSystem) {
+                    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    themeToApply = prefersDark ? 'dark' : 'light';
+                }
+                root.classList.remove('light','dark');
+                root.classList.add(themeToApply);
+            } catch (e) {}
+        })();
+    </script>
+    
     <!-- Mobile Optimizations CSS -->
     <link rel="stylesheet" href="mobile-optimizations.css">
     
