@@ -63,7 +63,17 @@ git pull origin main || git pull origin master
 echo "✅ Code updated"
 
 echo "📦 Installing dependencies..."
-npm install --production || npm install
+# Prefer clean, deterministic installs; handle occasional ENOTEMPTY errors
+if ! npm ci --omit=dev; then
+  echo "⚠️  npm ci failed; attempting standard install..."
+  if ! npm install --omit=dev; then
+    echo "⚠️  npm install failed; cleaning problematic modules and retrying..."
+    rm -rf node_modules/.cache || true
+    rm -rf node_modules/googleapis || true
+    rm -rf node_modules || true
+    npm install --omit=dev
+  fi
+fi
 
 echo "🏗️  Generating Prisma client..."
 npx prisma generate || echo "⚠️  Prisma generate skipped"
