@@ -79,14 +79,28 @@ const api = {
   
   async refresh() {
     try {
-      const res = await request('/auth/refresh', { 
-        method: 'POST'
+      // Use direct fetch to avoid request() error logging
+      const fullUrl = `${API_BASE}/auth/refresh`
+      const res = await fetch(fullUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
       })
-      if (res?.data?.accessToken) window.storage.setToken(res.data.accessToken)
-      return res
+      
+      if (!res.ok) {
+        // Expected failure when no refresh cookie - return null silently
+        return null
+      }
+      
+      const text = await res.text()
+      const data = text ? JSON.parse(text) : {}
+      
+      if (data?.data?.accessToken) {
+        window.storage.setToken(data.data.accessToken)
+      }
+      return data
     } catch (error) {
-      // Refresh failures are expected when no refresh cookie exists
-      // Don't treat this as a critical error
+      // Silently fail - expected when no refresh cookie exists
       return null
     }
   },
