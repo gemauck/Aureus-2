@@ -127,18 +127,21 @@ class EnhancedAPIWrapper {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
                     'X-Request-ID': id
-                }
+                },
+                credentials: 'include'
             };
 
             if (data && method !== 'GET') {
                 requestOptions.body = JSON.stringify(data);
             }
 
-            // Execute request with timeout
-            const response = await Promise.race([
+            const execute = async () => Promise.race([
                 fetch(url, requestOptions),
                 timeoutPromise
             ]);
+
+            // Execute request with timeout
+            let response = await execute();
 
             // Clear timeout
             const timeoutId = this.requestTimeouts.get(id);
@@ -147,22 +150,41 @@ class EnhancedAPIWrapper {
                 this.requestTimeouts.delete(id);
             }
 
-            // Handle response
+            // Handle response with refresh-once logic
+            if (!response.ok && response.status === 401) {
+                try {
+                    const refreshUrl = `${window.DatabaseAPI.API_BASE}/api/auth/refresh`;
+                    const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                    if (refreshRes.ok) {
+                        const text = await refreshRes.text();
+                        const refreshData = text ? JSON.parse(text) : {};
+                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                        if (newToken && window.storage?.setToken) {
+                            window.storage.setToken(newToken);
+                            requestOptions.headers = { ...requestOptions.headers, Authorization: `Bearer ${newToken}` };
+                            response = await execute();
+                        }
+                    }
+                } catch (_) {
+                    // ignore, will handle below
+                }
+            }
+
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Token expired - clear auth data and redirect to login
-                    window.storage.removeToken();
-                    window.storage.removeUser();
-                    
-                    // Stop live data sync if active
-                    if (window.LiveDataSync) {
-                        window.LiveDataSync.stop();
+                    // Avoid logging out for permission endpoints like /users
+                    const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
+                    if (!permissionLikely) {
+                        if (window.storage?.removeToken) window.storage.removeToken();
+                        if (window.storage?.removeUser) window.storage.removeUser();
+                        if (window.LiveDataSync) {
+                            window.LiveDataSync.stop();
+                        }
+                        if (!window.location.hash.includes('#/login')) {
+                            window.location.hash = '#/login';
+                        }
                     }
-                    
-                    // Redirect to login screen
-                    window.location.hash = '#/login';
-                    window.location.reload();
-                    throw new Error('Authentication expired');
+                    throw new Error('Authentication expired or unauthorized');
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
