@@ -19,6 +19,15 @@ echo "📥 Pulling latest code..."
 git pull origin main
 echo "✅ Code updated"
 echo ""
+echo "🧱 Building frontend (JSX → dist)..."
+if command -v npm >/dev/null 2>&1; then
+  npm ci --omit=dev || npm install --omit=dev || true
+  npm run build:jsx || node build-jsx.js
+else
+  node build-jsx.js
+fi
+echo "✅ Frontend built"
+echo ""
 echo "🔧 Applying nginx HTTP/2 fix..."
 chmod +x /root/fix-http2-nginx.sh
 /root/fix-http2-nginx.sh
