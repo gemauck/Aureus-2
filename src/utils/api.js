@@ -1,8 +1,6 @@
 const API_BASE = (() => {
-    const hostname = window.location.hostname;
-    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
-    const apiBase = isLocalhost ? 'http://localhost:3000/api' : window.location.origin + '/api';
-    return apiBase;
+    // Always use the current origin; works for localhost on any port and production
+    return window.location.origin + '/api'
 })()
 
 async function request(path, options = {}) {

@@ -7,14 +7,27 @@ import fs from 'fs'
 import { fileURLToPath } from 'url'
 
 // Ensure critical environment variables are set
+// Allow relaxed requirements in local dev when DEV_LOCAL_NO_DB=true
+const isDevNoDb = process.env.DEV_LOCAL_NO_DB === 'true'
+
 if (!process.env.JWT_SECRET) {
-  console.error('❌ JWT_SECRET environment variable is required')
-  process.exit(1)
+  if (isDevNoDb) {
+    // Provide a safe default for local-only flows
+    process.env.JWT_SECRET = 'dev-local-secret'
+    console.warn('⚠️ Using default JWT_SECRET for local dev (DEV_LOCAL_NO_DB=true)')
+  } else {
+    console.error('❌ JWT_SECRET environment variable is required')
+    process.exit(1)
+  }
 }
 
 if (!process.env.DATABASE_URL) {
-  console.error('❌ DATABASE_URL environment variable is required')
-  process.exit(1)
+  if (isDevNoDb) {
+    console.warn('⚠️ DATABASE_URL not set, continuing due to DEV_LOCAL_NO_DB=true')
+  } else {
+    console.error('❌ DATABASE_URL environment variable is required')
+    process.exit(1)
+  }
 }
 
 console.log('✅ Environment variables validated')
@@ -99,6 +112,12 @@ const PORT = process.env.PORT || 3000
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser())
+
+// Instruct search engines not to index the site
+app.use((req, res, next) => {
+  res.set('X-Robots-Tag', 'noindex, nofollow')
+  next()
+})
 
 // CORS middleware for local development
 app.use((req, res, next) => {
@@ -449,10 +468,10 @@ app.use(express.static(rootDir, {
       res.setHeader('Cache-Control', 'no-cache')
     }
     
-    // Set content length if available (helps with HTTP/2)
-    if (stat && stat.size) {
-      res.setHeader('Content-Length', stat.size.toString())
-    }
+    // Do NOT set Content-Length manually here.
+    // When upstream (e.g., Nginx) applies gzip/brotli under HTTP/2, a manual
+    // Content-Length can cause ERR_HTTP2_PROTOCOL_ERROR due to length mismatch.
+    // Let Express/proxy determine the correct transfer semantics.
     
     // Additional HTTP/2 safe headers
     res.setHeader('X-Content-Type-Options', 'nosniff')

@@ -32,7 +32,6 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         const items = await prisma.inventoryItem.findMany({
-          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         console.log('🧪 Manufacturing List inventory', { owner, count: items.length })
@@ -139,7 +138,7 @@ async function handler(req, res) {
             supplier: body.supplier || '',
             status: status,
             lastRestocked,
-            ownerId: req.user?.sub
+            ownerId: null
           }
         })
         
@@ -252,7 +251,6 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         const boms = await prisma.bOM.findMany({
-          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         console.log('🧪 Manufacturing List boms', { owner, count: boms.length })
@@ -328,7 +326,7 @@ async function handler(req, res) {
             estimatedTime: parseInt(body.estimatedTime) || 0,
             components: JSON.stringify(components),
             notes: body.notes || '',
-            ownerId: req.user?.sub
+            ownerId: null
           }
         })
         
@@ -427,7 +425,6 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         const orders = await prisma.productionOrder.findMany({
-          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         console.log('🧪 Manufacturing List productionOrders', { owner, count: orders.length })
@@ -500,7 +497,7 @@ async function handler(req, res) {
             totalCost: parseFloat(body.totalCost) || 0,
             notes: body.notes || '',
             createdBy: body.createdBy || req.user?.name || 'System',
-            ownerId: req.user?.sub
+            ownerId: null
           }
         })
         
@@ -590,7 +587,6 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         const movements = await prisma.stockMovement.findMany({
-          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { date: 'desc' }
         })
         console.log('🧪 Manufacturing List movements', { owner, count: movements.length })
@@ -655,37 +651,127 @@ async function handler(req, res) {
             : 1
           movementId = `MOV${String(nextNumber).padStart(4, '0')}`
         }
-        
-        const movement = await prisma.stockMovement.create({
-          data: {
-            movementId,
-            date: body.date ? new Date(body.date) : new Date(),
-            type: body.type,
-            itemName: body.itemName,
-            sku: body.sku,
-            quantity: parseFloat(body.quantity) || 0,
-            fromLocation: body.fromLocation || '',
-            toLocation: body.toLocation || '',
-            reference: body.reference || '',
-            performedBy: body.performedBy || req.user?.name || 'System',
-            notes: body.notes || '',
-            ownerId: req.user?.sub
+
+        const quantity = parseFloat(body.quantity) || 0
+        if (quantity <= 0) {
+          return badRequest(res, 'quantity must be greater than 0')
+        }
+
+        // Perform movement and inventory adjustment atomically
+        const result = await prisma.$transaction(async (tx) => {
+          // Create movement record
+          const movement = await tx.stockMovement.create({
+            data: {
+              movementId,
+              date: body.date ? new Date(body.date) : new Date(),
+              type: body.type, // expected: receipt | consumption | production | transfer | adjustment
+              itemName: body.itemName,
+              sku: body.sku,
+              quantity,
+              fromLocation: body.fromLocation || '',
+              toLocation: body.toLocation || '',
+              reference: body.reference || '',
+              performedBy: body.performedBy || req.user?.name || 'System',
+              notes: body.notes || '',
+              ownerId: null
+            }
+          })
+
+          // Fetch existing inventory item by SKU
+          let item = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
+
+          const type = String(body.type).toLowerCase()
+          let newQuantity = item?.quantity || 0
+
+          if (type === 'receipt') {
+            // Create item on first receipt if it doesn't exist
+            if (!item) {
+              const unitCost = parseFloat(body.unitCost) || 0
+              const reorderPoint = parseFloat(body.reorderPoint) || 0
+              const totalValue = quantity * unitCost
+              item = await tx.inventoryItem.create({
+                data: {
+                  sku: body.sku,
+                  name: body.itemName,
+                  thumbnail: body.thumbnail || '',
+                  category: body.category || 'components',
+                  type: body.itemType || 'raw_material',
+                  quantity: quantity,
+                  unit: body.unit || 'pcs',
+                  reorderPoint,
+                  reorderQty: parseFloat(body.reorderQty) || 0,
+                  unitCost,
+                  totalValue,
+                  supplier: body.supplier || '',
+                  status: quantity > reorderPoint ? 'in_stock' : (quantity > 0 ? 'low_stock' : 'out_of_stock'),
+                  lastRestocked: body.date ? new Date(body.date) : new Date(),
+                  ownerId: null
+                }
+              })
+            } else {
+              // Increment quantity and update value
+              const unitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : item.unitCost
+              newQuantity = (item.quantity || 0) + quantity
+              const totalValue = newQuantity * (unitCost || 0)
+              const reorderPoint = item.reorderPoint || 0
+              const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
+              item = await tx.inventoryItem.update({
+                where: { id: item.id },
+                data: {
+                  quantity: newQuantity,
+                  unitCost,
+                  totalValue,
+                  status,
+                  lastRestocked: body.date ? new Date(body.date) : new Date()
+                }
+              })
+            }
+          } else if (type === 'consumption') {
+            if (!item) {
+              throw new Error('Inventory item not found for consumption')
+            }
+            if ((item.quantity || 0) < quantity) {
+              throw new Error('Insufficient stock to consume the requested quantity')
+            }
+            newQuantity = (item.quantity || 0) - quantity
+            const totalValue = newQuantity * (item.unitCost || 0)
+            const reorderPoint = item.reorderPoint || 0
+            const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
+            item = await tx.inventoryItem.update({
+              where: { id: item.id },
+              data: {
+                quantity: newQuantity,
+                totalValue,
+                status
+              }
+            })
           }
+
+          return { movement, item }
         })
-        
-        console.log('✅ Created stock movement:', movement.id)
-        return created(res, { 
+
+        console.log('✅ Created stock movement and updated inventory:', result.movement.id, result.item?.id)
+        return created(res, {
           movement: {
-            ...movement,
-            id: movement.id,
-            date: formatDate(movement.date),
-            createdAt: formatDate(movement.createdAt),
-            updatedAt: formatDate(movement.updatedAt)
-          }
+            ...result.movement,
+            id: result.movement.id,
+            date: formatDate(result.movement.date),
+            createdAt: formatDate(result.movement.createdAt),
+            updatedAt: formatDate(result.movement.updatedAt)
+          },
+          item: result.item
+            ? {
+                ...result.item,
+                lastRestocked: formatDate(result.item.lastRestocked),
+                createdAt: formatDate(result.item.createdAt),
+                updatedAt: formatDate(result.item.updatedAt)
+              }
+            : null
         })
       } catch (error) {
         console.error('❌ Failed to create stock movement:', error)
-        return serverError(res, 'Failed to create stock movement', error.message)
+        const message = error?.message || 'Failed to create stock movement'
+        return serverError(res, message, message)
       }
     }
 
@@ -705,6 +791,131 @@ async function handler(req, res) {
     }
   }
 
+  // PRODUCTION ORDER CONSUMPTION (consume BOM components)
+  if (resourceType === 'production-orders' && id && pathSegments[3] === 'consume' && req.method === 'POST') {
+    try {
+      const order = await prisma.productionOrder.findUnique({ where: { id } })
+      if (!order) return notFound(res, 'Production order not found')
+
+      // Determine consume quantity: from body.quantity or remaining to produce
+      const body = req.body || {}
+      const consumeQuantity = parseInt(body.quantity) || (order.quantity - order.quantityProduced)
+      if (consumeQuantity <= 0) {
+        return badRequest(res, 'quantity must be greater than 0')
+      }
+
+      // Load BOM
+      const bomId = order.bomId
+      if (!bomId) return badRequest(res, 'Production order has no BOM linked')
+      const bom = await prisma.bOM.findUnique({ where: { id: bomId } })
+      if (!bom) return notFound(res, 'BOM not found')
+      const components = (() => {
+        try { return JSON.parse(bom.components || '[]') } catch { return [] }
+      })()
+
+      // Compute required quantities per component
+      const requirements = components.map(c => ({
+        sku: c.sku || c.componentSku || '',
+        itemName: c.name || c.itemName || c.componentName || '',
+        quantity: (parseFloat(c.quantity) || 0) * consumeQuantity,
+        unit: c.unit || 'pcs'
+      })).filter(r => r.sku && r.quantity > 0)
+
+      if (requirements.length === 0) {
+        return badRequest(res, 'BOM has no consumable components')
+      }
+
+      // Verify stock availability
+      const inventoryBySku = new Map()
+      for (const reqComp of requirements) {
+        const item = await prisma.inventoryItem.findFirst({ where: { sku: reqComp.sku } })
+        if (!item) {
+          return badRequest(res, `Inventory item ${reqComp.sku} not found`)
+        }
+        if ((item.quantity || 0) < reqComp.quantity) {
+          return badRequest(res, `Insufficient stock for ${reqComp.sku}. Have ${item.quantity}, need ${reqComp.quantity}`)
+        }
+        inventoryBySku.set(reqComp.sku, item)
+      }
+
+      // Consume within a transaction: create movements and decrement stock; update order.quantityProduced optionally
+      const result = await prisma.$transaction(async (tx) => {
+        const now = new Date()
+
+        // Generate next movement number base
+        const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+        let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+          ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+          : 1
+
+        const createdMovements = []
+        for (const reqComp of requirements) {
+          const item = inventoryBySku.get(reqComp.sku)
+          const newQty = (item.quantity || 0) - reqComp.quantity
+          const totalValue = newQty * (item.unitCost || 0)
+          const reorderPoint = item.reorderPoint || 0
+          const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+
+          // Update inventory
+          await tx.inventoryItem.update({
+            where: { id: item.id },
+            data: { quantity: newQty, totalValue, status }
+          })
+
+          // Create movement per component
+          const movement = await tx.stockMovement.create({
+            data: {
+              movementId: `MOV${String(seq++).padStart(4, '0')}`,
+              date: now,
+              type: 'consumption',
+              itemName: reqComp.itemName || item.name,
+              sku: reqComp.sku,
+              quantity: reqComp.quantity,
+              fromLocation: 'store',
+              toLocation: 'production',
+              reference: `production:${order.id}`,
+              performedBy: req.user?.name || 'System',
+              notes: body.notes || '',
+              ownerId: null
+            }
+          })
+          createdMovements.push(movement)
+        }
+
+        // Optionally update produced quantity progress
+        const updatedOrder = await tx.productionOrder.update({
+          where: { id: order.id },
+          data: {
+            quantityProduced: order.quantityProduced + (body.incrementProduced ? parseInt(body.incrementProduced) : 0)
+          }
+        })
+
+        return { createdMovements, updatedOrder }
+      })
+
+      return ok(res, {
+        consumed: true,
+        movements: result.createdMovements.map(m => ({
+          ...m,
+          date: formatDate(m.date),
+          createdAt: formatDate(m.createdAt),
+          updatedAt: formatDate(m.updatedAt)
+        })),
+        order: {
+          ...result.updatedOrder,
+          startDate: formatDate(result.updatedOrder.startDate),
+          targetDate: formatDate(result.updatedOrder.targetDate),
+          completedDate: formatDate(result.updatedOrder.completedDate),
+          createdAt: formatDate(result.updatedOrder.createdAt),
+          updatedAt: formatDate(result.updatedOrder.updatedAt)
+        }
+      })
+    } catch (error) {
+      console.error('❌ Failed to consume BOM for production order:', error)
+      return serverError(res, 'Failed to consume BOM for production order', error.message)
+    }
+  }
+
   // SUPPLIERS
   if (resourceType === 'suppliers') {
     // LIST (GET /api/manufacturing/suppliers)
@@ -712,7 +923,6 @@ async function handler(req, res) {
       try {
         const owner = req.user?.sub
         const suppliers = await prisma.supplier.findMany({
-          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         console.log('🧪 Manufacturing List suppliers', { owner, count: suppliers.length })
@@ -787,7 +997,7 @@ async function handler(req, res) {
             paymentTerms: body.paymentTerms || 'Net 30',
             status: body.status || 'active',
             notes: body.notes || '',
-            ownerId: req.user?.sub
+            ownerId: null
           }
         })
         
@@ -851,7 +1061,6 @@ async function handler(req, res) {
         // Check if supplier is used in any inventory items
         const inventoryItems = await prisma.inventoryItem.findMany({
           where: {
-            ownerId: req.user?.sub,
             supplier: {
               contains: id
             }

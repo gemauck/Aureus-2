@@ -18,6 +18,46 @@ async function handler(req, res) {
       return badRequest(res, 'Email and password required')
     }
 
+    // Development-only shortcut to allow local login without a database
+    if (process.env.DEV_LOCAL_NO_DB === 'true') {
+      const devEmail = 'admin@example.com'
+      const devPassword = 'password123'
+      if (email !== devEmail || password !== devPassword) {
+        return unauthorized(res, 'Invalid credentials')
+      }
+
+      if (!process.env.JWT_SECRET) {
+        return serverError(res, 'Server configuration error', 'JWT_SECRET missing')
+      }
+
+      const payload = { 
+        sub: 'dev-admin', 
+        email: devEmail, 
+        role: 'admin',
+        name: 'Admin User'
+      }
+
+      const accessToken = signAccessToken(payload)
+      const refreshToken = signRefreshToken(payload)
+
+      const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+      const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
+      const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
+      const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
+      res.setHeader('Set-Cookie', [cookieValue])
+
+      return ok(res, {
+        accessToken,
+        user: {
+          id: 'dev-admin',
+          email: devEmail,
+          name: 'Admin User',
+          role: 'admin'
+        },
+        mustChangePassword: false
+      })
+    }
+
     console.log('🔍 Looking up user:', email)
     
     // Test database connection first
