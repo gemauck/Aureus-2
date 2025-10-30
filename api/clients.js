@@ -8,7 +8,7 @@ import { withLogging } from './_lib/logger.js'
 // Helper function to parse JSON fields from database responses
 function parseClientJsonFields(client) {
   try {
-    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals']
+    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
     const parsed = { ...client }
     
     jsonFields.forEach(field => {
@@ -183,9 +183,10 @@ async function handler(req, res) {
       const body = req.body || {}
       if (!body.name) return badRequest(res, 'name required')
 
-      // Ensure type column exists in database
+      // Ensure type and services columns exist in database
       try {
         await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+        await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "services" TEXT DEFAULT '[]'`
         } catch (error) {
         // Column may already exist
       }
@@ -222,6 +223,7 @@ async function handler(req, res) {
         sites: JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
         contracts: JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
         activityLog: JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+        services: JSON.stringify(Array.isArray(body.services) ? body.services : []),
         billingTerms: JSON.stringify(typeof body.billingTerms === 'object' ? body.billingTerms : {
           paymentTerms: 'Net 30',
           billingFrequency: 'Monthly',
@@ -254,6 +256,7 @@ async function handler(req, res) {
             sites: Array.isArray(clientData.sites) ? JSON.stringify(clientData.sites) : (typeof clientData.sites === 'string' ? clientData.sites : '[]'),
             contracts: Array.isArray(clientData.contracts) ? JSON.stringify(clientData.contracts) : (typeof clientData.contracts === 'string' ? clientData.contracts : '[]'),
             activityLog: Array.isArray(clientData.activityLog) ? JSON.stringify(clientData.activityLog) : (typeof clientData.activityLog === 'string' ? clientData.activityLog : '[]'),
+            services: Array.isArray(clientData.services) ? JSON.stringify(clientData.services) : (typeof clientData.services === 'string' ? clientData.services : '[]'),
             billingTerms: typeof clientData.billingTerms === 'object' ? JSON.stringify(clientData.billingTerms) : (typeof clientData.billingTerms === 'string' ? clientData.billingTerms : '{}'),
             ...(ownerId ? { ownerId } : {})
           }
@@ -312,6 +315,7 @@ async function handler(req, res) {
           sites: typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : []),
           contracts: typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : []),
           activityLog: typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : []),
+          services: typeof body.services === 'string' ? body.services : JSON.stringify(Array.isArray(body.services) ? body.services : []),
           billingTerms: typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(typeof body.billingTerms === 'object' && body.billingTerms !== null ? body.billingTerms : {})
         }
         Object.keys(updateData).forEach(key => {

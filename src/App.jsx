@@ -14,6 +14,7 @@ const AppContent = () => {
     // Check invitation route FIRST, before any auth/data loading
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
+    const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
     
     // Show invitation page immediately if token is present - bypass all auth checks
     if (isInvitationPage) {
@@ -26,6 +27,20 @@ const AppContent = () => {
                     <div className="text-white text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
                         <p>Loading invitation...</p>
+                    </div>
+                </div>
+            );
+        }
+    }
+    if (isResetPage) {
+        if (window.ResetPassword) {
+            return <window.ResetPassword />;
+        } else {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
+                    <div className="text-white text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <p>Loading reset page...</p>
                     </div>
                 </div>
             );
@@ -96,6 +111,7 @@ const App = () => {
     // Check for invitation route BEFORE wrapping in providers
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
+    const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
     
     // If invitation page, render it directly without providers (no auth needed)
     if (isInvitationPage) {
@@ -109,6 +125,21 @@ const App = () => {
                     <div className="text-white text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
                         <p>Loading invitation page...</p>
+                    </div>
+                </div>
+            </window.ThemeProvider>
+        );
+    }
+    if (isResetPage) {
+        if (window.ResetPassword) {
+            return <window.ResetPassword />;
+        }
+        return (
+            <window.ThemeProvider>
+                <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700">
+                    <div className="text-white text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+                        <p>Loading reset page...</p>
                     </div>
                 </div>
             </window.ThemeProvider>

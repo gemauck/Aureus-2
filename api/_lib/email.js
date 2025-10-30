@@ -272,6 +272,56 @@ export const sendInvitationEmail = async (invitationData) => {
     }
 };
 
+// Send password reset email
+export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
+    const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'no-reply@abcotronics.co.za';
+    const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+
+    const mailOptions = {
+        from: fromAddress,
+        replyTo: process.env.EMAIL_REPLY_TO || 'garethm@abcotronics.co.za',
+        to: email,
+        subject: 'Reset your Abcotronics password',
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%); padding: 20px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Password Reset</h1>
+                </div>
+                <div style="padding: 30px; background: #f8f9fa;">
+                    <p style="color: #555; line-height: 1.6;">Hi ${name || email},</p>
+                    <p style="color: #555; line-height: 1.6;">We received a request to reset your password. Click the button below to choose a new password.</p>
+                    <div style="text-align: center; margin: 30px 0;">
+                        <a href="${resetLink}" style="background: #1d4ed8; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Reset Password</a>
+                    </div>
+                    <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.</p>
+                </div>
+                <div style="background: #343a40; color: white; padding: 16px; text-align: center; font-size: 12px;">
+                    <p style="margin: 0;">© 2024 Abcotronics. All rights reserved.</p>
+                </div>
+            </div>
+        `,
+        text: `Password Reset\n\nHi ${name || email},\n\nClick this link to reset your password: ${resetLink}\n\nIf you didn't request this, ignore this email. The link expires in 1 hour.`
+    };
+
+    try {
+        checkEmailConfiguration();
+        const emailTransporter = getTransporter();
+        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        let result;
+        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+            mailOptions.fromName = 'Abcotronics';
+            result = await sendViaSendGridAPI(mailOptions, apiKey);
+        } else {
+            result = await emailTransporter.sendMail(mailOptions);
+        }
+        console.log('✅ Password reset email sent:', result.messageId);
+        return { success: true, messageId: result.messageId };
+    } catch (error) {
+        console.error('❌ Failed to send password reset email:', error);
+        throw new Error(`Failed to send password reset email: ${error.message}`);
+    }
+};
+
 // Send notification email
 export const sendNotificationEmail = async (to, subject, message) => {
     const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'garethm@abcotronics.co.za';
