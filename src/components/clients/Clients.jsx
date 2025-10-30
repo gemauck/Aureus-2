@@ -1880,7 +1880,16 @@ const Clients = React.memo(() => {
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
+                                        <div className="flex items-center gap-3">
+                                            {client.thumbnail ? (
+                                                <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                            ) : (
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {(client.name || '?').charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.contacts?.[0]?.name || 'No contact'}</div>
@@ -1939,7 +1948,16 @@ const Clients = React.memo(() => {
                                         className={`${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} cursor-pointer transition`}
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
+                                        <div className="flex items-center gap-3">
+                                            {lead.thumbnail ? (
+                                                <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                                            ) : (
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-600'}`}>
+                                                    {(lead.name || '?').charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.name}</div>
+                                        </div>
                                     </td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{lead.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">

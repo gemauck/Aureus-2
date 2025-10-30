@@ -56,6 +56,22 @@ const DatabaseAPI = {
             }
 
             if (!response.ok) {
+                // Try to extract backend error message for better debugging
+                let serverErrorMessage = '';
+                try {
+                    const text = await response.text();
+                    if (text) {
+                        try {
+                            const json = JSON.parse(text);
+                            serverErrorMessage = json?.message || json?.error || json?.data?.message || '';
+                        } catch (_) {
+                            serverErrorMessage = text.substring(0, 200);
+                        }
+                    }
+                } catch (_) {
+                    // ignore parse failures
+                }
+
                 if (response.status === 401) {
                     // Avoid logging out for pure permission denials (like /users) – just throw
                     const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
@@ -69,9 +85,11 @@ const DatabaseAPI = {
                             window.location.hash = '#/login';
                         }
                     }
-                    throw new Error('Authentication expired or unauthorized.');
+                    throw new Error(serverErrorMessage || 'Authentication expired or unauthorized.');
                 }
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const statusText = response.statusText || 'Error';
+                const msg = serverErrorMessage ? ` ${serverErrorMessage}` : '';
+                throw new Error(`HTTP ${response.status}: ${statusText}${msg}`);
             }
 
             // Check if response is JSON
