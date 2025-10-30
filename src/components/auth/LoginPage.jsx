@@ -34,9 +34,9 @@ const LoginPage = () => {
                 <div className="grid md:grid-cols-2">
                     {/* Left Side - Branding */}
                     <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex flex-col justify-center items-center text-center">
-                        <style>{`#loginBrand{color:#ffffff !important;text-align:center !important;}`}</style>
+                        <style>{`#loginBrand,.login-brand{color:#ffffff !important;text-align:center !important;}`}</style>
                         <div className="mb-8 w-full flex justify-center">
-                            <h1 id="loginBrand" className="text-3xl font-bold mb-2">Abcotronics</h1>
+                            <h1 id="loginBrand" className="login-brand text-3xl font-bold mb-2">Abcotronics</h1>
                         </div>
                     </div>
 
