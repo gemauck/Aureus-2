@@ -63,7 +63,13 @@ const DatabaseAPI = {
                     if (text) {
                         try {
                             const json = JSON.parse(text);
-                            serverErrorMessage = json?.message || json?.error || json?.data?.message || '';
+                            // Prefer nested error.message if present
+                            serverErrorMessage =
+                                (json && json.error && typeof json.error === 'object' && json.error.message) ||
+                                json?.message ||
+                                json?.data?.message ||
+                                // Fallback if error is a string
+                                (typeof json?.error === 'string' ? json.error : '');
                         } catch (_) {
                             serverErrorMessage = text.substring(0, 200);
                         }
