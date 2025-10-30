@@ -22,6 +22,7 @@
     background: transparent !important;
     box-shadow: none !important;
     border: 0 !important;
+    display: none !important;
   }
 
   /* On login, keep dropdowns/menus positioned relative to their containers */
@@ -35,10 +36,75 @@
     transform: none !important;
     box-shadow: none !important;
     background: transparent !important;
+    display: none !important;
+  }
+  
+  /* Login page specific mobile fixes */
+  body.login-page {
+    position: relative !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  body.login-page #root {
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+  
+  /* Ensure login form container is visible and properly sized */
+  body.login-page .login-container {
+    width: calc(100% - 2rem) !important;
+    max-width: 100% !important;
+    margin: 1rem !important;
+  }
+  
+  /* Login form inputs must be touch-friendly */
+  body.login-page input,
+  body.login-page textarea,
+  body.login-page select {
+    font-size: 16px !important;
+    min-height: 48px !important;
+    padding: 14px 16px !important;
+    width: 100% !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    border: 2px solid #e5e7eb !important;
+    border-radius: 12px !important;
+    background: white !important;
+  }
+  
+  body.login-page input:focus,
+  body.login-page textarea:focus,
+  body.login-page select:focus {
+    border-color: #3b82f6 !important;
+    outline: none !important;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+  }
+  
+  /* Login button styling */
+  body.login-page button[type="submit"] {
+    min-height: 48px !important;
+    font-size: 16px !important;
+    padding: 14px 18px !important;
+    width: 100% !important;
+    touch-action: manipulation !important;
+  }
+  
+  /* Ensure labels are visible */
+  body.login-page label {
+    font-size: 14px !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+    font-weight: 600 !important;
   }
 
-  /* Global mobile optimizations */
-  * {
+  /* Global mobile optimizations - excluding login page */
+  body:not(.login-page) * {
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
     -webkit-user-select: none;
@@ -47,8 +113,23 @@
   
   /* Allow text selection for inputs and textareas */
   input, textarea, [contenteditable] {
-    -webkit-user-select: text;
-    user-select: text;
+    -webkit-user-select: text !important;
+    user-select: text !important;
+  }
+  
+  /* Ensure login page is fully interactive */
+  body.login-page * {
+    -webkit-user-select: text !important;
+    user-select: text !important;
+    pointer-events: auto !important;
+  }
+  
+  body.login-page input,
+  body.login-page button,
+  body.login-page textarea,
+  body.login-page select {
+    touch-action: manipulation !important;
+    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.2) !important;
   }
   
   body {
@@ -1315,44 +1396,44 @@
   }
 }
 
-/* Dark mode mobile optimizations */
-@media (max-width: 768px) and (prefers-color-scheme: dark) {
-  .card {
+/* Dark mode mobile optimizations (respect explicit .dark class only) */
+@media (max-width: 768px) {
+  .dark .card {
     background: #1f2937;
     border-color: #374151;
   }
   
-  .modal-content {
+  .dark .modal-content {
     background: #1f2937;
     color: #f9fafb;
   }
   
-  .modal-header {
+  .dark .modal-header {
     background: #1f2937;
     border-color: #374151;
   }
   
-  .modal-footer {
+  .dark .modal-footer {
     background: #1f2937;
     border-color: #374151;
   }
   
-  .form-control {
+  .dark .form-control {
     background: #374151;
     border-color: #4b5563;
     color: #f9fafb;
   }
   
-  .form-control:focus {
+  .dark .form-control:focus {
     border-color: #3b82f6;
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
   }
   
-  .pipeline-stage {
+  .dark .pipeline-stage {
     background: #374151;
   }
   
-  .pipeline-item {
+  .dark .pipeline-item {
     background: #1f2937;
     border-color: #374151;
   }
