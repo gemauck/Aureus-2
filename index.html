@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0284c7">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -202,7 +202,7 @@
         }
     </style>
 </head>
-<body class="bg-gray-50">
+<body class="bg-gray-50 login-page">
     <div id="root"></div>
 
     <!-- React Production Builds - Much faster than development -->
@@ -300,7 +300,7 @@
     <!-- 🚀 DATA CONTEXT - LOAD-ONCE ARCHITECTURE -->
     <script defer src="./dist/src/components/common/DataContext.js"></script>
     
-    <!-- Load all components inline -->
+    <!-- Critical path: minimal runtime + auth + data context -->
     <script defer src="./dist/src/utils/api.js?v=999"></script>
     <script defer src="./dist/src/utils/localStorage.js"></script>
     <script defer src="./dist/src/utils/dataService.js"></script>
@@ -359,23 +359,11 @@
     <script defer src="./dist/src/components/common/ErrorBoundary.js"></script>
     <script defer src="./dist/src/components/dashboard/DashboardSimple.js"></script>
     <script defer src="./dist/src/components/dashboard/DashboardFallback.js"></script>
-    <script defer src="./dist/src/components/dashboard/DashboardLive.js"></script>
+    <!-- Heavier dashboard variants moved to lazy load -->
     
-    <script defer src="./dist/src/components/clients/ClientsSimple.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectsSimple.js"></script>
-    
-    <!-- Load database-first components for later use -->
+    <!-- Keep tiny fallbacks; move heavy modules to lazy -->
     <script defer src="./dist/src/components/common/LoadingState.js"></script>
     <script defer src="./dist/src/components/common/QuickFallback.js"></script>
-    <script defer src="./dist/src/components/dashboard/DashboardDatabaseFirst.js"></script>
-    <!-- Load Client modals BEFORE Clients component to avoid race condition -->
-    <script defer src="./dist/src/components/clients/ClientDetailModal.js"></script>
-    <script defer src="./dist/src/components/clients/LeadDetailModal.js?v=4002"></script>
-    <!-- Load ONLY the main Clients.jsx with Pipeline fixes -->
-    <script defer src="./dist/src/components/clients/Clients.js?v=4001"></script>
-    <!-- Pipeline Component - Load early for fast access -->
-    <script defer src="./dist/src/components/clients/Pipeline.js"></script>
-    <!-- REMOVED ClientsCached and ClientsDatabaseFirst to prevent conflicts -->
     
     <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
     <script>
@@ -384,131 +372,29 @@
         window.USE_LOAD_ONCE_ARCHITECTURE = true;
         
     </script>
-    <script defer src="./dist/src/components/projects/ProjectsDatabaseFirst.js"></script>
-    <script defer src="./dist/src/components/invoicing/InvoicingDatabaseFirst.js"></script>
-    <script defer src="./dist/src/components/time/TimeTrackingDatabaseFirst.js"></script>
     
-    <!-- Load other components (some moved to lazy load) -->
-    <script defer src="./dist/src/components/dashboard/DashboardEnhanced.js"></script>
-    <!-- Client modals moved to lazy load -->
-    <script defer src="./dist/src/components/clients/ClientDetailModalMobile.js"></script>
-    <script defer src="./dist/src/components/clients/ClientsMobile.js"></script>
-    <script defer src="./dist/src/components/clients/ClientsMobileOptimized.js"></script>
-    <script defer src="./dist/src/components/common/AdvancedSearch.js"></script>
-    <script defer src="./dist/src/components/clients/BulkOperations.js"></script>
-    <script defer src="./dist/src/components/invoicing/RecurringInvoices.js"></script>
-    <script defer src="./dist/src/components/clients/PipelineIntegration.js"></script>
+    <!-- Heavier components moved to lazy loader for faster first paint -->
     
-    <!-- Projects Components -->
-    <script defer src="./dist/src/components/projects/CustomFieldModal.js"></script>
-    <script defer src="./dist/src/components/projects/TaskDetailModal.js"></script>
-    <script defer src="./dist/src/components/projects/StatusManagementModal.js"></script>
-    <script defer src="./dist/src/components/projects/KanbanView.js"></script>
-    <script defer src="./dist/src/components/projects/ListModal.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectModal.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectProgressTracker.js"></script>
-    <script>
-        // Load MonthlyDocumentCollectionTracker with error handling
-        (function() {
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.src = './dist/src/components/projects/MonthlyDocumentCollectionTracker.js?v=' + Date.now();
-            script.async = true;
-            
-            let checkCount = 0;
-            const maxChecks = 15; // Increased to 15 seconds
-            
-            script.onerror = () => {
-                // Component failed to load, app continues without it
-            };
-            
-            document.body.appendChild(script);
-        })();
-    </script>
-    <script defer src="./dist/src/components/projects/CommentsPopup.js"></script>
-    <script defer src="./dist/src/components/projects/DocumentCollectionModal.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectDetail.js"></script>
-    <script defer src="./dist/src/components/projects/Projects.js?v=4004"></script>
-    <script defer src="./dist/src/components/projects/ProjectsDatabaseFirst.js"></script>
+    <!-- Projects components moved to lazy -->
     
-    <!-- Time Tracking Components -->
-    <script defer src="./dist/src/components/time/TimeModal.js"></script>
-    <script defer src="./dist/src/components/time/TimeTracking.js"></script>
-    <script defer src="./dist/src/components/time/TimeTrackingDatabaseFirst.js"></script>
+    <!-- Time tracking moved to lazy -->
     
-    <!-- Teams Components -->
-    <script defer src="./dist/src/components/teams/DocumentModal.js"></script>
-    <script defer src="./dist/src/components/teams/WorkflowModal.js"></script>
-    <script defer src="./dist/src/components/teams/ChecklistModal.js"></script>
-    <script defer src="./dist/src/components/teams/NoticeModal.js"></script>
-    <script defer src="./dist/src/components/teams/WorkflowExecutionModal.js"></script>
-    <script defer src="./dist/src/components/teams/TeamModals.js"></script>
-    <script defer src="./dist/src/components/teams/Teams.js"></script>
-    <!-- TeamsSimple kept as fallback only -->
-    <script defer src="./dist/src/components/teams/TeamsSimple.js"></script>
+    <!-- Teams moved to lazy -->
     
-    <!-- Users Components -->
-    <script defer src="./dist/src/components/users/UserModal.js"></script>
-    <script defer src="./dist/src/components/users/InviteUserModal.js"></script>
-    <script defer src="./dist/src/components/users/PasswordDisplayModal.js"></script>
-    <script defer src="./dist/src/components/users/Users.js"></script>
+    <!-- Users moved to lazy -->
     
-    <!-- Manufacturing Components -->
-    <script defer src="./dist/src/components/manufacturing/locations/StockLocations.js"></script>
-    <script defer src="./dist/src/components/manufacturing/Manufacturing.js"></script>
+    <!-- Manufacturing moved to lazy -->
     
-    <!-- Tools Components -->
-    <script defer src="./dist/src/components/tools/TankSizeCalculator.js"></script>
-    <script defer src="./dist/src/components/tools/PDFToWordConverter.js"></script>
-    <script defer src="./dist/src/components/tools/HandwritingToWord.js"></script>
-    <script defer src="./dist/src/components/tools/UnitConverter.js"></script>
-    <script defer src="./dist/src/components/tools/Tools.js"></script>
+    <!-- Tools moved to lazy -->
     
-    <!-- HR Components -->
-    <script defer src="./dist/src/components/hr/EmployeeManagement.js"></script>
-    <script defer src="./dist/src/components/hr/LeaveManagement.js"></script>
-    <script defer src="./dist/src/components/hr/LeaveBalance.js"></script>
-    <script defer src="./dist/src/components/hr/Attendance.js"></script>
-    <script defer src="./dist/src/components/hr/QuickBooksPayrollSync.js"></script>
-    <script defer src="./dist/src/components/hr/Payroll.js"></script>
-    <script defer src="./dist/src/components/hr/HR.js"></script>
+    <!-- HR moved to lazy -->
     
-    <!-- Reports Components -->
-    <script defer src="./dist/src/components/reports/AuditTrail.js"></script>
-    <script defer src="./dist/src/components/reports/FeedbackViewer.js"></script>
-    <script defer src="./dist/src/components/reports/Reports.js"></script>
+    <!-- Reports moved to lazy -->
     
-    <!-- User Management -->
-    <script defer src="./dist/src/components/users/UserManagement.js?v=4002"></script>
-    
-    <!-- Account Component -->
-    <script defer src="./dist/src/components/account/Account.js"></script>
-    
-    <!-- Feedback Components -->
-    <script defer src="./dist/src/components/feedback/FeedbackWidget.js"></script>
-    <script defer src="./dist/src/components/feedback/SectionCommentWidget.js"></script>
-    
-    <!-- Settings Component -->
-    <script defer src="./dist/src/components/settings/Settings.js"></script>
-    
-    <!-- Settings Portal Component -->
-    <script defer src="./dist/src/components/settings/SettingsPortal.js"></script>
-    
-    <!-- Permission System -->
-    <script defer src="./dist/src/utils/permissions.js"></script>
-    
-    <!-- Utils -->
-    <script defer src="./dist/src/utils/whatsapp.js"></script>
-    
-    <!-- Layout -->
+    <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>
     
-    <!-- Google Calendar Integration -->
-    <script defer src="./dist/src/services/GoogleCalendarService.js"></script>
-    <script defer src="./dist/src/components/calendar/GoogleCalendarSync.js"></script>
-    
-    <!-- Database Seeding Script -->
-    <script defer src="./database-seed-clients.js"></script>
+    <!-- Optional integrations moved to lazy -->
     
     <!-- Lazy Load Non-Critical Components -->
     <script defer src="./lazy-load-components.js"></script>
