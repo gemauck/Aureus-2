@@ -824,6 +824,12 @@ const Manufacturing = () => {
         };
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
+          console.log('✅ Created inventory item (debug):', {
+            id: response.data.item.id,
+            sku: response.data.item.sku,
+            hasThumbnail: !!response.data.item.thumbnail,
+            thumbnailPreview: (response.data.item.thumbnail || '').slice(0, 64)
+          });
           setInventory([...inventory, { ...response.data.item, id: response.data.item.id }]);
         }
       }
