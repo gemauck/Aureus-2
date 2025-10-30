@@ -81,7 +81,8 @@ async function request(path, options = {}) {
 const api = {
   // Auth
   async login(email, password) {
-    const res = await request('/login', { method: 'POST', body: JSON.stringify({ email, password }) })
+    // Use auth namespaced login so refresh cookie has proper Secure flag in production
+    const res = await request('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) })
     // Handle both response formats: production (accessToken) and local (data.accessToken)
     if (res?.accessToken) {
       window.storage.setToken(res.accessToken)
