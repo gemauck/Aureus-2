@@ -37,8 +37,11 @@ else
     cd abcotronics-erp
 fi
 
-echo "📦 Installing dependencies..."
-npm install --production
+echo "📦 Installing dependencies (including dev for build)..."
+npm install
+
+echo "🏗️  Building frontend (dist)..."
+npm run build || (echo "⚠️ Build failed" && exit 1)
 
 echo "🔧 Setting up environment..."
 # Create .env file if it doesn't exist
