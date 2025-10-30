@@ -261,6 +261,17 @@ app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => 
   }
 })
 
+// Explicit mapping for manufacturing endpoints (inventory, boms, production-orders, stock-movements, suppliers)
+app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'manufacturing.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for sites endpoints
 app.all('/api/sites/client/:clientId/:siteId?', async (req, res, next) => {
   try {
