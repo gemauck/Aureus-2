@@ -30,7 +30,7 @@ const LoginPage = () => {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-4xl overflow-hidden">
+            <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl overflow-hidden">
                 <div className="grid md:grid-cols-2">
                     {/* Left Side - Branding */}
                     <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex flex-col justify-center items-center text-center">
