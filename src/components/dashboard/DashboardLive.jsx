@@ -137,16 +137,25 @@ const DashboardLive = () => {
                 window.DatabaseAPI.getTimeEntries().catch(err => {
                     console.warn('Time entry sync failed:', err);
                     return { data: [] };
-                }),
-                window.DatabaseAPI.getUsers().catch(err => {
-                    console.warn('User sync failed:', err);
-                    return { data: [] };
                 })
             ];
 
+            // Only fetch users for admins to avoid unnecessary 401s and load
+            try {
+                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
+                if (role === 'admin') {
+                    syncPromises.push(
+                        window.DatabaseAPI.getUsers().catch(err => {
+                            console.warn('User sync failed:', err);
+                            return { data: [] };
+                        })
+                    );
+                }
+            } catch (_) {}
+
             // Update with fresh API data when available
             Promise.allSettled(syncPromises).then((results) => {
-                const [clientsRes, leadsRes, projectsRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+            const [clientsRes, leadsRes, projectsRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
 
                 // Get clients from clients API
                 const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients.filter(c => c.type === 'client' || !c.type) : cachedClients;

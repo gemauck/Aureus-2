@@ -117,15 +117,22 @@ class LiveDataSync {
 
             log('🔄 Syncing live data...');
             
-            // Sync all data types
+            // Sync core data types
             const syncPromises = [
                 this.syncData('clients', () => window.DatabaseAPI.getClients()),
                 this.syncData('leads', () => window.DatabaseAPI.getLeads()),
                 this.syncData('projects', () => window.DatabaseAPI.getProjects()),
                 this.syncData('invoices', () => window.DatabaseAPI.getInvoices()),
-                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries()),
-                this.syncData('users', () => window.DatabaseAPI.getUsers())
+                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries())
             ];
+
+            // Only sync users if admin to avoid unnecessary 401s and extra load
+            try {
+                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
+                if (role === 'admin') {
+                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers()));
+                }
+            } catch (_) {}
 
             const results = await Promise.allSettled(syncPromises);
             
