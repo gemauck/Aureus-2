@@ -1,6 +1,7 @@
 // Railway Server Entry Point
 import 'dotenv/config'
 import express from 'express'
+import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import path from 'path'
 import fs from 'fs'
@@ -108,6 +109,9 @@ async function loadHandler(handlerPath) {
 
 const app = express()
 const PORT = process.env.PORT || 3000
+
+// Enable gzip compression for all responses to speed up loads
+app.use(compression({ threshold: 0 }))
 
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
