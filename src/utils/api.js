@@ -43,9 +43,10 @@ async function request(path, options = {}) {
           window.LiveDataSync.stop();
         }
         
-        // Redirect to login screen
-        window.location.hash = '#/login';
-        window.location.reload();
+        // Only redirect if not already on login page to prevent flashing
+        if (!window.location.hash.includes('#/login')) {
+          window.location.hash = '#/login';
+        }
       }
       
       throw new Error(data?.error?.message || `Request failed with status ${res.status}`)
