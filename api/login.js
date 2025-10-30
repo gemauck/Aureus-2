@@ -37,8 +37,11 @@ async function handler(req, res) {
       }
     })
 
+    const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+    const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
+    const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
     res.setHeader('Set-Cookie', [
-      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800` // 7 days
+      `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax; Max-Age=604800${isSecure ? '; Secure' : ''}${domainAttr}` // 7 days
     ])
     return ok(res, { accessToken })
   } catch (e) {

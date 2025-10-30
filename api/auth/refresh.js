@@ -21,7 +21,9 @@ async function handler(req, res) {
     const newRefreshToken = signRefreshToken(newPayload)
 
     const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
-    const cookieValue = `refreshToken=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}`
+    const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
+    const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
+    const cookieValue = `refreshToken=${newRefreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
     res.setHeader('Set-Cookie', [cookieValue])
     return ok(res, { data: { accessToken } })
   } catch (e) {
