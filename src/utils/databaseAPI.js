@@ -452,9 +452,20 @@ const DatabaseAPI = {
     // MANUFACTURING OPERATIONS - INVENTORY
     async getInventory() {
         console.log('📡 Fetching inventory from database...');
-        const response = await this.makeRequest('/manufacturing/inventory');
-        console.log('✅ Inventory fetched from database:', response.data?.inventory?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/manufacturing/inventory');
+        const normalized = {
+            data: {
+                inventory: Array.isArray(raw?.data?.inventory)
+                    ? raw.data.inventory
+                    : Array.isArray(raw?.inventory)
+                        ? raw.inventory
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Inventory fetched from database:', normalized.data.inventory.length);
+        return normalized;
     },
 
     async createInventoryItem(itemData) {
@@ -489,9 +500,20 @@ const DatabaseAPI = {
     // MANUFACTURING OPERATIONS - BOMs
     async getBOMs() {
         console.log('📡 Fetching BOMs from database...');
-        const response = await this.makeRequest('/manufacturing/boms');
-        console.log('✅ BOMs fetched from database:', response.data?.boms?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/manufacturing/boms');
+        const normalized = {
+            data: {
+                boms: Array.isArray(raw?.data?.boms)
+                    ? raw.data.boms
+                    : Array.isArray(raw?.boms)
+                        ? raw.boms
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ BOMs fetched from database:', normalized.data.boms.length);
+        return normalized;
     },
 
     async createBOM(bomData) {
@@ -526,9 +548,20 @@ const DatabaseAPI = {
     // MANUFACTURING OPERATIONS - PRODUCTION ORDERS
     async getProductionOrders() {
         console.log('📡 Fetching production orders from database...');
-        const response = await this.makeRequest('/manufacturing/production-orders');
-        console.log('✅ Production orders fetched from database:', response.data?.productionOrders?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/manufacturing/production-orders');
+        const normalized = {
+            data: {
+                productionOrders: Array.isArray(raw?.data?.productionOrders)
+                    ? raw.data.productionOrders
+                    : Array.isArray(raw?.productionOrders)
+                        ? raw.productionOrders
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Production orders fetched from database:', normalized.data.productionOrders.length);
+        return normalized;
     },
 
     async createProductionOrder(orderData) {
@@ -563,9 +596,20 @@ const DatabaseAPI = {
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
     async getStockMovements() {
         console.log('📡 Fetching stock movements from database...');
-        const response = await this.makeRequest('/manufacturing/stock-movements');
-        console.log('✅ Stock movements fetched from database:', response.data?.movements?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/manufacturing/stock-movements');
+        const normalized = {
+            data: {
+                movements: Array.isArray(raw?.data?.movements)
+                    ? raw.data.movements
+                    : Array.isArray(raw?.movements)
+                        ? raw.movements
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Stock movements fetched from database:', normalized.data.movements.length);
+        return normalized;
     },
 
     async createStockMovement(movementData) {
@@ -590,9 +634,20 @@ const DatabaseAPI = {
     // MANUFACTURING OPERATIONS - SUPPLIERS
     async getSuppliers() {
         console.log('📡 Fetching suppliers from database...');
-        const response = await this.makeRequest('/manufacturing/suppliers');
-        console.log('✅ Suppliers fetched from database:', response.data?.suppliers?.length || 0);
-        return response;
+        const raw = await this.makeRequest('/manufacturing/suppliers');
+        const normalized = {
+            data: {
+                suppliers: Array.isArray(raw?.data?.suppliers)
+                    ? raw.data.suppliers
+                    : Array.isArray(raw?.suppliers)
+                        ? raw.suppliers
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Suppliers fetched from database:', normalized.data.suppliers.length);
+        return normalized;
     },
 
     async createSupplier(supplierData) {
