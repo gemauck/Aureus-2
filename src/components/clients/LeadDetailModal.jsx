@@ -1804,62 +1804,70 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                     <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
                                                     {proposal.stages.map((stage, stageIndex) => {
                                                         const currentStage = proposal.stages[proposal.stages.findIndex(s => s.status === 'in-progress') || 0];
-                                                        const canApprove = stage.canApprove && 
+                                                        const canApprove = 
                                                             (stage.status === 'pending' || stage.status === 'in-progress') &&
                                                             (stageIndex === 0 || proposal.stages[stageIndex - 1].status === 'approved');
                                                         const statusColor = 
                                                             stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
                                                             stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
                                                             'bg-gray-100 text-gray-600 border-gray-300';
+                                                        // Map department name to team style/icon similar to Teams module
+                                                        const teamKey = (stage.department || '').toLowerCase();
+                                                        const teamMetaMap = {
+                                                            'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
+                                                            'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
+                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
+                                                            'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
+                                                            'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
+                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
+                                                            'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
+                                                        };
+                                                        const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
                                                         
                                                         return (
-                                                            <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
-                                                                <div className="flex justify-between items-start">
-                                                                    <div className="flex-1">
-                                                                        <div className="flex items-center gap-2 mb-1">
-                                                                            <span className="font-medium text-sm">{stageIndex + 1}.</span>
-                                                                            <span className="font-medium text-sm">{stage.name}</span>
-                                                                        </div>
-                                                                        <div className="text-xs text-gray-600 ml-6">
-                                                                            <span className="mr-3"><i className="fas fa-building mr-1"></i>{stage.department}</span>
-                                                                            <span><i className="fas fa-user mr-1"></i>{stage.assignee}</span>
-                                                                        </div>
-                                                                        {stage.comments && (
-                                                                            <div className="mt-2 p-2 bg-white rounded text-xs text-gray-700">
-                                                                                <strong>Comments:</strong> {stage.comments}
+                                                            <>
+                                                                <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
+                                                                    <div className="flex justify-between items-start">
+                                                                        <div className="flex-1">
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <span className="font-medium text-sm">{stageIndex + 1}.</span>
+                                                                                <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
                                                                             </div>
-                                                                        )}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        {canApprove && (
-                                                                            <>
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        const updatedStages = proposal.stages.map((s, idx) => {
-                                                                                            if (idx === stageIndex) {
-                                                                                                return { ...s, status: 'in-progress' };
-                                                                                            }
-                                                                                            return s;
-                                                                                        });
-                                                                                        const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                            idx === proposalIndex ? { ...p, stages: updatedStages } : p
-                                                                                        );
-                                                                                        setFormData({ ...formData, proposals: updatedProposals });
-                                                                                        handleSave({ ...formData, proposals: updatedProposals }, true);
-                                                                                    }}
-                                                                                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
-                                                                                >
-                                                                                    Start
-                                                                                </button>
+                                                                            <div className="text-xs ml-6">
+                                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
+                                                                                    <i className={`fas ${teamMeta.icon}`}></i>
+                                                                                    {stage.department}
+                                                                                </span>
+                                                                            </div>
+                                                                            {stage.comments && (
+                                                                                <div className="mt-2 p-2 bg-white rounded text-xs text-gray-700">
+                                                                                    <strong>Comments:</strong> {stage.comments}
+                                                                                </div>
+                                                                            )}
+                                                                            {stage.approvedBy && (
+                                                                                <div className="mt-2 text-[11px] text-gray-600">
+                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {canApprove && (
                                                                                 <button
                                                                                     type="button"
                                                                                     onClick={() => {
                                                                                         const comments = prompt('Enter comments (optional):');
+                                                                                        // Identify current user for audit trail
+                                                                                        let approver = 'Unknown';
+                                                                                        try {
+                                                                                            const u = (window.storage && (window.storage.getUserInfo?.() || window.storage.getUser?.())) || null;
+                                                                                            approver = (u && (u.name || u.email)) || 'Unknown';
+                                                                                        } catch (_) {}
                                                                                         if (comments !== null) {
                                                                                             const updatedStages = proposal.stages.map((s, idx) => {
                                                                                                 if (idx === stageIndex) {
-                                                                                                    return { ...s, status: 'approved', comments };
+                                                                                                    return { ...s, status: 'approved', comments, approvedBy: approver, approvedAt: new Date().toISOString() };
                                                                                                 } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
                                                                                                     return { ...s, status: 'in-progress' };
                                                                                                 }
@@ -1876,21 +1884,26 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                                                                                 >
                                                                                     Approve
                                                                                 </button>
-                                                                            </>
-                                                                        )}
-                                                                        {stage.status === 'approved' && (
-                                                                            <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
-                                                                                <i className="fas fa-check mr-1"></i>Approved
-                                                                            </span>
-                                                                        )}
-                                                                        {stage.status === 'in-progress' && (
-                                                                            <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
-                                                                                <i className="fas fa-clock mr-1"></i>In Progress
-                                                                            </span>
-                                                                        )}
+                                                                            )}
+                                                                            {stage.status === 'approved' && (
+                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                    <i className="fas fa-check mr-1"></i>Approved
+                                                                                </span>
+                                                                            )}
+                                                                            {stage.status === 'in-progress' && (
+                                                                                <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
+                                                                                    <i className="fas fa-clock mr-1"></i>In Progress
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
+                                                                {stageIndex < proposal.stages.length - 1 && (
+                                                                    <div className="flex justify-center -my-1">
+                                                                        <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
+                                                                    </div>
+                                                                )}
+                                                            </>
                                                         );
                                                     })}
                                                 </div>

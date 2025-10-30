@@ -2,6 +2,41 @@
 
 /* Base mobile styles */
 @media (max-width: 768px) {
+  /* Login page isolation: prevent global sticky/fixed overlays from covering the form */
+  body.login-page header,
+  body.login-page .header-mobile,
+  body.login-page [class*="header"],
+  body.login-page .mobile-nav,
+  body.login-page [class*="mobile-header"],
+  body.login-page [class*="page-header"],
+  body.login-page div[class*="sticky"],
+  body.login-page div[class*="border-b"],
+  body.login-page [class*="filter-bar"],
+  body.login-page [class*="toolbar"],
+  body.login-page [class*="action-bar"],
+  body.login-page [class*="tabs"],
+  body.login-page .nav-tabs {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+
+  /* On login, keep dropdowns/menus positioned relative to their containers */
+  body.login-page .relative > div[class*="absolute"],
+  body.login-page div[class*="dropdown"],
+  body.login-page div[class*="menu"]:not(nav):not([class*="nav"]) {
+    position: absolute !important;
+    width: auto !important;
+    left: auto !important;
+    right: auto !important;
+    transform: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+  }
+
   /* Global mobile optimizations */
   * {
     -webkit-tap-highlight-color: transparent;

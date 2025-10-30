@@ -33,6 +33,18 @@ const AppContent = () => {
     }
 
     const { user, loading: authLoading } = window.useAuth();
+    // Toggle a body class so mobile CSS can avoid affecting the login page
+    window.React.useEffect(() => {
+        const body = document.body;
+        if (!user) {
+            body.classList.add('login-page');
+        } else {
+            body.classList.remove('login-page');
+        }
+        return () => {
+            body.classList.remove('login-page');
+        };
+    }, [user]);
     const { initialLoadComplete, globalLoading } = window.useData();
 
     // Show loading screen during auth check OR initial data load
