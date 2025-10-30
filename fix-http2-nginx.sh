@@ -66,6 +66,14 @@ server {
     large_client_header_buffers 8 32k;
     keepalive_requests 1000;
 
+    # Enable gzip compression for faster loads
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript text/javascript application/x-javascript application/xml application/xml+rss image/svg+xml;
+
     # Proxy to Node.js app
     location / {
         proxy_pass http://localhost:APP_PORT_PLACEHOLDER;
@@ -106,7 +114,7 @@ server {
         proxy_pass http://localhost:APP_PORT_PLACEHOLDER;
         proxy_set_header Host $host;
         expires 30d;
-        add_header Cache-Control "public, immutable";
+        add_header Cache-Control "public, max-age=2592000, immutable";
         
         # Proper buffering for static files
         proxy_buffering on;
