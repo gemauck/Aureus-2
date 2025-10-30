@@ -415,8 +415,6 @@ const DashboardLive = () => {
         );
     }
 
-        const EmployeeChat = window.EmployeeChat;
-
         return (
         <div className="space-y-4">
             {/* Header with Live Status */}
@@ -669,12 +667,7 @@ const DashboardLive = () => {
                 </div>
             </div>
 
-            {/* Employee Chat */}
-            {EmployeeChat && (
-                <div>
-                    <EmployeeChat />
-                </div>
-            )}
+            
         </div>
     );
 };

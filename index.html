@@ -300,8 +300,42 @@
     <!-- Persistence Hook and Common Components -->
     <script defer src="./dist/src/hooks/usePersistence.js"></script>
     <script src="./dist/src/components/common/SyncStatus.js"></script>
-    <!-- Use only one databaseAPI - the new version -->
-    <script defer src="./dist/src/utils/databaseAPI-new.js?v=1003"></script>
+    <!-- Database API - load new version first, then legacy as fallback to ensure all methods exist -->
+    <script src="./dist/src/utils/databaseAPI-new.js?v=1005"></script>
+    <script src="./dist/src/utils/databaseAPI.js?v=1005"></script>
+    <script>
+        // Runtime shim: ensure DatabaseAPI.getProject exists for components relying on it
+        (function() {
+            try {
+                if (window.DatabaseAPI && typeof window.DatabaseAPI.getProject !== 'function') {
+                    window.DatabaseAPI.getProject = async function(id) {
+                        try {
+                            if (window.api && typeof window.api.getProject === 'function') {
+                                return await window.api.getProject(id);
+                            }
+                        } catch (e) {
+                            // fall through to direct fetch
+                        }
+                        const res = await fetch(`/api/projects/${id}`, {
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                            }
+                        });
+                        if (!res.ok) {
+                            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                        }
+                        const data = await res.json();
+                        // Normalize to { data: { project: ... } }
+                        return data?.data ? data : { data: { project: data.project || data.data || data } };
+                    };
+                    console.log('🧩 Shimmed DatabaseAPI.getProject at runtime');
+                }
+            } catch (err) {
+                console.warn('DatabaseAPI.getProject shim failed:', err);
+            }
+        })();
+    </script>
     <script defer src="./dist/src/utils/cache-manager.js"></script>
     <script defer src="./dist/src/utils/liveDataSync.js"></script>
     <script defer src="./dist/src/utils/auditLogger.js"></script>
@@ -316,9 +350,6 @@
     <script src="./dist/src/components/dashboard/DashboardSimple.js"></script>
     <script src="./dist/src/components/dashboard/DashboardFallback.js"></script>
     <script src="./dist/src/components/dashboard/DashboardLive.js"></script>
-    
-    <!-- Employee Chat Component -->
-    <script src="./dist/src/components/chat/EmployeeChat.js"></script>
     
     <script src="./dist/src/components/clients/ClientsSimple.js"></script>
     <script src="./dist/src/components/projects/ProjectsSimple.js"></script>
@@ -558,6 +589,48 @@
                 });
             }
         }, 3000);
+    </script>
+    
+    <!-- Final safety: keep DatabaseAPI.getProject available even if overwritten later -->
+    <script>
+        (function() {
+            function ensureGetProject() {
+                try {
+                    if (!window.DatabaseAPI) window.DatabaseAPI = {};
+                    if (typeof window.DatabaseAPI.getProject !== 'function') {
+                        window.DatabaseAPI.getProject = async function(id) {
+                            try {
+                                if (window.api && typeof window.api.getProject === 'function') {
+                                    return await window.api.getProject(id);
+                                }
+                            } catch (e) {
+                                // fall through
+                            }
+                            const res = await fetch(`/api/projects/${id}`, {
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                                }
+                            });
+                            if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+                            const data = await res.json();
+                            return data?.data ? data : { data: { project: data.project || data.data || data } };
+                        };
+                        console.log('🧩 Ensured DatabaseAPI.getProject (final safety)');
+                    }
+                } catch (err) {
+                    // ignore
+                }
+            }
+            // Run now, on load, and briefly after to cover late overrides
+            ensureGetProject();
+            window.addEventListener('load', ensureGetProject);
+            let tries = 0;
+            const t = setInterval(() => {
+                ensureGetProject();
+                if (++tries >= 10) clearInterval(t);
+            }, 500);
+        })();
     </script>
 </body>
 </html>

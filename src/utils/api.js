@@ -11,7 +11,7 @@ async function request(path, options = {}) {
   if (token) headers['Authorization'] = `Bearer ${token}`
   
   const fullUrl = `${API_BASE}${path}`
-  const requestOptions = { ...options, headers }
+  const requestOptions = { ...options, headers, credentials: 'include' }
   
   try {
     const res = await fetch(fullUrl, requestOptions)
