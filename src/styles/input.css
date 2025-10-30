@@ -58,15 +58,13 @@ body {
     }
 }
 
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    :root {
-        --bg-primary: #1f2937;
-        --bg-secondary: #374151;
-        --text-primary: #f9fafb;
-        --text-secondary: #d1d5db;
-        --border-color: #4b5563;
-    }
+/* Dark mode support: apply only when .dark class is present */
+.dark {
+    --bg-primary: #1f2937;
+    --bg-secondary: #374151;
+    --text-primary: #f9fafb;
+    --text-secondary: #d1d5db;
+    --border-color: #4b5563;
 }
 
 /* Line clamp utility */
