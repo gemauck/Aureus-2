@@ -97,7 +97,9 @@ async function handler(req, res) {
 
     // Set refresh token cookie
     const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
-    const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}`
+    const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
+    const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
+    const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
     res.setHeader('Set-Cookie', [cookieValue])
     
     console.log('✅ Login successful for user:', user.email)

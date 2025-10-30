@@ -94,8 +94,11 @@ async function handler(req, res) {
         const refreshToken = signRefreshToken(payload)
         
         // Set refresh token cookie
+        const isSecure = process.env.NODE_ENV === 'production' || process.env.FORCE_SECURE_COOKIES === 'true'
+        const domain = process.env.REFRESH_COOKIE_DOMAIN || 'abcoafrica.co.za'
+        const domainAttr = process.env.NODE_ENV === 'production' ? `; Domain=${domain}` : ''
         res.setHeader('Set-Cookie', [
-            `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax`
+            `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
         ])
         
         // Clear OAuth state cookie
