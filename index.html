@@ -372,6 +372,48 @@
     <script src="./dist/src/components/auth/LoginPage.js"></script>
     <script src="./dist/src/components/auth/AcceptInvitation.js"></script>
     <script src="./dist/src/components/auth/PasswordChangeModal.js"></script>
+    <!-- Runtime shim: ensure api.login uses /auth/login in case older build calls /login -->
+    <script>
+        (function() {
+            function patchApiLogin() {
+                try {
+                    if (!window.api || window.__apiLoginPatched) return;
+                    const originalLogin = window.api.login;
+                    if (typeof originalLogin !== 'function') return;
+                    window.api.login = async function(email, password) {
+                        try {
+                            // Try existing implementation first
+                            return await originalLogin(email, password);
+                        } catch (err) {
+                            // Fallback to /auth/login if server returns HTML/502/etc
+                            try {
+                                const res = await fetch(window.location.origin + '/api/auth/login', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ email, password })
+                                });
+                                const text = await res.text();
+                                const data = text ? JSON.parse(text) : {};
+                                if (data?.accessToken) {
+                                    window.storage?.setToken?.(data.accessToken);
+                                } else if (data?.data?.accessToken) {
+                                    window.storage?.setToken?.(data.data.accessToken);
+                                }
+                                return data;
+                            } catch (fallbackErr) {
+                                throw err; // rethrow original for visibility
+                            }
+                        }
+                    };
+                    window.__apiLoginPatched = true;
+                    console.log('🧩 Patched api.login to fallback to /auth/login');
+                } catch (_) {}
+            }
+            patchApiLogin();
+            window.addEventListener('load', patchApiLogin, { once: true });
+        })();
+    </script>
     <!-- Load simple components FIRST for immediate loading -->
     <script defer src="./dist/src/components/common/ErrorBoundary.js"></script>
     <script defer src="./dist/src/components/dashboard/DashboardSimple.js"></script>
@@ -464,6 +506,24 @@
         window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
         window.HR = window.HR;
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
+        // Late bind Clients if it registers after this script
+        (function() {
+            function bindClients() {
+                if (!window.Clients) {
+                    window.Clients = window.Clients || window.ClientsCached || window.ClientsDatabaseFirst || window.ClientsSimple;
+                    if (window.Clients) {
+                        console.log('✅ Bound window.Clients dynamically');
+                    }
+                }
+            }
+            bindClients();
+            // Retry briefly to catch late component registration
+            let tries = 0;
+            const t = setInterval(() => {
+                if (window.Clients || ++tries > 10) return clearInterval(t);
+                bindClients();
+            }, 300);
+        })();
     </script>
     
     <!-- App Entry Point - Load AFTER setup -->
