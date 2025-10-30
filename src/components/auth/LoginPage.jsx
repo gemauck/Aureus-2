@@ -34,8 +34,8 @@ const LoginPage = () => {
                 <div className="grid md:grid-cols-2">
                     {/* Left Side - Branding */}
                     <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex flex-col justify-center items-center text-center">
-                        <div className="mb-8">
-                            <h1 className="text-3xl font-bold mb-2 text-white">Abcotronics</h1>
+                        <div className="mb-8 w-full flex justify-center">
+                            <h1 className="text-3xl font-bold mb-2 text-white" style={{ color: '#ffffff', textAlign: 'center' }}>Abcotronics</h1>
                         </div>
                     </div>
 
