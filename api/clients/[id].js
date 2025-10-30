@@ -14,11 +14,10 @@ async function handler(req, res) {
       user: req.user
     })
     
-    const url = new URL(req.url, `http://${req.headers.host}`)
-    const pathSegments = url.pathname.split('/').filter(Boolean)
-    const id = pathSegments[pathSegments.length - 1] // Get the ID from the URL
-
-    console.log('🔍 Path segments:', pathSegments, 'ID:', id)
+    // Extract ID from req.params (set by Express route parameter)
+    const id = req.params.id
+    
+    console.log('🔍 ID from params:', id)
 
     if (!id) {
       return badRequest(res, 'Client ID required')
