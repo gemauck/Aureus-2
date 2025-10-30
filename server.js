@@ -458,11 +458,13 @@ app.use(express.static(rootDir, {
       res.setHeader('Expires', '0')
     } else if (path.endsWith('.js')) {
       res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
-      // Reduced cache time for development/debugging - files in dist/ change frequently during dev
-      if (process.env.NODE_ENV === 'development' || path.includes('/dist/')) {
+      // In production, cache bundled assets in /dist for 30 days
+      if (process.env.NODE_ENV === 'development') {
         res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+      } else if (path.includes('/dist/')) {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days for bundled assets
       } else {
-        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
+        res.setHeader('Cache-Control', 'public, max-age=604800') // 7 days for other JS
       }
     } else if (path.endsWith('.css')) {
       res.setHeader('Content-Type', 'text/css; charset=utf-8')
