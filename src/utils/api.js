@@ -78,11 +78,17 @@ const api = {
   },
   
   async refresh() {
-    const res = await request('/auth/refresh', { 
-      method: 'POST'
-    })
-    if (res?.data?.accessToken) window.storage.setToken(res.data.accessToken)
-    return res
+    try {
+      const res = await request('/auth/refresh', { 
+        method: 'POST'
+      })
+      if (res?.data?.accessToken) window.storage.setToken(res.data.accessToken)
+      return res
+    } catch (error) {
+      // Refresh failures are expected when no refresh cookie exists
+      // Don't treat this as a critical error
+      return null
+    }
   },
   
   async logout() {
