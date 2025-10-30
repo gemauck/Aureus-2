@@ -56,16 +56,33 @@ const DatabaseAPI = {
         log('📡 Database API request:', { url, endpoint, options, hasToken: !!token });
         
         try {
-            const response = await fetch(url, {
-                headers,
-                ...options
-            });
+            const doFetch = async (hdrs) => fetch(url, { headers: hdrs, credentials: 'include', ...options });
+            let response = await doFetch(headers);
 
             log('📡 Database API response:', { 
                 status: response.status, 
                 ok: response.ok, 
                 endpoint 
             });
+
+            // If unauthorized, try a one-time refresh flow
+            if (!response.ok && response.status === 401) {
+                try {
+                    const refreshRes = await fetch(`${this.API_BASE}/api/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                    if (refreshRes.ok) {
+                        const refreshText = await refreshRes.text();
+                        const refreshData = refreshText ? JSON.parse(refreshText) : {};
+                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                        if (newToken && window.storage?.setToken) {
+                            window.storage.setToken(newToken);
+                            const refreshedHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+                            response = await doFetch(refreshedHeaders);
+                        }
+                    }
+                } catch (_) {
+                    // ignore network errors; will handle below
+                }
+            }
 
             // Get response text first to check content type
             const responseText = await response.text();
@@ -86,19 +103,19 @@ const DatabaseAPI = {
 
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Token expired, clear auth data
-                    if (window.storage?.removeToken) window.storage.removeToken();
-                    if (window.storage?.removeUser) window.storage.removeUser();
-                    
-                    // Stop live data sync if active
-                    if (window.LiveDataSync) {
-                        window.LiveDataSync.stop();
+                    // Do not auto-logout for permission-only endpoints
+                    const permissionLikely = cacheKey.startsWith('/users') || cacheKey.startsWith('/admin');
+                    if (!permissionLikely) {
+                        if (window.storage?.removeToken) window.storage.removeToken();
+                        if (window.storage?.removeUser) window.storage.removeUser();
+                        if (window.LiveDataSync) {
+                            window.LiveDataSync.stop();
+                        }
+                        if (!window.location.hash.includes('#/login')) {
+                            window.location.hash = '#/login';
+                        }
                     }
-                    
-                    // Redirect to login screen
-                    window.location.hash = '#/login';
-                    window.location.reload();
-                    throw new Error('Authentication expired. Please log in again.');
+                    throw new Error('Authentication expired or unauthorized.');
                 }
                 
                 // Extract error message from response
