@@ -142,6 +142,12 @@ const DatabaseAPI = {
         return this.makeRequest('/clients');
     },
 
+    async getClient(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching client ${id} from database...`);
+        return this.makeRequest(`/clients/${id}`);
+    },
+
     async createClient(clientData) {
         const result = await this.makeRequest('/clients', {
             method: 'POST',
@@ -187,6 +193,12 @@ const DatabaseAPI = {
         return this.makeRequest('/leads', { forceRefresh });
     },
 
+    async getLead(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching lead ${id} from database...`);
+        return this.makeRequest(`/leads/${id}`);
+    },
+
     async createLead(leadData) {
         const result = await this.makeRequest('/leads', {
             method: 'POST',
@@ -225,6 +237,12 @@ const DatabaseAPI = {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching projects from database...');
         return this.makeRequest('/projects');
+    },
+
+    async getProject(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching project ${id} from database...`);
+        return this.makeRequest(`/projects/${id}`);
     },
 
     async createProject(projectData) {
@@ -274,6 +292,12 @@ const DatabaseAPI = {
         return this.makeRequest('/invoices');
     },
 
+    async getInvoice(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching invoice ${id} from database...`);
+        return this.makeRequest(`/invoices/${id}`);
+    },
+
     async createInvoice(invoiceData) {
         const result = await this.makeRequest('/invoices', {
             method: 'POST',
@@ -312,6 +336,12 @@ const DatabaseAPI = {
         return this.makeRequest('/time-entries');
     },
 
+    async getTimeEntry(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching time entry ${id} from database...`);
+        return this.makeRequest(`/time-entries/${id}`);
+    },
+
     async createTimeEntry(timeEntryData) {
         const result = await this.makeRequest('/time-entries', {
             method: 'POST',
@@ -348,6 +378,12 @@ const DatabaseAPI = {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching users from database...');
         return this.makeRequest('/users');
+    },
+
+    async getUser(id) {
+        const log = window.debug?.log || (() => {});
+        log(`📡 Fetching user ${id} from database...`);
+        return this.makeRequest(`/users/${id}`);
     },
 
     async createUser(userData) {

@@ -230,14 +230,51 @@
     display: none;
   }
   
-  /* Mobile navigation enhancements */
+  /* Mobile navigation enhancements - ENSURE ALL NAVIGATION IS STICKY */
+  .mobile-nav,
+  [class*="mobile-header"],
+  [class*="page-header"],
+  div[class*="sticky"][class*="top-0"] {
+    position: sticky !important;
+    position: -webkit-sticky !important;
+    top: 56px !important; /* Below main header */
+    z-index: 40 !important;
+    background: white !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    padding: 12px 16px !important;
+  }
+  
+  .dark .mobile-nav,
+  .dark [class*="mobile-header"],
+  .dark [class*="page-header"] {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+  
+  /* Legacy mobile-nav class */
   .mobile-nav {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    background: white;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 12px 16px;
+    top: 56px;
+    z-index: 40;
+  }
+  
+  /* Modern browser :has() support for headers with h1/h2 and buttons */
+  @supports selector(:has(*)) {
+    div[class*="border-b"]:has(h1):has(button):not(header):not([role="dialog"]),
+    div[class*="border-b"]:has(h2):has(button):not(header):not([role="dialog"]) {
+      position: sticky !important;
+      position: -webkit-sticky !important;
+      top: 56px !important;
+      z-index: 40 !important;
+      background: white !important;
+      border-bottom: 1px solid #e5e7eb !important;
+      padding: 12px 16px !important;
+    }
+    
+    .dark div[class*="border-b"]:has(h1):has(button),
+    .dark div[class*="border-b"]:has(h2):has(button) {
+      background: #1f2937 !important;
+      border-bottom-color: #374151 !important;
+    }
   }
   
   .mobile-nav-tabs {
@@ -493,7 +530,24 @@
     text-align: left;
   }
   
-  /* Header optimizations */
+  /* Header optimizations - FIXED ON MOBILE */
+  header,
+  .header-mobile,
+  [class*="header"] {
+    position: sticky !important;
+    position: -webkit-sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    background: white !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+  }
+  
+  .dark header,
+  .dark .header-mobile,
+  .dark [class*="header"] {
+    background: #1f2937 !important;
+  }
+  
   .header-mobile {
     height: 56px;
     padding: 0 16px;
@@ -501,6 +555,23 @@
   
   .header-mobile .search-input {
     display: none;
+  }
+  
+  /* Ensure main content has padding-top to account for fixed header */
+  main,
+  .main-content,
+  [class*="main-content"] {
+    padding-top: 0 !important;
+  }
+  
+  /* Add safe area for fixed header */
+  body {
+    padding-top: 0;
+  }
+  
+  /* Main content area should scroll under fixed header */
+  .flex-1.overflow-auto {
+    position: relative;
   }
   
   /* Modal optimizations */
@@ -728,13 +799,46 @@
     padding: 16px;
   }
   
-  /* Navigation tabs */
-  .nav-tabs {
-    display: flex;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-bottom: 1px solid #e5e7eb;
-    padding: 0 16px;
+  /* Navigation tabs - STICKY ON MOBILE */
+  .nav-tabs,
+  [class*="nav-tabs"],
+  [class*="tabs"],
+  .overflow-x-auto[class*="tab"] {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    padding: 0 16px !important;
+    position: sticky !important;
+    position: -webkit-sticky !important;
+    top: 56px !important; /* Below main header */
+    z-index: 40 !important;
+    background: white !important;
+    margin: 0 !important;
+  }
+  
+  .dark .nav-tabs,
+  .dark [class*="nav-tabs"],
+  .dark [class*="tabs"] {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+  
+  /* Use :has() for modern browsers only */
+  @supports selector(:has(*)) {
+    div[class*="tab"]:has(button) {
+      display: flex !important;
+      overflow-x: auto !important;
+      position: sticky !important;
+      position: -webkit-sticky !important;
+      top: 56px !important;
+      z-index: 40 !important;
+      background: white !important;
+    }
+    
+    .dark div[class*="tab"]:has(button) {
+      background: #1f2937 !important;
+    }
   }
   
   .nav-tab {
@@ -745,11 +849,57 @@
     font-size: 14px;
     color: #6b7280;
     text-decoration: none;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
   }
   
   .nav-tab.active {
     color: #3b82f6;
     border-bottom-color: #3b82f6;
+  }
+  
+  /* Page-level navigation bars and filter bars */
+  [class*="filter-bar"],
+  [class*="toolbar"],
+  [class*="action-bar"],
+  div[class*="filter"]:not(select):not(input) {
+    position: sticky !important;
+    position: -webkit-sticky !important;
+    top: 56px !important;
+    z-index: 40 !important;
+    background: white !important;
+  }
+  
+  .dark [class*="filter-bar"],
+  .dark [class*="toolbar"],
+  .dark [class*="action-bar"],
+  .dark div[class*="filter"]:not(select):not(input) {
+    background: #1f2937 !important;
+  }
+  
+  /* If there are tabs above, adjust positioning */
+  .nav-tabs ~ [class*="filter-bar"],
+  .nav-tabs ~ [class*="toolbar"],
+  [class*="tabs"] ~ div[class*="filter"]:not(select):not(input) {
+    top: 112px !important; /* Header + tabs (56px header + ~56px tabs) */
+  }
+  
+  /* Use :has() for modern browsers only */
+  @supports selector(:has(*)) {
+    div[class*="border-b"]:has(button):not(header):not([role="dialog"]):not([class*="modal"]),
+    div[class*="border-b"]:has(input[type="search"]):not(header),
+    div[class*="border-b"]:has(input[type="text"]):not(header) {
+      position: sticky !important;
+      position: -webkit-sticky !important;
+      top: 56px !important;
+      z-index: 40 !important;
+      background: white !important;
+    }
+    
+    .dark div[class*="border-b"]:has(button):not(header) {
+      background: #1f2937 !important;
+    }
   }
   
   /* Statistics cards */
@@ -1008,6 +1158,70 @@
       font-size: 16px !important;
     }
   }
+  
+  /* Ensure all component headers with sticky classes work correctly */
+  div[class*="sticky"][class*="top"],
+  [class*="sticky-top"],
+  div.sticky.top-0,
+  div.sticky.top-16 {
+    position: -webkit-sticky !important;
+    position: sticky !important;
+  }
+  
+  /* Component-level page headers (like in Clients, Projects, etc.) */
+  /* Use specific class patterns first, then fallback to :has() for modern browsers */
+  div[class*="border-b"][class*="flex"]:not(header):not([role="dialog"]):not([class*="modal"]) {
+    position: sticky !important;
+    position: -webkit-sticky !important;
+    top: 56px !important; /* Below main header */
+    z-index: 40 !important;
+    background: white !important;
+  }
+  
+  .dark div[class*="border-b"][class*="flex"]:not(header):not([role="dialog"]) {
+    background: #1f2937 !important;
+  }
+  
+  /* Fallback for modern browsers with :has() support */
+  @supports selector(:has(*)) {
+    div:has(> h1):has(button):not(header):not(.modal):not([class*="modal"]),
+    div:has(> h2):has(button):not(header):not(.modal):not([class*="modal"]) {
+      position: sticky !important;
+      position: -webkit-sticky !important;
+      top: 56px !important;
+      z-index: 40 !important;
+      background: white !important;
+    }
+    
+    .dark div:has(> h1):has(button),
+    .dark div:has(> h2):has(button) {
+      background: #1f2937 !important;
+    }
+  }
+  
+  /* Ensure responsive visibility - hide desktop-only elements */
+  [class*="hidden"]:not([class*="md:block"]):not([class*="lg:block"]) {
+    display: none !important;
+  }
+  
+  /* Show mobile-only elements */
+  [class*="mobile"]:not([class*="hidden"]) {
+    display: block !important;
+  }
+  
+  /* Force responsive table conversion */
+  table {
+    font-size: 14px;
+  }
+  
+  /* Ensure cards and containers adapt */
+  [class*="container"],
+  [class*="max-w"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
 }
 
 /* Tablet styles */
@@ -1030,7 +1244,7 @@
   }
 }
 
-/* Desktop styles */
+/* Desktop styles - Reset sticky positioning */
 @media (min-width: 1025px) {
   .table-responsive {
     display: block;
@@ -1046,6 +1260,23 @@
   
   .pipeline-desktop {
     display: block;
+  }
+  
+  /* Remove sticky on desktop for main header (using static instead) */
+  header.header-mobile,
+  .header-mobile {
+    position: static !important;
+    top: auto !important;
+    z-index: auto !important;
+    box-shadow: none !important;
+  }
+  
+  /* Navigation tabs can be sticky on desktop if needed, but adjust positioning */
+  .nav-tabs,
+  [class*="nav-tabs"],
+  [class*="tabs"] {
+    position: relative !important;
+    top: auto !important;
   }
 }
 

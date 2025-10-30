@@ -411,8 +411,8 @@ const MainLayout = () => {
 
             {/* Main Content */}
             <div className="flex-1 overflow-auto">
-                {/* Header */}
-                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile`}>
+                {/* Header - Fixed on mobile, static on desktop */}
+                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
                     <div className="flex items-center">
                         <button 
                             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}

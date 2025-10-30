@@ -625,6 +625,7 @@ if (window.api) {
     window.api.deleteLead = DatabaseAPI.deleteLead.bind(DatabaseAPI);
     
     window.api.getProjects = DatabaseAPI.getProjects.bind(DatabaseAPI);
+    window.api.getProject = DatabaseAPI.getProject.bind(DatabaseAPI);
     window.api.createProject = DatabaseAPI.createProject.bind(DatabaseAPI);
     window.api.updateProject = DatabaseAPI.updateProject.bind(DatabaseAPI);
     window.api.deleteProject = DatabaseAPI.deleteProject.bind(DatabaseAPI);
