@@ -2866,13 +2866,14 @@ const Manufacturing = () => {
 
       {/* Navigation Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
-        <div className="flex border-b border-gray-200">
+        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide">
           {[
             { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
             { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
+            { id: 'stock-transactions', label: 'Stock Transactions', icon: 'fa-exchange' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
           ].map(tab => (
@@ -2905,6 +2906,9 @@ const Manufacturing = () => {
             inventory={inventory}
             onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
           />
+        )}
+        {activeTab === 'stock-transactions' && window.StockTransactions && (
+          <window.StockTransactions />
         )}
       </div>
 
