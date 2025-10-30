@@ -300,8 +300,7 @@
     <!-- Persistence Hook and Common Components -->
     <script defer src="./dist/src/hooks/usePersistence.js"></script>
     <script src="./dist/src/components/common/SyncStatus.js"></script>
-    <!-- Database API - load new version first, then legacy as fallback to ensure all methods exist -->
-    <script src="./dist/src/utils/databaseAPI-new.js?v=1005"></script>
+    <!-- Database API - load only the main version -->
     <script src="./dist/src/utils/databaseAPI.js?v=1005"></script>
     <script>
         // Runtime shim: ensure DatabaseAPI.getProject exists for components relying on it

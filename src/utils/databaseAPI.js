@@ -41,9 +41,10 @@ const DatabaseAPI = {
                         window.LiveDataSync.stop();
                     }
                     
-                    // Redirect to login screen
-                    window.location.hash = '#/login';
-                    window.location.reload();
+                    // Only redirect if not already on login page to prevent flashing
+                    if (!window.location.hash.includes('#/login')) {
+                        window.location.hash = '#/login';
+                    }
                     throw new Error('Authentication expired. Please log in again.');
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
