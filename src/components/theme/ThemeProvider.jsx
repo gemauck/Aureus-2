@@ -33,9 +33,9 @@ const ThemeProvider = ({ children }) => {
         } else if (savedTheme) {
             initialTheme = savedTheme;
         } else {
-            // First time user - use system preference
-            initialTheme = systemPreference;
-            localStorage.setItem('abcotronics_use_system_theme', 'true');
+            // First time user - default to light and do NOT follow system
+            initialTheme = 'light';
+            localStorage.setItem('abcotronics_use_system_theme', 'false');
         }
         
         setTheme(initialTheme);
