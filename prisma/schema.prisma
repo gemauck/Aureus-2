@@ -357,6 +357,7 @@ model InventoryItem {
   id            String   @id @default(cuid())
   sku           String
   name          String
+  thumbnail     String   @default("")
   category      String   @default("components") // components, packaging, accessories, finished_goods, work_in_progress
   type          String   @default("raw_material") // raw_material, finished_good, wip
   quantity      Float    @default(0)

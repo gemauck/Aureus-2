@@ -126,6 +126,7 @@ async function handler(req, res) {
           data: {
             sku: sku,
             name: body.name,
+            thumbnail: body.thumbnail || '',
             category: body.category || 'components',
             type: body.type || 'raw_material',
             quantity: quantity,
@@ -172,6 +173,7 @@ async function handler(req, res) {
         // SKU cannot be changed (read-only after creation)
         // if (body.sku !== undefined) updateData.sku = body.sku
         if (body.name !== undefined) updateData.name = body.name
+        if (body.thumbnail !== undefined) updateData.thumbnail = body.thumbnail
         if (body.category !== undefined) updateData.category = body.category
         if (body.type !== undefined) updateData.type = body.type
         // Quantity cannot be edited (only through stock movements)
