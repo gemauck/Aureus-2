@@ -665,6 +665,17 @@ const DatabaseAPI = {
         return normalized;
     },
 
+    // STOCK TRANSACTIONS (per-location aware)
+    async createStockTransaction(data) {
+        console.log('📡 Creating stock transaction...', data?.type)
+        const response = await this.makeRequest('/manufacturing/stock-transactions', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        })
+        console.log('✅ Stock transaction created')
+        return response
+    },
+
     async createStockMovement(movementData) {
         console.log('📡 Creating stock movement in database...');
         const response = await this.makeRequest('/manufacturing/stock-movements', {
