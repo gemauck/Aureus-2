@@ -226,7 +226,43 @@ const Projects = () => {
     const handleEditProject = async (project) => {
         try {
             // Fetch full project data for editing
-            const response = await window.DatabaseAPI.getProject(project.id);
+            // Always use safe fallback approach to avoid function errors
+            let response;
+            
+            // Safely check and use DatabaseAPI.getProject
+            try {
+                if (window.DatabaseAPI && 
+                    window.DatabaseAPI.getProject && 
+                    typeof window.DatabaseAPI.getProject === 'function') {
+                    response = await window.DatabaseAPI.getProject(project.id);
+                } else {
+                    throw new Error('DatabaseAPI.getProject not available');
+                }
+            } catch (apiError) {
+                // Try window.api.getProject as fallback
+                try {
+                    if (window.api && 
+                        window.api.getProject && 
+                        typeof window.api.getProject === 'function') {
+                        response = await window.api.getProject(project.id);
+                    } else {
+                        throw new Error('window.api.getProject not available');
+                    }
+                } catch (api2Error) {
+                    // Final fallback: fetch directly
+                    const fetchResponse = await fetch(`/api/projects/${project.id}`, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                        }
+                    });
+                    if (!fetchResponse.ok) {
+                        throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                    }
+                    const data = await fetchResponse.json();
+                    response = { data: { project: data.project || data.data || data } };
+                }
+            }
             const fullProject = response?.data?.project || response?.project || response?.data;
             
             if (!fullProject) {
@@ -250,9 +286,56 @@ const Projects = () => {
     const handleViewProject = async (project) => {
         console.log('Viewing project:', project);
         console.log('ProjectDetail component exists:', !!ProjectDetail);
+        console.log('🔍 DatabaseAPI check:', {
+            exists: !!window.DatabaseAPI,
+            hasGetProject: !!(window.DatabaseAPI && window.DatabaseAPI.getProject),
+            getProjectType: window.DatabaseAPI?.getProject ? typeof window.DatabaseAPI.getProject : 'undefined',
+            apiExists: !!window.api,
+            apiHasGetProject: !!(window.api && window.api.getProject)
+        });
         try {
             // Fetch full project data from API for detail view
-            const response = await window.DatabaseAPI.getProject(project.id);
+            // Always use safe fallback approach to avoid function errors
+            let response;
+            
+            // Safely check and use DatabaseAPI.getProject
+            try {
+                if (window.DatabaseAPI && 
+                    window.DatabaseAPI.getProject && 
+                    typeof window.DatabaseAPI.getProject === 'function') {
+                    console.log('✅ Using window.DatabaseAPI.getProject');
+                    response = await window.DatabaseAPI.getProject(project.id);
+                } else {
+                    throw new Error('DatabaseAPI.getProject not available');
+                }
+            } catch (apiError) {
+                console.warn('⚠️ DatabaseAPI.getProject failed, trying fallback:', apiError);
+                // Try window.api.getProject as fallback
+                try {
+                    if (window.api && 
+                        window.api.getProject && 
+                        typeof window.api.getProject === 'function') {
+                        console.log('✅ Using window.api.getProject');
+                        response = await window.api.getProject(project.id);
+                    } else {
+                        throw new Error('window.api.getProject not available');
+                    }
+                } catch (api2Error) {
+                    console.log('✅ Using direct fetch fallback');
+                    // Final fallback: fetch directly
+                    const fetchResponse = await fetch(`/api/projects/${project.id}`, {
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
+                        }
+                    });
+                    if (!fetchResponse.ok) {
+                        throw new Error(`HTTP error! status: ${fetchResponse.status}`);
+                    }
+                    const data = await fetchResponse.json();
+                    response = { data: { project: data.project || data.data || data } };
+                }
+            }
             const fullProject = response?.data?.project || response?.project || response?.data;
             
             if (!fullProject) {

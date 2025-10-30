@@ -31,7 +31,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
                 billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
+                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+                thumbnail: lead.thumbnail || ''
             };
             setFormData(parsedLead);
         } else if (lead && formData.id && lead.id !== formData.id) {
@@ -46,7 +47,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                 comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
                 activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
                 billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
+                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+                thumbnail: lead.thumbnail || ''
             };
             setFormData(parsedLead);
         } else if (lead && formData.id === lead.id) {
@@ -113,7 +115,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
             activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
             billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
+            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+            thumbnail: lead.thumbnail || ''
         } : {
             name: '',
             industry: '',
@@ -128,7 +131,8 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
             comments: [],
             activityLog: [],
             proposals: [],
-            firstContactDate: new Date().toISOString().split('T')[0]
+            firstContactDate: new Date().toISOString().split('T')[0],
+            thumbnail: ''
         };
         
         formDataRef.current = parsedLead;
@@ -166,6 +170,89 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
     const [newNoteTags, setNewNoteTags] = useState([]);
     const [newNoteAttachments, setNewNoteAttachments] = useState([]);
     const [notesTagFilter, setNotesTagFilter] = useState(null);
+    const [thumbnailPreview, setThumbnailPreview] = useState(null);
+    const [showThumbnailPreview, setShowThumbnailPreview] = useState(false);
+    const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
+
+    // Handle thumbnail upload
+    const handleThumbnailUpload = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        // Validate image type
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file');
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Image size must be less than 5MB');
+            return;
+        }
+
+        setUploadingThumbnail(true);
+        try {
+            // Convert to base64
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const dataUrl = e.target.result;
+                setThumbnailPreview(dataUrl);
+
+                // Upload to server
+                const token = window.storage?.getToken?.();
+                if (!token) {
+                    alert('Please log in to upload images');
+                    setUploadingThumbnail(false);
+                    return;
+                }
+
+                try {
+                    const response = await fetch('/api/files', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            folder: 'thumbnails',
+                            name: file.name,
+                            dataUrl: dataUrl
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+
+                    const result = await response.json();
+                    setFormData({ ...formData, thumbnail: result.url });
+                    setUploadingThumbnail(false);
+                } catch (error) {
+                    console.error('Thumbnail upload error:', error);
+                    alert('Failed to upload thumbnail: ' + error.message);
+                    setUploadingThumbnail(false);
+                }
+            };
+            reader.readAsDataURL(file);
+        } catch (error) {
+            console.error('Thumbnail read error:', error);
+            alert('Failed to read image file');
+            setUploadingThumbnail(false);
+        }
+    };
+
+    const handleRemoveThumbnail = () => {
+        setFormData({ ...formData, thumbnail: '' });
+        setThumbnailPreview(null);
+    };
+
+    // Load thumbnail preview when formData changes
+    useEffect(() => {
+        if (formData.thumbnail) {
+            setThumbnailPreview(formData.thumbnail);
+        }
+    }, [formData.thumbnail]);
 
     const handleAddTagFromInput = () => {
         const raw = (newNoteTagsInput || '').trim();
@@ -823,9 +910,35 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         }
     };
 
+    // Thumbnail Preview Modal Component - defined before use
+    const ThumbnailPreviewModal = () => (
+        showThumbnailPreview && (thumbnailPreview || formData.thumbnail) && (
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[9999]"
+                onClick={() => setShowThumbnailPreview(false)}
+            >
+                <div className="relative max-w-4xl max-h-[90vh] p-4">
+                    <button
+                        onClick={() => setShowThumbnailPreview(false)}
+                        className="absolute top-2 right-2 bg-white rounded-full w-10 h-10 flex items-center justify-center text-gray-700 hover:bg-gray-100 shadow-lg z-10"
+                    >
+                        <i className="fas fa-times"></i>
+                    </button>
+                    <img 
+                        src={thumbnailPreview || formData.thumbnail} 
+                        alt="Thumbnail full view" 
+                        className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
+            </div>
+        )
+    );
+
     if (isFullPage) {
         // Full-page view - no modal wrapper
         return (
+            <>
             <div className="w-full h-full flex flex-col">
                 {/* Header */}
                 <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
@@ -905,6 +1018,70 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
                             <div className="space-y-4">
+                                {/* Thumbnail Upload Section */}
+                                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Thumbnail Image
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                        {thumbnailPreview || formData.thumbnail ? (
+                                            <div className="relative">
+                                                <img 
+                                                    src={thumbnailPreview || formData.thumbnail} 
+                                                    alt="Thumbnail preview" 
+                                                    className="w-24 h-24 object-cover rounded-lg border border-gray-300 cursor-pointer hover:opacity-80 transition"
+                                                    onClick={() => setShowThumbnailPreview(true)}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleRemoveThumbnail}
+                                                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                                                    title="Remove thumbnail"
+                                                >
+                                                    <i className="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white">
+                                                <i className="fas fa-image text-gray-400 text-2xl"></i>
+                                            </div>
+                                        )}
+                                        <div className="flex-1">
+                                            <input
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleThumbnailUpload}
+                                                className="hidden"
+                                                id="thumbnail-upload"
+                                                disabled={uploadingThumbnail}
+                                            />
+                                            <label
+                                                htmlFor="thumbnail-upload"
+                                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 cursor-pointer transition ${
+                                                    uploadingThumbnail 
+                                                        ? 'bg-gray-200 cursor-not-allowed' 
+                                                        : 'bg-white hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                {uploadingThumbnail ? (
+                                                    <>
+                                                        <i className="fas fa-spinner fa-spin text-gray-500"></i>
+                                                        <span className="text-sm text-gray-600">Uploading...</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <i className="fas fa-upload text-gray-600"></i>
+                                                        <span className="text-sm text-gray-700">
+                                                            {thumbnailPreview || formData.thumbnail ? 'Change' : 'Upload'} Thumbnail
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </label>
+                                            <p className="text-xs text-gray-500 mt-1">Click thumbnail to view full size</p>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -2009,194 +2186,216 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                     </form>
                 </div>
             </div>
+            <ThumbnailPreviewModal />
+            </>
         );
-    } else {
-        // Modal view - with modal wrapper
-        return (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
-                    {/* Header */}
-                    <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-900">
-                                {lead ? formData.name : 'Add New Lead'}
-                            </h2>
-                            {lead && (
-                                <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-sm text-gray-600">{formData.industry}</span>
-                                </div>
-                            )}
-                        </div>
-                        <button
-                            onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                            <i className="fas fa-times text-xl"></i>
-                        </button>
-                    </div>
+    }
 
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto">
-                        <form onSubmit={handleSubmit} className="h-full flex flex-col">
-                            {/* Tabs */}
-                            <div className="border-b border-gray-200 px-3 sm:px-6">
-                                <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                                    {['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab => (
-                                        <button
-                                            key={tab}
-                                            onClick={() => handleTabChange(tab)}
-                                            className={`py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
+    // Modal view - with modal wrapper  
+    return React.createElement(React.Fragment, null,
+        React.createElement('div', { className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4', onClick: onClose },
+            React.createElement('div', { className: 'bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col', onClick: (e) => e.stopPropagation() },
+                React.createElement('div', { className: 'flex justify-between items-center px-6 py-4 border-b border-gray-200' },
+                    React.createElement('div', null,
+                        React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' },
+                            lead ? formData.name : 'Add New Lead'
+                        ),
+                        lead && React.createElement('div', { className: 'flex items-center gap-2 mt-0.5' },
+                            React.createElement('span', { className: 'text-sm text-gray-600' }, formData.industry)
+                        )
+                    ),
+                    React.createElement('button', { onClick: onClose, className: 'text-gray-400 hover:text-gray-600 transition-colors' },
+                        React.createElement('i', { className: 'fas fa-times text-xl' })
+                    )
+                ),
+                React.createElement('div', { className: 'flex-1 overflow-y-auto' },
+                    React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
+                        React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
+                            React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
+                                ['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab =>
+                                    React.createElement('button', {
+                                        key: tab,
+                                        onClick: () => handleTabChange(tab),
+                                        className: `py-3 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 min-w-fit ${
                                                 activeTab === tab
                                                     ? 'border-primary-600 text-primary-600'
                                                     : 'border-transparent text-gray-600 hover:text-gray-900'
-                                            }`}
-                                            style={{ minWidth: 'max-content' }}
-                                        >
-                                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Tab Content */}
-                            <div className="flex-1 p-6">
-                                {activeTab === 'overview' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Entity Name
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.name}
-                                                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                                placeholder="Enter lead name"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Industry
-                                            </label>
-                                            <select
-                                                value={formData.industry}
-                                                onChange={(e) => setFormData({...formData, industry: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            >
-                                                <option value="Technology">Technology</option>
-                                                <option value="Manufacturing">Manufacturing</option>
-                                                <option value="Healthcare">Healthcare</option>
-                                                <option value="Finance">Finance</option>
-                                                <option value="Retail">Retail</option>
-                                                <option value="Education">Education</option>
-                                                <option value="Government">Government</option>
-                                                <option value="Other">Other</option>
-                                            </select>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                First Contact Date
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={formData.firstContactDate}
-                                                onChange={(e) => setFormData({...formData, firstContactDate: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Status
-                                            </label>
-                                            <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700">
-                                                Active
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Source
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={formData.source}
-                                                onChange={(e) => setFormData({...formData, source: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                                placeholder="e.g., Website, Referral, Cold Call"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">AIDIA Stage</label>
-                                            <select
-                                                value={formData.stage}
-                                                onChange={(e) => setFormData({...formData, stage: e.target.value})}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                            >
-                                                <option value="Awareness">Awareness - Lead knows about us</option>
-                                                <option value="Interest">Interest - Lead is interested</option>
-                                                <option value="Desire">Desire - Lead wants our solution</option>
-                                                <option value="Action">Action - Lead is ready to buy</option>
-                                            </select>
-                                        </div>
-                                        
-                                        <div className="md:col-span-2">
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Notes
-                                            </label>
-                                            <textarea
-                                                value={formData.notes}
-                                                onChange={(e) => {
+                                        }`,
+                                        style: { minWidth: 'max-content' }
+                                    }, tab.charAt(0).toUpperCase() + tab.slice(1))
+                                )
+                            )
+                        ),
+                        React.createElement('div', { className: 'flex-1 p-6' },
+                            activeTab === 'overview' && React.createElement('div', { className: 'space-y-6' },
+                                React.createElement('div', { className: 'border border-gray-200 rounded-lg p-4 bg-gray-50' },
+                                    React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Thumbnail Image'),
+                                    React.createElement('div', { className: 'flex items-center gap-4' },
+                                        (thumbnailPreview || formData.thumbnail) ? (
+                                            React.createElement('div', { className: 'relative' },
+                                                React.createElement('img', {
+                                                    src: thumbnailPreview || formData.thumbnail,
+                                                    alt: 'Thumbnail preview',
+                                                    className: 'w-24 h-24 object-cover rounded-lg border border-gray-300 cursor-pointer hover:opacity-80 transition',
+                                                    onClick: () => setShowThumbnailPreview(true)
+                                                }),
+                                                React.createElement('button', {
+                                                    type: 'button',
+                                                    onClick: handleRemoveThumbnail,
+                                                    className: 'absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600',
+                                                    title: 'Remove thumbnail'
+                                                }, React.createElement('i', { className: 'fas fa-times' }))
+                                            )
+                                        ) : (
+                                            React.createElement('div', { className: 'w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center bg-white' },
+                                                React.createElement('i', { className: 'fas fa-image text-gray-400 text-2xl' })
+                                            )
+                                        ),
+                                        React.createElement('div', { className: 'flex-1' },
+                                            React.createElement('input', {
+                                                type: 'file',
+                                                accept: 'image/*',
+                                                onChange: handleThumbnailUpload,
+                                                className: 'hidden',
+                                                id: 'thumbnail-upload-modal',
+                                                disabled: uploadingThumbnail
+                                            }),
+                                            React.createElement('label', {
+                                                htmlFor: 'thumbnail-upload-modal',
+                                                className: `inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 cursor-pointer transition ${
+                                                    uploadingThumbnail ? 'bg-gray-200 cursor-not-allowed' : 'bg-white hover:bg-gray-50'
+                                                }`
+                                            },
+                                                uploadingThumbnail ? (
+                                                    React.createElement(React.Fragment, null,
+                                                        React.createElement('i', { className: 'fas fa-spinner fa-spin text-gray-500' }),
+                                                        React.createElement('span', { className: 'text-sm text-gray-600' }, 'Uploading...')
+                                                    )
+                                                ) : (
+                                                    React.createElement(React.Fragment, null,
+                                                        React.createElement('i', { className: 'fas fa-upload text-gray-600' }),
+                                                        React.createElement('span', { className: 'text-sm text-gray-700' },
+                                                            (thumbnailPreview || formData.thumbnail) ? 'Change' : 'Upload', ' Thumbnail'
+                                                        )
+                                                    )
+                                                )
+                                            ),
+                                            React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, 'Click thumbnail to view full size')
+                                        )
+                                    )
+                                ),
+                                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Entity Name'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: formData.name,
+                                            onChange: (e) => setFormData({...formData, name: e.target.value}),
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
+                                            placeholder: 'Enter lead name'
+                                        })
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Industry'),
+                                        React.createElement('select', {
+                                            value: formData.industry,
+                                            onChange: (e) => setFormData({...formData, industry: e.target.value}),
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                        },
+                                            React.createElement('option', { value: 'Technology' }, 'Technology'),
+                                            React.createElement('option', { value: 'Manufacturing' }, 'Manufacturing'),
+                                            React.createElement('option', { value: 'Healthcare' }, 'Healthcare'),
+                                            React.createElement('option', { value: 'Finance' }, 'Finance'),
+                                            React.createElement('option', { value: 'Retail' }, 'Retail'),
+                                            React.createElement('option', { value: 'Education' }, 'Education'),
+                                            React.createElement('option', { value: 'Government' }, 'Government'),
+                                            React.createElement('option', { value: 'Other' }, 'Other')
+                                        )
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'First Contact Date'),
+                                        React.createElement('input', {
+                                            type: 'date',
+                                            value: formData.firstContactDate,
+                                            onChange: (e) => setFormData({...formData, firstContactDate: e.target.value}),
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                        })
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Status'),
+                                        React.createElement('div', { className: 'w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-700' }, 'Active')
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Source'),
+                                        React.createElement('input', {
+                                            type: 'text',
+                                            value: formData.source,
+                                            onChange: (e) => setFormData({...formData, source: e.target.value}),
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
+                                            placeholder: 'e.g., Website, Referral, Cold Call'
+                                        })
+                                    ),
+                                    React.createElement('div', null,
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDIA Stage'),
+                                        React.createElement('select', {
+                                            value: formData.stage,
+                                            onChange: (e) => setFormData({...formData, stage: e.target.value}),
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
+                                        },
+                                            React.createElement('option', { value: 'Awareness' }, 'Awareness - Lead knows about us'),
+                                            React.createElement('option', { value: 'Interest' }, 'Interest - Lead is interested'),
+                                            React.createElement('option', { value: 'Desire' }, 'Desire - Lead wants our solution'),
+                                            React.createElement('option', { value: 'Action' }, 'Action - Lead is ready to buy')
+                                        )
+                                    ),
+                                    React.createElement('div', { className: 'md:col-span-2' },
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Notes'),
+                                        React.createElement('textarea', {
+                                            value: formData.notes,
+                                            onChange: (e) => {
                                                     const updated = {...formData, notes: e.target.value};
                                                     setFormData(updated);
                                                     formDataRef.current = updated;
-                                                }}
-                                                onBlur={() => {
-                                                    // Auto-save notes when user leaves the field
+                                            },
+                                            onBlur: () => {
                                                     if (lead && formDataRef.current) {
                                                         const latest = {...formDataRef.current};
                                                         onSave(latest, true);
                                                     }
-                                                }}
-                                                rows={4}
-                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                                                placeholder="Add notes about this lead..."
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Other tab content would go here - simplified for brevity */}
-                                {activeTab !== 'overview' && (
-                                    <div className="text-center py-8 text-gray-500">
-                                        {activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} content coming soon...
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Footer */}
-                            <div className="border-t border-gray-200 px-6 py-4">
-                                <div className="flex justify-between">
-                                    <button
-                                        type="button"
-                                        onClick={onClose}
-                                        className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-                                    >
-                                        Cancel
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 transition-colors flex items-center"
-                                    >
-                                        <i className="fas fa-save mr-2"></i>
-                                        {lead ? 'Update Lead' : 'Create Lead'}
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        );
-    }
+                                            },
+                                            rows: 4,
+                                            className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
+                                            placeholder: 'Add notes about this lead...'
+                                        })
+                                    )
+                                )
+                            ),
+                            activeTab !== 'overview' && React.createElement('div', { className: 'text-center py-8 text-gray-500' },
+                                activeTab.charAt(0).toUpperCase() + activeTab.slice(1), ' content coming soon...'
+                            )
+                        ),
+                        React.createElement('div', { className: 'border-t border-gray-200 px-6 py-4' },
+                            React.createElement('div', { className: 'flex justify-between' },
+                                React.createElement('button', {
+                                    type: 'button',
+                                    onClick: onClose,
+                                    className: 'px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors'
+                                }, 'Cancel'),
+                                React.createElement('button', {
+                                    type: 'submit',
+                                    className: 'bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 transition-colors flex items-center'
+                                },
+                                    React.createElement('i', { className: 'fas fa-save mr-2' }),
+                                    lead ? 'Update Lead' : 'Create Lead'
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        ),
+        React.createElement(ThumbnailPreviewModal)
+    );
 };
 
 // Make available globally
