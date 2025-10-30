@@ -300,6 +300,15 @@ async function handler(req, res) {
     // CREATE (POST /api/manufacturing/boms)
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
+      // Debug payload to help diagnose 400s
+      try {
+        console.log('📥 Received BOM create payload:', {
+          type: typeof body,
+          keys: Object.keys(body || {}),
+          productSku: body?.productSku,
+          productName: body?.productName
+        })
+      } catch (_) {}
       
       if (!body.productSku || !body.productName) {
         return badRequest(res, 'productSku and productName required')
