@@ -116,14 +116,19 @@ const AuthProvider = ({ children }) => {
                 
                 if (!window.storage.getToken()) {
                     // Try refresh if no token but might have refresh cookie
+                    // Silently fail if no refresh token is available
                     if (window.api && window.api.refresh) {
                         try {
-                            await Promise.race([
+                            const refreshResult = await Promise.race([
                                 window.api.refresh(),
                                 new Promise((_, reject) => setTimeout(() => reject(new Error('Refresh timeout')), 5000))
                             ]);
+                            // Only warn if refresh was attempted but failed (timeout)
+                            if (!refreshResult && refreshResult !== null) {
+                                console.warn('Refresh timeout');
+                            }
                         } catch (err) {
-                            console.warn('Refresh failed or timed out:', err.message);
+                            // Silently ignore refresh failures - they're expected when no refresh cookie exists
                         }
                     }
                 }
