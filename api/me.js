@@ -16,6 +16,24 @@ async function handler(req, res) {
 
     console.log('✅ Me endpoint: Fetching user for id:', req.user.sub)
 
+    // Development-only shortcut to avoid DB when running locally
+    if (process.env.DEV_LOCAL_NO_DB === 'true' || (req.user?.sub || '').startsWith('dev-')) {
+      const user = {
+        id: req.user.sub || 'dev-admin',
+        email: req.user.email || 'admin@example.com',
+        name: req.user.name || 'Admin User',
+        role: req.user.role || 'admin',
+        provider: 'local',
+        lastLoginAt: new Date().toISOString(),
+        mustChangePassword: false,
+        phone: '',
+        department: '',
+        jobTitle: '',
+        permissions: '[]'
+      }
+      return ok(res, { user })
+    }
+
     let user
     try {
       // Query without permissions field to avoid schema mismatch

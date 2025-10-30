@@ -631,6 +631,30 @@ const DatabaseAPI = {
         return response;
     },
 
+    // MANUFACTURING OPERATIONS - RECEIVING AND BOM CONSUMPTION
+    async receiveStock(receiptData) {
+        console.log('📡 Receiving stock via database...')
+        const response = await this.makeRequest('/manufacturing/stock-movements', {
+            method: 'POST',
+            body: JSON.stringify({
+                ...receiptData,
+                type: 'receipt'
+            })
+        })
+        console.log('✅ Stock received in database')
+        return response
+    },
+
+    async consumeBomForProduction(orderId, payload = {}) {
+        console.log(`📡 Consuming BOM for production order ${orderId}...`)
+        const response = await this.makeRequest(`/manufacturing/production-orders/${orderId}/consume`, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        })
+        console.log('✅ BOM consumption completed in database')
+        return response
+    },
+
     // MANUFACTURING OPERATIONS - SUPPLIERS
     async getSuppliers() {
         console.log('📡 Fetching suppliers from database...');

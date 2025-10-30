@@ -965,7 +965,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
 
                 {/* Tabs */}
                 <div className="border-b border-gray-200 px-3 sm:px-6">
-                    <div className="flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                    <div className="flex flex-wrap gap-2 sm:gap-6">
                         {['overview', 'contacts', 'calendar', 'projects', 'proposals', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
@@ -2225,7 +2225,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
                     React.createElement('form', { onSubmit: handleSubmit, className: 'h-full flex flex-col' },
                         React.createElement('div', { className: 'border-b border-gray-200 px-3 sm:px-6' },
                             React.createElement('div', { className: 'flex gap-2 sm:gap-6 overflow-x-auto scrollbar-hide', style: { scrollbarWidth: 'none', msOverflowStyle: 'none' } },
-                                ['overview', 'contacts', 'calendar', 'projects', 'activity', 'notes'].map(tab =>
+                                ['overview', 'contacts', 'calendar', 'projects', 'proposals', 'activity', 'notes'].map(tab =>
                                     React.createElement('button', {
                                         key: tab,
                                         onClick: () => handleTabChange(tab),

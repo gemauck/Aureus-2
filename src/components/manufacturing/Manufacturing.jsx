@@ -31,6 +31,7 @@ const Manufacturing = () => {
   const [categories, setCategories] = useState(['components', 'packaging', 'accessories', 'finished_goods', 'work_in_progress']);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Load data from API
   useEffect(() => {
@@ -152,6 +153,64 @@ const Manufacturing = () => {
 
     loadData();
   }, []);
+
+  // Manual refresh for diagnostics
+  const refreshAllManufacturingData = async () => {
+    try {
+      setIsRefreshing(true);
+      // Inventory
+      if (window.DatabaseAPI?.getInventory) {
+        const invResponse = await window.DatabaseAPI.getInventory();
+        const invData = invResponse?.data?.inventory || [];
+        setInventory(invData.map(item => ({ ...item, id: item.id })));
+      }
+      // BOMs
+      if (window.DatabaseAPI?.getBOMs) {
+        const bomResponse = await window.DatabaseAPI.getBOMs();
+        const bomData = bomResponse?.data?.boms || [];
+        setBoms(bomData.map(bom => ({
+          ...bom,
+          id: bom.id,
+          components: Array.isArray(bom.components) ? bom.components : (typeof bom.components === 'string' ? JSON.parse(bom.components || '[]') : [])
+        })));
+      }
+      // Production Orders
+      if (window.DatabaseAPI?.getProductionOrders) {
+        const ordersResponse = await window.DatabaseAPI.getProductionOrders();
+        const ordersData = ordersResponse?.data?.productionOrders || [];
+        setProductionOrders(ordersData.map(order => ({ ...order, id: order.id })));
+      }
+      // Movements
+      if (window.DatabaseAPI?.getStockMovements) {
+        const movementsResponse = await window.DatabaseAPI.getStockMovements();
+        const movementsData = movementsResponse?.data?.movements || [];
+        setMovements(movementsData.map(movement => ({ ...movement, id: movement.id })));
+      }
+      // Suppliers
+      if (window.DatabaseAPI?.getSuppliers) {
+        const suppliersResponse = await window.DatabaseAPI.getSuppliers();
+        const suppliersData = suppliersResponse?.data?.suppliers || [];
+        setSuppliers(suppliersData.map(supplier => ({
+          ...supplier,
+          id: supplier.id,
+          createdAt: supplier.createdAt || new Date().toISOString().split('T')[0],
+          updatedAt: supplier.updatedAt || new Date().toISOString().split('T')[0]
+        })));
+      }
+      console.log('🧪 Manufacturing refresh:', {
+        apiBase: window.DatabaseAPI?.API_BASE,
+        inventoryCount: (inventory || []).length,
+        bomsCount: (boms || []).length,
+        productionOrdersCount: (productionOrders || []).length,
+        movementsCount: (movements || []).length,
+        suppliersCount: (suppliers || []).length
+      });
+    } catch (e) {
+      console.error('Error refreshing manufacturing data:', e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const getInitialInventory = () => [];
 
@@ -375,9 +434,11 @@ const Manufacturing = () => {
 
   const InventoryView = () => {
     const filteredInventory = inventory.filter(item => {
-      const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           item.sku.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = filterCategory === 'all' || item.category === filterCategory;
+      const name = (item.name || '').toString().toLowerCase();
+      const sku = (item.sku || '').toString().toLowerCase();
+      const category = (item.category || '').toString();
+      const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
+      const matchesCategory = filterCategory === 'all' || category === filterCategory;
       return matchesSearch && matchesCategory;
     });
 
@@ -409,8 +470,20 @@ const Manufacturing = () => {
                 <option value="finished_goods">Finished Goods</option>
                 <option value="work_in_progress">Work in Progress</option>
               </select>
+              <div className="text-xs text-gray-500 whitespace-nowrap">
+                Showing {filteredInventory.length} of {inventory.length}
+              </div>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={refreshAllManufacturingData}
+                className={`px-3 py-2 text-sm rounded-lg border ${isRefreshing ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-white hover:bg-gray-50 border-gray-300'} flex items-center gap-2`}
+                disabled={isRefreshing}
+                title="Force refresh from server"
+              >
+                <i className={`fas fa-rotate-right text-xs ${isRefreshing ? 'animate-spin' : ''}`}></i>
+                {isRefreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
               <button className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
                 <i className="fas fa-download text-xs"></i>
                 Export
@@ -425,6 +498,24 @@ const Manufacturing = () => {
             </div>
           </div>
         </div>
+
+        {/* Diagnostics Banner */}
+        <div className="px-1">
+          <div className="text-[11px] text-gray-500 flex items-center gap-3">
+            <span>API: {window.DatabaseAPI?.API_BASE || 'n/a'}</span>
+            <span>• Inventory: {inventory.length}</span>
+            <span>• BOMs: {boms.length}</span>
+            <span>• Orders: {productionOrders.length}</span>
+            <span>• Movements: {movements.length}</span>
+            <span>• Suppliers: {suppliers.length}</span>
+          </div>
+        </div>
+
+        {filteredInventory.length < inventory.length && (
+          <div className="text-xs text-gray-500 px-1">
+            Some items are hidden by current search or category filter.
+          </div>
+        )}
 
         {/* Inventory Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -1406,8 +1497,8 @@ const Manufacturing = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Point</label>
                   <input
                     type="number"
-                    value={formData.reorderPoint || 0}
-                    onChange={(e) => setFormData({ ...formData, reorderPoint: parseInt(e.target.value) || 0 })}
+                    value={(formData.reorderPoint === undefined || formData.reorderPoint === null) ? '' : formData.reorderPoint}
+                    onChange={(e) => setFormData({ ...formData, reorderPoint: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -1417,8 +1508,8 @@ const Manufacturing = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Quantity</label>
                   <input
                     type="number"
-                    value={formData.reorderQty || 0}
-                    onChange={(e) => setFormData({ ...formData, reorderQty: parseInt(e.target.value) || 0 })}
+                    value={(formData.reorderQty === undefined || formData.reorderQty === null) ? '' : formData.reorderQty}
+                    onChange={(e) => setFormData({ ...formData, reorderQty: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
@@ -1429,8 +1520,8 @@ const Manufacturing = () => {
                   <input
                     type="number"
                     step="0.01"
-                    value={formData.unitCost || 0}
-                    onChange={(e) => setFormData({ ...formData, unitCost: parseFloat(e.target.value) || 0 })}
+                    value={(formData.unitCost === undefined || formData.unitCost === null) ? '' : formData.unitCost}
+                    onChange={(e) => setFormData({ ...formData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
