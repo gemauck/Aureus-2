@@ -207,8 +207,8 @@
 
     <!-- React Production Builds - Much faster than development -->
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; }"></script>
-    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); }"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; }"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); }"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
