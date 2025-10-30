@@ -31,7 +31,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const items = await prisma.inventoryItem.findMany({
-          where: { ownerId: req.user?.sub },
+          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         
@@ -247,7 +247,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const boms = await prisma.bOM.findMany({
-          where: { ownerId: req.user?.sub },
+          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         
@@ -420,7 +420,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const orders = await prisma.productionOrder.findMany({
-          where: { ownerId: req.user?.sub },
+          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         
@@ -581,7 +581,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const movements = await prisma.stockMovement.findMany({
-          where: { ownerId: req.user?.sub },
+          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { date: 'desc' }
         })
         
@@ -701,7 +701,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const suppliers = await prisma.supplier.findMany({
-          where: { ownerId: req.user?.sub },
+          where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
         
