@@ -286,7 +286,7 @@ app.all('/api/clients', async (req, res, next) => {
 // Explicit mapping for clients operations with ID (GET, PATCH, DELETE /api/clients/[id])
 app.all('/api/clients/:id', async (req, res, next) => {
   try {
-    const handler = await loadHandler(path.join(apiDir, 'clients.js'))
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id].js'))
     if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
     return handler(req, res)
   } catch (e) {
