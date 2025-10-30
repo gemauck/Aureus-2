@@ -2872,7 +2872,7 @@ const Manufacturing = () => {
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
             { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
-            { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
+            { id: 'movements', label: 'Stock Transactions', icon: 'fa-exchange-alt' },
             { id: 'stock-transactions', label: 'Stock Transactions', icon: 'fa-exchange' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
@@ -2899,7 +2899,9 @@ const Manufacturing = () => {
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
-        {activeTab === 'movements' && <MovementsView />}
+        {activeTab === 'movements' && (
+          window.StockTransactions ? <window.StockTransactions /> : <MovementsView />
+        )}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'locations' && window.StockLocations && (
           <window.StockLocations 
