@@ -544,7 +544,11 @@ const Manufacturing = () => {
                       {item.thumbnail ? (
                         <img src={item.thumbnail} alt={item.name} className="w-10 h-10 object-cover rounded" />
                       ) : (
-                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 text-xs">No</div>
+                        <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                            <path d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15A2.25 2.25 0 012.25 17.25V6.75zM6 7.5a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zM3.75 16.5l4.69-4.69a1.125 1.125 0 011.59 0l3.44 3.44.53-.53a1.125 1.125 0 011.59 0l4.13 4.13H3.75z" />
+                          </svg>
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-2">
@@ -975,6 +979,12 @@ const Manufacturing = () => {
 
   const handleSaveBom = async () => {
     try {
+      // Validate required fields per backend requirements
+      if (!formData.productSku || !formData.productName) {
+        alert('Please enter both Product SKU and Product Name before saving the BOM.');
+        return;
+      }
+
       const totalMaterialCost = bomComponents.reduce((sum, comp) => sum + (parseFloat(comp.totalCost) || 0), 0);
       const laborCost = parseFloat(formData.laborCost || 0);
       const overheadCost = parseFloat(formData.overheadCost || 0);
@@ -1340,7 +1350,8 @@ const Manufacturing = () => {
                   />
                 </div>
 
-                {/* Image / Thumbnail */}
+                {/* Image / Thumbnail */
+                }
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
                   <input
@@ -1357,6 +1368,27 @@ const Manufacturing = () => {
                     }}
                     className="w-full text-sm"
                   />
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="Or paste image URL (https://...)"
+                      value={formData.thumbnail || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, thumbnail: e.target.value }))}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const clip = await navigator.clipboard.readText();
+                          if (clip) setFormData(prev => ({ ...prev, thumbnail: clip }));
+                        } catch (_) {}
+                      }}
+                      className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
+                    >
+                      Paste
+                    </button>
+                  </div>
                   {formData.thumbnail && (
                     <div className="mt-2">
                       <img src={formData.thumbnail} alt="Preview" className="w-20 h-20 object-cover rounded border" />

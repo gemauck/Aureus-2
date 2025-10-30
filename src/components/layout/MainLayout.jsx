@@ -172,7 +172,7 @@ const MainLayout = () => {
     // Filter menu items based on user role
     const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
-        { id: 'clients', label: 'Clients', icon: 'fa-users' },
+        { id: 'clients', label: 'CRM', icon: 'fa-users' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
