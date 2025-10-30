@@ -56,6 +56,10 @@
     <style>
         /* Force login brand white regardless of dark mode overrides */
         .login-brand { color: #ffffff !important; }
+        html:not(.dark) h1.login-brand, html:not(.dark) #loginBrand {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+        }
     </style>
     
     <style>
