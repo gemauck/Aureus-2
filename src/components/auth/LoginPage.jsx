@@ -9,6 +9,7 @@ const LoginPage = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
     const { login } = useAuth();
 
     const handleSubmit = async (e) => {
@@ -21,27 +22,110 @@ const LoginPage = () => {
         }
 
         try {
+            setSubmitting(true);
             await login(email, password);
         } catch (err) {
             setError('Invalid credentials');
+        } finally {
+            setSubmitting(false);
         }
     };
 
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4">
-            <div className="bg-white rounded-lg shadow-2xl w-full max-w-3xl overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4" style={{ minHeight: '100dvh' }}>
+            <style>{`
+                /* Mobile-specific login page fixes */
+                @media (max-width: 768px) {
+                    .login-container {
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        margin: 0 !important;
+                        padding: 1rem !important;
+                    }
+                    
+                    .login-form-wrapper {
+                        padding: 1.5rem !important;
+                    }
+                    
+                    .login-form-wrapper input,
+                    .login-form-wrapper textarea,
+                    .login-form-wrapper select {
+                        font-size: 16px !important;
+                        min-height: 48px !important;
+                        padding: 14px 16px !important;
+                        -webkit-appearance: none;
+                        appearance: none;
+                    }
+                    
+                    .login-form-wrapper button {
+                        min-height: 48px !important;
+                        font-size: 16px !important;
+                        padding: 14px 18px !important;
+                        touch-action: manipulation;
+                    }
+                    
+                    .login-form-wrapper label {
+                        font-size: 14px !important;
+                        margin-bottom: 8px !important;
+                        display: block !important;
+                    }
+                    
+                    .login-branding {
+                        display: flex !important;
+                        justify-content: center !important;
+                        align-items: center !important;
+                        padding: 2rem 1rem !important;
+                        margin-bottom: 1rem !important;
+                    }
+                    
+                    .login-branding h1 {
+                        font-size: 2rem !important;
+                        color: #ffffff !important;
+                    }
+                }
+                
+                /* Ensure login form is interactive on mobile */
+                #root > div input,
+                #root > div button {
+                    -webkit-user-select: text;
+                    user-select: text;
+                    pointer-events: auto;
+                    touch-action: manipulation;
+                }
+                
+                /* Prevent body scroll issues on mobile */
+                body.login-page {
+                    position: fixed !important;
+                    width: 100% !important;
+                    height: 100% !important;
+                    overflow: hidden !important;
+                }
+                
+                body.login-page #root {
+                    width: 100% !important;
+                    height: 100% !important;
+                    overflow: auto !important;
+                    -webkit-overflow-scrolling: touch !important;
+                }
+            `}</style>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-xl overflow-hidden login-container">
                 <div className="grid md:grid-cols-2">
                     {/* Left Side - Branding */}
-                    <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex flex-col justify-center items-center text-center">
+                    <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex-col justify-center items-center text-center">
                         <style>{`#loginBrand,.login-brand{color:#ffffff !important;text-align:center !important;}`}</style>
                         <div className="mb-8 w-full flex justify-center">
                             <h1 id="loginBrand" className="login-brand text-3xl font-bold mb-2">Abcotronics</h1>
                         </div>
                     </div>
+                    
+                    {/* Mobile Branding - visible on mobile */}
+                    <div className="md:hidden bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white text-center login-branding">
+                        <h1 className="login-brand text-3xl font-bold">Abcotronics</h1>
+                    </div>
 
                     {/* Right Side - Login */}
-                    <div className="p-8">
+                    <div className="p-6 sm:p-8 login-form-wrapper">
                         <div className="mb-6">
                             <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome</h2>
                             <p className="text-sm text-gray-600">Sign in to access your dashboard</p>
@@ -89,9 +173,10 @@ const LoginPage = () => {
 
                                 <button
                                     type="submit"
-                                    className="w-full bg-blue-600 text-white py-2 text-sm rounded-lg hover:bg-blue-700 transition font-medium"
+                                    disabled={submitting}
+                                    className={`w-full bg-blue-600 text-white py-3 text-sm rounded-lg transition font-medium ${submitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'}`}
                                 >
-                                    Sign In
+                                    {submitting ? 'Signing In…' : 'Sign In'}
                                 </button>
                                 
                                 
