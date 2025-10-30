@@ -826,6 +826,7 @@ const Clients = React.memo(() => {
                 opportunities: clientFormData.opportunities || [],
                 contracts: clientFormData.contracts || [],
                 activityLog: clientFormData.activityLog || [],
+                    services: Array.isArray(clientFormData.services) ? clientFormData.services : [],
                 billingTerms: clientFormData.billingTerms || {
                     paymentTerms: 'Net 30',
                     billingFrequency: 'Monthly',
@@ -891,6 +892,7 @@ const Clients = React.memo(() => {
                             // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
+                            services: comprehensiveClient.services,
                             billingTerms: comprehensiveClient.billingTerms
                         };
                         
@@ -925,6 +927,7 @@ const Clients = React.memo(() => {
                             // opportunities field removed - conflicts with Prisma relation
                             contracts: comprehensiveClient.contracts,
                             activityLog: comprehensiveClient.activityLog,
+                            services: comprehensiveClient.services,
                             billingTerms: comprehensiveClient.billingTerms
                         };
                         

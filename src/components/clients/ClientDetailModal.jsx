@@ -125,6 +125,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
             opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
             activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+            services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
             billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
                 paymentTerms: 'Net 30',
                 billingFrequency: 'Monthly',
@@ -148,6 +149,7 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
             sites: [],
             opportunities: [],
             activityLog: [],
+            services: [],
             billingTerms: {
                 paymentTerms: 'Net 30',
                 billingFrequency: 'Monthly',
@@ -295,7 +297,8 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                 comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
                 contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
                 activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || [])
+                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+                services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || [])
             };
             
             console.log('🔄 Initial formData from client prop:', {
@@ -1561,6 +1564,44 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                         rows="3"
                                         placeholder="General information about this client..."
                                     ></textarea>
+                                </div>
+
+                                {/* Services - service level tags */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Services</label>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            'Self-Managed FMS',
+                                            'Comprehensive FMS',
+                                            'Diesel Refund Compliance',
+                                            'Diesel Refund Audit',
+                                            'Weight Track'
+                                        ].map(option => {
+                                            const isSelected = Array.isArray(formData.services) && formData.services.includes(option);
+                                            return (
+                                                <button
+                                                    key={option}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const current = Array.isArray(formData.services) ? formData.services : [];
+                                                        const next = isSelected
+                                                            ? current.filter(s => s !== option)
+                                                            : [...current, option];
+                                                        setFormData({ ...formData, services: next });
+                                                        hasUserEditedForm.current = true;
+                                                    }}
+                                                    className={`px-3 py-1.5 text-xs rounded-full border transition ${
+                                                        isSelected
+                                                            ? 'bg-primary-100 text-primary-700 border-primary-200'
+                                                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                                    }`}
+                                                >
+                                                    <i className="fas fa-tags mr-1"></i>
+                                                    {option}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             </div>
                         )}

@@ -48,6 +48,7 @@ model User {
   auditLogs     AuditLog[]   @relation("AuditActor")
   feedback      Feedback[]   @relation("UserFeedback")
   sentMessages  Message[]    @relation("MessageSender")
+  passwordResets PasswordReset[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -93,6 +94,7 @@ model Client {
   activityLog   String        @default("[]")
   billingTerms  String        @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
   proposals     String        @default("[]")
+  services      String        @default("[]") // JSON array of service level tags
   thumbnail     String        @default("") // Image URL for client/lead thumbnail
   ownerId       String?
   owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
@@ -526,4 +528,18 @@ model Message {
   @@index([senderId])
   @@index([createdAt])
   @@index([read])
+}
+
+// Password reset tokens for forgot-password flow
+model PasswordReset {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  token      String   @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }

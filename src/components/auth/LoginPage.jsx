@@ -11,6 +11,9 @@ const LoginPage = () => {
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const { login } = useAuth();
+    const [showForgot, setShowForgot] = useState(false);
+    const [resetEmail, setResetEmail] = useState('');
+    const [resetStatus, setResetStatus] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -178,8 +181,45 @@ const LoginPage = () => {
                                 >
                                     {submitting ? 'Signing In…' : 'Sign In'}
                                 </button>
-                                
-                                
+                                <div className="mt-3 text-right">
+                                    <button type="button" onClick={() => setShowForgot(v => !v)} className="text-xs text-blue-600 hover:underline">
+                                        {showForgot ? 'Hide' : 'Forgot password?'}
+                                    </button>
+                                </div>
+
+                                {showForgot && (
+                                    <div className="mt-4 p-3 border rounded-md bg-gray-50">
+                                        <label htmlFor="resetEmail" className="block text-xs font-medium text-gray-700 mb-1.5">Enter your email</label>
+                                        <input
+                                            id="resetEmail"
+                                            type="email"
+                                            value={resetEmail}
+                                            onChange={(e) => setResetEmail(e.target.value)}
+                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            placeholder="you@company.com"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                setResetStatus('');
+                                                if (!resetEmail) { setResetStatus('Please enter your email'); return; }
+                                                try {
+                                                    await window.api.requestPasswordReset(resetEmail);
+                                                    setResetStatus('If the email exists, a reset link has been sent.');
+                                                } catch (e) {
+                                                    setResetStatus('If the email exists, a reset link has been sent.');
+                                                }
+                                            }}
+                                            className="mt-2 w-full bg-gray-800 text-white py-2 text-sm rounded-lg hover:bg-gray-900"
+                                        >
+                                            Send reset link
+                                        </button>
+                                        {resetStatus && (
+                                            <div className="mt-2 text-xs text-gray-700">{resetStatus}</div>
+                                        )}
+                                    </div>
+                                )}
+
                             </form>
                     </div>
                 </div>

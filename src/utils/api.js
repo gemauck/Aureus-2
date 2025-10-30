@@ -129,6 +129,22 @@ const api = {
     return res
   },
 
+  async requestPasswordReset(email) {
+    const res = await request('/auth/request-password-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    })
+    return res
+  },
+
+  async resetPassword(token, password) {
+    const res = await request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, password })
+    })
+    return res
+  },
+
   // Heartbeat to track online status
   async heartbeat() {
     try {
