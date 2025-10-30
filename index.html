@@ -30,17 +30,11 @@
             try {
                 var root = document.documentElement;
                 var storedTheme = localStorage.getItem('abcotronics_theme');
-                var followSystem = localStorage.getItem('abcotronics_use_system_theme') === 'true';
-                // Default behavior: do NOT follow system unless user turned it on
-                if (!localStorage.getItem('abcotronics_use_system_theme')) {
-                    localStorage.setItem('abcotronics_use_system_theme', 'false');
-                }
-                var themeToApply = 'light';
-                if (storedTheme === 'dark') themeToApply = 'dark';
-                if (followSystem) {
-                    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                    themeToApply = prefersDark ? 'dark' : 'light';
-                }
+                // Enforce app-controlled theme by default: do NOT follow system
+                localStorage.setItem('abcotronics_use_system_theme', 'false');
+                var themeToApply = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : 'light';
+                // Persist explicit theme so React uses same value
+                localStorage.setItem('abcotronics_theme', themeToApply);
                 root.classList.remove('light','dark');
                 root.classList.add(themeToApply);
             } catch (e) {}
