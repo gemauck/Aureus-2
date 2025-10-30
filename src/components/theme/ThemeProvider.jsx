@@ -21,17 +21,17 @@ const ThemeProvider = ({ children }) => {
         return () => mediaQuery.removeEventListener('change', handleChange);
     }, []);
 
-    // Load theme from localStorage on mount, with system preference fallback
+    // Load theme from localStorage on mount; only fall back to system if no saved theme
     useEffect(() => {
         const savedTheme = localStorage.getItem('abcotronics_theme');
         const useSystemPreference = localStorage.getItem('abcotronics_use_system_theme') === 'true';
         
         let initialTheme = 'light';
         
-        if (useSystemPreference) {
-            initialTheme = systemPreference;
-        } else if (savedTheme) {
+        if (savedTheme) {
             initialTheme = savedTheme;
+        } else if (useSystemPreference) {
+            initialTheme = systemPreference;
         } else {
             // First time user - default to light and do NOT follow system
             initialTheme = 'light';
