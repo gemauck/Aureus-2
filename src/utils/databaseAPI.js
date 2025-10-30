@@ -18,34 +18,58 @@ const DatabaseAPI = {
         }
 
         const url = `${this.API_BASE}/api${endpoint}`;
-        const config = {
+        const buildConfigWithToken = (authToken) => ({
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${authToken}`,
                 ...options.headers
             },
+            credentials: 'include',
             ...options
+        });
+
+        const execute = async (authToken) => {
+            const response = await fetch(url, buildConfigWithToken(authToken));
+            return response;
         };
 
         try {
-            const response = await fetch(url, config);
-            
+            let response = await execute(token);
+
+            if (!response.ok && response.status === 401) {
+                // Attempt refresh once
+                try {
+                    const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
+                    const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                    if (refreshRes.ok) {
+                        const text = await refreshRes.text();
+                        const refreshData = text ? JSON.parse(text) : {};
+                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                        if (newToken && window.storage?.setToken) {
+                            window.storage.setToken(newToken);
+                            response = await execute(newToken);
+                        }
+                    }
+                } catch (_) {
+                    // ignore refresh network errors; will handle below
+                }
+            }
+
             if (!response.ok) {
                 if (response.status === 401) {
-                    // Token expired, redirect to login
-                    window.storage.removeToken();
-                    window.storage.removeUser();
-                    
-                    // Stop live data sync if active
-                    if (window.LiveDataSync) {
-                        window.LiveDataSync.stop();
+                    // Avoid logging out for pure permission denials (like /users) – just throw
+                    const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
+                    if (!permissionLikely) {
+                        if (window.storage?.removeToken) window.storage.removeToken();
+                        if (window.storage?.removeUser) window.storage.removeUser();
+                        if (window.LiveDataSync) {
+                            window.LiveDataSync.stop();
+                        }
+                        if (!window.location.hash.includes('#/login')) {
+                            window.location.hash = '#/login';
+                        }
                     }
-                    
-                    // Only redirect if not already on login page to prevent flashing
-                    if (!window.location.hash.includes('#/login')) {
-                        window.location.hash = '#/login';
-                    }
-                    throw new Error('Authentication expired. Please log in again.');
+                    throw new Error('Authentication expired or unauthorized.');
                 }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }

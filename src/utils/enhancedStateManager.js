@@ -376,35 +376,58 @@ class EnhancedStateManager {
         }
 
         const url = `${window.DatabaseAPI.API_BASE}/api${endpoint}`;
-        const options = {
+        const buildOptions = (authToken) => ({
             method,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
-        };
+                'Authorization': `Bearer ${authToken}`
+            },
+            credentials: 'include'
+        });
 
+        let options = buildOptions(token);
         if (data && method !== 'GET') {
             options.body = JSON.stringify(data);
         }
 
-        const response = await fetch(url, options);
-        
+        let response = await fetch(url, options);
+
+        if (!response.ok && response.status === 401) {
+            // attempt refresh once
+            try {
+                const refreshUrl = `${window.DatabaseAPI.API_BASE}/api/auth/refresh`;
+                const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                if (refreshRes.ok) {
+                    const text = await refreshRes.text();
+                    const refreshData = text ? JSON.parse(text) : {};
+                    const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                    if (newToken && window.storage?.setToken) {
+                        window.storage.setToken(newToken);
+                        options = buildOptions(newToken);
+                        if (data && method !== 'GET') options.body = JSON.stringify(data);
+                        response = await fetch(url, options);
+                    }
+                }
+            } catch (_) {
+                // ignore; handle below
+            }
+        }
+
         if (!response.ok) {
             if (response.status === 401) {
-                // Token expired - clear auth data and redirect to login
-                window.storage.removeToken();
-                window.storage.removeUser();
-                
-                // Stop live data sync if active
-                if (window.LiveDataSync) {
-                    window.LiveDataSync.stop();
+                // Avoid logging out for permission endpoints
+                const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
+                if (!permissionLikely) {
+                    if (window.storage?.removeToken) window.storage.removeToken();
+                    if (window.storage?.removeUser) window.storage.removeUser();
+                    if (window.LiveDataSync) {
+                        window.LiveDataSync.stop();
+                    }
+                    if (!window.location.hash.includes('#/login')) {
+                        window.location.hash = '#/login';
+                    }
                 }
-                
-                // Redirect to login screen
-                window.location.hash = '#/login';
-                window.location.reload();
-                throw new Error('Authentication expired');
+                throw new Error('Authentication expired or unauthorized');
             }
             throw new Error(`Server error: ${response.status} ${response.statusText}`);
         }

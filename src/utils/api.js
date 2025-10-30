@@ -9,14 +9,14 @@ async function request(path, options = {}) {
   const token = window.storage?.getToken?.()
   const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) }
   if (token) headers['Authorization'] = `Bearer ${token}`
-  
+
   const fullUrl = `${API_BASE}${path}`
   const requestOptions = { ...options, headers, credentials: 'include' }
-  
-  try {
+
+  const execute = async () => {
     const res = await fetch(fullUrl, requestOptions)
     const text = await res.text()
-    
+
     let data = {}
     if (text) {
       try {
@@ -30,28 +30,47 @@ async function request(path, options = {}) {
         }
       }
     }
-    
-    if (!res.ok) {
-      // Handle specific error cases
-      if (res.status === 401) {
-        // Clear auth data
-        if (window.storage?.removeToken) window.storage.removeToken();
-        if (window.storage?.removeUser) window.storage.removeUser();
-        
-        // Stop live data sync if active
-        if (window.LiveDataSync) {
-          window.LiveDataSync.stop();
+
+    return { res, data }
+  }
+
+  try {
+    let { res, data } = await execute()
+
+    if (!res.ok && res.status === 401) {
+      // Try refresh once
+      const refreshed = await api.refresh?.()
+      if (refreshed?.data?.accessToken || refreshed?.accessToken) {
+        // Update Authorization header and retry
+        const newToken = refreshed.data?.accessToken || refreshed.accessToken
+        if (newToken) {
+          if (window.storage?.setToken) window.storage.setToken(newToken)
+          requestOptions.headers = { ...requestOptions.headers, Authorization: `Bearer ${newToken}` }
         }
-        
-        // Only redirect if not already on login page to prevent flashing
-        if (!window.location.hash.includes('#/login')) {
-          window.location.hash = '#/login';
+        ({ res, data } = await execute())
+      }
+    }
+
+    if (!res.ok) {
+      // Do NOT log out on permission-related 401s (e.g., /users). Only log out if refresh failed and this looks like an auth problem on core identity endpoints.
+      if (res.status === 401) {
+        const isAuthEndpoint = path === '/me' || path === '/auth/refresh' || path === '/login'
+        const permissionLikely = path.startsWith('/users') || path.startsWith('/admin')
+        if (isAuthEndpoint || !permissionLikely) {
+          // Token likely invalid and refresh failed → clear and redirect
+          if (window.storage?.removeToken) window.storage.removeToken();
+          if (window.storage?.removeUser) window.storage.removeUser();
+          if (window.LiveDataSync) {
+            window.LiveDataSync.stop();
+          }
+          if (!window.location.hash.includes('#/login')) {
+            window.location.hash = '#/login';
+          }
         }
       }
-      
       throw new Error(data?.error?.message || `Request failed with status ${res.status}`)
     }
-    
+
     return data
   } catch (error) {
     console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
