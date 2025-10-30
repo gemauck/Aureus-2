@@ -346,8 +346,8 @@ const MainLayout = () => {
                 {/* Logo */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         {(sidebarOpen || (mobileMenuOpen && isMobile)) ? (
-                        <div className="flex-1">
-                            <h1 className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
+                        <div className="flex-1 flex justify-center">
+                            <h1 className={`text-xl lg:text-base font-bold text-white`}>Abcotronics</h1>
                         </div>
                     ) : (
                         <div className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>
