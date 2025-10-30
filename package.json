@@ -31,7 +31,8 @@
     "nodemailer": "^6.9.8",
     "pino": "^9.3.2",
     "prisma": "^5.18.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "compression": "^1.7.4"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
