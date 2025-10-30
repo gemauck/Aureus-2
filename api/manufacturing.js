@@ -30,10 +30,12 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/inventory)
     if (req.method === 'GET' && !id) {
       try {
+        const owner = req.user?.sub
         const items = await prisma.inventoryItem.findMany({
           where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
+        console.log('🧪 Manufacturing List inventory', { owner, count: items.length })
         
         // Format dates for response
         const formatted = items.map(item => ({
@@ -246,10 +248,12 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/boms)
     if (req.method === 'GET' && !id) {
       try {
+        const owner = req.user?.sub
         const boms = await prisma.bOM.findMany({
           where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
+        console.log('🧪 Manufacturing List boms', { owner, count: boms.length })
         
         const formatted = boms.map(bom => ({
           ...bom,
@@ -419,10 +423,12 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/production-orders)
     if (req.method === 'GET' && !id) {
       try {
+        const owner = req.user?.sub
         const orders = await prisma.productionOrder.findMany({
           where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
+        console.log('🧪 Manufacturing List productionOrders', { owner, count: orders.length })
         
         const formatted = orders.map(order => ({
           ...order,
@@ -580,10 +586,12 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/stock-movements)
     if (req.method === 'GET' && !id) {
       try {
+        const owner = req.user?.sub
         const movements = await prisma.stockMovement.findMany({
           where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { date: 'desc' }
         })
+        console.log('🧪 Manufacturing List movements', { owner, count: movements.length })
         
         const formatted = movements.map(movement => ({
           ...movement,
@@ -700,10 +708,12 @@ async function handler(req, res) {
     // LIST (GET /api/manufacturing/suppliers)
     if (req.method === 'GET' && !id) {
       try {
+        const owner = req.user?.sub
         const suppliers = await prisma.supplier.findMany({
           where: { OR: [ { ownerId: req.user?.sub }, { ownerId: null } ] },
           orderBy: { createdAt: 'desc' }
         })
+        console.log('🧪 Manufacturing List suppliers', { owner, count: suppliers.length })
         
         const formatted = suppliers.map(supplier => ({
           ...supplier,
