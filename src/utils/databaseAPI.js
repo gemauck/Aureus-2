@@ -12,8 +12,37 @@ const DatabaseAPI = {
     
     // Helper function to make authenticated requests
     async makeRequest(endpoint, options = {}) {
-        const token = window.storage?.getToken?.();
+        let token = window.storage?.getToken?.();
+
+        // If no token, attempt a silent refresh using the refresh cookie
         if (!token) {
+            try {
+                const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
+                const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                if (refreshRes.ok) {
+                    const text = await refreshRes.text();
+                    const refreshData = text ? JSON.parse(text) : {};
+                    const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                    if (newToken && window.storage?.setToken) {
+                        window.storage.setToken(newToken);
+                        token = newToken;
+                    }
+                }
+            } catch (_) {
+                // ignore refresh errors here; downstream logic will handle redirect
+            }
+        }
+
+        if (!token) {
+            // Still no token → ensure clean state and redirect to login
+            if (window.storage?.removeToken) window.storage.removeToken();
+            if (window.storage?.removeUser) window.storage.removeUser();
+            if (window.LiveDataSync) {
+                window.LiveDataSync.stop();
+            }
+            if (!window.location.hash.includes('#/login')) {
+                window.location.hash = '#/login';
+            }
             throw new Error('No authentication token found. Please log in.');
         }
 
