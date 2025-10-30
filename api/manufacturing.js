@@ -5,7 +5,7 @@ import { ok, created, badRequest, notFound, serverError } from './_lib/response.
 async function handler(req, res) {
   const urlPath = req.url.replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
-  const resourceType = pathSegments[1] // inventory, boms, production-orders, stock-movements
+  const resourceType = pathSegments[1] // inventory, boms, production-orders, stock-movements, locations, location-inventory, stock-transactions
   const id = pathSegments[2]
 
   // Helper to parse JSON fields
@@ -15,6 +15,257 @@ async function handler(req, res) {
       return typeof str === 'string' ? JSON.parse(str) : str
     } catch {
       return defaultValue
+    }
+  }
+
+  // STOCK LOCATIONS
+  if (resourceType === 'locations') {
+    // LIST
+    if (req.method === 'GET' && !id) {
+      try {
+        const locations = await prisma.stockLocation.findMany({ orderBy: { createdAt: 'desc' } })
+        return ok(res, { locations })
+      } catch (e) {
+        return serverError(res, 'Failed to list locations', e.message)
+      }
+    }
+    // GET ONE
+    if (req.method === 'GET' && id) {
+      const loc = await prisma.stockLocation.findUnique({ where: { id } })
+      if (!loc) return notFound(res, 'Location not found')
+      return ok(res, { location: loc })
+    }
+    // CREATE
+    if (req.method === 'POST' && !id) {
+      const body = req.body || {}
+      if (!body.name) return badRequest(res, 'name required')
+      try {
+        // auto code
+        let code = body.code
+        if (!code) {
+          const last = await prisma.stockLocation.findFirst({ orderBy: { createdAt: 'desc' } })
+          const next = last && last.code?.startsWith('LOC') ? parseInt(last.code.replace('LOC','')) + 1 : 1
+          code = `LOC${String(next).padStart(3,'0')}`
+        }
+        const location = await prisma.stockLocation.create({
+          data: {
+            code,
+            name: body.name,
+            type: body.type || 'warehouse',
+            status: body.status || 'active',
+            address: body.address || '',
+            contactPerson: body.contactPerson || '',
+            contactPhone: body.contactPhone || '',
+            meta: JSON.stringify(body.meta || {})
+          }
+        })
+        return created(res, { location })
+      } catch (e) {
+        return serverError(res, 'Failed to create location', e.message)
+      }
+    }
+    // UPDATE
+    if (req.method === 'PATCH' && id) {
+      const body = req.body || {}
+      try {
+        const location = await prisma.stockLocation.update({ where: { id }, data: {
+          code: body.code ?? undefined,
+          name: body.name ?? undefined,
+          type: body.type ?? undefined,
+          status: body.status ?? undefined,
+          address: body.address ?? undefined,
+          contactPerson: body.contactPerson ?? undefined,
+          contactPhone: body.contactPhone ?? undefined,
+          meta: body.meta !== undefined ? JSON.stringify(body.meta) : undefined
+        }})
+        return ok(res, { location })
+      } catch (e) {
+        if (e.code === 'P2025') return notFound(res, 'Location not found')
+        return serverError(res, 'Failed to update location', e.message)
+      }
+    }
+    // DELETE
+    if (req.method === 'DELETE' && id) {
+      try {
+        const existsInv = await prisma.locationInventory.findFirst({ where: { locationId: id } })
+        if (existsInv) return badRequest(res, 'Cannot delete location with inventory')
+        await prisma.stockLocation.delete({ where: { id } })
+        return ok(res, { deleted: true })
+      } catch (e) {
+        if (e.code === 'P2025') return notFound(res, 'Location not found')
+        return serverError(res, 'Failed to delete location', e.message)
+      }
+    }
+  }
+
+  // LOCATION INVENTORY (per location by SKU)
+  if (resourceType === 'location-inventory') {
+    // LIST by location: /api/manufacturing/location-inventory/:id (locationId)
+    if (req.method === 'GET' && id) {
+      try {
+        const items = await prisma.locationInventory.findMany({ where: { locationId: id }, orderBy: { updatedAt: 'desc' } })
+        return ok(res, { items })
+      } catch (e) {
+        return serverError(res, 'Failed to list location inventory', e.message)
+      }
+    }
+  }
+
+  // STOCK TRANSACTIONS (receipt, transfer, sale, adjustment with per-location integrity)
+  if (resourceType === 'stock-transactions') {
+    if (req.method === 'POST') {
+      const body = req.body || {}
+      const type = String(body.type || '').toLowerCase() // receipt, transfer, sale, adjustment
+      if (!['receipt','transfer','sale','adjustment'].includes(type)) return badRequest(res, 'Invalid type')
+      if (!body.sku || !body.itemName) return badRequest(res, 'sku and itemName required')
+      const qty = parseFloat(body.quantity) || 0
+      if (qty <= 0) return badRequest(res, 'quantity must be greater than 0')
+
+      try {
+        const result = await prisma.$transaction(async (tx) => {
+          // Helper to get or create per-location record
+          async function upsertLocationSku(locationId) {
+            let li = await tx.locationInventory.findUnique({ where: { locationId_sku: { locationId, sku: body.sku } } })
+            if (!li) {
+              li = await tx.locationInventory.create({ data: {
+                locationId,
+                sku: body.sku,
+                itemName: body.itemName,
+                quantity: 0,
+                unitCost: parseFloat(body.unitCost) || 0,
+                reorderPoint: parseFloat(body.reorderPoint) || 0,
+                status: 'in_stock'
+              }})
+            }
+            return li
+          }
+
+          // Ensure InventoryItem exists
+          let master = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
+          if (!master && type !== 'sale' && type !== 'adjustment') {
+            master = await tx.inventoryItem.create({ data: {
+              sku: body.sku,
+              name: body.itemName,
+              category: body.category || 'components',
+              type: body.itemType || 'raw_material',
+              quantity: 0,
+              unit: body.unit || 'pcs',
+              reorderPoint: parseFloat(body.reorderPoint) || 0,
+              reorderQty: parseFloat(body.reorderQty) || 0,
+              unitCost: parseFloat(body.unitCost) || 0,
+              totalValue: 0,
+              supplier: body.supplier || ''
+            }})
+          }
+
+          const now = body.date ? new Date(body.date) : new Date()
+          // Generate movement ID
+          const last = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+          const seq = last && last.movementId?.startsWith('MOV') ? (parseInt(last.movementId.replace('MOV','')) + 1) : 1
+          const movementId = body.movementId || `MOV${String(seq).padStart(4, '0')}`
+
+          // Adjust per type
+          if (type === 'receipt') {
+            if (!body.toLocationId) return badRequest(res, 'toLocationId required for receipt')
+            const toLi = await upsertLocationSku(body.toLocationId)
+            const newQtyTo = (toLi.quantity || 0) + qty
+            await tx.locationInventory.update({ where: { id: toLi.id }, data: {
+              quantity: newQtyTo,
+              unitCost: body.unitCost !== undefined ? parseFloat(body.unitCost) : toLi.unitCost,
+              lastRestocked: now,
+              status: newQtyTo > toLi.reorderPoint ? 'in_stock' : (newQtyTo > 0 ? 'low_stock' : 'out_of_stock')
+            }})
+            // Update master aggregate
+            const totalAtLocations = await tx.locationInventory.aggregate({ _sum: { quantity: true }, where: { sku: body.sku } })
+            const aggQty = totalAtLocations._sum.quantity || 0
+            if (master) {
+              await tx.inventoryItem.update({ where: { id: master.id }, data: {
+                quantity: aggQty,
+                unitCost: body.unitCost !== undefined ? parseFloat(body.unitCost) : master.unitCost,
+                totalValue: aggQty * (body.unitCost !== undefined ? parseFloat(body.unitCost) : (master.unitCost || 0)),
+                lastRestocked: now,
+                status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+              }})
+            }
+          }
+
+          if (type === 'transfer') {
+            if (!body.fromLocationId || !body.toLocationId) return badRequest(res, 'fromLocationId and toLocationId required for transfer')
+            const fromLi = await upsertLocationSku(body.fromLocationId)
+            if ((fromLi.quantity || 0) < qty) throw new Error('Insufficient stock at source location')
+            const toLi = await upsertLocationSku(body.toLocationId)
+            await tx.locationInventory.update({ where: { id: fromLi.id }, data: {
+              quantity: fromLi.quantity - qty,
+              status: (fromLi.quantity - qty) > fromLi.reorderPoint ? 'in_stock' : ((fromLi.quantity - qty) > 0 ? 'low_stock' : 'out_of_stock')
+            }})
+            await tx.locationInventory.update({ where: { id: toLi.id }, data: {
+              quantity: toLi.quantity + qty,
+              status: (toLi.quantity + qty) > toLi.reorderPoint ? 'in_stock' : ((toLi.quantity + qty) > 0 ? 'low_stock' : 'out_of_stock')
+            }})
+            // Master aggregate unaffected in total (sum constant), but recalc for safety
+            const totalAtLocations = await tx.locationInventory.aggregate({ _sum: { quantity: true }, where: { sku: body.sku } })
+            const aggQty = totalAtLocations._sum.quantity || 0
+            if (master) {
+              await tx.inventoryItem.update({ where: { id: master.id }, data: {
+                quantity: aggQty,
+                totalValue: aggQty * (master.unitCost || 0),
+                status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+              }})
+            }
+          }
+
+          if (type === 'sale' || type === 'adjustment') {
+            const locationId = body.fromLocationId || body.locationId
+            if (!locationId) return badRequest(res, 'locationId required for sale/adjustment')
+            const fromLi = await upsertLocationSku(locationId)
+            const delta = type === 'sale' ? -qty : (parseFloat(body.delta) || -qty)
+            const newQty = (fromLi.quantity || 0) + delta
+            if (newQty < 0) throw new Error('Resulting quantity cannot be negative')
+            await tx.locationInventory.update({ where: { id: fromLi.id }, data: {
+              quantity: newQty,
+              status: newQty > fromLi.reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+            }})
+            // Update master
+            const totalAtLocations = await tx.locationInventory.aggregate({ _sum: { quantity: true }, where: { sku: body.sku } })
+            const aggQty = totalAtLocations._sum.quantity || 0
+            if (master) {
+              await tx.inventoryItem.update({ where: { id: master.id }, data: {
+                quantity: aggQty,
+                totalValue: aggQty * (master.unitCost || 0),
+                status: aggQty > (master.reorderPoint || 0) ? 'in_stock' : (aggQty > 0 ? 'low_stock' : 'out_of_stock')
+              }})
+            }
+          }
+
+          // Create stock movement record
+          const movement = await tx.stockMovement.create({ data: {
+            movementId,
+            date: now,
+            type: type === 'sale' ? 'consumption' : (type === 'adjustment' ? 'adjustment' : type),
+            itemName: body.itemName,
+            sku: body.sku,
+            quantity: qty,
+            fromLocation: body.fromLocationId || body.locationId || '',
+            toLocation: body.toLocationId || '',
+            reference: body.reference || '',
+            performedBy: body.performedBy || req.user?.name || 'System',
+            notes: body.notes || ''
+          }})
+
+          return { movement }
+        })
+
+        return created(res, { movement: {
+          ...result.movement,
+          date: formatDate(result.movement.date),
+          createdAt: formatDate(result.movement.createdAt),
+          updatedAt: formatDate(result.movement.updatedAt)
+        } })
+      } catch (e) {
+        const msg = e?.message || 'Failed to process stock transaction'
+        console.error('❌ Stock transaction error:', e)
+        return serverError(res, msg, msg)
+      }
     }
   }
 
@@ -589,7 +840,7 @@ async function handler(req, res) {
     }
   }
 
-  // STOCK MOVEMENTS
+  // STOCK MOVEMENTS (aggregate movements, legacy)
   if (resourceType === 'stock-movements') {
     // LIST (GET /api/manufacturing/stock-movements)
     if (req.method === 'GET' && !id) {
@@ -666,7 +917,7 @@ async function handler(req, res) {
           return badRequest(res, 'quantity must be greater than 0')
         }
 
-        // Perform movement and inventory adjustment atomically
+        // Perform movement and inventory adjustment atomically (basic aggregate store)
         const result = await prisma.$transaction(async (tx) => {
           // Create movement record
           const movement = await tx.stockMovement.create({
@@ -735,7 +986,7 @@ async function handler(req, res) {
                 }
               })
             }
-          } else if (type === 'consumption') {
+          } else if (type === 'consumption' || type === 'sale') {
             if (!item) {
               throw new Error('Inventory item not found for consumption')
             }

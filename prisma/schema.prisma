@@ -451,6 +451,47 @@ model StockMovement {
   @@index([ownerId])
 }
 
+// Physical stock locations (warehouses, vehicles, stores)
+model StockLocation {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  type        String   @default("warehouse") // warehouse, vehicle, store, site
+  status      String   @default("active")
+  address     String   @default("")
+  contactPerson String @default("")
+  contactPhone String  @default("")
+  meta        String   @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  inventory   LocationInventory[]
+
+  @@index([type])
+  @@index([status])
+}
+
+// Inventory quantity per location by SKU
+model LocationInventory {
+  id          String   @id @default(cuid())
+  locationId  String
+  sku         String
+  itemName    String
+  quantity    Float    @default(0)
+  unitCost    Float    @default(0)
+  reorderPoint Float   @default(0)
+  lastRestocked DateTime?
+  status      String   @default("in_stock")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  location    StockLocation @relation(fields: [locationId], references: [id])
+
+  @@unique([locationId, sku])
+  @@index([sku])
+  @@index([locationId])
+}
+
 model Supplier {
   id            String   @id @default(cuid())
   code          String   @default("")
