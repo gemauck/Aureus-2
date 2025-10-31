@@ -2784,4 +2784,14 @@ window.Clients._isPaginated = true;
 window.Clients._version = 'paginated-v1';
 console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes and pagination)');
 
+// Notify MainLayout that Clients component is now available
+if (typeof window.dispatchEvent === 'function') {
+    try {
+        window.dispatchEvent(new CustomEvent('clientsComponentReady'));
+        console.log('📢 Dispatched clientsComponentReady event');
+    } catch (e) {
+        // Event not supported, that's okay
+    }
+}
+
 
