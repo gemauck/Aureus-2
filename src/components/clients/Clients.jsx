@@ -585,15 +585,15 @@ const Clients = React.memo(() => {
                     console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
                     
                     // Separate clients and leads based on type
-                    // Explicitly filter: only include records with type='client' and exclude any with null/undefined type
-                    const clientsOnly = processedClients.filter(c => c.type === 'client');
+                    // Include records with type='client' OR null/undefined (legacy clients without type field)
+                    const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
                     const leadsOnly = processedClients.filter(c => c.type === 'lead');
-                    // Log any records with missing type for debugging
-                    const missingType = processedClients.filter(c => !c.type || (c.type !== 'client' && c.type !== 'lead'));
-                    if (missingType.length > 0) {
-                        console.warn(`⚠️ Found ${missingType.length} records with invalid/missing type:`, missingType.map(c => ({ id: c.id, name: c.name, type: c.type })));
+                    // Log any records with unexpected types for debugging
+                    const unexpectedType = processedClients.filter(c => c.type && c.type !== 'client' && c.type !== 'lead');
+                    if (unexpectedType.length > 0) {
+                        console.warn(`⚠️ Found ${unexpectedType.length} records with unexpected type:`, unexpectedType.map(c => ({ id: c.id, name: c.name, type: c.type })));
                     }
-                    console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
+                    console.log(`🔍 Clients only: ${clientsOnly.length} (including ${processedClients.filter(c => c.type === null || c.type === undefined).length} legacy/null), Leads only: ${leadsOnly.length}`);
                     
                     // Preserve opportunities from cached clients for instant display
                     const cachedClientsForOpps = safeStorage.getClients() || [];
