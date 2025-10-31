@@ -521,8 +521,10 @@ const Clients = React.memo(() => {
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
-            if (timeSinceLastCall < API_CALL_INTERVAL && clients.length > 0) {
-                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
+            // If we have cached clients AND it's been less than 30 seconds since last call, skip API entirely
+            // This prevents unnecessary network requests when data is fresh
+            if (timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+                console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, cached data available)`);
                 // Refresh opportunities in background using bulk fetch (much faster)
                 if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
                     window.DatabaseAPI.getOpportunities()
@@ -538,7 +540,8 @@ const Clients = React.memo(() => {
                                     opportunitiesByClient[clientId].push(opp);
                                 }
                             });
-                            const updated = clients.map(client => ({
+                            const clientsToUpdate = clients.length > 0 ? clients : (cachedClients || []);
+                            const updated = clientsToUpdate.map(client => ({
                                 ...client,
                                 opportunities: opportunitiesByClient[client.id] || client.opportunities || []
                             }));
@@ -550,16 +553,25 @@ const Clients = React.memo(() => {
                 return; // Use cached data, skip API call
             }
             
-            // Update last API call timestamp
+            // Update last API call timestamp BEFORE making the call
+            // This prevents race conditions if component re-renders during the API call
             lastApiCallTimestamp = now;
             
             // API call happens in background after showing cached data
+            // Use DatabaseAPI for deduplication and caching benefits
             try {
                 const apiStartTime = performance.now();
-                const res = await window.api.listClients();
+                // Prefer DatabaseAPI.getClients() for deduplication and caching
+                const apiMethod = window.DatabaseAPI?.getClients || window.api?.listClients;
+                if (!apiMethod) {
+                    console.warn('⚠️ No API method available for fetching clients');
+                    return;
+                }
+                const res = await apiMethod();
                 const apiEndTime = performance.now();
                 console.log(`⚡ API call: ${(apiEndTime - apiStartTime).toFixed(1)}ms`);
-                const apiClients = res?.data?.clients || [];
+                // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
+                const apiClients = res?.data?.clients || res?.clients || [];
                 console.log(`🔍 Raw API clients received: ${apiClients.length}`, apiClients);
                     
                     // If API returns no clients, use cached data
