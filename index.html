@@ -522,7 +522,7 @@
                 }
             }
             bindClients();
-            // Retry briefly to catch late component registration
+            // Retry briefly to catch late component registration  
             let tries = 0;
             const t = setInterval(() => {
                 if (window.Clients || ++tries > 10) return clearInterval(t);

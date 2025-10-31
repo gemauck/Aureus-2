@@ -2488,6 +2488,9 @@ const Clients = React.memo(() => {
 
 // Force register as the main Clients component (overrides ClientsCached if it loaded first)
 window.Clients = Clients;
-console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes)');
+// Mark this as the preferred component version
+window.Clients._isPaginated = true;
+window.Clients._version = 'paginated-v1';
+console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes and pagination)');
 
 
