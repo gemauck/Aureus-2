@@ -3,7 +3,7 @@
 
 set -e
 
-echo "🚀 Deploying HTTP/2 fix to server..."
+echo "🚀 Deploying CSP fix to server..."
 echo ""
 
 # Server details
@@ -25,11 +25,14 @@ echo "📁 Current directory: \$(pwd)"
 # Pull latest changes
 echo ""
 echo "📥 Pulling latest changes from GitHub..."
-git pull origin main || {
-    echo "⚠️  Git pull failed, trying to stash changes..."
+git reset --hard origin/main || {
+    echo "⚠️  Git reset failed, trying to stash changes..."
     git stash
-    git pull origin main
+    git reset --hard origin/main
 }
+
+# Clean untracked files that would conflict
+git clean -fd
 
 echo ""
 echo "✅ Code updated"
