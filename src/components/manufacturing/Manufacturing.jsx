@@ -3032,6 +3032,19 @@ const Manufacturing = () => {
   const MovementsView = () => {
     console.log('📋 MovementsView component rendering...');
     
+    // Log when component mounts/updates
+    useEffect(() => {
+      console.log('📋 MovementsView mounted - useEffect fired');
+      console.log('📋 Current state:', {
+        showModal,
+        modalType,
+        movementsCount: movements.length
+      });
+      return () => {
+        console.log('📋 MovementsView unmounting');
+      };
+    }, [showModal, modalType, movements.length]);
+    
     // Define handler function - no useCallback needed, just a regular function
     const handleRecordClick = (e) => {
       if (e) {
@@ -3211,7 +3224,11 @@ const Manufacturing = () => {
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                console.log('🔵 Tab clicked:', tab.id, 'Current activeTab:', activeTab);
+                setActiveTab(tab.id);
+                console.log('🔵 activeTab will be set to:', tab.id);
+              }}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
@@ -3231,7 +3248,12 @@ const Manufacturing = () => {
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
-        {activeTab === 'movements' && <MovementsView />}
+        {activeTab === 'movements' && (() => {
+          console.log('🔵 Rendering MovementsView component - activeTab is:', activeTab);
+          const view = <MovementsView />;
+          console.log('🔵 MovementsView JSX created');
+          return view;
+        })()}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'locations' && window.StockLocations && (
           <window.StockLocations 
