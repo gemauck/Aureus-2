@@ -434,7 +434,7 @@ const Manufacturing = () => {
           <div className="bg-white p-3 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Active Production Orders</p>
+                <p className="text-xs text-gray-500">Active Work Orders</p>
                 <p className="text-lg font-semibold text-gray-900 mt-1">{prodStats.activeOrders}</p>
                 <p className="text-xs text-gray-500 mt-1">{prodStats.pendingUnits} units pending</p>
               </div>
@@ -486,12 +486,12 @@ const Manufacturing = () => {
             </div>
           </div>
 
-          {/* Active Production Orders */}
+          {/* Active Work Orders */}
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="p-3 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <i className="fas fa-industry text-blue-600"></i>
-                Active Production Orders
+                Active Work Orders
               </h3>
             </div>
             <div className="p-3">
@@ -907,7 +907,7 @@ const Manufacturing = () => {
         {/* Controls */}
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Production Orders</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Work Orders</h3>
             <button
               onClick={() => { 
                 setFormData({ 
@@ -921,12 +921,12 @@ const Manufacturing = () => {
               className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
               <i className="fas fa-plus text-xs"></i>
-              New Production Order
+              New Work Order
             </button>
           </div>
         </div>
 
-        {/* Production Orders Table */}
+        {/* Work Orders Table */}
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -1247,15 +1247,15 @@ const Manufacturing = () => {
   };
 
   const handleDeleteProductionOrder = async (orderId) => {
-    if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to delete this work order? This action cannot be undone.')) {
       try {
         await safeCallAPI('deleteProductionOrder', orderId);
         const updatedOrders = productionOrders.filter(order => order.id !== orderId);
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
       } catch (error) {
-        console.error('Error deleting production order:', error);
-        alert('Failed to delete production order. Please try again.');
+        console.error('Error deleting work order:', error);
+        alert('Failed to delete work order. Please try again.');
       }
     }
   };
@@ -1587,6 +1587,7 @@ const Manufacturing = () => {
 
   const handleSaveProductionOrder = async () => {
     try {
+      console.log('🔍 Starting work order save...', { formData });
       const selectedBom = boms.find(b => b.id === formData.bomId);
       if (!selectedBom) {
         alert('Please select a BOM/Product');
@@ -1610,18 +1611,26 @@ const Manufacturing = () => {
         createdBy: user?.name || 'System'
       };
 
+      console.log('📤 Sending work order data:', orderData);
       const response = await safeCallAPI('createProductionOrder', orderData);
+      console.log('📥 API Response:', response);
+      
       if (response?.data?.order) {
+        console.log('✅ Work order created successfully:', response.data.order);
         const updatedOrders = [...productionOrders, { ...response.data.order, id: response.data.order.id }];
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
+        alert('Work order created successfully!');
+      } else {
+        console.warn('⚠️ No order in response:', response);
+        alert('Work order created but response data incomplete. Please refresh to verify.');
       }
 
       setShowModal(false);
       setFormData({});
     } catch (error) {
-      console.error('Error saving production order:', error);
-      alert('Failed to save production order. Please try again.');
+      console.error('❌ Error saving work order:', error);
+      alert(`Failed to save work order: ${error.message}`);
     }
   };
 
@@ -1647,8 +1656,8 @@ const Manufacturing = () => {
       setSelectedItem(null);
       setFormData({});
     } catch (error) {
-      console.error('Error updating production order:', error);
-      alert('Failed to update production order. Please try again.');
+      console.error('Error updating work order:', error);
+      alert('Failed to update work order. Please try again.');
     }
   };
 
@@ -2495,7 +2504,7 @@ const Manufacturing = () => {
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-lg font-semibold text-gray-900">
-                {modalType === 'add_production' ? 'New Production Order' : 'Production Order Details'}
+                {modalType === 'add_production' ? 'New Work Order' : 'Work Order Details'}
               </h2>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
@@ -2692,7 +2701,7 @@ const Manufacturing = () => {
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
                 disabled={!formData.bomId || !formData.quantity || !formData.startDate || !formData.targetDate || !formData.assignedTo}
               >
-                {modalType === 'add_production' ? 'Create Production Order' : 'Update Order'}
+                {modalType === 'add_production' ? 'Create Work Order' : 'Update Order'}
               </button>
             </div>
           </div>
@@ -3595,7 +3604,7 @@ const Manufacturing = () => {
             { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
-            { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
+            { id: 'production', label: 'Work Orders', icon: 'fa-industry' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }

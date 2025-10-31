@@ -13,3 +13,7 @@ CREATE INDEX IF NOT EXISTS "Project_status_idx" ON "Project"("status");
 CREATE INDEX IF NOT EXISTS "Project_ownerId_idx" ON "Project"("ownerId");
 CREATE INDEX IF NOT EXISTS "Project_createdAt_idx" ON "Project"("createdAt");
 
+-- Opportunity table indexes (CRITICAL for CRM performance)
+CREATE INDEX IF NOT EXISTS "Opportunity_clientId_idx" ON "Opportunity"("clientId");
+CREATE INDEX IF NOT EXISTS "Opportunity_createdAt_idx" ON "Opportunity"("createdAt");
+

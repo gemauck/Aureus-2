@@ -6,59 +6,45 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
 // Helper function to parse JSON fields from database responses
+// PERFORMANCE: Optimized JSON parsing - only parse what's needed
+const DEFAULT_BILLING_TERMS = {
+  paymentTerms: 'Net 30',
+  billingFrequency: 'Monthly',
+  currency: 'ZAR',
+  retainerAmount: 0,
+  taxExempt: false,
+  notes: ''
+}
+
 function parseClientJsonFields(client) {
   try {
     const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
     const parsed = { ...client }
     
-    jsonFields.forEach(field => {
-      try {
-        if (parsed[field] && typeof parsed[field] === 'string') {
-          try {
-            parsed[field] = JSON.parse(parsed[field])
-          } catch (e) {
-            // If parsing fails, set to default based on field type
-            if (field === 'billingTerms') {
-              parsed[field] = {
-                paymentTerms: 'Net 30',
-                billingFrequency: 'Monthly',
-                currency: 'ZAR',
-                retainerAmount: 0,
-                taxExempt: false,
-                notes: ''
-              }
-            } else {
-              parsed[field] = []
-            }
-          }
-        } else if (!parsed[field]) {
-          // Set defaults for missing fields
-          if (field === 'billingTerms') {
-            parsed[field] = {
-              paymentTerms: 'Net 30',
-              billingFrequency: 'Monthly',
-              currency: 'ZAR',
-              retainerAmount: 0,
-              taxExempt: false,
-              notes: ''
-            }
-          } else {
-            parsed[field] = []
-          }
+    // Extract tags from ClientTag relations if present (only in detail views)
+    if (client.tags && Array.isArray(client.tags)) {
+      parsed.tags = client.tags.map(ct => ct.tag).filter(Boolean)
+    } else {
+      parsed.tags = []
+    }
+    
+    // Optimized: Parse JSON fields with minimal error handling overhead
+    for (const field of jsonFields) {
+      const value = parsed[field]
+      
+      if (typeof value === 'string' && value) {
+        try {
+          parsed[field] = JSON.parse(value)
+        } catch (e) {
+          // Set safe defaults on parse error
+          parsed[field] = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
         }
-      } catch (fieldError) {
-        // If individual field fails, set safe default
-        console.warn(`⚠️ Error parsing field ${field} for client ${client.id}:`, fieldError.message)
-        parsed[field] = field === 'billingTerms' ? {
-          paymentTerms: 'Net 30',
-          billingFrequency: 'Monthly',
-          currency: 'ZAR',
-          retainerAmount: 0,
-          taxExempt: false,
-          notes: ''
-        } : []
+      } else if (!value) {
+        // Set defaults for missing/null fields
+        parsed[field] = field === 'billingTerms' ? DEFAULT_BILLING_TERMS : []
       }
-    })
+      // If already an object/array, keep as-is (already parsed)
+    }
     
     return parsed
   } catch (error) {
@@ -78,106 +64,25 @@ async function handler(req, res) {
     // List Clients (GET /api/clients)
     if (req.method === 'GET' && ((pathSegments.length === 1 && pathSegments[0] === 'clients') || (pathSegments.length === 0 && req.url === '/clients/'))) {
       try {
-        console.log('📋 GET /api/clients - Starting query...')
+        console.log('📋 GET /api/clients - Starting optimized query...')
         
-        // Ensure database connection
-        try {
-          await prisma.$connect()
-          console.log('✅ Database connected')
-        } catch (connError) {
-          console.warn('⚠️ Connection check failed (may reconnect automatically):', connError.message)
-        }
+        // PERFORMANCE OPTIMIZATION: Query only clients directly with WHERE clause
+        // This is MUCH faster than fetching all records and filtering in memory
+        // Use database WHERE clause to filter - this uses indexes and is much faster
+        // Query for type='client' OR type IS NULL (legacy data)
+        // NOTE: Tags are excluded from list query for performance - they're only needed in detail views
+        const clients = await prisma.client.findMany({
+          where: {
+            OR: [
+              { type: 'client' },
+              { type: null }
+            ]
+          },
+          // Tags excluded for performance - only fetch when viewing individual client detail
+          orderBy: { createdAt: 'desc' }
+        })
         
-        // Ensure NULL type values are set to 'client' (for legacy databases)
-        try {
-          await prisma.$executeRaw`UPDATE "Client" SET "type" = 'client' WHERE "type" IS NULL`
-          console.log('✅ Verified type column')
-        } catch (schemaError) {
-          // Column might not exist - this is handled by Prisma schema
-          console.log('ℹ️ Type update skipped (expected if schema is up to date):', schemaError.message)
-        }
-        
-        // Ensure services column exists in database (PostgreSQL compatible)
-        try {
-          // Check if column exists first
-          const columnExists = await prisma.$queryRaw`
-            SELECT column_name 
-            FROM information_schema.columns 
-            WHERE table_name = 'Client' AND column_name = 'services'
-          `
-          if (!columnExists || columnExists.length === 0) {
-            await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "services" TEXT DEFAULT '[]'`
-            console.log('✅ Services column added to database')
-          } else {
-            console.log('✅ Services column already exists')
-          }
-        } catch (schemaError) {
-          // If error contains "already exists" or "duplicate", column already exists
-          if (schemaError.message && (schemaError.message.includes('already exists') || schemaError.message.includes('duplicate'))) {
-            console.log('ℹ️ Services column already exists:', schemaError.message)
-          } else {
-            console.log('ℹ️ Services column check failed (may already exist):', schemaError.message)
-          }
-        }
-        
-        // Simplified: Single query to get only clients
-        // Filter by type='client' directly in the database query
-        let clients = []
-        
-        try {
-          console.log('🔍 Querying all clients first...')
-          // First, try to get all records to check what we have
-          const allClients = await prisma.client.findMany({
-            orderBy: { createdAt: 'desc' }
-          })
-          console.log(`📊 Found ${allClients.length} total client records`)
-          
-          // Filter to only clients (not leads)
-          clients = allClients.filter(client => {
-            // If type exists, it must be 'client'
-            if (client.type !== null && client.type !== undefined && client.type !== '') {
-              return client.type === 'client'
-            }
-            // If type is null/undefined/empty, treat as client (legacy data)
-            return true
-          })
-          console.log(`✅ Filtered to ${clients.length} clients`)
-        } catch (queryError) {
-          console.error('❌ Primary query failed:', {
-            message: queryError.message,
-            code: queryError.code,
-            meta: queryError.meta,
-            stack: queryError.stack
-          })
-          
-          // Fallback: If query fails, try without type filter and filter in memory
-          console.warn('⚠️ Trying fallback query without type filter...')
-          try {
-            const allRecords = await prisma.client.findMany({
-              orderBy: { createdAt: 'desc' }
-            })
-            console.log(`📊 Found ${allRecords.length} total records`)
-            // Filter to only clients (not leads)
-            clients = allRecords.filter(client => {
-              // If type exists, it must be 'client'
-              if (client.type !== null && client.type !== undefined) {
-                return client.type === 'client'
-              }
-              // If type is null/undefined, check if it's not a lead (legacy handling)
-              // Default to treating as client if no type is set
-              return true
-            })
-            console.log(`✅ Filtered to ${clients.length} clients`)
-          } catch (fallbackError) {
-            console.error('❌ Fallback query also failed:', {
-              message: fallbackError.message,
-              code: fallbackError.code,
-              meta: fallbackError.meta,
-              stack: fallbackError.stack
-            })
-            throw fallbackError
-          }
-        }
+        console.log(`✅ Found ${clients.length} clients (filtered in database)`)
         
         // Parse JSON fields before returning
         const parsedClients = clients.map(parseClientJsonFields)
@@ -298,8 +203,16 @@ async function handler(req, res) {
     if (pathSegments.length === 2 && pathSegments[0] === 'clients' && id) {
       if (req.method === 'GET') {
         try {
+          // Include tags for detail view (single client queries are fast)
           const client = await prisma.client.findUnique({ 
-            where: { id }
+            where: { id },
+            include: {
+              tags: {
+                include: {
+                  tag: true
+                }
+              }
+            }
           })
           if (!client) return notFound(res)
           // Parse JSON fields before returning

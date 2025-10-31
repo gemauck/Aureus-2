@@ -50,6 +50,10 @@ model User {
   sentMessages   Message[]       @relation("MessageSender")
   passwordResets PasswordReset[]
   calendarNotes  CalendarNote[]
+  sessions       Session[]
+  twoFactor      TwoFactor?
+  securityEvents SecurityEvent[]
+  passwordHistory PasswordHistory[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 }
@@ -588,4 +592,65 @@ model CalendarNote {
   @@unique([userId, date]) // One note per user per date
   @@index([userId])
   @@index([date])
+}
+
+// Session Management - Track all user sessions
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  token        String   @unique
+  deviceInfo   String?  // Device type, browser, OS info
+  ipAddress    String?
+  userAgent    String?
+  location     String?  // IP-based location
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// Two-Factor Authentication
+model TwoFactor {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+  secret      String   // TOTP secret
+  backupCodes String   // JSON array of backup codes
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// Security Events - Audit log for security-related events
+model SecurityEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  eventType   String   // login_success, login_failed, 2fa_enabled, password_changed, session_revoked, etc.
+  ipAddress   String?
+  userAgent   String?
+  details     String?  // JSON string with additional details
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// Password History - Prevent password reuse
+model PasswordHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
 }
