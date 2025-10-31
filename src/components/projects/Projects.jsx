@@ -613,36 +613,109 @@ const Projects = () => {
     // Function to actively load ProjectDetail if not available
     const loadProjectDetail = async () => {
         if (window.ProjectDetail) {
+            console.log('✅ ProjectDetail already available');
             setProjectDetailAvailable(true);
             return true;
         }
         
+        // Check if script is already in DOM
+        const existingScript = document.querySelector(`script[src*="ProjectDetail.js"]`);
+        if (existingScript) {
+            console.log('⏳ ProjectDetail script already loading, waiting...');
+            // Wait for it to finish loading
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.ProjectDetail) {
+                        console.log('✅ ProjectDetail loaded from existing script');
+                        setProjectDetailAvailable(true);
+                        clearInterval(checkInterval);
+                        resolve(true);
+                    } else if (attempts >= 50) {
+                        console.warn('⚠️ ProjectDetail script loaded but component not registered');
+                        clearInterval(checkInterval);
+                        resolve(false);
+                    }
+                }, 100);
+            });
+        }
+        
         // Try to load ProjectDetail from the lazy loader path
         const projectDetailPath = './dist/src/components/projects/ProjectDetail.js';
+        console.log('📥 Loading ProjectDetail from:', projectDetailPath);
+        
         try {
             const script = document.createElement('script');
             script.src = projectDetailPath;
             script.type = 'text/javascript';
+            script.async = false; // Load synchronously to ensure it executes
             
             await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('ProjectDetail load timeout after 5 seconds'));
+                }, 5000);
+                
                 script.onload = () => {
-                    // Wait a bit for the script to execute
-                    setTimeout(() => {
+                    console.log('✅ ProjectDetail script loaded, checking registration...');
+                    // Wait for the script to execute and register
+                    let attempts = 0;
+                    const checkInterval = setInterval(() => {
+                        attempts++;
                         if (window.ProjectDetail) {
+                            console.log('✅ ProjectDetail registered successfully');
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
                             setProjectDetailAvailable(true);
                             resolve(true);
-                        } else {
-                            reject(new Error('ProjectDetail not registered after script load'));
+                        } else if (attempts >= 20) {
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            reject(new Error('ProjectDetail not registered after script load (waited 2s)'));
                         }
                     }, 100);
                 };
-                script.onerror = () => reject(new Error('Failed to load ProjectDetail script'));
-                document.body.appendChild(script);
+                
+                script.onerror = (error) => {
+                    clearTimeout(timeout);
+                    console.error('❌ Failed to load ProjectDetail script:', error);
+                    reject(new Error(`Failed to load ProjectDetail script: ${error.message || 'Unknown error'}`));
+                };
+                
+                document.head.appendChild(script);
             });
             return true;
         } catch (error) {
-            console.warn('Failed to actively load ProjectDetail:', error);
-            return false;
+            console.error('❌ Failed to actively load ProjectDetail:', error);
+            // Try alternative path
+            const altPath = '/dist/src/components/projects/ProjectDetail.js';
+            console.log('🔄 Trying alternative path:', altPath);
+            
+            try {
+                const script2 = document.createElement('script');
+                script2.src = altPath;
+                script2.type = 'text/javascript';
+                script2.async = false;
+                
+                await new Promise((resolve, reject) => {
+                    script2.onload = () => {
+                        setTimeout(() => {
+                            if (window.ProjectDetail) {
+                                setProjectDetailAvailable(true);
+                                resolve(true);
+                            } else {
+                                reject(new Error('ProjectDetail not registered from alt path'));
+                            }
+                        }, 200);
+                    };
+                    script2.onerror = () => reject(new Error('Alt path also failed'));
+                    document.head.appendChild(script2);
+                });
+                return true;
+            } catch (altError) {
+                console.error('❌ Alternative path also failed:', altError);
+                return false;
+            }
         }
     };
     
