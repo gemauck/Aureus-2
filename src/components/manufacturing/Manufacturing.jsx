@@ -1074,20 +1074,27 @@ const Manufacturing = () => {
   };
 
   const openAddMovementModal = () => {
-    setFormData({
-      type: 'receipt',
-      sku: '',
-      itemName: '',
-      quantity: '',
-      unitCost: '',
-      fromLocation: '',
-      toLocation: '',
-      reference: '',
-      notes: '',
-      date: new Date().toISOString().split('T')[0]
-    });
-    setModalType('add_movement');
-    setShowModal(true);
+    console.log('📝 openAddMovementModal called');
+    try {
+      setFormData({
+        type: 'receipt',
+        sku: '',
+        itemName: '',
+        quantity: '',
+        unitCost: '',
+        fromLocation: '',
+        toLocation: '',
+        reference: '',
+        notes: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+      setModalType('add_movement');
+      setShowModal(true);
+      console.log('✅ Modal state set: type=add_movement, showModal=true');
+    } catch (error) {
+      console.error('❌ Error opening movement modal:', error);
+      alert('Error opening movement modal. Please check console.');
+    }
   };
 
   const handleSaveMovement = async () => {
