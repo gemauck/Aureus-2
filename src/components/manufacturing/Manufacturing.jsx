@@ -1603,8 +1603,8 @@ const Manufacturing = () => {
       const totalCost = selectedBom.totalCost * (parseInt(formData.quantity) || 0);
       const orderData = {
         bomId: formData.bomId,
-        productSku: formData.productSku,
-        productName: formData.productName,
+        productSku: formData.productSku || selectedBom.productSku,
+        productName: formData.productName || selectedBom.productName,
         quantity: parseInt(formData.quantity) || 0,
         quantityProduced: 0,
         status: formData.status || 'in_progress',
@@ -2578,11 +2578,12 @@ const Manufacturing = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Quantity to Produce *</label>
                     <input
                       type="number"
-                      value={formData.quantity || 0}
-                      onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
+                      value={formData.quantity || ''}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value ? parseInt(e.target.value) : undefined })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="1"
                       disabled={modalType === 'view_production'}
+                      placeholder="Enter quantity"
                     />
                   </div>
 
