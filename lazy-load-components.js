@@ -120,11 +120,16 @@
         return new Promise((resolve, reject) => {
             // Convert src/ paths to dist/src/ paths if needed
             // Use absolute path for dist assets to avoid relative path issues on nested routes
-            const scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
+            let scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
+            
+            // Add cache-busting parameter to force fresh fetch - critical for Clients.js
+            const separator = scriptSrc.includes('?') ? '&' : '?';
+            scriptSrc = scriptSrc + separator + 'v=' + Date.now();
             
             // First, fetch the file to validate it's JavaScript before loading as script
             // This prevents HTML (404 pages) from being executed as JavaScript
-            fetch(scriptSrc)
+            // cache: 'no-store' forces bypass of HTTP cache
+            fetch(scriptSrc, { cache: 'no-store' })
                 .then(response => {
                     if (!response.ok) {
                         // File doesn't exist - skip silently
@@ -190,7 +195,8 @@
                     // Try to fetch with a text request to validate before loading as script
                     fetch(scriptSrc, { 
                         method: 'GET',
-                        headers: { 'Accept': 'text/plain,application/javascript,*/*' }
+                        headers: { 'Accept': 'text/plain,application/javascript,*/*' },
+                        cache: 'no-store'
                     })
                     .then(response => {
                         if (!response.ok) {
