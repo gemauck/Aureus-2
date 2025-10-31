@@ -2705,8 +2705,9 @@ const Manufacturing = () => {
                     handleUpdateProductionOrder();
                   }
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={!formData.bomId || !formData.quantity || !formData.startDate || !formData.assignedTo}
+                title={!formData.bomId ? 'Please select a BOM/Product' : !formData.quantity ? 'Please enter quantity' : !formData.startDate ? 'Please enter start date' : !formData.assignedTo ? 'Please enter assigned to' : 'Create work order'}
               >
                 {modalType === 'add_production' ? 'Create Work Order' : 'Update Order'}
               </button>
