@@ -35,11 +35,29 @@ const LoginPage = () => {
     };
 
 
-    // Add mobile-specific body class on mount
+    // Add mobile-specific body class on mount and handle viewport fixes
     useEffect(() => {
         document.body.classList.add('login-page');
+        
+        // Fix viewport height on mobile when keyboard appears
+        const setViewportHeight = () => {
+            const vh = window.innerHeight * 0.01;
+            document.documentElement.style.setProperty('--vh', `${vh}px`);
+        };
+        
+        setViewportHeight();
+        window.addEventListener('resize', setViewportHeight);
+        window.addEventListener('orientationchange', setViewportHeight);
+        
+        // Prevent body scroll on mobile but allow login-outer scroll
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        
         return () => {
             document.body.classList.remove('login-page');
+            document.body.style.overflow = originalOverflow;
+            window.removeEventListener('resize', setViewportHeight);
+            window.removeEventListener('orientationchange', setViewportHeight);
         };
     }, []);
 
@@ -51,7 +69,8 @@ const LoginPage = () => {
             alignItems: 'center',
             justifyContent: 'center',
             padding: '1rem',
-            boxSizing: 'border-box'
+            boxSizing: 'border-box',
+            background: 'linear-gradient(to bottom right, #3b82f6, #1e40af)'
         }}>
             <style>{`
                 /* Critical: Reset everything for mobile login */
@@ -65,19 +84,29 @@ const LoginPage = () => {
                         padding: 0 !important;
                         width: 100% !important;
                         height: 100% !important;
+                        height: 100dvh !important;
                         overflow-x: hidden !important;
                         position: relative !important;
                         -webkit-text-size-adjust: 100% !important;
                         -ms-text-size-adjust: 100% !important;
+                        background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
                     }
                     
                     #root {
                         width: 100% !important;
                         min-height: 100vh !important;
                         min-height: 100dvh !important;
+                        height: 100vh !important;
+                        height: 100dvh !important;
                         margin: 0 !important;
                         padding: 0 !important;
                         overflow-x: hidden !important;
+                        overflow-y: auto !important;
+                        -webkit-overflow-scrolling: touch !important;
+                        background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
+                        position: relative !important;
+                        display: flex !important;
+                        flex-direction: column !important;
                     }
                     
                     .login-outer {
@@ -85,34 +114,50 @@ const LoginPage = () => {
                         max-width: 100% !important;
                         min-height: 100vh !important;
                         min-height: 100dvh !important;
-                        padding: 0.5rem !important;
+                        min-height: calc(var(--vh, 1vh) * 100) !important;
+                        height: 100vh !important;
+                        height: 100dvh !important;
+                        height: calc(var(--vh, 1vh) * 100) !important;
+                        padding: 1rem !important;
+                        padding-top: max(1rem, env(safe-area-inset-top)) !important;
+                        padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
+                        padding-left: max(1rem, env(safe-area-inset-left)) !important;
+                        padding-right: max(1rem, env(safe-area-inset-right)) !important;
                         margin: 0 !important;
                         display: flex !important;
-                        align-items: flex-start !important;
+                        align-items: center !important;
                         justify-content: center !important;
-                        padding-top: 2rem !important;
-                        padding-bottom: 2rem !important;
                         background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
                         position: relative !important;
                         overflow-y: auto !important;
                         -webkit-overflow-scrolling: touch !important;
+                        z-index: 1 !important;
                     }
                     
                     .login-container {
                         width: 100% !important;
-                        max-width: 100% !important;
+                        max-width: 420px !important;
                         margin: 0 auto !important;
                         border-radius: 1rem !important;
-                        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+                        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
                         overflow: visible !important;
                         position: relative !important;
-                        z-index: 1 !important;
+                        z-index: 10 !important;
+                        background: white !important;
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
+                        transform: none !important;
                     }
                     
                     .login-form-wrapper {
                         padding: 1.5rem !important;
+                        padding-top: 1.25rem !important;
                         width: 100% !important;
                         box-sizing: border-box !important;
+                        display: block !important;
+                        visibility: visible !important;
+                        opacity: 1 !important;
                     }
                     
                     .login-form-wrapper h2 {
@@ -131,8 +176,8 @@ const LoginPage = () => {
                     .login-form-wrapper input[type="password"],
                     .login-form-wrapper input[type="text"] {
                         font-size: 16px !important;
-                        min-height: 50px !important;
-                        height: 50px !important;
+                        min-height: 52px !important;
+                        height: 52px !important;
                         padding: 14px 16px !important;
                         width: 100% !important;
                         max-width: 100% !important;
@@ -147,6 +192,9 @@ const LoginPage = () => {
                         color: #000000 !important;
                         line-height: 1.5 !important;
                         -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+                        opacity: 1 !important;
+                        visibility: visible !important;
+                        pointer-events: auto !important;
                     }
                     
                     .login-form-wrapper input:focus {
@@ -158,9 +206,10 @@ const LoginPage = () => {
                     /* Buttons must be large and touchable */
                     .login-form-wrapper button[type="submit"],
                     .login-form-wrapper button[type="button"]:not(.text-xs) {
-                        min-height: 50px !important;
+                        min-height: 52px !important;
                         height: auto !important;
                         font-size: 16px !important;
+                        font-weight: 600 !important;
                         padding: 14px 20px !important;
                         touch-action: manipulation !important;
                         width: 100% !important;
@@ -170,6 +219,10 @@ const LoginPage = () => {
                         cursor: pointer !important;
                         border: none !important;
                         border-radius: 0.5rem !important;
+                        opacity: 1 !important;
+                        visibility: visible !important;
+                        pointer-events: auto !important;
+                        display: block !important;
                     }
                     
                     .login-form-wrapper label {
@@ -252,8 +305,9 @@ const LoginPage = () => {
                 /* Landscape orientation on mobile */
                 @media (max-width: 768px) and (orientation: landscape) {
                     .login-outer {
-                        padding-top: 0.5rem !important;
-                        padding-bottom: 0.5rem !important;
+                        padding-top: max(0.5rem, env(safe-area-inset-top)) !important;
+                        padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
+                        align-items: center !important;
                     }
                     
                     .login-branding {
@@ -262,6 +316,10 @@ const LoginPage = () => {
                     
                     .login-branding h1 {
                         font-size: 1.25rem !important;
+                    }
+                    
+                    .login-container {
+                        max-width: 500px !important;
                     }
                 }
                 
@@ -292,20 +350,54 @@ const LoginPage = () => {
                 body.login-page {
                     position: relative !important;
                     width: 100% !important;
-                    height: 100% !important;
+                    height: 100vh !important;
+                    height: 100dvh !important;
                     overflow-x: hidden !important;
+                    overflow-y: auto !important;
                     -webkit-overflow-scrolling: touch !important;
                     margin: 0 !important;
                     padding: 0 !important;
+                    background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
                 }
                 
                 body.login-page #root {
                     width: 100% !important;
                     min-height: 100vh !important;
                     min-height: 100dvh !important;
+                    height: 100vh !important;
+                    height: 100dvh !important;
                     overflow-x: hidden !important;
+                    overflow-y: auto !important;
                     margin: 0 !important;
                     padding: 0 !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
+                    position: relative !important;
+                }
+                
+                /* Ensure login page elements are always visible */
+                body.login-page .login-outer,
+                body.login-page .login-container,
+                body.login-page .login-form-wrapper {
+                    display: flex !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                }
+                
+                body.login-page .login-container {
+                    display: block !important;
+                }
+                
+                /* Hide any overlay elements that might cover login */
+                body.login-page .overlay,
+                body.login-page .modal-backdrop,
+                body.login-page [class*="backdrop"],
+                body.login-page [class*="overlay"] {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    z-index: -1 !important;
                 }
             `}</style>
             <div className="bg-white rounded-xl shadow-xl w-full max-w-xl overflow-hidden login-container" style={{ width: '100%', maxWidth: '100%', margin: '0 auto' }}>
