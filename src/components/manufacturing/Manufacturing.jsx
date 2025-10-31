@@ -3,7 +3,7 @@ console.log('🏭 Manufacturing.jsx: Starting to load...');
 console.log('🏭 React available:', typeof window.React !== 'undefined');
 console.log('🏭 useAuth available:', typeof window.useAuth !== 'undefined');
 
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 const { useAuth } = window;
 
 const Manufacturing = () => {
@@ -45,13 +45,6 @@ const Manufacturing = () => {
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Log activeTab changes
-  useEffect(() => {
-    console.log('🏭 Manufacturing activeTab changed to:', activeTab);
-    if (activeTab === 'movements') {
-      console.log('🏭✅ Stock Movements tab is now active - MovementsView should render');
-    }
-  }, [activeTab]);
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
   useEffect(() => {
@@ -660,6 +653,8 @@ const Manufacturing = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Image</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Item Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Part No.</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Legacy Part Number</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Category</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
@@ -703,7 +698,37 @@ const Manufacturing = () => {
                     </td>
                     <td className="px-3 py-2">
                       <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                      <div className="text-xs text-gray-500">Reorder: {item.reorderPoint} {item.unit}</div>
+                      {item.reorderPoint > 0 && (
+                        <div className="text-xs text-gray-500">Reorder: {item.reorderPoint} {item.unit}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-600">
+                      {(() => {
+                        try {
+                          const supplierParts = (item.supplierPartNumbers !== undefined && item.supplierPartNumbers !== null)
+                            ? (typeof item.supplierPartNumbers === 'string' 
+                                ? JSON.parse(item.supplierPartNumbers || '[]') 
+                                : (item.supplierPartNumbers || []))
+                            : [];
+                          if (supplierParts.length === 0) return <span className="text-gray-400">-</span>;
+                          return (
+                            <div className="space-y-1">
+                              {supplierParts.map((sp, idx) => (
+                                <div key={idx} className="text-xs">
+                                  <span className="font-medium">{sp.supplier}:</span> {sp.partNumber}
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        } catch (e) {
+                          return <span className="text-gray-400">-</span>;
+                        }
+                      })()}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-600">
+                      {(item.legacyPartNumber !== undefined && item.legacyPartNumber) 
+                        ? item.legacyPartNumber 
+                        : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category.replace('_', ' ')}</td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.type.replace('_', ' ')}</td>
@@ -711,9 +736,15 @@ const Manufacturing = () => {
                       <div className="text-sm font-semibold text-gray-900">{item.quantity}</div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{item.location}</td>
-                    <td className="px-3 py-2 text-sm text-right text-gray-900">{formatCurrency(item.unitCost)}</td>
-                    <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(item.totalValue)}</td>
+                    <td className="px-3 py-2 text-sm text-gray-600">
+                      {item.location ? item.location : <span className="text-gray-400">-</span>}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-right text-gray-900">
+                      {item.unitCost > 0 ? formatCurrency(item.unitCost) : <span className="text-gray-400">-</span>}
+                    </td>
+                    <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
+                      {item.totalValue > 0 ? formatCurrency(item.totalValue) : <span className="text-gray-400">-</span>}
+                    </td>
                     <td className="px-3 py-2">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(item.status)}`}>
                         {item.status.replace('_', ' ')}
@@ -1053,6 +1084,14 @@ const Manufacturing = () => {
         unitCost: parseFloat(formData.unitCost) || 0,
         supplier: formData.supplier || ''
       };
+      
+      // Only include new fields if they exist (backwards compatibility)
+      if (formData.supplierPartNumbers !== undefined) {
+        itemData.supplierPartNumbers = formData.supplierPartNumbers || '[]';
+      }
+      if (formData.legacyPartNumber !== undefined) {
+        itemData.legacyPartNumber = formData.legacyPartNumber || '';
+      }
 
       if (selectedItem?.id) {
         // Update existing - don't send quantity or SKU
@@ -1356,7 +1395,6 @@ const Manufacturing = () => {
       });
       setModalType('add_movement');
       setShowModal(true);
-      console.log('✅ Modal state set: type=add_movement, showModal=true');
     } catch (error) {
       console.error('❌ Error opening movement modal:', error);
       alert('Error opening movement modal. Please check console.');
@@ -1693,6 +1731,105 @@ const Manufacturing = () => {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="e.g., GPS Module GT-U7"
+                  />
+                </div>
+
+                {/* Supplier Part Numbers */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Part No.</label>
+                  <div className="space-y-2">
+                    {(() => {
+                      try {
+                        const supplierParts = typeof formData.supplierPartNumbers === 'string' 
+                          ? JSON.parse(formData.supplierPartNumbers || '[]') 
+                          : (formData.supplierPartNumbers || []);
+                        return (
+                          <>
+                            {supplierParts.map((sp, idx) => (
+                              <div key={idx} className="flex gap-2">
+                                <select
+                                  value={sp.supplier || ''}
+                                  onChange={(e) => {
+                                    const updated = [...supplierParts];
+                                    updated[idx].supplier = e.target.value;
+                                    setFormData({ ...formData, supplierPartNumbers: JSON.stringify(updated) });
+                                  }}
+                                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                  <option value="">Select supplier...</option>
+                                  {suppliers.filter(s => s.status === 'active').map(supplier => (
+                                    <option key={supplier.id} value={supplier.name}>
+                                      {supplier.name} {supplier.code ? `(${supplier.code})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  type="text"
+                                  value={sp.partNumber || ''}
+                                  onChange={(e) => {
+                                    const updated = [...supplierParts];
+                                    updated[idx].partNumber = e.target.value;
+                                    setFormData({ ...formData, supplierPartNumbers: JSON.stringify(updated) });
+                                  }}
+                                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  placeholder="Part number"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = supplierParts.filter((_, i) => i !== idx);
+                                    setFormData({ ...formData, supplierPartNumbers: JSON.stringify(updated) });
+                                  }}
+                                  className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 border border-red-300 rounded-lg"
+                                  title="Remove"
+                                >
+                                  <i className="fas fa-times"></i>
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentParts = typeof formData.supplierPartNumbers === 'string' 
+                                  ? JSON.parse(formData.supplierPartNumbers || '[]') 
+                                  : (formData.supplierPartNumbers || []);
+                                const updated = [...currentParts, { supplier: '', partNumber: '' }];
+                                setFormData({ ...formData, supplierPartNumbers: JSON.stringify(updated) });
+                              }}
+                              className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                            >
+                              <i className="fas fa-plus mr-1"></i>
+                              Add Supplier Part Number
+                            </button>
+                          </>
+                        );
+                      } catch (e) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFormData({ ...formData, supplierPartNumbers: JSON.stringify([{ supplier: '', partNumber: '' }]) });
+                            }}
+                            className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                          >
+                            <i className="fas fa-plus mr-1"></i>
+                            Add Supplier Part Number
+                          </button>
+                        );
+                      }
+                    })()}
+                  </div>
+                </div>
+
+                {/* Legacy Part Number */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Legacy Part Number</label>
+                  <input
+                    type="text"
+                    value={formData.legacyPartNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, legacyPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., OLD-PART-123"
                   />
                 </div>
 
@@ -3288,64 +3425,14 @@ const Manufacturing = () => {
   };
 
   const MovementsView = () => {
-    console.log('📋 MovementsView component rendering...');
-    console.log('📋 Movements count:', movements.length);
-    console.log('📋 User role:', user?.role);
-    console.log('📋 Movements data:', movements);
-    
-    // Log when component mounts/updates
-    useEffect(() => {
-      console.log('📋 MovementsView mounted - useEffect fired');
-      console.log('📋 Current state:', {
-        showModal,
-        modalType,
-        movementsCount: movements.length,
-        userRole: user?.role,
-        hasMovements: movements.length > 0
-      });
-      return () => {
-        console.log('📋 MovementsView unmounting');
-      };
-    }, [showModal, modalType, movements.length]);
-    
-    // Verify button exists in DOM after render
-    useEffect(() => {
-      setTimeout(() => {
-        const button = document.querySelector('[data-testid="record-movement-button"]');
-        console.log('🔍 Button DOM check after render:', {
-          found: !!button,
-          button: button,
-          onClick: button ? typeof button.onclick : 'N/A',
-          disabled: button ? button.disabled : 'N/A',
-          style: button ? button.style.cssText : 'N/A',
-          computedStyle: button ? window.getComputedStyle(button).pointerEvents : 'N/A'
-        });
-        if (!button) {
-          console.error('❌ RECORD MOVEMENT BUTTON NOT FOUND IN DOM!');
-          alert('ERROR: Record Movement button not found in DOM!');
-        } else {
-          console.log('✅ Button found in DOM - should be clickable!');
-        }
-      }, 100);
-    }, []);
-    
-    // Define handler function - no useCallback needed, just a regular function
-    const handleRecordClick = (e) => {
+    // Memoize the handler to prevent recreation on every render
+    const handleRecordClick = useCallback((e) => {
       if (e) {
         e.preventDefault();
         e.stopPropagation();
       }
-      console.log('🖱️ ========== Button clicked - Record Movement ==========');
-      console.log('🖱️ Event object:', e);
-      console.log('🖱️ Handler function type:', typeof handleRecordClick);
-      console.log('🖱️ State setters check:', {
-        setFormData: typeof setFormData === 'function',
-        setModalType: typeof setModalType === 'function',
-        setShowModal: typeof setShowModal === 'function'
-      });
       
       try {
-        console.log('🔄 Setting up stock movement form...');
         const formDataInit = {
           type: 'receipt',
           sku: '',
@@ -3358,28 +3445,15 @@ const Manufacturing = () => {
           notes: '',
           date: new Date().toISOString().split('T')[0]
         };
-        console.log('🔄 Form data to set:', JSON.stringify(formDataInit));
         
         setFormData(formDataInit);
-        console.log('✅ Form data set via setFormData');
-        
         setModalType('add_movement');
-        console.log('✅ Modal type set to add_movement via setModalType');
-        
         setShowModal(true);
-        console.log('✅ Modal visibility set to true via setShowModal');
-        console.log('✅ All state updates completed - modal should be visible');
-        
-        // Force a console warning to ensure logs are visible
-        console.warn('⚠️ MODAL SHOULD BE OPEN NOW - check UI');
       } catch (error) {
         console.error('❌ Error opening movement modal:', error);
-        console.error('❌ Error stack:', error.stack);
         alert('Error opening movement modal: ' + error.message);
       }
-    };
-    
-    console.log('📋 MovementsView rendered, handleRecordClick function exists:', typeof handleRecordClick === 'function');
+    }, []); // Empty deps - React's useState setters are stable
 
     return (
       <div className="space-y-3">
@@ -3413,34 +3487,10 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  alert('BUTTON CLICKED! This confirms the button works.');
-                  console.log('🔥🔥🔥 BUTTON CLICKED - DIRECT onClick handler fired!');
-                  console.log('🔥 Event:', e);
-                  console.log('🔥 Button element:', e.target);
-                  
-                  // Call the main handler
-                  handleRecordClick(e);
-                }}
-                onMouseDown={(e) => {
-                  console.log('🖱️ Mouse down event fired');
-                  alert('Mouse down detected!');
-                }}
-                onMouseUp={(e) => {
-                  console.log('🖱️ Mouse up event fired');
-                }}
-                onFocus={(e) => {
-                  console.log('🔵 Button received focus');
-                }}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer relative z-10"
+                onClick={handleRecordClick}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                 type="button"
-                style={{ pointerEvents: 'auto', zIndex: 1000, position: 'relative', cursor: 'pointer' }}
-                data-testid="record-movement-button"
                 aria-label="Record Stock Movement"
-                disabled={false}
-                tabIndex={0}
               >
                 <i className="fas fa-plus text-xs"></i>
                 Record Movement
@@ -3552,11 +3602,7 @@ const Manufacturing = () => {
           ].map(tab => (
             <button
               key={tab.id}
-              onClick={() => {
-                console.log('🔵 Tab clicked:', tab.id, 'Current activeTab:', activeTab);
-                setActiveTab(tab.id);
-                console.log('🔵 activeTab will be set to:', tab.id);
-              }}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-blue-600 text-blue-600'
@@ -3576,12 +3622,7 @@ const Manufacturing = () => {
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
-        {activeTab === 'movements' && (() => {
-          console.log('🔵 Rendering MovementsView component - activeTab is:', activeTab);
-          const view = <MovementsView />;
-          console.log('🔵 MovementsView JSX created');
-          return view;
-        })()}
+        {activeTab === 'movements' && <MovementsView />}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'locations' && window.StockLocations && (
           <window.StockLocations 

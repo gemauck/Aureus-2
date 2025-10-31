@@ -102,6 +102,7 @@ model Client {
   projects      Project[]
   invoices      Invoice[]
   opportunities Opportunity[]
+  tags          ClientTag[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -109,6 +110,33 @@ model Client {
   @@index([type])
   @@index([status])
   @@index([ownerId])
+}
+
+model Tag {
+  id          String      @id @default(cuid())
+  name        String      @unique
+  color       String      @default("#3B82F6") // Default blue color
+  description String      @default("")
+  ownerId     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  clients     ClientTag[]
+
+  @@index([name])
+  @@index([ownerId])
+}
+
+model ClientTag {
+  id        String   @id @default(cuid())
+  clientId  String
+  tagId     String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, tagId])
+  @@index([clientId])
+  @@index([tagId])
 }
 
 model Project {
@@ -371,6 +399,8 @@ model InventoryItem {
   unitCost      Float    @default(0)
   totalValue    Float    @default(0)
   supplier      String   @default("")
+  supplierPartNumbers String @default("[]") // JSON array of {supplier: string, partNumber: string}
+  legacyPartNumber String @default("")
   status        String   @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
   lastRestocked DateTime?
   ownerId       String?
