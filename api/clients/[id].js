@@ -26,10 +26,26 @@ async function handler(req, res) {
     // Get Single Client (GET /api/clients/[id])
     if (req.method === 'GET') {
       try {
-        const client = await prisma.client.findUnique({ where: { id } })
+        const client = await prisma.client.findUnique({ 
+          where: { id },
+          include: {
+            tags: {
+              include: {
+                tag: true
+              }
+            }
+          }
+        })
         if (!client) return notFound(res)
+        
+        // Parse tags from ClientTag relations
+        const parsedClient = {
+          ...client,
+          tags: client.tags ? client.tags.map(ct => ct.tag).filter(Boolean) : []
+        }
+        
         console.log('✅ Client retrieved successfully:', client.id)
-        return ok(res, { client })
+        return ok(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error getting client:', dbError)
         return serverError(res, 'Failed to get client', dbError.message)

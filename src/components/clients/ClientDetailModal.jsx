@@ -224,6 +224,156 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         }
     };
     
+    // Tag management state
+    const [clientTags, setClientTags] = useState([]);
+    const [allTags, setAllTags] = useState([]);
+    const [showTagSelector, setShowTagSelector] = useState(false);
+    const [newTagName, setNewTagName] = useState('');
+    const [newTagColor, setNewTagColor] = useState('#3B82F6');
+    
+    // Load tags when client changes
+    useEffect(() => {
+        if (client?.id) {
+            loadClientTags();
+            loadAllTags();
+        }
+    }, [client?.id]);
+    
+    // Load client tags
+    const loadClientTags = async () => {
+        if (!client?.id) return;
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch(`/api/clients/${client.id}/tags`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setClientTags(data.data?.tags || []);
+            }
+        } catch (error) {
+            console.error('Error loading client tags:', error);
+        }
+    };
+    
+    // Load all available tags
+    const loadAllTags = async () => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch('/api/tags', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setAllTags(data.data?.tags || []);
+            }
+        } catch (error) {
+            console.error('Error loading tags:', error);
+        }
+    };
+    
+    // Add tag to client
+    const handleAddTag = async (tagId) => {
+        if (!client?.id) return;
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch(`/api/clients/${client.id}/tags`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ tagId })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                setClientTags(prev => [...prev, data.data.tag]);
+                loadClientTags(); // Reload to ensure consistency
+            } else {
+                const error = await response.json();
+                alert(error.error?.message || 'Failed to add tag');
+            }
+        } catch (error) {
+            console.error('Error adding tag:', error);
+            alert('Failed to add tag: ' + error.message);
+        }
+    };
+    
+    // Remove tag from client
+    const handleRemoveTag = async (tagId) => {
+        if (!client?.id) return;
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch(`/api/clients/${client.id}/tags?tagId=${tagId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                setClientTags(prev => prev.filter(t => t.id !== tagId));
+            } else {
+                const error = await response.json();
+                alert(error.error?.message || 'Failed to remove tag');
+            }
+        } catch (error) {
+            console.error('Error removing tag:', error);
+            alert('Failed to remove tag: ' + error.message);
+        }
+    };
+    
+    // Create new tag
+    const handleCreateTag = async () => {
+        if (!newTagName.trim()) {
+            alert('Please enter a tag name');
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            const response = await fetch('/api/tags', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: newTagName.trim(),
+                    color: newTagColor
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const newTag = data.data.tag;
+                setAllTags(prev => [...prev, newTag]);
+                setNewTagName('');
+                setNewTagColor('#3B82F6');
+                
+                // Automatically add to client
+                await handleAddTag(newTag.id);
+            } else {
+                const error = await response.json();
+                alert(error.error?.message || 'Failed to create tag');
+            }
+        } catch (error) {
+            console.error('Error creating tag:', error);
+            alert('Failed to create tag: ' + error.message);
+        }
+    };
+    
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
     const [newContact, setNewContact] = useState({
@@ -1602,6 +1752,135 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
                                             );
                                         })}
                                     </div>
+                                </div>
+
+                                {/* Tags Section */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {clientTags.map(tag => (
+                                            <span
+                                                key={tag.id}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full border transition"
+                                                style={{
+                                                    backgroundColor: tag.color ? `${tag.color}20` : '#3B82F620',
+                                                    color: tag.color || '#3B82F6',
+                                                    borderColor: tag.color || '#3B82F6'
+                                                }}
+                                            >
+                                                <i className="fas fa-tag"></i>
+                                                {tag.name}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveTag(tag.id)}
+                                                    className="ml-1 hover:opacity-70"
+                                                    title="Remove tag"
+                                                >
+                                                    <i className="fas fa-times"></i>
+                                                </button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    
+                                    <div className="flex gap-2">
+                                        <div className="flex-1 relative">
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowTagSelector(!showTagSelector)}
+                                                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-between"
+                                            >
+                                                <span className="text-gray-600">Add Tag</span>
+                                                <i className={`fas fa-chevron-${showTagSelector ? 'up' : 'down'} text-gray-400`}></i>
+                                            </button>
+                                            
+                                            {showTagSelector && (
+                                                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                                                    {allTags.filter(tag => !clientTags.find(ct => ct.id === tag.id)).map(tag => (
+                                                        <button
+                                                            key={tag.id}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                handleAddTag(tag.id);
+                                                                setShowTagSelector(false);
+                                                            }}
+                                                            className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                                                        >
+                                                            <span
+                                                                className="w-3 h-3 rounded-full"
+                                                                style={{ backgroundColor: tag.color || '#3B82F6' }}
+                                                            ></span>
+                                                            {tag.name}
+                                                        </button>
+                                                    ))}
+                                                    {allTags.filter(tag => !clientTags.find(ct => ct.id === tag.id)).length === 0 && (
+                                                        <div className="px-3 py-2 text-sm text-gray-500 text-center">No available tags</div>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setNewTagName('');
+                                                setNewTagColor('#3B82F6');
+                                            }}
+                                            className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                                        >
+                                            <i className="fas fa-plus mr-1"></i>
+                                            New Tag
+                                        </button>
+                                    </div>
+                                    
+                                    {newTagName && (
+                                        <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <input
+                                                    type="text"
+                                                    value={newTagName}
+                                                    onChange={(e) => setNewTagName(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            handleCreateTag();
+                                                        } else if (e.key === 'Escape') {
+                                                            setNewTagName('');
+                                                            setNewTagColor('#3B82F6');
+                                                        }
+                                                    }}
+                                                    placeholder="Tag name"
+                                                    className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+                                                    autoFocus
+                                                />
+                                                <input
+                                                    type="color"
+                                                    value={newTagColor}
+                                                    onChange={(e) => setNewTagColor(e.target.value)}
+                                                    className="w-10 h-8 border border-gray-300 rounded cursor-pointer"
+                                                    title="Select tag color"
+                                                />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCreateTag}
+                                                    className="px-3 py-1 text-sm bg-primary-600 text-white rounded hover:bg-primary-700"
+                                                >
+                                                    Create & Add
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setNewTagName('');
+                                                        setNewTagColor('#3B82F6');
+                                                    }}
+                                                    className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100"
+                                                >
+                                                    Cancel
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}

@@ -319,6 +319,19 @@ app.all('/api/clients', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for client tags endpoints (GET, POST, DELETE /api/clients/[id]/tags)
+app.all('/api/clients/:id/tags', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    // Pass the client ID as a param
+    req.params = req.params || {}
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for clients operations with ID (GET, PATCH, DELETE /api/clients/[id])
 app.all('/api/clients/:id', async (req, res, next) => {
   try {
