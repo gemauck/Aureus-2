@@ -2103,17 +2103,6 @@ const Clients = React.memo(() => {
                                     )}
                                 </div>
                             </th>
-                            <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('lastContact')}
-                            >
-                                <div className="flex items-center">
-                                    Last Contact
-                                    {sortField === 'lastContact' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
@@ -2185,7 +2174,6 @@ const Clients = React.memo(() => {
                                             {client.status === 'active' ? 'Active' : client.status}
                                         </span>
                                     </td>
-                                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{client.lastContact}</td>
                                 </tr>
                             ))
                         )}
