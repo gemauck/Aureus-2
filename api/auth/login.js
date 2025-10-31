@@ -63,14 +63,17 @@ async function handler(req, res) {
     // Test database connection first
     try {
       await prisma.$connect()
-      logger.debug({ email }, '✅ Database connection verified')
+      logger.info({ email }, '✅ Database connection verified')
     } catch (dbError) {
-      logger.error({ email, error: dbError.message }, '❌ Database connection failed')
+      logger.error({ email, error: dbError.message, stack: dbError.stack }, '❌ Database connection failed')
       return serverError(res, 'Database connection failed', dbError.message)
     }
 
     // Find user
-    const user = await prisma.user.findUnique({ 
+    let user
+    try {
+      logger.info({ email }, '🔍 Querying database for user')
+      user = await prisma.user.findUnique({ 
       where: { email },
       select: {
         id: true,
@@ -80,8 +83,12 @@ async function handler(req, res) {
         role: true,
         status: true,
         mustChangePassword: true
-      }
-    })
+      })
+      logger.info({ email, userFound: !!user }, '🔍 User query completed')
+    } catch (queryError) {
+      logger.error({ email, error: queryError.message, stack: queryError.stack }, '❌ Database query failed')
+      return serverError(res, 'Database query failed', queryError.message)
+    }
     
     if (!user) {
       logger.warn({ email }, '❌ User not found')
