@@ -3464,40 +3464,54 @@ const Manufacturing = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {movements.map(movement => (
-                  <tr key={movement.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.id}</td>
-                    <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
-                    <td className="px-3 py-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
-                        {movement.type}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
-                      <div className="text-xs text-gray-500">{movement.sku}</div>
-                    </td>
-                    <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
-                      {movement.quantity > 0 ? '+' : ''}{movement.quantity}
-                    </td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
-                    <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => handleDeleteMovement(movement.id)}
-                          className="text-red-600 hover:text-red-800 text-sm font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors"
-                          title="Delete Movement"
-                        >
-                          <i className="fas fa-trash"></i>
-                        </button>
-                      </div>
+                {movements.length === 0 ? (
+                  <tr>
+                    <td colSpan="11" className="px-3 py-8 text-center text-sm text-gray-500">
+                      No stock movements found. Click "Record Movement" to create one.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  movements.map(movement => (
+                    <tr key={movement.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.id}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
+                          {movement.type}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
+                        <div className="text-xs text-gray-500">{movement.sku}</div>
+                      </td>
+                      <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
+                        {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
+                      <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
+                      <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log('🗑️ Delete button clicked for movement:', movement.id);
+                              handleDeleteMovement(movement.id);
+                            }}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                            title="Delete Movement"
+                            type="button"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
