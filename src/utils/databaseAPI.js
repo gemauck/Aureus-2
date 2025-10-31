@@ -10,8 +10,109 @@ const DatabaseAPI = {
         return apiBase;
     })(),
     
-    // Helper function to make authenticated requests
+    // Request deduplication: prevent multiple concurrent requests to the same endpoint
+    _pendingRequests: new Map(),
+    
+    // Short-term cache for recent responses (2 seconds TTL)
+    _responseCache: new Map(),
+    _cacheTTL: 2000, // 2 seconds
+    
+    // Clear old cache entries periodically
+    _cleanCache() {
+        const now = Date.now();
+        for (const [key, { timestamp }] of this._responseCache.entries()) {
+            if (now - timestamp > this._cacheTTL) {
+                this._responseCache.delete(key);
+            }
+        }
+    },
+    
+    // Helper function to check if an error is a network error (retry-able)
+    isNetworkError(error) {
+        if (!error) return false;
+        // Check for network-related error types
+        const errorMessage = error.message?.toLowerCase() || '';
+        const errorName = error.name?.toLowerCase() || '';
+        const errorString = error.toString().toLowerCase();
+        
+        return (
+            errorName === 'typeerror' ||
+            errorMessage.includes('failed to fetch') ||
+            errorMessage.includes('networkerror') ||
+            errorMessage.includes('network request failed') ||
+            errorMessage.includes('err_internet_disconnected') ||
+            errorMessage.includes('err_network_changed') ||
+            errorMessage.includes('err_connection_refused') ||
+            errorMessage.includes('err_connection_reset') ||
+            errorMessage.includes('err_connection_timed_out') ||
+            errorString.includes('networkerror') ||
+            errorString.includes('failed to fetch')
+        );
+    },
+
+    // Helper function to make authenticated requests with retry logic
     async makeRequest(endpoint, options = {}) {
+        // Clean old cache entries periodically
+        this._cleanCache();
+        
+        // Create a cache key from endpoint and method (ignore body for caching)
+        const method = (options.method || 'GET').toUpperCase();
+        const cacheKey = `${method}:${endpoint}`;
+        
+        // Check cache first (only for GET requests)
+        if (method === 'GET') {
+            const cached = this._responseCache.get(cacheKey);
+            if (cached && (Date.now() - cached.timestamp) < this._cacheTTL) {
+                console.log(`⚡ DatabaseAPI: Serving ${endpoint} from cache`);
+                return cached.data;
+            }
+        }
+        
+        // Check if there's already a pending request for this endpoint
+        // Deduplicate concurrent requests
+        if (this._pendingRequests.has(cacheKey)) {
+            console.log(`🔄 DatabaseAPI: Deduplicating concurrent request to ${endpoint}`);
+            try {
+                const result = await this._pendingRequests.get(cacheKey);
+                return result;
+            } catch (error) {
+                // If the pending request failed, we'll retry below
+                this._pendingRequests.delete(cacheKey);
+            }
+        }
+        
+        // Create the request promise and store it for deduplication
+        const requestPromise = this._executeRequest(endpoint, options);
+        this._pendingRequests.set(cacheKey, requestPromise);
+        
+        // Clean up after request completes (whether success or failure)
+        requestPromise.finally(() => {
+            this._pendingRequests.delete(cacheKey);
+        });
+        
+        try {
+            const result = await requestPromise;
+            
+            // Cache successful GET responses
+            if (method === 'GET') {
+                this._responseCache.set(cacheKey, {
+                    data: result,
+                    timestamp: Date.now()
+                });
+            }
+            
+            return result;
+        } catch (error) {
+            // Don't cache errors
+            throw error;
+        }
+    },
+    
+    // Internal method to execute the actual request
+    async _executeRequest(endpoint, options = {}) {
+        const maxRetries = 3;
+        const baseDelay = 1000; // Start with 1 second
+        
         let token = window.storage?.getToken?.();
 
         // If no token, attempt a silent refresh using the refresh cookie
@@ -62,102 +163,132 @@ const DatabaseAPI = {
             return response;
         };
 
-        try {
-            let response = await execute(token);
+        // Retry loop for network errors
+        let lastError = null;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                let response = await execute(token);
 
-            if (!response.ok && response.status === 401) {
-                // Attempt refresh once
-                try {
-                    const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
-                    const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
-                    if (refreshRes.ok) {
-                        const text = await refreshRes.text();
-                        const refreshData = text ? JSON.parse(text) : {};
-                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
-                        if (newToken && window.storage?.setToken) {
-                            window.storage.setToken(newToken);
-                            response = await execute(newToken);
+                if (!response.ok && response.status === 401) {
+                    // Attempt refresh once
+                    try {
+                        const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
+                        const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                        if (refreshRes.ok) {
+                            const text = await refreshRes.text();
+                            const refreshData = text ? JSON.parse(text) : {};
+                            const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                            if (newToken && window.storage?.setToken) {
+                                window.storage.setToken(newToken);
+                                token = newToken;
+                                response = await execute(newToken);
+                            }
                         }
+                    } catch (_) {
+                        // ignore refresh network errors; will handle below
                     }
-                } catch (_) {
-                    // ignore refresh network errors; will handle below
                 }
-            }
 
-            if (!response.ok) {
-                // Try to extract backend error message for better debugging
-                let serverErrorMessage = '';
-                try {
+                if (!response.ok) {
+                    // Try to extract backend error message for better debugging
+                    let serverErrorMessage = '';
+                    try {
+                        const text = await response.text();
+                        if (text) {
+                            try {
+                                const json = JSON.parse(text);
+                                // Prefer nested error.message if present
+                                serverErrorMessage =
+                                    (json && json.error && typeof json.error === 'object' && json.error.message) ||
+                                    json?.message ||
+                                    json?.data?.message ||
+                                    // Fallback if error is a string
+                                    (typeof json?.error === 'string' ? json.error : '');
+                            } catch (_) {
+                                serverErrorMessage = text.substring(0, 200);
+                            }
+                        }
+                    } catch (_) {
+                        // ignore parse failures
+                    }
+
+                    if (response.status === 401) {
+                        // Avoid logging out for pure permission denials (like /users) – just throw
+                        const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
+                        if (!permissionLikely) {
+                            if (window.storage?.removeToken) window.storage.removeToken();
+                            if (window.storage?.removeUser) window.storage.removeUser();
+                            if (window.LiveDataSync) {
+                                window.LiveDataSync.stop();
+                            }
+                            if (!window.location.hash.includes('#/login')) {
+                                window.location.hash = '#/login';
+                            }
+                        }
+                        throw new Error(serverErrorMessage || 'Authentication expired or unauthorized.');
+                    }
+                    const statusText = response.statusText || 'Error';
+                    const msg = serverErrorMessage ? ` ${serverErrorMessage}` : '';
+                    throw new Error(`HTTP ${response.status}: ${statusText}${msg}`);
+                }
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
                     const text = await response.text();
-                    if (text) {
-                        try {
-                            const json = JSON.parse(text);
-                            // Prefer nested error.message if present
-                            serverErrorMessage =
-                                (json && json.error && typeof json.error === 'object' && json.error.message) ||
-                                json?.message ||
-                                json?.data?.message ||
-                                // Fallback if error is a string
-                                (typeof json?.error === 'string' ? json.error : '');
-                        } catch (_) {
-                            serverErrorMessage = text.substring(0, 200);
-                        }
-                    }
-                } catch (_) {
-                    // ignore parse failures
+                    console.error(`Non-JSON response from ${endpoint}:`, text.substring(0, 200));
+                    throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
                 }
 
-                if (response.status === 401) {
-                    // Avoid logging out for pure permission denials (like /users) – just throw
-                    const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
-                    if (!permissionLikely) {
-                        if (window.storage?.removeToken) window.storage.removeToken();
-                        if (window.storage?.removeUser) window.storage.removeUser();
-                        if (window.LiveDataSync) {
-                            window.LiveDataSync.stop();
-                        }
-                        if (!window.location.hash.includes('#/login')) {
-                            window.location.hash = '#/login';
-                        }
-                    }
-                    throw new Error(serverErrorMessage || 'Authentication expired or unauthorized.');
+                const data = await response.json();
+                // Only log for non-cached responses to reduce noise
+                if (!this._responseCache.has(`${(options.method || 'GET').toUpperCase()}:${endpoint}`)) {
+                    console.log(`📥 API Response for ${endpoint}:`, {
+                        status: response.status,
+                        hasData: !!data,
+                        dataKeys: Object.keys(data || {}),
+                        dataStructure: endpoint === '/projects' ? {
+                            hasProjects: !!(data?.data?.projects),
+                            projectsCount: data?.data?.projects?.length || 0,
+                            rawData: data
+                        } : 'other endpoint'
+                    });
                 }
-                const statusText = response.statusText || 'Error';
-                const msg = serverErrorMessage ? ` ${serverErrorMessage}` : '';
-                throw new Error(`HTTP ${response.status}: ${statusText}${msg}`);
+                return data;
+            } catch (error) {
+                lastError = error;
+                
+                // Only retry on network errors, not on HTTP errors or auth errors
+                const isNetwork = this.isNetworkError(error);
+                const shouldRetry = isNetwork && attempt < maxRetries;
+                
+                if (shouldRetry) {
+                    // Calculate exponential backoff delay: 1s, 2s, 4s
+                    const delay = baseDelay * Math.pow(2, attempt);
+                    console.warn(`⚠️ Network error on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue; // Retry the request
+                } else {
+                    // Don't retry - log and throw
+                    if (isNetwork && attempt === maxRetries) {
+                        console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
+                        throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                    } else {
+                        console.error(`❌ Database API request failed (${endpoint}):`, error);
+                        throw error;
+                    }
+                }
             }
-
-            // Check if response is JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                const text = await response.text();
-                console.error(`Non-JSON response from ${endpoint}:`, text.substring(0, 200));
-                throw new Error(`Server returned non-JSON response. Status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            console.log(`📥 API Response for ${endpoint}:`, {
-                status: response.status,
-                hasData: !!data,
-                dataKeys: Object.keys(data || {}),
-                dataStructure: endpoint === '/projects' ? {
-                    hasProjects: !!(data?.data?.projects),
-                    projectsCount: data?.data?.projects?.length || 0,
-                    rawData: data
-                } : 'other endpoint'
-            });
-            return data;
-        } catch (error) {
-            console.error(`Database API request failed (${endpoint}):`, error);
-            throw error;
         }
+        
+        // Should never reach here, but just in case
+        throw lastError || new Error(`Unknown error occurred while making request to ${endpoint}`);
     },
 
     // CLIENT OPERATIONS
     async getClients() {
-        console.log('📡 Fetching clients from database...');
+        // Silent fetch - makeRequest handles cache logging, reduces console noise
         const response = await this.makeRequest('/clients');
-        console.log('✅ Clients fetched from database:', response.data?.clients?.length || 0);
         return response;
     },
 
