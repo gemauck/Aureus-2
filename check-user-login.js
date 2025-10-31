@@ -1,64 +1,59 @@
-#!/usr/bin/env node
-// Script to check user login status in database
-import { prisma } from './api/_lib/prisma.js'
+// Check user login status
+import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import 'dotenv/config'
 
-const emails = ['garethm@abcotronics.co.za', 'gemauck@gmail.com']
+const prisma = new PrismaClient()
 
-async function checkUsers() {
+async function checkUser() {
   try {
-    console.log('🔍 Checking users in database...\n')
+    const email = 'garethm@abcotronics.co.za'
+    console.log('🔍 Checking user:', email)
     
-    for (const email of emails) {
-      console.log(`📧 Checking: ${email}`)
-      const user = await prisma.user.findUnique({
-        where: { email },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          status: true,
-          passwordHash: true,
-          provider: true,
-          mustChangePassword: true
-        }
-      })
-      
-      if (!user) {
-        console.log('  ❌ User not found in database\n')
-        continue
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        status: true,
+        passwordHash: true,
+        role: true,
+        mustChangePassword: true
       }
-      
-      console.log('  ✅ User found:')
-      console.log(`     ID: ${user.id}`)
-      console.log(`     Name: ${user.name || 'N/A'}`)
-      console.log(`     Role: ${user.role}`)
-      console.log(`     Status: ${user.status}`)
-      console.log(`     Provider: ${user.provider}`)
-      console.log(`     Has Password Hash: ${!!user.passwordHash}`)
-      console.log(`     Must Change Password: ${user.mustChangePassword}`)
-      
-      if (!user.passwordHash) {
-        console.log('  ⚠️  WARNING: User has no password hash! Cannot login with password.')
-      } else {
-        console.log('  ✅ Password hash exists (length: ' + user.passwordHash.length + ')')
-      }
-      
-      if (user.status !== 'active') {
-        console.log(`  ⚠️  WARNING: User status is "${user.status}", not "active"!`)
-      }
-      
-      console.log('')
+    })
+    
+    if (!user) {
+      console.log('❌ User not found in database')
+      return
     }
     
-    await prisma.$disconnect()
+    console.log('✅ User found:')
+    console.log('  ID:', user.id)
+    console.log('  Name:', user.name)
+    console.log('  Email:', user.email)
+    console.log('  Role:', user.role)
+    console.log('  Status:', user.status)
+    console.log('  Has password hash:', !!user.passwordHash)
+    console.log('  Password hash length:', user.passwordHash?.length || 0)
+    console.log('  Password hash prefix:', user.passwordHash?.substring(0, 20) || 'N/A')
+    console.log('  Must change password:', user.mustChangePassword)
+    
+    // Test password comparison if hash exists
+    if (user.passwordHash) {
+      const testPassword = 'test123' // Replace with actual password to test
+      console.log('\n🔑 Testing password comparison...')
+      console.log('  Test password:', testPassword)
+      const valid = await bcrypt.compare(testPassword, user.passwordHash)
+      console.log('  Password match:', valid)
+    }
+    
   } catch (error) {
-    console.error('❌ Error:', error)
+    console.error('❌ Error:', error.message)
+    console.error(error.stack)
+  } finally {
     await prisma.$disconnect()
-    process.exit(1)
   }
 }
 
-checkUsers()
-
+checkUser()
