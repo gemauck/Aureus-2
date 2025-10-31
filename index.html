@@ -395,14 +395,28 @@
                                 });
                                 const text = await res.text();
                                 const data = text ? JSON.parse(text) : {};
+                                
+                                // Check if response is actually successful
+                                if (!res.ok) {
+                                    // If it's an error response, throw it
+                                    const errorMessage = data?.error?.message || data?.message || `Request failed with status ${res.status}`;
+                                    const error = new Error(errorMessage);
+                                    error.status = res.status;
+                                    throw error;
+                                }
+                                
+                                // Only proceed if we got a token
                                 if (data?.accessToken) {
                                     window.storage?.setToken?.(data.accessToken);
                                 } else if (data?.data?.accessToken) {
                                     window.storage?.setToken?.(data.data.accessToken);
+                                } else {
+                                    throw new Error('No access token received from login');
                                 }
+                                
                                 return data;
                             } catch (fallbackErr) {
-                                throw err; // rethrow original for visibility
+                                throw fallbackErr; // rethrow fallback error (or original if fallback failed)
                             }
                         }
                     };

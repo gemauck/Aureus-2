@@ -211,14 +211,25 @@ const AuthProvider = ({ children }) => {
         try {
             console.log('🔐 Attempting login for:', email);
             const loginResult = await window.api.login(email, password);
-            console.log('✅ Login API successful:', loginResult);
+            
+            // Check if login response contains an error
+            if (loginResult?.error) {
+                throw new Error(loginResult.error.message || 'Login failed');
+            }
+            
+            // Verify we got a token
+            if (!loginResult?.accessToken && !loginResult?.data?.accessToken) {
+                throw new Error('No access token received from login');
+            }
+            
+            console.log('✅ Login API successful, token received');
             
             const meResponse = await window.api.me();
             console.log('✅ Me API successful:', meResponse);
             
             // Extract user from response (API returns { user: {...} } or direct user object)
-            const user = meResponse.user || meResponse;
-            if (!user) {
+            const user = meResponse.user || meResponse?.data?.user || meResponse?.data || meResponse;
+            if (!user || !user.id) {
                 throw new Error('Failed to get user data from API');
             }
             
