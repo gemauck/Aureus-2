@@ -1222,15 +1222,42 @@ const Manufacturing = () => {
   };
 
   const handleDeleteMovement = async (movementId) => {
-    if (confirm('Are you sure you want to delete this stock movement? This will affect audit trail.')) {
+    // Find the movement for confirmation message
+    const movement = movements.find(m => m.id === movementId);
+    const movementInfo = movement 
+      ? `${movement.itemName} (${movement.sku}) - ${movement.type} on ${movement.date}`
+      : movementId;
+    
+    if (confirm(`Are you sure you want to delete this stock movement?\n\n${movementInfo}\n\nThis action cannot be undone.`)) {
       try {
-        await safeCallAPI('deleteStockMovement', movementId);
+        console.log('🗑️ Deleting stock movement:', movementId);
+        
+        // Use the API endpoint directly
+        const token = window.storage?.getToken?.();
+        const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+        
+        const response = await fetch(`${apiBase}/api/manufacturing/stock-movements/${movementId}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: response.statusText }));
+          throw new Error(errorData.message || `Failed to delete: ${response.status}`);
+        }
+
+        // Remove from local state
         const updatedMovements = movements.filter(movement => movement.id !== movementId);
         setMovements(updatedMovements);
         localStorage.setItem('manufacturing_movements', JSON.stringify(updatedMovements));
+        
+        console.log('✅ Stock movement deleted successfully');
       } catch (error) {
-        console.error('Error deleting stock movement:', error);
-        alert('Failed to delete stock movement. Please try again.');
+        console.error('❌ Error deleting stock movement:', error);
+        alert(`Failed to delete stock movement: ${error.message}`);
       }
     }
   };
@@ -3460,15 +3487,13 @@ const Manufacturing = () => {
                     <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-2">
-                        {user?.role === 'Admin' && (
-                          <button
-                            onClick={() => handleDeleteMovement(movement.id)}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium"
-                            title="Delete Movement (Admin Only)"
-                          >
-                            <i className="fas fa-trash"></i>
-                          </button>
-                        )}
+                        <button
+                          onClick={() => handleDeleteMovement(movement.id)}
+                          className="text-red-600 hover:text-red-800 text-sm font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors"
+                          title="Delete Movement"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
                       </div>
                     </td>
                   </tr>
