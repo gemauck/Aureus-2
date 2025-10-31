@@ -152,32 +152,45 @@ const MainLayout = () => {
         // Check if Clients component is available
         const checkClients = () => {
             const ClientsComponent = window.Clients || window.ClientsSimple;
-            if (ClientsComponent && !clientsComponentReady) {
-                console.log('✅ MainLayout: Clients component became available');
-                setClientsComponentReady(true);
+            if (ClientsComponent) {
+                if (!clientsComponentReady) {
+                    console.log('✅ MainLayout: Clients component became available', ClientsComponent);
+                    setClientsComponentReady(true);
+                }
+                return true;
             }
+            return false;
         };
         
         // Check immediately
-        checkClients();
+        if (checkClients()) {
+            return; // Component already available, no need to poll
+        }
+        
+        // Also listen for when Clients component registers itself
+        const originalRegister = window.Clients?.register;
+        const handleClientsAvailable = () => {
+            if (checkClients()) {
+                window.removeEventListener('clientsComponentReady', handleClientsAvailable);
+            }
+        };
+        window.addEventListener('clientsComponentReady', handleClientsAvailable);
         
         // Re-check periodically until component is available
         const interval = setInterval(() => {
-            if (!clientsComponentReady) {
-                checkClients();
-            } else {
-                clearInterval(interval);
-            }
-        }, 500);
+            checkClients();
+        }, 300); // Check more frequently
         
-        // Cleanup after 10 seconds to avoid infinite checking
+        // Cleanup after 15 seconds to avoid infinite checking
         const timeout = setTimeout(() => {
             clearInterval(interval);
-        }, 10000);
+            window.removeEventListener('clientsComponentReady', handleClientsAvailable);
+        }, 15000);
         
         return () => {
             clearInterval(interval);
             clearTimeout(timeout);
+            window.removeEventListener('clientsComponentReady', handleClientsAvailable);
         };
     }, [clientsComponentReady]);
     
