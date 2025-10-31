@@ -1,9 +1,9 @@
 #!/bin/bash
-# Deploy HTTP/2 fix and code changes to server
+# Deploy code changes to server
 
 set -e
 
-echo "🚀 Deploying CSP fix to server..."
+echo "🚀 Deploying code changes to server..."
 echo ""
 
 # Server details
