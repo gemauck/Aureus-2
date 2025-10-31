@@ -287,7 +287,7 @@ const Projects = () => {
 
     const handleViewProject = async (project) => {
         console.log('Viewing project:', project);
-        console.log('ProjectDetail component exists:', !!ProjectDetail);
+        console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'local:', !!ProjectDetail);
         console.log('🔍 DatabaseAPI check:', {
             exists: !!window.DatabaseAPI,
             hasGetProject: !!(window.DatabaseAPI && window.DatabaseAPI.getProject),
@@ -610,6 +610,42 @@ const Projects = () => {
         return <window.ProjectProgressTracker onBack={() => setShowProgressTracker(false)} />;
     }
 
+    // Function to actively load ProjectDetail if not available
+    const loadProjectDetail = async () => {
+        if (window.ProjectDetail) {
+            setProjectDetailAvailable(true);
+            return true;
+        }
+        
+        // Try to load ProjectDetail from the lazy loader path
+        const projectDetailPath = './dist/src/components/projects/ProjectDetail.js';
+        try {
+            const script = document.createElement('script');
+            script.src = projectDetailPath;
+            script.type = 'text/javascript';
+            
+            await new Promise((resolve, reject) => {
+                script.onload = () => {
+                    // Wait a bit for the script to execute
+                    setTimeout(() => {
+                        if (window.ProjectDetail) {
+                            setProjectDetailAvailable(true);
+                            resolve(true);
+                        } else {
+                            reject(new Error('ProjectDetail not registered after script load'));
+                        }
+                    }, 100);
+                };
+                script.onerror = () => reject(new Error('Failed to load ProjectDetail script'));
+                document.body.appendChild(script);
+            });
+            return true;
+        } catch (error) {
+            console.warn('Failed to actively load ProjectDetail:', error);
+            return false;
+        }
+    };
+    
     // Wait for ProjectDetail component to load if it's not available yet
     useEffect(() => {
         // Check immediately
@@ -621,24 +657,44 @@ const Projects = () => {
         
         if (viewingProject) {
             setWaitingForProjectDetail(true);
-            let checkCount = 0;
-            const maxChecks = 50; // 5 seconds total (50 * 100ms)
+            let checkInterval = null;
+            let cancelled = false;
             
-            const checkInterval = setInterval(() => {
-                checkCount++;
-                if (window.ProjectDetail) {
-                    setProjectDetailAvailable(true);
+            // Try to actively load it first
+            loadProjectDetail().then(success => {
+                if (cancelled) return;
+                if (success) {
                     setWaitingForProjectDetail(false);
-                    clearInterval(checkInterval);
-                    // Force re-render
-                    setViewingProject({...viewingProject});
-                } else if (checkCount >= maxChecks) {
-                    setWaitingForProjectDetail(false);
-                    clearInterval(checkInterval);
+                    setViewingProject({...viewingProject}); // Force re-render
+                } else {
+                    // Fall back to polling
+                    let checkCount = 0;
+                    const maxChecks = 50; // 5 seconds total (50 * 100ms)
+                    
+                    checkInterval = setInterval(() => {
+                        if (cancelled) {
+                            clearInterval(checkInterval);
+                            return;
+                        }
+                        checkCount++;
+                        if (window.ProjectDetail) {
+                            setProjectDetailAvailable(true);
+                            setWaitingForProjectDetail(false);
+                            clearInterval(checkInterval);
+                            // Force re-render
+                            setViewingProject({...viewingProject});
+                        } else if (checkCount >= maxChecks) {
+                            setWaitingForProjectDetail(false);
+                            clearInterval(checkInterval);
+                        }
+                    }, 100);
                 }
-            }, 100);
+            });
             
-            return () => clearInterval(checkInterval);
+            return () => {
+                cancelled = true;
+                if (checkInterval) clearInterval(checkInterval);
+            };
         }
     }, [viewingProject]);
     
