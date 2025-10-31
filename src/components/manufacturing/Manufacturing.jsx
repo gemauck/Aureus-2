@@ -3289,6 +3289,9 @@ const Manufacturing = () => {
 
   const MovementsView = () => {
     console.log('📋 MovementsView component rendering...');
+    console.log('📋 Movements count:', movements.length);
+    console.log('📋 User role:', user?.role);
+    console.log('📋 Movements data:', movements);
     
     // Log when component mounts/updates
     useEffect(() => {
@@ -3296,7 +3299,9 @@ const Manufacturing = () => {
       console.log('📋 Current state:', {
         showModal,
         modalType,
-        movementsCount: movements.length
+        movementsCount: movements.length,
+        userRole: user?.role,
+        hasMovements: movements.length > 0
       });
       return () => {
         console.log('📋 MovementsView unmounting');
@@ -3501,11 +3506,12 @@ const Manufacturing = () => {
                               console.log('🗑️ Delete button clicked for movement:', movement.id);
                               handleDeleteMovement(movement.id);
                             }}
-                            className="text-red-600 hover:text-red-800 text-sm font-medium px-2 py-1 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                            className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer border border-red-200"
                             title="Delete Movement"
                             type="button"
+                            style={{ minWidth: '32px', minHeight: '32px' }}
                           >
-                            <i className="fas fa-trash"></i>
+                            <i className="fas fa-trash text-sm"></i>
                           </button>
                         </div>
                       </td>
