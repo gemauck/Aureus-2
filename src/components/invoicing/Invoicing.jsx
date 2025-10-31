@@ -52,7 +52,11 @@ const Invoicing = () => {
     const [reminderSettings, setReminderSettings] = useState({
         enabled: true,
         days: [7, 3, 0, 7],
-        autoSend: true
+        autoSend: true,
+        emailTemplate: 'default',
+        includePDF: true,
+        ccAccounting: false,
+        servicesForEachClient: false
     });
 
     // Load data from localStorage
@@ -118,7 +122,17 @@ const Invoicing = () => {
         }
         if (savedReminderSettings) {
             try {
-                setReminderSettings(JSON.parse(savedReminderSettings));
+                const loadedSettings = JSON.parse(savedReminderSettings);
+                // Merge with defaults to ensure all fields are present
+                setReminderSettings({
+                    enabled: loadedSettings.enabled !== undefined ? loadedSettings.enabled : true,
+                    days: loadedSettings.days || [7, 3, 0, 7],
+                    autoSend: loadedSettings.autoSend !== undefined ? loadedSettings.autoSend : true,
+                    emailTemplate: loadedSettings.emailTemplate || 'default',
+                    includePDF: loadedSettings.includePDF !== undefined ? loadedSettings.includePDF : true,
+                    ccAccounting: loadedSettings.ccAccounting !== undefined ? loadedSettings.ccAccounting : false,
+                    servicesForEachClient: loadedSettings.servicesForEachClient !== undefined ? loadedSettings.servicesForEachClient : false
+                });
             } catch (e) {
                 console.error('Error loading reminder settings:', e);
             }

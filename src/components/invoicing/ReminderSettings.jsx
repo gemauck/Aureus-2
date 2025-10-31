@@ -7,7 +7,8 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
         autoSend: true,
         emailTemplate: 'default',
         includePDF: true,
-        ccAccounting: false
+        ccAccounting: false,
+        servicesForEachClient: false
     });
 
     const handleSubmit = (e) => {
@@ -184,6 +185,21 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
                                             <div className="font-medium text-xs text-gray-900">CC accounting team</div>
                                             <div className="text-[10px] text-gray-600">
                                                 Copy accounting@abcotronics.co.za on all reminders
+                                            </div>
+                                        </div>
+                                    </label>
+
+                                    <label className="flex items-center p-2.5 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={formData.servicesForEachClient || false}
+                                            onChange={(e) => setFormData({...formData, servicesForEachClient: e.target.checked})}
+                                            className="mr-2.5 w-3.5 h-3.5"
+                                        />
+                                        <div>
+                                            <div className="font-medium text-xs text-gray-900">Services for each Client</div>
+                                            <div className="text-[10px] text-gray-600">
+                                                Group and display services separately for each client in reminders
                                             </div>
                                         </div>
                                     </label>
