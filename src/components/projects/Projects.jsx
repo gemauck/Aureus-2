@@ -18,6 +18,7 @@ const Projects = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
+    const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
     
     // Ensure storage is available
     useEffect(() => {
@@ -608,14 +609,53 @@ const Projects = () => {
         return <window.ProjectProgressTracker onBack={() => setShowProgressTracker(false)} />;
     }
 
+    // Wait for ProjectDetail component to load if it's not available yet
+    useEffect(() => {
+        if (viewingProject && !window.ProjectDetail) {
+            setWaitingForProjectDetail(true);
+            let checkCount = 0;
+            const maxChecks = 50; // 5 seconds total (50 * 100ms)
+            
+            const checkInterval = setInterval(() => {
+                checkCount++;
+                if (window.ProjectDetail) {
+                    setWaitingForProjectDetail(false);
+                    clearInterval(checkInterval);
+                    // Force re-render by updating viewingProject with a copy
+                    setViewingProject({...viewingProject});
+                } else if (checkCount >= maxChecks) {
+                    setWaitingForProjectDetail(false);
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+            
+            return () => clearInterval(checkInterval);
+        } else if (window.ProjectDetail) {
+            setWaitingForProjectDetail(false);
+        }
+    }, [viewingProject]);
+
     if (viewingProject) {
         try {
-            if (!ProjectDetail) {
-                console.error('ProjectDetail component not found!');
+            // Check window.ProjectDetail directly (it may be loaded lazily)
+            const ProjectDetailComponent = window.ProjectDetail || ProjectDetail;
+            if (!ProjectDetailComponent) {
+                console.error('ProjectDetail component not found!', {
+                    windowProjectDetail: typeof window.ProjectDetail,
+                    localProjectDetail: typeof ProjectDetail,
+                    availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
+                });
+                
                 return (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <h2 className="text-lg font-semibold text-red-800 mb-2">Error: ProjectDetail component not loaded</h2>
-                        <p className="text-sm text-red-600 mb-3">The ProjectDetail component is not available. Check the browser console for more details.</p>
+                        <h2 className="text-lg font-semibold text-red-800 mb-2">
+                            {waitingForProjectDetail ? 'Loading ProjectDetail...' : 'Error: ProjectDetail component not loaded'}
+                        </h2>
+                        <p className="text-sm text-red-600 mb-3">
+                            {waitingForProjectDetail 
+                                ? 'Waiting for ProjectDetail component to load...' 
+                                : 'The ProjectDetail component is not available. It may still be loading. Please wait a moment and try again.'}
+                        </p>
                         <button 
                             onClick={() => setViewingProject(null)}
                             className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
@@ -625,7 +665,7 @@ const Projects = () => {
                     </div>
                 );
             }
-            return <ProjectDetail 
+            return <ProjectDetailComponent 
                 project={viewingProject} 
                 onBack={() => setViewingProject(null)}
                 onDelete={handleDeleteProject}
