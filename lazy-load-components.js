@@ -119,7 +119,8 @@
     function loadComponent(src) {
         return new Promise((resolve, reject) => {
             // Convert src/ paths to dist/src/ paths if needed
-            const scriptSrc = src.startsWith('./src/') ? src.replace('./src/', './dist/src/').replace('.jsx', '.js') : src;
+            // Use absolute path for dist assets to avoid relative path issues on nested routes
+            const scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
             
             // First, fetch the file to validate it's JavaScript before loading as script
             // This prevents HTML (404 pages) from being executed as JavaScript
