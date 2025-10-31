@@ -1073,6 +1073,71 @@ const Manufacturing = () => {
     }
   };
 
+  const openAddMovementModal = () => {
+    setFormData({
+      type: 'receipt',
+      sku: '',
+      itemName: '',
+      quantity: '',
+      unitCost: '',
+      fromLocation: '',
+      toLocation: '',
+      reference: '',
+      notes: '',
+      date: new Date().toISOString().split('T')[0]
+    });
+    setModalType('add_movement');
+    setShowModal(true);
+  };
+
+  const handleSaveMovement = async () => {
+    try {
+      if (!formData.sku || !formData.itemName || !formData.quantity || parseFloat(formData.quantity) <= 0) {
+        alert('Please provide SKU, Item Name, and a positive Quantity');
+        return;
+      }
+
+      const movementData = {
+        type: formData.type || 'receipt',
+        sku: formData.sku,
+        itemName: formData.itemName,
+        quantity: parseFloat(formData.quantity),
+        unitCost: formData.unitCost ? parseFloat(formData.unitCost) : undefined,
+        fromLocation: formData.fromLocation || '',
+        toLocation: formData.toLocation || '',
+        reference: formData.reference || '',
+        notes: formData.notes || '',
+        date: formData.date || new Date().toISOString()
+      };
+
+      const response = await safeCallAPI('createStockMovement', movementData);
+      
+      if (response?.data?.movement) {
+        // Refresh movements list
+        const movementsResponse = await safeCallAPI('getStockMovements');
+        const movementsData = movementsResponse?.data?.movements || [];
+        setMovements(movementsData.map(movement => ({
+          ...movement,
+          id: movement.id
+        })));
+        
+        // Refresh inventory
+        const invResponse = await safeCallAPI('getInventory');
+        const invData = invResponse?.data?.inventory || [];
+        setInventory(invData.map(item => ({ ...item, id: item.id })));
+        
+        setShowModal(false);
+        setFormData({});
+        alert('Stock movement recorded successfully!');
+      } else {
+        throw new Error('Invalid response from server');
+      }
+    } catch (error) {
+      console.error('Error creating stock movement:', error);
+      alert(error?.message || 'Failed to create stock movement. Please try again.');
+    }
+  };
+
   const openAddSupplierModal = () => {
     setFormData({
       name: '',
@@ -2521,6 +2586,182 @@ const Manufacturing = () => {
       );
     }
 
+    if (modalType === 'add_movement') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">Record Stock Movement</h2>
+              <button
+                onClick={() => { setShowModal(false); setFormData({}); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="space-y-4">
+                {/* Movement Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type *</label>
+                  <select
+                    value={formData.type || 'receipt'}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="receipt">Receipt (Incoming Stock)</option>
+                    <option value="consumption">Consumption (Outgoing Stock)</option>
+                    <option value="production">Production</option>
+                    <option value="transfer">Transfer</option>
+                    <option value="adjustment">Adjustment</option>
+                  </select>
+                </div>
+
+                {/* SKU */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">SKU *</label>
+                  <select
+                    value={formData.sku || ''}
+                    onChange={(e) => {
+                      const selectedItem = inventory.find(item => item.sku === e.target.value);
+                      setFormData({ 
+                        ...formData, 
+                        sku: e.target.value,
+                        itemName: selectedItem ? selectedItem.name : formData.itemName
+                      });
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select SKU...</option>
+                    {inventory.map(item => (
+                      <option key={item.sku} value={item.sku}>{item.sku} - {item.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Item Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
+                  <input
+                    type="text"
+                    value={formData.itemName || ''}
+                    onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., GPS Module GT-U7"
+                  />
+                </div>
+
+                {/* Quantity */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.quantity || ''}
+                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="10"
+                  />
+                </div>
+
+                {/* Unit Cost (for receipts) */}
+                {(formData.type === 'receipt' || formData.type === 'production') && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost (R)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={formData.unitCost || ''}
+                      onChange={(e) => setFormData({ ...formData, unitCost: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0.00"
+                    />
+                  </div>
+                )}
+
+                {/* Locations */}
+                <div className="grid grid-cols-2 gap-4">
+                  {(formData.type === 'transfer' || formData.type === 'consumption') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">From Location</label>
+                      <input
+                        type="text"
+                        value={formData.fromLocation || ''}
+                        onChange={(e) => setFormData({ ...formData, fromLocation: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Warehouse A"
+                      />
+                    </div>
+                  )}
+                  {(formData.type === 'transfer' || formData.type === 'receipt' || formData.type === 'production') && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">To Location</label>
+                      <input
+                        type="text"
+                        value={formData.toLocation || ''}
+                        onChange={(e) => setFormData({ ...formData, toLocation: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Warehouse B"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Reference */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reference</label>
+                  <input
+                    type="text"
+                    value={formData.reference || ''}
+                    onChange={(e) => setFormData({ ...formData, reference: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., PO-12345, Invoice #789"
+                  />
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={formData.date || new Date().toISOString().split('T')[0]}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                  <textarea
+                    value={formData.notes || ''}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional notes about this movement..."
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex items-center justify-end gap-3 sticky bottom-0 bg-white">
+              <button
+                onClick={() => { setShowModal(false); setFormData({}); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveMovement}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Record Movement
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (modalType === 'view_supplier') {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2778,7 +3019,7 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={() => { setModalType('add_movement'); setShowModal(true); }}
+                onClick={openAddMovementModal}
                 className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
               >
                 <i className="fas fa-plus text-xs"></i>
