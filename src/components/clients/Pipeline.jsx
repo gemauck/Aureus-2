@@ -582,7 +582,7 @@ const Pipeline = () => {
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-lg p-2.5 border border-gray-200 shadow-sm cursor-move min-h-[140px] flex flex-col ${!isDragging ? 'hover:shadow-md transition' : ''} ${
+                className={`bg-white rounded-lg p-2.5 border border-gray-200 shadow-sm cursor-move flex flex-col ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
             >
@@ -597,16 +597,6 @@ const Pipeline = () => {
                         {item.type === 'lead' ? 'LEAD' : 'OPP'}
                     </span>
                 </div>
-
-                {/* Contact/Client */}
-                {item.type !== 'lead' && (
-                    <div className="text-[10px] text-gray-600 mb-1.5 flex items-center gap-1">
-                        <i className={`fas fa-building text-[9px]`}></i>
-                        <span className="truncate">
-                            {item.clientName}
-                        </span>
-                    </div>
-                )}
 
                 {/* Value */}
                 <div className="flex items-center justify-between mb-1.5">

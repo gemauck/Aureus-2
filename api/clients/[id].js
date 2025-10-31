@@ -79,6 +79,7 @@ async function handler(req, res) {
         sites: Array.isArray(body.sites) ? JSON.stringify(body.sites) : undefined,
         contracts: Array.isArray(body.contracts) ? JSON.stringify(body.contracts) : undefined,
         activityLog: Array.isArray(body.activityLog) ? JSON.stringify(body.activityLog) : undefined,
+        services: Array.isArray(body.services) ? JSON.stringify(body.services) : (body.services ? JSON.stringify(body.services) : undefined),
         billingTerms: typeof body.billingTerms === 'object' ? JSON.stringify(body.billingTerms) : undefined
       }
 
