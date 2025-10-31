@@ -8,7 +8,7 @@ const Calendar = () => {
     const [notes, setNotes] = useState({}); // { '2024-01-15': 'note text' }
     const { isDark } = window.useTheme();
     
-    // Load notes (server if authenticated, else from localStorage) for current month
+    // Load notes (load ALL notes, not just current month) - localStorage first for instant display, then sync from server
     useEffect(() => {
         const loadNotes = async () => {
             try {
@@ -16,40 +16,54 @@ const Calendar = () => {
                 const userId = user?.id || user?.email || 'default';
                 const notesKey = `user_notes_${userId}`;
 
-                // Calculate current month range
-                const monthStart = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-                const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
-                const startStr = monthStart.toISOString().split('T')[0];
-                const endStr = monthEnd.toISOString().split('T')[0];
-
-                const token = window.storage?.getToken?.();
-                if (token) {
-                    // Fetch from server (scoped by user on server)
-                    const res = await fetch(`/api/calendar-notes?startDate=${startStr}&endDate=${endStr}`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                        credentials: 'include'
-                    });
-                    if (res.ok) {
-                        const data = await res.json();
-                        const serverNotes = data?.notes || {};
-                        setNotes(prev => ({ ...prev, ...serverNotes }));
-                        try { localStorage.setItem(notesKey, JSON.stringify({ ...(JSON.parse(localStorage.getItem(notesKey) || '{}')), ...serverNotes })); } catch (_) {}
-                        return;
+                // STEP 1: Load from localStorage first for instant display
+                const savedNotes = localStorage.getItem(notesKey);
+                if (savedNotes) {
+                    try {
+                        const parsedNotes = JSON.parse(savedNotes);
+                        setNotes(parsedNotes);
+                        console.log('📝 Loaded notes from localStorage:', Object.keys(parsedNotes).length);
+                    } catch (e) {
+                        console.error('Error parsing localStorage notes:', e);
                     }
                 }
 
-                // Fallback to localStorage
-                const savedNotes = localStorage.getItem(notesKey);
-                if (savedNotes) {
-                    setNotes(JSON.parse(savedNotes));
+                // STEP 2: Fetch ALL notes from server (no date filter = all notes)
+                const token = window.storage?.getToken?.();
+                if (token) {
+                    try {
+                        const res = await fetch('/api/calendar-notes', {
+                            headers: { Authorization: `Bearer ${token}` },
+                            credentials: 'include'
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            const serverNotes = data?.notes || {};
+                            console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
+                            
+                            // Merge server notes with existing (server takes priority)
+                            setNotes(prev => ({ ...prev, ...serverNotes }));
+                            
+                            // Update localStorage with server data
+                            try {
+                                const currentLocalNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                                localStorage.setItem(notesKey, JSON.stringify({ ...currentLocalNotes, ...serverNotes }));
+                            } catch (e) {
+                                console.error('Error updating localStorage:', e);
+                            }
+                        } else {
+                            console.warn('Failed to load notes from server:', res.status);
+                        }
+                    } catch (error) {
+                        console.error('Error fetching notes from server:', error);
+                    }
                 }
             } catch (error) {
                 console.error('Error loading notes:', error);
             }
         };
         loadNotes();
-        // Re-load when month changes
-    }, [currentDate]);
+    }, []); // Only load once on mount, not when month changes
     
     // Save notes to server if authenticated, always cache in localStorage
     const saveNotes = async (dateString, noteText) => {
@@ -59,18 +73,37 @@ const Calendar = () => {
             const notesKey = `user_notes_${userId}`;
             const updatedNotes = { ...notes, [dateString]: noteText };
 
-            // Optimistic update + cache
+            // Optimistic update
             setNotes(updatedNotes);
-            try { localStorage.setItem(notesKey, JSON.stringify(updatedNotes)); } catch (_) {}
+            
+            // Save to localStorage immediately
+            try {
+                localStorage.setItem(notesKey, JSON.stringify(updatedNotes));
+                console.log('✅ Saved note to localStorage:', dateString);
+            } catch (e) {
+                console.error('Error saving to localStorage:', e);
+            }
 
+            // Save to server
             const token = window.storage?.getToken?.();
             if (token) {
-                await fetch('/api/calendar-notes', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    credentials: 'include',
-                    body: JSON.stringify({ date: dateString, note: noteText })
-                });
+                try {
+                    const res = await fetch('/api/calendar-notes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        credentials: 'include',
+                        body: JSON.stringify({ date: dateString, note: noteText })
+                    });
+                    
+                    if (res.ok) {
+                        const data = await res.json();
+                        console.log('✅ Saved note to server:', dateString, data);
+                    } else {
+                        console.error('❌ Failed to save note to server:', res.status, await res.text());
+                    }
+                } catch (error) {
+                    console.error('❌ Error saving note to server:', error);
+                }
             }
         } catch (error) {
             console.error('Error saving notes:', error);
