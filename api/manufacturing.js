@@ -981,8 +981,8 @@ async function handler(req, res) {
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
       
-      if (!body.productSku || !body.productName || !body.quantity) {
-        return badRequest(res, 'productSku, productName, and quantity required')
+      if (!body.productSku || !body.productName || body.quantity === undefined || body.quantity === null || parseInt(body.quantity) <= 0) {
+        return badRequest(res, 'productSku, productName, and quantity (must be > 0) required')
       }
 
       try {
