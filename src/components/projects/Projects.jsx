@@ -19,6 +19,7 @@ const Projects = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
+    const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     
     // Ensure storage is available
     useEffect(() => {
@@ -611,7 +612,14 @@ const Projects = () => {
 
     // Wait for ProjectDetail component to load if it's not available yet
     useEffect(() => {
-        if (viewingProject && !window.ProjectDetail) {
+        // Check immediately
+        if (window.ProjectDetail) {
+            setProjectDetailAvailable(true);
+            setWaitingForProjectDetail(false);
+            return;
+        }
+        
+        if (viewingProject) {
             setWaitingForProjectDetail(true);
             let checkCount = 0;
             const maxChecks = 50; // 5 seconds total (50 * 100ms)
@@ -619,9 +627,10 @@ const Projects = () => {
             const checkInterval = setInterval(() => {
                 checkCount++;
                 if (window.ProjectDetail) {
+                    setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
                     clearInterval(checkInterval);
-                    // Force re-render by updating viewingProject with a copy
+                    // Force re-render
                     setViewingProject({...viewingProject});
                 } else if (checkCount >= maxChecks) {
                     setWaitingForProjectDetail(false);
@@ -630,19 +639,44 @@ const Projects = () => {
             }, 100);
             
             return () => clearInterval(checkInterval);
-        } else if (window.ProjectDetail) {
-            setWaitingForProjectDetail(false);
         }
     }, [viewingProject]);
+    
+    // Also listen for when ProjectDetail loads globally
+    useEffect(() => {
+        const checkProjectDetail = () => {
+            if (window.ProjectDetail && !projectDetailAvailable) {
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+                if (viewingProject) {
+                    // Force re-render to show ProjectDetail
+                    setViewingProject({...viewingProject});
+                }
+            }
+        };
+        
+        // Check periodically even when not viewing a project
+        const interval = setInterval(checkProjectDetail, 500);
+        
+        // Also check on window load events
+        window.addEventListener('load', checkProjectDetail);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('load', checkProjectDetail);
+        };
+    }, [projectDetailAvailable, viewingProject]);
 
     if (viewingProject) {
         try {
             // Check window.ProjectDetail directly (it may be loaded lazily)
-            const ProjectDetailComponent = window.ProjectDetail || ProjectDetail;
+            const ProjectDetailComponent = window.ProjectDetail;
             if (!ProjectDetailComponent) {
                 console.error('ProjectDetail component not found!', {
                     windowProjectDetail: typeof window.ProjectDetail,
                     localProjectDetail: typeof ProjectDetail,
+                    projectDetailAvailable: projectDetailAvailable,
+                    waitingForProjectDetail: waitingForProjectDetail,
                     availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
                 });
                 
