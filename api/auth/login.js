@@ -3,18 +3,18 @@ import bcrypt from 'bcryptjs'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { signAccessToken, signRefreshToken } from '../_lib/jwt.js'
 import { withHttp } from '../_lib/withHttp.js'
-import { withLogging } from '../_lib/logger.js'
+import { withLogging, logger } from '../_lib/logger.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   
   try {
-    console.log('🔐 Login attempt started')
+    logger.info({ email: req.body?.email || 'unknown' }, '🔐 Login attempt started')
     
     // Validate request body
     const { email, password } = req.body || {}
     if (!email || !password) {
-      console.log('❌ Missing email or password')
+      logger.warn({ hasEmail: !!email, hasPassword: !!password }, '❌ Missing email or password')
       return badRequest(res, 'Email and password required')
     }
 
@@ -58,14 +58,14 @@ async function handler(req, res) {
       })
     }
 
-    console.log('🔍 Looking up user:', email)
+    logger.info({ email }, '🔍 Looking up user')
     
     // Test database connection first
     try {
       await prisma.$connect()
-      console.log('✅ Database connection verified')
+      logger.debug({ email }, '✅ Database connection verified')
     } catch (dbError) {
-      console.error('❌ Database connection failed:', dbError)
+      logger.error({ email, error: dbError.message }, '❌ Database connection failed')
       return serverError(res, 'Database connection failed', dbError.message)
     }
 
@@ -84,41 +84,32 @@ async function handler(req, res) {
     })
     
     if (!user) {
-      console.log('❌ User not found:', email)
+      logger.warn({ email }, '❌ User not found')
       return unauthorized(res, 'Invalid credentials')
     }
     
     if (!user.passwordHash) {
-      console.log('❌ User has no password hash:', email)
+      logger.warn({ email, userId: user.id }, '❌ User has no password hash')
       return unauthorized(res, 'Invalid credentials')
     }
     
     if (user.status !== 'active') {
-      console.log('❌ User account is not active:', email)
+      logger.warn({ email, userId: user.id, status: user.status }, '❌ User account is not active')
       return unauthorized(res, 'Account is not active')
     }
 
-    console.log('🔑 Verifying password for user:', user.id)
-    console.log('🔑 Password length received:', password?.length || 0)
-    console.log('🔑 Password hash length:', user.passwordHash?.length || 0)
-    console.log('🔑 Password hash starts with:', user.passwordHash?.substring(0, 7) || 'N/A')
+    logger.info({ email, userId: user.id, passwordLength: password?.length || 0, hashLength: user.passwordHash?.length || 0, hashPrefix: user.passwordHash?.substring(0, 7) || 'N/A' }, '🔑 Verifying password')
     
     // Verify password
     const valid = await bcrypt.compare(password, user.passwordHash)
-    console.log('🔑 Password comparison result:', valid)
+    logger.info({ email, valid, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '🔑 Password comparison result')
     
     if (!valid) {
-      console.log('❌ Invalid password for user:', email)
-      console.log('❌ Check: password hash format, password encoding, or password mismatch')
-      
-      // Additional diagnostic: check if password hash format is valid
-      const hashFormat = user.passwordHash.match(/^\$2[ayb]\$.{56}$/)
-      console.log('❌ Password hash format valid:', !!hashFormat)
-      
+      logger.warn({ email, userId: user.id, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '❌ Invalid password - check: password hash format, password encoding, or password mismatch')
       return unauthorized(res, 'Invalid credentials')
     }
 
-    console.log('✅ Password verified, generating tokens')
+    logger.info({ email, userId: user.id }, '✅ Password verified, generating tokens')
 
     // Check JWT_SECRET
     if (!process.env.JWT_SECRET) {
@@ -153,7 +144,7 @@ async function handler(req, res) {
     const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
     res.setHeader('Set-Cookie', [cookieValue])
     
-    console.log('✅ Login successful for user:', user.email)
+    logger.info({ email, userId: user.id, role: user.role }, '✅ Login successful')
     
     return ok(res, { 
       accessToken,
