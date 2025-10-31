@@ -8,8 +8,9 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
-    // Parse the URL path (already has /api/ stripped by server)
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Parse the URL path and query (already has /api/ stripped by server)
+    const url = new URL(req.url, 'http://localhost')
+    const pathSegments = url.pathname.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
     const userId = req.user?.sub
 
@@ -20,9 +21,11 @@ async function handler(req, res) {
     // Get all notes for user (GET /api/calendar-notes)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'calendar-notes') {
       try {
-        // Optionally filter by date range
-        const startDate = req.query?.startDate ? new Date(req.query.startDate) : null
-        const endDate = req.query?.endDate ? new Date(req.query.endDate) : null
+        // Optionally filter by date range via query params
+        const startParam = url.searchParams.get('startDate')
+        const endParam = url.searchParams.get('endDate')
+        const startDate = startParam ? new Date(startParam) : null
+        const endDate = endParam ? new Date(endParam) : null
 
         let whereClause = { userId }
         
