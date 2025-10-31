@@ -3030,6 +3030,44 @@ const Manufacturing = () => {
   };
 
   const MovementsView = () => {
+    const handleRecordClick = () => {
+      console.log('🖱️ Button clicked - Record Movement (handleRecordClick)');
+      console.log('🔍 Checking openAddMovementModal...', {
+        exists: typeof openAddMovementModal !== 'undefined',
+        type: typeof openAddMovementModal,
+        isFunction: typeof openAddMovementModal === 'function'
+      });
+      
+      if (typeof openAddMovementModal === 'function') {
+        console.log('✅ Calling openAddMovementModal...');
+        try {
+          openAddMovementModal();
+        } catch (error) {
+          console.error('❌ Error calling openAddMovementModal:', error);
+          alert('Error opening modal: ' + error.message);
+        }
+      } else {
+        console.error('❌ openAddMovementModal is not accessible!');
+        // Fallback: set state directly
+        console.log('🔄 Attempting direct state set...');
+        setFormData({
+          type: 'receipt',
+          sku: '',
+          itemName: '',
+          quantity: '',
+          unitCost: '',
+          fromLocation: '',
+          toLocation: '',
+          reference: '',
+          notes: '',
+          date: new Date().toISOString().split('T')[0]
+        });
+        setModalType('add_movement');
+        setShowModal(true);
+        console.log('✅ Direct state set completed');
+      }
+    };
+
     return (
       <div className="space-y-3">
         {/* Controls */}
@@ -3042,20 +3080,10 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  console.log('🖱️ Button clicked - Record Movement');
-                  console.log('🔍 openAddMovementModal type:', typeof openAddMovementModal);
-                  if (typeof openAddMovementModal === 'function') {
-                    openAddMovementModal();
-                  } else {
-                    console.error('❌ openAddMovementModal is not a function!', openAddMovementModal);
-                    alert('Error: openAddMovementModal function not found. Please check console.');
-                  }
-                }}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer"
+                onClick={handleRecordClick}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer relative z-10"
                 type="button"
+                style={{ pointerEvents: 'auto' }}
               >
                 <i className="fas fa-plus text-xs"></i>
                 Record Movement
