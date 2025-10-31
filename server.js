@@ -39,8 +39,10 @@ const rootDir = __dirname
 const apiDir = path.join(__dirname, 'api')
 
 function toHandlerPath(urlPath) {
+  // Strip query parameters and hash from URL path
+  const cleanPath = urlPath.split('?')[0].split('#')[0]
   // Remove /api prefix and split into parts
-  const parts = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+  const parts = cleanPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
   
   if (parts.length === 0) {
     return path.join(apiDir, 'health.js')
