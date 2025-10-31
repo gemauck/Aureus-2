@@ -49,6 +49,7 @@ model User {
   feedback      Feedback[]   @relation("UserFeedback")
   sentMessages  Message[]    @relation("MessageSender")
   passwordResets PasswordReset[]
+  calendarNotes CalendarNote[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 }
@@ -542,4 +543,19 @@ model PasswordReset {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+// Calendar Notes - User-specific daily notes
+model CalendarNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  date      DateTime // Date of the note (date only, no time)
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date]) // One note per user per date
+  @@index([userId])
+  @@index([date])
 }

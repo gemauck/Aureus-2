@@ -5,6 +5,7 @@
     const componentFiles = [
         // Defer heavier or non-critical modules until after first paint
         // Dashboard variants
+        './src/components/dashboard/Calendar.jsx',
         './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
         './src/components/dashboard/DashboardEnhanced.jsx',

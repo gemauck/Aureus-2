@@ -219,152 +219,22 @@ const Dashboard = () => {
     const totalPipeline = leadsPipelineValue;
     const weightedPipeline = leadsWeightedValue;
 
+    // Get Calendar component (may be lazy loaded)
+    const Calendar = window.Calendar || (() => <div>Loading calendar...</div>);
+    
     return (
-        <div className="space-y-3">
+        <div className="space-y-4">
+            {/* Calendar Component */}
             <div>
-                <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
-                <p className="text-xs text-gray-600">Business overview</p>
+                <Calendar />
             </div>
-
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-                {stats.map((stat, idx) => (
-                    <div key={idx} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded border p-2`}>
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'} mb-0.5`}>{stat.label}</p>
-                                <p className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{stat.value}</p>
-                                <p className={`text-[10px] ${stat.changeColor} mt-0.5`}>{stat.change}</p>
-                            </div>
-                            <div className={`${stat.color} w-10 h-10 rounded-lg flex items-center justify-center`}>
-                                <i className={`fas ${stat.icon} text-white`}></i>
-                            </div>
-                        </div>
-                    </div>
-                ))}
+            
+            {/* Other dashboard items coming soon */}
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
+                <p className={`text-sm text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Other dashboard items coming soon
+                </p>
             </div>
-
-            {/* Pipeline Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-1 gap-3">
-                <div className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg p-4 text-white">
-                    <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-semibold">Sales Pipeline</h2>
-                        <i className="fas fa-funnel-dollar text-xl opacity-80"></i>
-                    </div>
-                    <div className="space-y-2">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs opacity-90">Active Leads (Prospects)</span>
-                            <span className="text-base font-bold">{leads.length}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs opacity-90">Client Opportunities</span>
-                            <span className="text-base font-bold">{clientOpportunities.length}</span>
-                        </div>
-                        <div className="flex justify-between items-center pt-2 border-t border-blue-400">
-                            <span className="text-xs font-medium">Total Pipeline Value</span>
-                            <span className="text-lg font-bold">R {totalPipeline.toLocaleString('en-ZA')}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-medium">Weighted Value</span>
-                            <span className="text-xl font-bold">R {Math.round(weightedPipeline).toLocaleString('en-ZA')}</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                {/* Recent Projects */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                    <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>Recent Projects</h2>
-                    {recentProjects.length > 0 ? (
-                        <div className="space-y-3">
-                            {recentProjects.map(project => (
-                                <div key={project.id} className={`${isDark ? 'border-gray-700' : 'border-gray-200'} border-b pb-3 last:border-b-0 last:pb-0`}>
-                                    <div className="flex justify-between items-start mb-1.5">
-                                        <div>
-                                            <h3 className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} text-sm`}>{project.name}</h3>
-                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{project.client}</p>
-                                        </div>
-                                        <span className={`px-1.5 py-0.5 text-[10px] rounded font-medium ${
-                                            project.status === 'In Progress' ? 'bg-blue-100 text-blue-800' :
-                                            project.status === 'Review' ? 'bg-yellow-100 text-yellow-800' :
-                                            project.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                                            isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-100 text-gray-800'
-                                        }`}>
-                                            {project.status}
-                                        </span>
-                                    </div>
-                                    <div className={`flex items-center justify-between text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        <span><i className="fas fa-tasks mr-1"></i>{project.taskCount} tasks</span>
-                                        <span><i className="fas fa-calendar mr-1"></i>{project.dueDate}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-8">
-                            <i className="fas fa-project-diagram text-3xl text-gray-300 mb-2"></i>
-                            <p className="text-xs text-gray-500">No projects yet</p>
-                        </div>
-                    )}
-                </div>
-
-                {/* Recent Activity */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                    <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>Recent Activity</h2>
-                    {recentActivities.length > 0 ? (
-                        <div className="space-y-2.5">
-                            {recentActivities.slice(0, 5).map((activity, idx) => (
-                                <div key={idx} className="flex items-start space-x-2">
-                                    <div className={`w-7 h-7 rounded-full bg-${activity.color}-100 flex items-center justify-center flex-shrink-0`}>
-                                        <i className={`fas fa-${activity.icon} text-${activity.color}-600 text-xs`}></i>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className={`text-xs ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>
-                                            <span className="font-medium">{activity.user}</span>
-                                            {' '}{activity.action}{' '}
-                                            <span className="font-medium">{activity.target}</span>
-                                        </p>
-                                        <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{activity.time}</p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-8">
-                            <i className={`fas fa-history text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No activity in the last 30 days</p>
-                            <p className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'} mt-1`}>Time entries and projects will appear here</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Top Clients */}
-            {topClients.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
-                    <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-2.5`}>Top Clients by Project Count</h2>
-                    <div className="space-y-2">
-                        {topClients.map((client, idx) => (
-                            <div key={idx} className={`flex items-center justify-between py-2 ${isDark ? 'border-gray-700' : 'border-gray-200'} border-b last:border-b-0`}>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center">
-                                        <span className="text-primary-600 font-semibold text-xs">{client.name.charAt(0)}</span>
-                                    </div>
-                                    <div>
-                                        <div className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'} text-sm`}>{client.name}</div>
-                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{client.status}</div>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="font-bold text-primary-600 text-sm">{client.projectCount}</div>
-                                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>projects</div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
