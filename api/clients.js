@@ -97,6 +97,29 @@ async function handler(req, res) {
           console.log('ℹ️ Type update skipped (expected if schema is up to date):', schemaError.message)
         }
         
+        // Ensure services column exists in database (PostgreSQL compatible)
+        try {
+          // Check if column exists first
+          const columnExists = await prisma.$queryRaw`
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'Client' AND column_name = 'services'
+          `
+          if (!columnExists || columnExists.length === 0) {
+            await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "services" TEXT DEFAULT '[]'`
+            console.log('✅ Services column added to database')
+          } else {
+            console.log('✅ Services column already exists')
+          }
+        } catch (schemaError) {
+          // If error contains "already exists" or "duplicate", column already exists
+          if (schemaError.message && (schemaError.message.includes('already exists') || schemaError.message.includes('duplicate'))) {
+            console.log('ℹ️ Services column already exists:', schemaError.message)
+          } else {
+            console.log('ℹ️ Services column check failed (may already exist):', schemaError.message)
+          }
+        }
+        
         // Simplified: Single query to get only clients
         // Filter by type='client' directly in the database query
         let clients = []
