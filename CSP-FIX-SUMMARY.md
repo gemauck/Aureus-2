@@ -50,8 +50,17 @@ The application should now load without CSP violations. All external resources f
 - `server.js` - Updated CSP configuration and added trust proxy
 - `deploy-to-server.sh` - Improved conflict resolution and description
 
+## Additional Fixes
+
+### Inline Event Handlers
+Added `scriptSrcAttr: ["'unsafe-inline'"]` to allow inline event handlers in HTML attributes.
+
+### Source Maps
+Added `https://unpkg.com` to `connectSrc` to allow Leaflet source maps to load.
+
 ## Status
 ✅ **FIXED** - All CSP violations resolved
-✅ **DEPLOYED** - Changes are live on production server
-✅ **VERIFIED** - Server restart successful, no errors in logs
+✅ **DEPLOYED** - Changes are live on production server  
+✅ **VERIFIED** - Server restart successful, no CSP errors in logs
+✅ **COMPLETE** - Application fully functional with all external resources loading
 
