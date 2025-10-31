@@ -500,7 +500,7 @@ const DatabaseAPI = {
         return result;
     },
 
-    // Manufacturing operations - Production Orders
+    // Manufacturing operations - Work Orders
     async getProductionOrders() {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching production orders from database...');
