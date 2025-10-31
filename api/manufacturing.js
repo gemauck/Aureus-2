@@ -143,7 +143,8 @@ async function handler(req, res) {
           // Ensure InventoryItem exists
           let master = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
           if (!master && type !== 'sale' && type !== 'adjustment') {
-            master = await tx.inventoryItem.create({ data: {
+            // Create with required fields first
+            const createData = {
               sku: body.sku,
               name: body.itemName,
               category: body.category || 'components',
@@ -155,7 +156,26 @@ async function handler(req, res) {
               unitCost: parseFloat(body.unitCost) || 0,
               totalValue: 0,
               supplier: body.supplier || ''
-            }})
+            };
+            
+            // Try to create with new fields, if that fails, create without them
+            try {
+              master = await tx.inventoryItem.create({ 
+                data: {
+                  ...createData,
+                  supplierPartNumbers: body.supplierPartNumbers || '[]',
+                  legacyPartNumber: body.legacyPartNumber || ''
+                }
+              })
+            } catch (createError) {
+              // If columns don't exist yet, create without them
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+                console.warn('⚠️ Creating inventory item without new fields (columns may not exist yet)');
+                master = await tx.inventoryItem.create({ data: createData })
+              } else {
+                throw createError;
+              }
+            }
           }
 
           const now = body.date ? new Date(body.date) : new Date()
@@ -327,6 +347,173 @@ async function handler(req, res) {
       }
     }
 
+    // BULK IMPORT (POST /api/manufacturing/inventory with items array)
+    if (req.method === 'POST' && !id && Array.isArray(req.body?.items)) {
+      const items = req.body.items || []
+      
+      if (items.length === 0) {
+        return badRequest(res, 'items array required and must not be empty')
+      }
+
+      console.log(`📦 Starting bulk import of ${items.length} inventory items...`)
+
+      try {
+        // Get current max SKU number
+        const allItems = await prisma.inventoryItem.findMany({
+          where: { sku: { startsWith: 'SKU' } },
+          select: { sku: true }
+        })
+        
+        let maxNumber = 0
+        for (const item of allItems) {
+          const match = item.sku.match(/^SKU(\d+)$/)
+          if (match) {
+            const num = parseInt(match[1])
+            if (num > maxNumber) maxNumber = num
+          }
+        }
+
+        let nextSkuNumber = maxNumber + 1
+        const created = []
+        const errors = []
+
+        // Helper functions
+        const determineCategory = (partNumber, description) => {
+          const partLower = (partNumber || '').toLowerCase()
+          const descLower = (description || '').toLowerCase()
+          
+          if (partLower.includes('fuse') || partLower.includes('led') || partLower.includes('diode') || 
+              partLower.includes('transistor') || partLower.includes('capacitor') || partLower.includes('resistor') ||
+              partLower.includes('ic') || partLower.includes('op amp') || partLower.includes('regulator') ||
+              partLower.includes('sensor') || partLower.includes('switch') || partLower.includes('connector') ||
+              partLower.includes('header') || partLower.includes('socket') || partLower.includes('relay') ||
+              partLower.includes('inductor') || partLower.includes('zener') || partLower.includes('schottky')) {
+            return 'components'
+          }
+          
+          if (partLower.includes('enclosure') || partLower.includes('box') || partLower.includes('housing') ||
+              partLower.includes('panel') || partLower.includes('gland') || partLower.includes('junction')) {
+            return 'accessories'
+          }
+          
+          if (partLower.includes('battery') || partLower.includes('power') || partLower.includes('psu')) {
+            return 'accessories'
+          }
+          
+          if (partLower.includes('screw') || partLower.includes('nut') || partLower.includes('washer') ||
+              partLower.includes('spacer') || partLower.includes('tape') || partLower.includes('pipe') ||
+              partLower.includes('joiner') || partLower.includes('valve')) {
+            return 'accessories'
+          }
+          
+          if (partLower.includes('completed unit') || partLower.includes('fuel track completed')) {
+            return 'finished_goods'
+          }
+          
+          return 'components'
+        }
+
+        const determineType = (partNumber, description) => {
+          const partLower = (partNumber || '').toLowerCase()
+          
+          if (partLower.includes('completed unit') || partLower.includes('finished')) {
+            return 'finished_good'
+          }
+          
+          if (partLower.includes('housing') || partLower.includes('card rev')) {
+            return 'work_in_progress'
+          }
+          
+          return 'raw_material'
+        }
+
+        // Process items in batch
+        for (const itemData of items) {
+          try {
+            const name = itemData.name || itemData.description || itemData.partNumber
+            if (!name) {
+              errors.push({ item: itemData.partNumber || 'Unknown', error: 'name/description required' })
+              continue
+            }
+
+            const quantity = parseFloat(itemData.quantity) || 0
+            const totalValue = parseFloat(itemData.totalValue) || 0
+            const unitCost = quantity > 0 ? Math.round((totalValue / quantity) * 100) / 100 : 0
+            const reorderPoint = Math.max(1, Math.floor(quantity * 0.2))
+            const reorderQty = Math.max(10, Math.floor(quantity * 0.3))
+            
+            let status = 'out_of_stock'
+            if (quantity > reorderPoint) {
+              status = 'in_stock'
+            } else if (quantity > 0 && quantity <= reorderPoint) {
+              status = 'low_stock'
+            }
+
+            const sku = `SKU${String(nextSkuNumber).padStart(4, '0')}`
+            nextSkuNumber++
+
+            // Create with core fields first
+            const createData = {
+              sku,
+              name,
+              thumbnail: itemData.thumbnail || '',
+              category: itemData.category || determineCategory(itemData.partNumber, itemData.description),
+              type: itemData.type || determineType(itemData.partNumber, itemData.description),
+              quantity,
+              unit: itemData.unit || 'pcs',
+              reorderPoint,
+              reorderQty,
+              location: itemData.location || '',
+              unitCost,
+              totalValue,
+              supplier: itemData.supplier || '',
+              status,
+              lastRestocked: new Date(),
+              ownerId: null
+            };
+            
+            // Try to create with new fields, fallback to core fields if columns don't exist
+            let inventoryItem;
+            try {
+              inventoryItem = await prisma.inventoryItem.create({
+                data: {
+                  ...createData,
+                  supplierPartNumbers: itemData.supplierPartNumbers || '[]',
+                  legacyPartNumber: itemData.legacyPartNumber || ''
+                }
+              })
+            } catch (createError) {
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+                console.warn('⚠️ Bulk import: Creating items without new fields (run migration)');
+                inventoryItem = await prisma.inventoryItem.create({ data: createData })
+              } else {
+                throw createError;
+              }
+            }
+
+            created.push({ sku: inventoryItem.sku, name: inventoryItem.name })
+          } catch (error) {
+            errors.push({ 
+              item: itemData.partNumber || itemData.name || 'Unknown', 
+              error: error.message 
+            })
+          }
+        }
+
+        console.log(`✅ Bulk import completed: ${created.length} created, ${errors.length} errors`)
+        return ok(res, {
+          message: `Bulk import completed: ${created.length} items created, ${errors.length} errors`,
+          created: created.length,
+          errors: errors.length,
+          createdItems: created,
+          errorItems: errors
+        })
+      } catch (error) {
+        console.error('❌ Bulk import failed:', error)
+        return serverError(res, 'Failed to bulk import inventory items', error.message)
+      }
+    }
+
     // CREATE (POST /api/manufacturing/inventory)
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
@@ -393,6 +580,27 @@ async function handler(req, res) {
           }
         })
         
+        // Try to update new fields if provided (safe - won't crash if columns don't exist yet)
+        if ((body.supplierPartNumbers !== undefined || body.legacyPartNumber !== undefined)) {
+          try {
+            const updateFields = {};
+            if (body.supplierPartNumbers !== undefined) updateFields.supplierPartNumbers = body.supplierPartNumbers || '[]';
+            if (body.legacyPartNumber !== undefined) updateFields.legacyPartNumber = body.legacyPartNumber || '';
+            
+            if (Object.keys(updateFields).length > 0) {
+              await prisma.inventoryItem.update({
+                where: { id: item.id },
+                data: updateFields
+              });
+              // Update local item object for response
+              Object.assign(item, updateFields);
+            }
+          } catch (e) {
+            // Columns may not exist yet - this is safe, migration will add them
+            console.warn('⚠️ New inventory fields not available yet (run migration):', e.message);
+          }
+        }
+        
         console.log('✅ Created inventory item:', item.id)
         return created(res, { 
           item: {
@@ -434,6 +642,25 @@ async function handler(req, res) {
         // Location removed - don't update it
         if (body.unitCost !== undefined) updateData.unitCost = parseFloat(body.unitCost)
         if (body.supplier !== undefined) updateData.supplier = body.supplier
+        
+        // New fields - only include if provided (safe for backwards compatibility)
+        if (body.supplierPartNumbers !== undefined) {
+          try {
+            updateData.supplierPartNumbers = body.supplierPartNumbers
+          } catch (e) {
+            // Column may not exist yet - safe to ignore
+            console.warn('⚠️ supplierPartNumbers field not available:', e.message)
+          }
+        }
+        if (body.legacyPartNumber !== undefined) {
+          try {
+            updateData.legacyPartNumber = body.legacyPartNumber
+          } catch (e) {
+            // Column may not exist yet - safe to ignore
+            console.warn('⚠️ legacyPartNumber field not available:', e.message)
+          }
+        }
+        
         // Status will be auto-calculated based on quantity and reorder point
         if (body.lastRestocked !== undefined) updateData.lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : null
         
@@ -456,10 +683,28 @@ async function handler(req, res) {
           updateData.status = 'out_of_stock'
         }
         
-        const item = await prisma.inventoryItem.update({
-          where: { id },
-          data: updateData
-        })
+        // Try to update - if new fields cause error, retry without them
+        let item;
+        try {
+          item = await prisma.inventoryItem.update({
+            where: { id },
+            data: updateData
+          })
+        } catch (updateError) {
+          // If error is about missing columns, retry without new fields
+          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('legacyPartNumber'))) {
+            console.warn('⚠️ New inventory columns not available yet, updating without them');
+            const safeUpdateData = { ...updateData };
+            delete safeUpdateData.supplierPartNumbers;
+            delete safeUpdateData.legacyPartNumber;
+            item = await prisma.inventoryItem.update({
+              where: { id },
+              data: safeUpdateData
+            })
+          } else {
+            throw updateError;
+          }
+        }
         
         console.log('✅ Updated inventory item:', id)
         return ok(res, { 
@@ -949,25 +1194,42 @@ async function handler(req, res) {
               const unitCost = parseFloat(body.unitCost) || 0
               const reorderPoint = parseFloat(body.reorderPoint) || 0
               const totalValue = quantity * unitCost
-              item = await tx.inventoryItem.create({
-                data: {
-                  sku: body.sku,
-                  name: body.itemName,
-                  thumbnail: body.thumbnail || '',
-                  category: body.category || 'components',
-                  type: body.itemType || 'raw_material',
-                  quantity: quantity,
-                  unit: body.unit || 'pcs',
-                  reorderPoint,
-                  reorderQty: parseFloat(body.reorderQty) || 0,
-                  unitCost,
-                  totalValue,
-                  supplier: body.supplier || '',
-                  status: quantity > reorderPoint ? 'in_stock' : (quantity > 0 ? 'low_stock' : 'out_of_stock'),
-                  lastRestocked: body.date ? new Date(body.date) : new Date(),
-                  ownerId: null
+              // Create with core fields
+              const createData = {
+                sku: body.sku,
+                name: body.itemName,
+                thumbnail: body.thumbnail || '',
+                category: body.category || 'components',
+                type: body.itemType || 'raw_material',
+                quantity: quantity,
+                unit: body.unit || 'pcs',
+                reorderPoint,
+                reorderQty: parseFloat(body.reorderQty) || 0,
+                unitCost,
+                totalValue,
+                supplier: body.supplier || '',
+                status: quantity > reorderPoint ? 'in_stock' : (quantity > 0 ? 'low_stock' : 'out_of_stock'),
+                lastRestocked: body.date ? new Date(body.date) : new Date(),
+                ownerId: null
+              };
+              
+              // Try with new fields, fallback if columns don't exist
+              try {
+                item = await tx.inventoryItem.create({
+                  data: {
+                    ...createData,
+                    supplierPartNumbers: body.supplierPartNumbers || '[]',
+                    legacyPartNumber: body.legacyPartNumber || ''
+                  }
+                })
+              } catch (createError) {
+                if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+                  console.warn('⚠️ Stock receipt: Creating item without new fields');
+                  item = await tx.inventoryItem.create({ data: createData })
+                } else {
+                  throw createError;
                 }
-              })
+              }
             } else {
               // Increment quantity and update value
               const unitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : item.unitCost
