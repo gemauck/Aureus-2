@@ -265,51 +265,31 @@
     function startLazyLoading() {
         // Wait for critical components to be ready
         setTimeout(() => {
-            // Load ProjectDetail and its dependencies in a priority batch first
-            const priorityComponents = [
-                './src/components/projects/CustomFieldModal.jsx',
-                './src/components/projects/TaskDetailModal.jsx',
-                './src/components/projects/ListModal.jsx',
-                './src/components/projects/ProjectModal.jsx',
-                './src/components/projects/KanbanView.jsx',
-                './src/components/projects/CommentsPopup.jsx',
-                './src/components/projects/DocumentCollectionModal.jsx',
-                './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
-                './src/components/projects/ProjectDetail.jsx'
-            ];
+            // ProjectDetail is now loaded directly in index.html, so skip it here
+            // Load remaining components in small batches
+            const batchSize = 3;
+            let index = 0;
             
-            console.log('📦 Loading ProjectDetail and dependencies first...');
-            Promise.all(priorityComponents.map(loadComponent)).then(() => {
-                console.log('✅ ProjectDetail dependencies loaded, continuing with other components...');
-                
-                // Remove priority components from main list to avoid duplicates
-                const remainingComponents = componentFiles.filter(f => !priorityComponents.includes(f));
-                
-                // Load remaining components in small batches
-                const batchSize = 3;
-                let index = 0;
-                
-                function loadBatch() {
-                    const batch = remainingComponents.slice(index, index + batchSize);
-                    if (batch.length === 0) {
-                        return;
-                    }
-                    
-                    Promise.all(batch.map(loadComponent)).then(() => {
-                        index += batchSize;
-                        // Use requestIdleCallback if available, otherwise setTimeout
-                        const nextBatchDelay = index < remainingComponents.length ? 100 : 0;
-                        
-                        if (typeof requestIdleCallback !== 'undefined') {
-                            requestIdleCallback(loadBatch, { timeout: 500 });
-                        } else {
-                            setTimeout(loadBatch, nextBatchDelay);
-                        }
-                    });
+            function loadBatch() {
+                const batch = componentFiles.slice(index, index + batchSize);
+                if (batch.length === 0) {
+                    return;
                 }
                 
-                loadBatch();
-            });
+                Promise.all(batch.map(loadComponent)).then(() => {
+                    index += batchSize;
+                    // Use requestIdleCallback if available, otherwise setTimeout
+                    const nextBatchDelay = index < componentFiles.length ? 100 : 0;
+                    
+                    if (typeof requestIdleCallback !== 'undefined') {
+                        requestIdleCallback(loadBatch, { timeout: 500 });
+                    } else {
+                        setTimeout(loadBatch, nextBatchDelay);
+                    }
+                });
+            }
+            
+            loadBatch();
         }, 500); // Reduced delay to 500ms for faster loading
     }
 })();

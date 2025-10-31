@@ -453,6 +453,18 @@
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>
     
+    <!-- Load ProjectDetail and dependencies early (needed for project viewing) -->
+    <!-- ProjectDetail dependencies must load before ProjectDetail -->
+    <script defer src="./dist/src/components/projects/CustomFieldModal.js"></script>
+    <script defer src="./dist/src/components/projects/TaskDetailModal.js"></script>
+    <script defer src="./dist/src/components/projects/ListModal.js"></script>
+    <script defer src="./dist/src/components/projects/ProjectModal.js"></script>
+    <script defer src="./dist/src/components/projects/KanbanView.js"></script>
+    <script defer src="./dist/src/components/projects/CommentsPopup.js"></script>
+    <script defer src="./dist/src/components/projects/DocumentCollectionModal.js"></script>
+    <script defer src="./dist/src/components/projects/MonthlyDocumentCollectionTracker.js"></script>
+    <script defer src="./dist/src/components/projects/ProjectDetail.js"></script>
+    
     <!-- Optional integrations moved to lazy -->
     
     <!-- Lazy Load Non-Critical Components -->
