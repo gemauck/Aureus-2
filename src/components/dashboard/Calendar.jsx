@@ -113,47 +113,47 @@ const Calendar = () => {
     
     return (
         <>
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center space-x-3">
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`}>
+                <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center space-x-2">
                         <button
                             onClick={goToPreviousMonth}
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
                         >
-                            <i className="fas fa-chevron-left"></i>
+                            <i className="fas fa-chevron-left text-xs"></i>
                         </button>
-                        <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                        <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                         </h2>
                         <button
                             onClick={goToNextMonth}
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded transition-colors`}
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
                         >
-                            <i className="fas fa-chevron-right"></i>
+                            <i className="fas fa-chevron-right text-xs"></i>
                         </button>
                     </div>
                     <button
                         onClick={goToToday}
-                        className={`text-sm ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium`}
+                        className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium`}
                     >
                         Today
                     </button>
                 </div>
                 
                 {/* Day names header */}
-                <div className="grid grid-cols-7 gap-1 mb-2">
+                <div className="grid grid-cols-7 gap-0.5 mb-1">
                     {dayNames.map(day => (
                         <div
                             key={day}
-                            className={`text-center text-xs font-semibold py-2 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+                            className={`text-center text-[10px] font-semibold py-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
                         >
-                            {day}
+                            {day.substring(0, 1)}
                         </div>
                     ))}
                 </div>
                 
-                {/* Calendar grid */}
-                <div className="grid grid-cols-7 gap-1">
+                {/* Calendar grid - compact */}
+                <div className="grid grid-cols-7 gap-0.5">
                     {days.map((day, index) => {
                         if (day === null) {
                             return <div key={`empty-${index}`} className="aspect-square"></div>;
@@ -168,22 +168,22 @@ const Calendar = () => {
                                 key={day}
                                 onClick={() => handleDayClick(day)}
                                 className={`
-                                    aspect-square rounded transition-all
+                                    aspect-square rounded transition-all text-xs
                                     ${dayIsToday 
                                         ? isDark 
-                                            ? 'bg-blue-600 text-white border-2 border-blue-400' 
-                                            : 'bg-blue-500 text-white border-2 border-blue-300'
+                                            ? 'bg-blue-600 text-white border border-blue-400' 
+                                            : 'bg-blue-500 text-white border border-blue-300'
                                         : isDark
                                             ? 'text-gray-200 hover:bg-gray-700 border border-gray-600'
                                             : 'text-gray-900 hover:bg-gray-100 border border-gray-200'
                                     }
-                                    ${dayHasNotes ? 'font-bold' : ''}
+                                    ${dayHasNotes ? 'font-bold' : 'font-normal'}
                                     flex flex-col items-center justify-center relative
                                 `}
                             >
-                                <span>{day}</span>
+                                <span className="text-xs">{day}</span>
                                 {dayHasNotes && (
-                                    <div className={`absolute bottom-1 w-1 h-1 rounded-full ${dayIsToday ? 'bg-white' : isDark ? 'bg-blue-400' : 'bg-blue-600'}`}></div>
+                                    <div className={`absolute bottom-0.5 w-1 h-1 rounded-full ${dayIsToday ? 'bg-white' : isDark ? 'bg-blue-400' : 'bg-blue-600'}`}></div>
                                 )}
                             </button>
                         );
