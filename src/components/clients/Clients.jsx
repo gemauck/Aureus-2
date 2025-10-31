@@ -144,6 +144,9 @@ const Clients = React.memo(() => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
+    // Separate sort state for leads
+    const [leadSortField, setLeadSortField] = useState('name');
+    const [leadSortDirection, setLeadSortDirection] = useState('asc');
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
@@ -720,6 +723,11 @@ const Clients = React.memo(() => {
                 if (window.DatabaseAPI?.clearCache) {
                     window.DatabaseAPI.clearCache('/leads');
                 }
+                // Clear localStorage cache to ensure fresh data
+                if (window.storage?.removeLeads) {
+                    window.storage.removeLeads();
+                    console.log('🗑️ localStorage cache cleared for leads');
+                }
                 lastLeadsApiCallTimestamp = 0; // Reset to force API call
             }
             
@@ -1170,11 +1178,6 @@ const Clients = React.memo(() => {
                     commentsCount: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 0
                 });
                 
-                // Update local state immediately for responsive UI
-                const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
-                setLeads(updatedLeads);
-                setSelectedLead(updatedLead); // Update selected lead immediately
-                
                 if (token && window.api?.updateLead) {
                     try {
                         console.log('🌐 Calling API to update lead:', updatedLead.id);
@@ -1185,23 +1188,86 @@ const Clients = React.memo(() => {
                         const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                         console.log('✅ Lead updated in database');
                         console.log('✅ API response:', apiResponse);
-                        console.log('✅ Saved lead data:', {
-                            contacts: Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array',
-                            followUps: Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 'not array',
-                            notes: updatedLead.notes ? updatedLead.notes.length : 0,
-                            comments: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 'not array'
+                        console.log('✅ API response structure:', {
+                            hasData: !!apiResponse?.data,
+                            hasLead: !!apiResponse?.data?.lead,
+                            hasDirectLead: !!apiResponse?.lead,
+                            dataKeys: apiResponse?.data ? Object.keys(apiResponse.data) : [],
+                            responseKeys: apiResponse ? Object.keys(apiResponse) : []
                         });
                         
-                        // Don't immediately refresh - let the UI use the updated local state
-                        // Only refresh if user manually refreshes page
-                        // setTimeout(() => {
-                        //     loadLeads(true); // Force refresh to bypass API throttling
-                        // }, 500);
+                        // Extract the saved lead from API response - try multiple possible locations
+                        let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse?.data || updatedLead;
+                        
+                        // If we got the same object back, log a warning
+                        if (savedLead === updatedLead && savedLead.id === updatedLead.id) {
+                            console.warn('⚠️ API response might not contain updated lead, using optimistic update');
+                        } else {
+                            console.log('✅ Extracted saved lead from API response:', savedLead.id);
+                        }
+                        
+                        // Safe JSON parser helper
+                        const safeParseJSON = (value, defaultValue) => {
+                            if (typeof value !== 'string') return value || defaultValue;
+                            try {
+                                return JSON.parse(value || JSON.stringify(defaultValue));
+                            } catch (e) {
+                                console.warn('⚠️ Failed to parse JSON field, using default:', e);
+                                return defaultValue;
+                            }
+                        };
+                        
+                        // Parse JSON fields from database (they come as strings)
+                        savedLead = {
+                            ...savedLead,
+                            contacts: safeParseJSON(savedLead.contacts, []),
+                            followUps: safeParseJSON(savedLead.followUps, []),
+                            projectIds: safeParseJSON(savedLead.projectIds, []),
+                            comments: safeParseJSON(savedLead.comments, []),
+                            activityLog: safeParseJSON(savedLead.activityLog, []),
+                            sites: safeParseJSON(savedLead.sites, []),
+                            contracts: safeParseJSON(savedLead.contracts, []),
+                            billingTerms: safeParseJSON(savedLead.billingTerms, {}),
+                            proposals: safeParseJSON(savedLead.proposals, [])
+                        };
+                        
+                        // CRITICAL: Use the API response to update state, not optimistic updates
+                        // This ensures we're synced with the database
+                        const savedLeads = leads.map(l => l.id === savedLead.id ? savedLead : l);
+                        setLeads(savedLeads);
+                        setSelectedLead(savedLead); // Update selected lead with persisted data
+                        
+                        // Also update localStorage to keep cache in sync
+                        if (window.storage?.setLeads) {
+                            window.storage.setLeads(savedLeads);
+                            console.log('💾 Updated leads in localStorage with saved data');
+                        }
+                        
+                        // Invalidate API cache to ensure next load is fresh
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/leads');
+                            console.log('🗑️ Cleared API cache for leads');
+                        }
+                        
+                        console.log('✅ Saved lead data from API:', {
+                            contacts: Array.isArray(savedLead.contacts) ? savedLead.contacts.length : 'not array',
+                            followUps: Array.isArray(savedLead.followUps) ? savedLead.followUps.length : 'not array',
+                            notes: savedLead.notes ? savedLead.notes.length : 0,
+                            comments: Array.isArray(savedLead.comments) ? savedLead.comments.length : 'not array'
+                        });
                     } catch (apiError) {
                         console.error('❌ API error updating lead:', apiError);
-                        // Local update already applied
+                        // If API fails, still update local state but show warning
+                        const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                        setLeads(updatedLeads);
+                        setSelectedLead(updatedLead);
+                        alert('Lead saved locally but may not have been saved to database. Please check your connection.');
                     }
                 } else {
+                    // No authentication - just update local state
+                    const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
+                    setLeads(updatedLeads);
+                    setSelectedLead(updatedLead);
                     console.log('✅ Lead updated locally (no authentication)');
                 }
                 console.log('✅ Lead updated');
@@ -1401,6 +1467,16 @@ const Clients = React.memo(() => {
         }
     };
 
+    // Separate sort handler for leads
+    const handleLeadSort = (field) => {
+        if (leadSortField === field) {
+            setLeadSortDirection(leadSortDirection === 'asc' ? 'desc' : 'asc');
+        } else {
+            setLeadSortField(field);
+            setLeadSortDirection('asc');
+        }
+    };
+
     // Sort function
     const sortClients = (clients) => {
         return [...clients].sort((a, b) => {
@@ -1424,6 +1500,37 @@ const Clients = React.memo(() => {
             if (typeof bValue === 'string') bValue = bValue.toLowerCase();
             
             if (sortDirection === 'asc') {
+                return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+            } else {
+                return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+            }
+        });
+    };
+
+    // Sort function for leads
+    const sortLeads = (leads) => {
+        return [...leads].sort((a, b) => {
+            let aValue = a[leadSortField];
+            let bValue = b[leadSortField];
+            
+            // Handle date fields
+            if (leadSortField === 'firstContactDate' || leadSortField === 'lastContact') {
+                aValue = new Date(aValue || 0);
+                bValue = new Date(bValue || 0);
+            }
+            
+            // Handle stage sorting (Awareness < Interest < Desire < Action)
+            if (leadSortField === 'stage') {
+                const stageOrder = { 'Awareness': 1, 'Interest': 2, 'Desire': 3, 'Action': 4 };
+                aValue = stageOrder[aValue] || 0;
+                bValue = stageOrder[bValue] || 0;
+            }
+            
+            // Convert to strings for comparison
+            if (typeof aValue === 'string') aValue = aValue.toLowerCase();
+            if (typeof bValue === 'string') bValue = bValue.toLowerCase();
+            
+            if (leadSortDirection === 'asc') {
                 return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
             } else {
                 return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
@@ -1488,6 +1595,9 @@ const Clients = React.memo(() => {
         return matchesSearch && matchesIndustry && matchesStatus;
     });
 
+    // Sort the filtered leads (default to alphabetical by name)
+    const sortedLeads = sortLeads(filteredLeads);
+
     // Paginate clients and leads
     const clientsStartIndex = (clientsPage - 1) * ITEMS_PER_PAGE;
     const clientsEndIndex = clientsStartIndex + ITEMS_PER_PAGE;
@@ -1496,17 +1606,17 @@ const Clients = React.memo(() => {
 
     const leadsStartIndex = (leadsPage - 1) * ITEMS_PER_PAGE;
     const leadsEndIndex = leadsStartIndex + ITEMS_PER_PAGE;
-    const paginatedLeads = filteredLeads.slice(leadsStartIndex, leadsEndIndex);
-    const totalLeadsPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+    const paginatedLeads = sortedLeads.slice(leadsStartIndex, leadsEndIndex);
+    const totalLeadsPages = Math.ceil(sortedLeads.length / ITEMS_PER_PAGE);
 
     // Debug pagination
     console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
 
-    // Reset page to 1 when filters change
+    // Reset page to 1 when filters or sort changes
     useEffect(() => {
         setClientsPage(1);
         setLeadsPage(1);
-    }, [searchTerm, filterIndustry, filterStatus]);
+    }, [searchTerm, filterIndustry, filterStatus, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
@@ -2109,11 +2219,53 @@ const Clients = React.memo(() => {
                 <table className={`min-w-full divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-200'}`}>
                     <thead className={isDark ? 'bg-gray-700' : 'bg-gray-50'}>
                         <tr>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Lead</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Industry</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Stage</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Status</th>
-                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>Time Since Contact</th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('name')}
+                            >
+                                <div className="flex items-center">
+                                    Lead
+                                    {leadSortField === 'name' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('industry')}
+                            >
+                                <div className="flex items-center">
+                                    Industry
+                                    {leadSortField === 'industry' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('stage')}
+                            >
+                                <div className="flex items-center">
+                                    Stage
+                                    {leadSortField === 'stage' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                                Status
+                            </th>
+                            <th 
+                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                onClick={() => handleLeadSort('firstContactDate')}
+                            >
+                                <div className="flex items-center">
+                                    Time Since Contact
+                                    {leadSortField === 'firstContactDate' && (
+                                        <i className={`fas fa-sort-${leadSortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
+                                    )}
+                                </div>
+                            </th>
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
@@ -2182,7 +2334,7 @@ const Clients = React.memo(() => {
             {totalLeadsPages > 1 && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, filteredLeads.length)} of {filteredLeads.length} leads
+                        Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, sortedLeads.length)} of {sortedLeads.length} leads
                     </div>
                     <div className="flex items-center gap-2">
                         <button
@@ -2278,7 +2430,10 @@ const Clients = React.memo(() => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
-                            onClick={() => {
+                            onClick={async () => {
+                                // Refresh leads from database to ensure we have latest persisted data
+                                console.log('🔄 Refreshing leads after closing lead detail...');
+                                await loadLeads(true); // Force refresh to get latest data
                                 setViewMode('leads');
                                 setSelectedLead(null);
                             }}
@@ -2307,7 +2462,10 @@ const Clients = React.memo(() => {
                         key={selectedLead?.id || 'new-lead'}
                         lead={selectedLead}
                         onSave={handleSaveLead}
-                        onClose={() => {
+                        onClose={async () => {
+                            // Refresh leads from database to ensure we have latest persisted data
+                            console.log('🔄 Refreshing leads after closing modal...');
+                            await loadLeads(true); // Force refresh to get latest data
                             setViewMode('leads');
                             setSelectedLead(null);
                             setCurrentLeadTab('overview');
