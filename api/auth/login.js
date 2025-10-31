@@ -13,10 +13,14 @@ async function handler(req, res) {
     
     // Validate request body
     const { email, password } = req.body || {}
+    logger.info({ email, hasPassword: !!password, bodyKeys: Object.keys(req.body || {}) }, '📝 Request body parsed')
+    
     if (!email || !password) {
       logger.warn({ hasEmail: !!email, hasPassword: !!password }, '❌ Missing email or password')
       return badRequest(res, 'Email and password required')
     }
+
+    logger.info({ email }, '✅ Email and password validated, proceeding...')
 
     // Development-only shortcut to allow local login without a database
     if (process.env.DEV_LOCAL_NO_DB === 'true') {
