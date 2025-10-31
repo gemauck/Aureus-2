@@ -3026,8 +3026,20 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={openAddMovementModal}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('🖱️ Button clicked - Record Movement');
+                  console.log('🔍 openAddMovementModal type:', typeof openAddMovementModal);
+                  if (typeof openAddMovementModal === 'function') {
+                    openAddMovementModal();
+                  } else {
+                    console.error('❌ openAddMovementModal is not a function!', openAddMovementModal);
+                    alert('Error: openAddMovementModal function not found. Please check console.');
+                  }
+                }}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer"
+                type="button"
               >
                 <i className="fas fa-plus text-xs"></i>
                 Record Movement
