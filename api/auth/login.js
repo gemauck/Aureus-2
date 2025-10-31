@@ -99,11 +99,22 @@ async function handler(req, res) {
     }
 
     console.log('🔑 Verifying password for user:', user.id)
+    console.log('🔑 Password length received:', password?.length || 0)
+    console.log('🔑 Password hash length:', user.passwordHash?.length || 0)
+    console.log('🔑 Password hash starts with:', user.passwordHash?.substring(0, 7) || 'N/A')
     
     // Verify password
     const valid = await bcrypt.compare(password, user.passwordHash)
+    console.log('🔑 Password comparison result:', valid)
+    
     if (!valid) {
       console.log('❌ Invalid password for user:', email)
+      console.log('❌ Check: password hash format, password encoding, or password mismatch')
+      
+      // Additional diagnostic: check if password hash format is valid
+      const hashFormat = user.passwordHash.match(/^\$2[ayb]\$.{56}$/)
+      console.log('❌ Password hash format valid:', !!hashFormat)
+      
       return unauthorized(res, 'Invalid credentials')
     }
 
