@@ -144,7 +144,7 @@ const Manufacturing = () => {
           );
         }
 
-        // Production Orders
+        // Work Orders
         if (typeof window.DatabaseAPI.getProductionOrders === 'function') {
           apiCalls.push(
             window.DatabaseAPI.getProductionOrders()
@@ -2597,7 +2597,7 @@ const Manufacturing = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Target Completion Date *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Target Completion Date</label>
                     <input
                       type="date"
                       value={formData.targetDate || ''}
@@ -2699,7 +2699,7 @@ const Manufacturing = () => {
                   }
                 }}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                disabled={!formData.bomId || !formData.quantity || !formData.startDate || !formData.targetDate || !formData.assignedTo}
+                disabled={!formData.bomId || !formData.quantity || !formData.startDate || !formData.assignedTo}
               >
                 {modalType === 'add_production' ? 'Create Work Order' : 'Update Order'}
               </button>
