@@ -165,11 +165,12 @@ async function handler(req, res) {
     })
     
   } catch (e) {
-    console.error('❌ Login error:', {
-      message: e.message,
-      stack: e.stack,
-      code: e.code
-    })
+    logger.error({ 
+      email: req.body?.email || 'unknown',
+      error: e.message, 
+      stack: e.stack, 
+      code: e.code 
+    }, '❌ Login error')
     return serverError(res, 'Login failed', e.message)
   }
 }
