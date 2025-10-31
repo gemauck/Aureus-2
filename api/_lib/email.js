@@ -14,38 +14,76 @@ let useSendGridHTTP = false;
 
 // Send email via SendGrid HTTP API (bypasses SMTP port blocking)
 async function sendViaSendGridAPI(mailOptions, apiKey) {
+    // Extract email from "Name <email>" format if needed
+    let fromEmail = mailOptions.from;
+    let fromName = mailOptions.fromName || 'Abcotronics';
+    
+    if (mailOptions.from.includes('<')) {
+        const match = mailOptions.from.match(/^(.+?)\s*<(.+)>$/);
+        if (match) {
+            fromName = match[1].trim() || fromName;
+            fromEmail = match[2].trim();
+        }
+    }
+    
+    const payload = {
+        personalizations: [{
+            to: [{ email: mailOptions.to }],
+            subject: mailOptions.subject
+        }],
+        from: { email: fromEmail, name: fromName },
+        content: []
+    };
+    
+    // Add reply_to if provided
+    if (mailOptions.replyTo) {
+        const replyEmail = mailOptions.replyTo.includes('<') 
+            ? mailOptions.replyTo.match(/<(.+)>/)?.[1] || mailOptions.replyTo
+            : mailOptions.replyTo;
+        payload.reply_to = { email: replyEmail };
+    }
+    
+    // SendGrid requires text/plain first, then text/html
+    if (mailOptions.text) {
+        payload.content.push({
+            type: 'text/plain',
+            value: mailOptions.text
+        });
+    }
+    
+    if (mailOptions.html) {
+        payload.content.push({
+            type: 'text/html',
+            value: mailOptions.html
+        });
+    } else if (mailOptions.text) {
+        // If no HTML but we have text, use text for HTML too
+        payload.content.push({
+            type: 'text/html',
+            value: mailOptions.text.replace(/\n/g, '<br>')
+        });
+    }
+    
+    console.log('📧 SendGrid API payload:', {
+        to: mailOptions.to,
+        from: { email: fromEmail, name: fromName },
+        subject: mailOptions.subject,
+        hasHtml: !!mailOptions.html,
+        hasText: !!mailOptions.text
+    });
+    
     const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${apiKey}`,
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            personalizations: [{
-                to: [{ email: mailOptions.to }],
-                subject: mailOptions.subject
-            }],
-            from: { email: mailOptions.from, name: mailOptions.fromName || 'Abcotronics' },
-            reply_to: mailOptions.replyTo ? { email: mailOptions.replyTo } : undefined,
-            content: [
-                // SendGrid requires text/plain first, then text/html
-                mailOptions.text ? {
-                    type: 'text/plain',
-                    value: mailOptions.text
-                } : undefined,
-                mailOptions.html ? {
-                    type: 'text/html',
-                    value: mailOptions.html
-                } : {
-                    type: 'text/plain',
-                    value: mailOptions.text || mailOptions.html
-                }
-            ].filter(Boolean)
-        })
+        body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ SendGrid API error response:', errorText);
         throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorText}`);
     }
 
@@ -62,13 +100,20 @@ function getTransporter() {
         transporterInitialized = true;
         
         const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-        const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD || process.env.SENDGRID_API_KEY;
+        const sendGridKey = process.env.SENDGRID_API_KEY || pass;
         
-        // Use SendGrid HTTP API if host is sendgrid and we have API key
-        if (host === 'smtp.sendgrid.net' && pass && pass.startsWith('SG.')) {
+        // Use SendGrid HTTP API if:
+        // 1. Explicit SENDGRID_API_KEY is set, OR
+        // 2. SMTP_HOST is sendgrid.net AND password looks like SendGrid API key (starts with SG.)
+        const isSendGrid = process.env.SENDGRID_API_KEY || 
+                          (host === 'smtp.sendgrid.net' && sendGridKey && sendGridKey.startsWith('SG.'));
+        
+        if (isSendGrid) {
             console.log('📧 Using SendGrid HTTP API (bypasses SMTP port blocking)');
+            console.log('📧 SendGrid API Key:', sendGridKey ? `${sendGridKey.substring(0, 5)}...` : 'NOT SET');
             useSendGridHTTP = true;
-            transporter = { useHTTP: true }; // Flag to use HTTP API
+            transporter = { useHTTP: true, apiKey: sendGridKey }; // Flag to use HTTP API
             return transporter;
         }
         
@@ -128,11 +173,23 @@ function getTransporter() {
 }
 
 function checkEmailConfiguration() {
+    // Check for SendGrid API key first (preferred for production)
+    const sendGridKey = process.env.SENDGRID_API_KEY || 
+                       (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
+    
+    // If SendGrid is configured, that's sufficient
+    if (sendGridKey) {
+        return true;
+    }
+    
+    // Otherwise, check for SMTP credentials
     const user = process.env.SMTP_USER || process.env.GMAIL_USER;
     const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
     
     if (!user || !pass) {
-        throw new Error('Email configuration incomplete. SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD) must be set in environment variables.');
+        throw new Error('Email configuration incomplete. Either:\n' +
+                       '  - Set SENDGRID_API_KEY (or SMTP_PASS with SendGrid key starting with SG.), OR\n' +
+                       '  - Set SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD)');
     }
     
     return true;
@@ -357,20 +414,38 @@ export const sendNotificationEmail = async (to, subject, message) => {
         checkEmailConfiguration();
         
         const emailTransporter = getTransporter();
-        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        // Check for SendGrid API key in multiple locations
+        const sendGridKey = process.env.SENDGRID_API_KEY || 
+                          (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null) ||
+                          (emailTransporter.apiKey ? emailTransporter.apiKey : null);
+        const apiKey = sendGridKey || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        
+        // Determine if we should use SendGrid HTTP API
+        const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+        const shouldUseSendGrid = useSendGridHTTP || 
+                                emailTransporter.useHTTP || 
+                                (host === 'smtp.sendgrid.net' && apiKey && apiKey.startsWith('SG.')) ||
+                                process.env.SENDGRID_API_KEY;
         
         console.log('📧 Sending notification email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject,
-            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP'
+            method: shouldUseSendGrid ? 'SendGrid HTTP API' : 'SMTP',
+            host: host,
+            hasSendGridKey: !!sendGridKey
         });
         
         // Use SendGrid HTTP API if configured
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+        if (shouldUseSendGrid && sendGridKey) {
             mailOptions.fromName = 'Abcotronics';
-            result = await sendViaSendGridAPI(mailOptions, apiKey);
+            // Extract email from "Name <email>" format if needed
+            const fromEmail = mailOptions.from.includes('<') 
+                ? mailOptions.from.match(/<(.+)>/)?.[1] || mailOptions.from
+                : mailOptions.from;
+            mailOptions.from = fromEmail; // SendGrid API expects just email
+            result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else {
             result = await emailTransporter.sendMail(mailOptions);
         }
@@ -378,12 +453,13 @@ export const sendNotificationEmail = async (to, subject, message) => {
         console.log('✅ Notification email sent successfully:', result.messageId);
         return { success: true, messageId: result.messageId };
     } catch (error) {
-        console.error('Failed to send notification email:', error);
-        console.error('Email sending error details:', {
+        console.error('❌ Failed to send notification email:', error);
+        console.error('❌ Email sending error details:', {
             message: error.message,
             code: error.code,
             command: error.command,
-            response: error.response
+            response: error.response,
+            stack: error.stack
         });
         throw new Error(`Failed to send notification email: ${error.message}`);
     }

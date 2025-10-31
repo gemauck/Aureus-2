@@ -9,6 +9,8 @@ import { withLogging } from './_lib/logger.js'
 // Notify admins when feedback is submitted
 async function notifyAdminsOfFeedback(feedback, submittingUser) {
   try {
+    console.log('📧 Starting feedback email notification process...')
+    
     // Get all admin users
     const admins = await prisma.user.findMany({
       where: {
@@ -22,9 +24,11 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     })
 
     if (admins.length === 0) {
-      console.log('No admin users found for feedback notification')
+      console.warn('⚠️ No admin users found for feedback notification. Feedback was still saved.')
       return
     }
+
+    console.log(`📧 Found ${admins.length} admin(s) to notify:`, admins.map(a => a.email).join(', '))
 
     // Prepare email content
     const userName = submittingUser?.name || submittingUser?.email || 'A user'
@@ -78,21 +82,52 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     const { sendNotificationEmail } = await import('./_lib/email.js')
     
     // Send email to all admins
-    const emailPromises = admins.map(admin => 
-      sendNotificationEmail(
-        admin.email,
-        subject,
-        htmlContent
-      ).catch(err => {
-        console.error(`Failed to send notification to ${admin.email}:`, err)
-      })
-    )
+    let successCount = 0
+    let failureCount = 0
+    
+    const emailPromises = admins.map(async (admin) => {
+      try {
+        console.log(`📧 Attempting to send feedback email to ${admin.email}...`)
+        const result = await sendNotificationEmail(
+          admin.email,
+          subject,
+          htmlContent
+        )
+        console.log(`✅ Feedback email sent successfully to ${admin.email}:`, result.messageId)
+        successCount++
+        return { success: true, email: admin.email }
+      } catch (err) {
+        console.error(`❌ Failed to send feedback notification to ${admin.email}:`, err.message)
+        console.error(`❌ Error details:`, {
+          code: err.code,
+          command: err.command,
+          response: err.response,
+          stack: err.stack
+        })
+        failureCount++
+        return { success: false, email: admin.email, error: err.message }
+      }
+    })
 
-    await Promise.all(emailPromises)
-    console.log(`✅ Feedback notifications sent to ${admins.length} admin(s)`)
+    const results = await Promise.all(emailPromises)
+    
+    console.log(`📧 Feedback email notification summary:`)
+    console.log(`   ✅ Successfully sent: ${successCount}`)
+    console.log(`   ❌ Failed: ${failureCount}`)
+    console.log(`   Total admins: ${admins.length}`)
+    
+    if (failureCount > 0) {
+      console.error(`⚠️ Some feedback emails failed to send. Check email configuration:`)
+      console.error(`   - SMTP_HOST: ${process.env.SMTP_HOST || 'NOT SET'}`)
+      console.error(`   - SENDGRID_API_KEY: ${process.env.SENDGRID_API_KEY ? 'SET (hidden)' : 'NOT SET'}`)
+      console.error(`   - SMTP_PASS: ${process.env.SMTP_PASS ? (process.env.SMTP_PASS.startsWith('SG.') ? 'SET (SendGrid key detected)' : 'SET (hidden)') : 'NOT SET'}`)
+      console.error(`   - SMTP_USER: ${process.env.SMTP_USER || 'NOT SET'}`)
+      console.error(`   - EMAIL_FROM: ${process.env.EMAIL_FROM || 'NOT SET'}`)
+    }
   } catch (error) {
-    console.error('Error in notifyAdminsOfFeedback:', error)
-    // Don't throw - this is non-critical
+    console.error('❌ Error in notifyAdminsOfFeedback:', error)
+    console.error('❌ Stack trace:', error.stack)
+    // Don't throw - this is non-critical, but log it thoroughly
   }
 }
 

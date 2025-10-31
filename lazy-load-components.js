@@ -311,28 +311,6 @@
                 loadBatch();
             });
         }, 500); // Reduced delay to 500ms for faster loading
-            
-            function loadBatch() {
-                const batch = componentFiles.slice(index, index + batchSize);
-                if (batch.length === 0) {
-                    return;
-                }
-                
-                Promise.all(batch.map(loadComponent)).then(() => {
-                    index += batchSize;
-                    // Use requestIdleCallback if available, otherwise setTimeout
-                    const nextBatchDelay = index < componentFiles.length ? 100 : 0;
-                    
-                    if (typeof requestIdleCallback !== 'undefined') {
-                        requestIdleCallback(loadBatch, { timeout: 500 });
-                    } else {
-                        setTimeout(loadBatch, nextBatchDelay);
-                    }
-                });
-            }
-            
-            loadBatch();
-        }, 2000); // Wait 2 seconds for initial page to load
     }
 })();
 
