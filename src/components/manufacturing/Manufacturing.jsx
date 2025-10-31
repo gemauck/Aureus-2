@@ -3030,27 +3030,26 @@ const Manufacturing = () => {
   };
 
   const MovementsView = () => {
-    const handleRecordClick = () => {
-      console.log('🖱️ Button clicked - Record Movement (handleRecordClick)');
-      console.log('🔍 Checking openAddMovementModal...', {
-        exists: typeof openAddMovementModal !== 'undefined',
-        type: typeof openAddMovementModal,
-        isFunction: typeof openAddMovementModal === 'function'
+    console.log('📋 MovementsView component rendering...');
+    
+    // Define handler function - no useCallback needed, just a regular function
+    const handleRecordClick = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      console.log('🖱️ ========== Button clicked - Record Movement ==========');
+      console.log('🖱️ Event object:', e);
+      console.log('🖱️ Handler function type:', typeof handleRecordClick);
+      console.log('🖱️ State setters check:', {
+        setFormData: typeof setFormData === 'function',
+        setModalType: typeof setModalType === 'function',
+        setShowModal: typeof setShowModal === 'function'
       });
       
-      if (typeof openAddMovementModal === 'function') {
-        console.log('✅ Calling openAddMovementModal...');
-        try {
-          openAddMovementModal();
-        } catch (error) {
-          console.error('❌ Error calling openAddMovementModal:', error);
-          alert('Error opening modal: ' + error.message);
-        }
-      } else {
-        console.error('❌ openAddMovementModal is not accessible!');
-        // Fallback: set state directly
-        console.log('🔄 Attempting direct state set...');
-        setFormData({
+      try {
+        console.log('🔄 Setting up stock movement form...');
+        const formDataInit = {
           type: 'receipt',
           sku: '',
           itemName: '',
@@ -3061,12 +3060,29 @@ const Manufacturing = () => {
           reference: '',
           notes: '',
           date: new Date().toISOString().split('T')[0]
-        });
+        };
+        console.log('🔄 Form data to set:', JSON.stringify(formDataInit));
+        
+        setFormData(formDataInit);
+        console.log('✅ Form data set via setFormData');
+        
         setModalType('add_movement');
+        console.log('✅ Modal type set to add_movement via setModalType');
+        
         setShowModal(true);
-        console.log('✅ Direct state set completed');
+        console.log('✅ Modal visibility set to true via setShowModal');
+        console.log('✅ All state updates completed - modal should be visible');
+        
+        // Force a console warning to ensure logs are visible
+        console.warn('⚠️ MODAL SHOULD BE OPEN NOW - check UI');
+      } catch (error) {
+        console.error('❌ Error opening movement modal:', error);
+        console.error('❌ Error stack:', error.stack);
+        alert('Error opening movement modal: ' + error.message);
       }
     };
+    
+    console.log('📋 MovementsView rendered, handleRecordClick function exists:', typeof handleRecordClick === 'function');
 
     return (
       <div className="space-y-3">
@@ -3080,10 +3096,23 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={handleRecordClick}
+                onClick={(e) => {
+                  console.log('🔥 DIRECT onClick fired on button element');
+                  handleRecordClick(e);
+                }}
+                onMouseDown={(e) => {
+                  console.log('🖱️ Mouse down on Record Movement button', e);
+                  e.stopPropagation();
+                }}
+                onMouseUp={(e) => {
+                  console.log('🖱️ Mouse up on Record Movement button', e);
+                }}
                 className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 cursor-pointer relative z-10"
                 type="button"
-                style={{ pointerEvents: 'auto' }}
+                style={{ pointerEvents: 'auto', zIndex: 1000, position: 'relative' }}
+                data-testid="record-movement-button"
+                aria-label="Record Stock Movement"
+                disabled={false}
               >
                 <i className="fas fa-plus text-xs"></i>
                 Record Movement
