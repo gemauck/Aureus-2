@@ -65,12 +65,14 @@ async function handler(req, res) {
           }
         }
         
-        // Try to query leads directly
+        // PERFORMANCE OPTIMIZATION: Tags excluded from list query - only fetch when viewing individual lead detail
+        // This is MUCH faster than fetching tags for every lead in the list
         let leads = []
         try {
-          console.log('🔍 Querying leads with type filter...')
+          console.log('🔍 Querying leads with type filter (tags excluded for performance)...')
           leads = await prisma.client.findMany({ 
             where: { type: 'lead' },
+            // Tags excluded for performance - only fetch when viewing individual lead detail
             orderBy: { createdAt: 'desc' } 
           })
           console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
@@ -86,6 +88,7 @@ async function handler(req, res) {
           console.warn('⚠️ Trying fallback query without type filter...')
           try {
             const allRecords = await prisma.client.findMany({
+              // Tags excluded for performance
               orderBy: { createdAt: 'desc' }
             })
             console.log(`📊 Found ${allRecords.length} total client records`)

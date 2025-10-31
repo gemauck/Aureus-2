@@ -150,14 +150,13 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
 
 async function handler(req, res) {
   try {
-    const pathSegments = req.url.split('/').filter(Boolean)
-    
-    // Parse query parameters safely
+    // Parse query parameters safely and get path without query string
     const parseQueryParams = (urlString) => {
       const params = {}
       const queryIndex = urlString.indexOf('?')
-      if (queryIndex === -1) return params
+      if (queryIndex === -1) return { params, path: urlString }
       
+      const path = urlString.substring(0, queryIndex)
       const queryString = urlString.substring(queryIndex + 1)
       queryString.split('&').forEach(param => {
         const [key, value] = param.split('=')
@@ -165,10 +164,11 @@ async function handler(req, res) {
           params[decodeURIComponent(key)] = value ? decodeURIComponent(value) : ''
         }
       })
-      return params
+      return { params, path }
     }
 
-    const queryParams = parseQueryParams(req.url)
+    const { params: queryParams, path: urlPath } = parseQueryParams(req.url)
+    const pathSegments = urlPath.split('/').filter(Boolean)
 
     // GET /api/feedback -> list feedback with optional filtering
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'feedback') {

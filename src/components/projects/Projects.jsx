@@ -99,29 +99,72 @@ const Projects = () => {
                     isProjectsArray: Array.isArray(response?.data?.projects),
                     projectsLength: response?.data?.projects?.length || 0,
                     dataKeys: response?.data ? Object.keys(response.data) : [],
-                    responseKeys: Object.keys(response || {})
+                    responseKeys: Object.keys(response || {}),
+                    responseType: typeof response,
+                    dataType: typeof response?.data
                 });
                 
-                // Handle different response structures
+                // Handle different response structures - try all possible formats
                 let apiProjects = [];
+                
+                // Try response.data.projects first (most common format)
                 if (response?.data?.projects && Array.isArray(response.data.projects)) {
                     apiProjects = response.data.projects;
-                    console.log('✅ Using response.data.projects');
-                } else if (response?.projects && Array.isArray(response.projects)) {
+                    console.log('✅ Using response.data.projects, count:', apiProjects.length);
+                } 
+                // Try response.data.data.projects (nested data wrapper)
+                else if (response?.data?.data?.projects && Array.isArray(response.data.data.projects)) {
+                    apiProjects = response.data.data.projects;
+                    console.log('✅ Using response.data.data.projects, count:', apiProjects.length);
+                }
+                // Try response.projects (direct projects array)
+                else if (response?.projects && Array.isArray(response.projects)) {
                     apiProjects = response.projects;
-                    console.log('✅ Using response.projects');
-                } else if (Array.isArray(response?.data)) {
+                    console.log('✅ Using response.projects, count:', apiProjects.length);
+                } 
+                // Try response.data as array
+                else if (Array.isArray(response?.data)) {
                     apiProjects = response.data;
-                    console.log('✅ Using response.data as array');
-                } else if (Array.isArray(response)) {
+                    console.log('✅ Using response.data as array, count:', apiProjects.length);
+                } 
+                // Try response as array
+                else if (Array.isArray(response)) {
                     apiProjects = response;
-                    console.log('✅ Using response as array');
-                } else {
-                    console.warn('⚠️ No projects found in response. Response:', response);
-                    apiProjects = [];
+                    console.log('✅ Using response as array, count:', apiProjects.length);
+                } 
+                // Last resort: try to find any array in the response
+                else {
+                    console.warn('⚠️ No projects found in standard locations. Searching response structure...');
+                    console.warn('⚠️ Full response structure:', JSON.stringify(response, null, 2).substring(0, 500));
+                    
+                    // Try to find any array in the response that might be projects
+                    const findProjectsInObject = (obj) => {
+                        if (Array.isArray(obj)) {
+                            return obj.length > 0 && obj[0]?.name ? obj : null;
+                        }
+                        if (typeof obj === 'object' && obj !== null) {
+                            for (const key in obj) {
+                                const result = findProjectsInObject(obj[key]);
+                                if (result) return result;
+                            }
+                        }
+                        return null;
+                    };
+                    
+                    const foundProjects = findProjectsInObject(response);
+                    if (foundProjects) {
+                        apiProjects = foundProjects;
+                        console.log('✅ Found projects in nested structure, count:', apiProjects.length);
+                    } else {
+                        console.error('❌ Could not find projects array in response');
+                        apiProjects = [];
+                    }
                 }
                 
-                console.log('📡 Database returned projects:', apiProjects?.length || 0, apiProjects);
+                console.log('📡 Database returned projects:', apiProjects?.length || 0);
+                if (apiProjects.length > 0) {
+                    console.log('📡 First project sample:', apiProjects[0]);
+                }
                 
                 // Normalize projects: map clientName to client for frontend compatibility
                 const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
@@ -160,7 +203,7 @@ const Projects = () => {
                 setProjects([]);
                 setIsLoading(false);
                 
-                // Set user-friendly error message
+                // Set user-friendly error message with retry guidance
                 if (error.message.includes('401') || error.message.includes('Authentication')) {
                     console.warn('⚠️ Authentication error - redirecting to login');
                     setLoadError('Authentication expired. Redirecting to login...');
@@ -171,10 +214,10 @@ const Projects = () => {
                     setLoadError('Projects API endpoint not found. Please contact support.');
                 } else if (error.message.includes('500') || error.message.includes('Server')) {
                     setLoadError('Server error loading projects. Please try again later.');
-                } else if (error.message.includes('Network') || error.message.includes('fetch')) {
-                    setLoadError('Network error. Please check your connection and try again.');
+                } else if (error.message.includes('Network') || error.message.includes('Unable to connect') || error.message.includes('fetch')) {
+                    setLoadError('Network error: Unable to connect to server. The request was retried automatically. Please check your internet connection and refresh the page if the problem persists.');
                 } else {
-                    setLoadError(`Failed to load projects: ${error.message}`);
+                    setLoadError(`Failed to load projects: ${error.message}. Please try refreshing the page.`);
                 }
             }
         };

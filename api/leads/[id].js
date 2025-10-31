@@ -28,11 +28,25 @@ async function handler(req, res) {
     if (req.method === 'GET') {
       try {
         const lead = await prisma.client.findFirst({ 
-          where: { id, type: 'lead' } 
+          where: { id, type: 'lead' },
+          include: {
+            tags: {
+              include: {
+                tag: true
+              }
+            }
+          }
         })
         if (!lead) return notFound(res)
+        
+        // Parse tags from ClientTag relations
+        const parsedLead = {
+          ...lead,
+          tags: lead.tags ? lead.tags.map(ct => ct.tag).filter(Boolean) : []
+        }
+        
         console.log('✅ Lead retrieved successfully:', lead.id)
-        return ok(res, { lead })
+        return ok(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error getting lead:', dbError)
         return serverError(res, 'Failed to get lead', dbError.message)
