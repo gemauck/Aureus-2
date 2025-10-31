@@ -152,7 +152,7 @@ const MainLayout = () => {
         // Check if Clients component is available
         const checkClients = () => {
             const ClientsComponent = window.Clients || window.ClientsSimple;
-            if (ClientsComponent) {
+            if (ClientsComponent && typeof ClientsComponent === 'function') {
                 if (!clientsComponentReady) {
                     console.log('✅ MainLayout: Clients component became available', ClientsComponent);
                     setClientsComponentReady(true);
@@ -167,8 +167,7 @@ const MainLayout = () => {
             return; // Component already available, no need to poll
         }
         
-        // Also listen for when Clients component registers itself
-        const originalRegister = window.Clients?.register;
+        // Also listen for when Clients component registers itself (set up listener FIRST)
         const handleClientsAvailable = () => {
             if (checkClients()) {
                 window.removeEventListener('clientsComponentReady', handleClientsAvailable);
@@ -176,16 +175,28 @@ const MainLayout = () => {
         };
         window.addEventListener('clientsComponentReady', handleClientsAvailable);
         
+        // Also check if event was already fired (component loaded before listener)
+        if (window._clientsComponentReady) {
+            checkClients();
+        }
+        
         // Re-check periodically until component is available
         const interval = setInterval(() => {
-            checkClients();
-        }, 300); // Check more frequently
+            if (!clientsComponentReady) {
+                checkClients();
+            } else {
+                clearInterval(interval);
+            }
+        }, 200); // Check even more frequently
         
-        // Cleanup after 15 seconds to avoid infinite checking
+        // Cleanup after 20 seconds to avoid infinite checking
         const timeout = setTimeout(() => {
             clearInterval(interval);
             window.removeEventListener('clientsComponentReady', handleClientsAvailable);
-        }, 15000);
+            if (!clientsComponentReady) {
+                console.warn('⚠️ MainLayout: Clients component did not load within 20 seconds');
+            }
+        }, 20000);
         
         return () => {
             clearInterval(interval);

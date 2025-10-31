@@ -2774,12 +2774,26 @@ window.Clients._version = 'paginated-v1';
 console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes and pagination)');
 
 // Notify MainLayout that Clients component is now available
+// Use multiple notification methods for maximum compatibility
+window._clientsComponentReady = true; // Flag for late listeners
+
 if (typeof window.dispatchEvent === 'function') {
     try {
+        // Dispatch immediately
         window.dispatchEvent(new CustomEvent('clientsComponentReady'));
         console.log('📢 Dispatched clientsComponentReady event');
+        
+        // Also dispatch after a small delay in case listeners weren't ready
+        setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('clientsComponentReady'));
+        }, 100);
+        
+        // One more delayed dispatch for safety
+        setTimeout(() => {
+            window.dispatchEvent(new CustomEvent('clientsComponentReady'));
+        }, 500);
     } catch (e) {
-        // Event not supported, that's okay
+        console.warn('⚠️ Could not dispatch clientsComponentReady event:', e);
     }
 }
 
