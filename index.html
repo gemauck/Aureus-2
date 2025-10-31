@@ -414,7 +414,7 @@
     <!-- Optional integrations moved to lazy -->
     
     <!-- Lazy Load Non-Critical Components -->
-    <script defer src="./lazy-load-components.js"></script>
+    <script defer src="./lazy-load-components.js?v=1008"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>
@@ -451,12 +451,16 @@
         window.Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback;
         
         // 🚀 FORCE USE ONLY Clients.jsx (has Pipeline opportunity fixes)
-        console.log('🔍 Available Clients components:', Object.keys(window).filter(k => k.startsWith('Clients')));
-        if (!window.Clients) {
-            console.error('❌ CRITICAL: window.Clients not found!');
-        } else {
-            console.log('✅ Using window.Clients (Pipeline fixes enabled)');
-        }
+        // Wait for Clients to load before checking (deferred check)
+        setTimeout(() => {
+            const clientsKeys = Object.keys(window).filter(k => k.startsWith('Clients'));
+            console.log('🔍 Available Clients components:', clientsKeys);
+            if (!window.Clients) {
+                console.warn('⚠️ window.Clients not yet loaded (will be available after lazy load)');
+            } else {
+                console.log('✅ Using window.Clients (Pipeline fixes enabled)');
+            }
+        }, 3000); // Check after lazy loading has started
         // Use the main Projects component (has latest fixes) with fallback
         window.Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
         // Use main Teams component, fallback to TeamsSimple only if main fails
