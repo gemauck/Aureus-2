@@ -73,57 +73,18 @@ async function handler(req, res) {
           // Column may already exist or error is expected
         }
         
-        // PERFORMANCE OPTIMIZATION: Query only clients directly with WHERE clause
-        // Query for type = 'client' first (most common case)
-        // Then separately query for null types and combine
+        // PERFORMANCE OPTIMIZATION: Use raw SQL for reliable query that handles null types
+        // This avoids Prisma validation issues with nullable fields
         // NOTE: Tags are excluded from list query for performance - they're only needed in detail views
-        const clientsWithType = await prisma.client.findMany({
-          where: { type: 'client' },
-          orderBy: { createdAt: 'desc' }
-        })
-        
-        // For null types, use a query that works with Prisma's null handling
-        // Prisma's OR doesn't work well with null, so query all and filter, or use raw SQL for nulls
-        const rawNullClients = await prisma.$queryRaw`
+        const rawClients = await prisma.$queryRaw`
           SELECT * FROM "Client" 
-          WHERE "type" IS NULL
+          WHERE ("type" = 'client' OR "type" IS NULL)
           ORDER BY "createdAt" DESC
         `
         
-        // Map raw SQL results to match Prisma model structure
-        const clientsWithNullType = rawNullClients.map(row => ({
-          id: row.id,
-          name: row.name,
-          type: row.type,
-          industry: row.industry,
-          status: row.status,
-          revenue: row.revenue,
-          value: row.value,
-          probability: row.probability,
-          lastContact: row.lastContact,
-          address: row.address,
-          website: row.website,
-          notes: row.notes,
-          contacts: row.contacts,
-          followUps: row.followUps,
-          projectIds: row.projectIds,
-          comments: row.comments,
-          sites: row.sites,
-          contracts: row.contracts,
-          activityLog: row.activityLog,
-          services: row.services,
-          billingTerms: row.billingTerms,
-          ownerId: row.ownerId,
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt
-        }))
-        
-        // Combine and maintain sort order
-        const clients = [...clientsWithType, ...clientsWithNullType].sort((a, b) => {
-          const dateA = new Date(a.createdAt)
-          const dateB = new Date(b.createdAt)
-          return dateB - dateA
-        })
+        // Raw SQL returns plain objects - use them directly (already sorted by SQL query)
+        // The parseClientJsonFields function will handle JSON field parsing
+        const clients = rawClients
         
         console.log(`✅ Found ${clients.length} clients (filtered in database)`)
         
