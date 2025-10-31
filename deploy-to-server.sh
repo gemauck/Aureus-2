@@ -25,6 +25,7 @@ echo "📁 Current directory: \$(pwd)"
 # Pull latest changes
 echo ""
 echo "📥 Pulling latest changes from GitHub..."
+git fetch origin
 git reset --hard origin/main || {
     echo "⚠️  Git reset failed, trying to stash changes..."
     git stash
