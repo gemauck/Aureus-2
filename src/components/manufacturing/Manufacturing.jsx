@@ -2504,6 +2504,15 @@ const Manufacturing = () => {
     if (modalType === 'add_production' || modalType === 'view_production') {
       const selectedBom = formData.bomId ? boms.find(b => b.id === formData.bomId) : null;
       const totalCost = selectedBom ? selectedBom.totalCost * (formData.quantity || 0) : 0;
+      
+      // Debug form state
+      console.log('🔍 Rendering work order modal:', {
+        bomId: formData.bomId,
+        quantity: formData.quantity,
+        startDate: formData.startDate,
+        assignedTo: formData.assignedTo,
+        modalType
+      });
 
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -2699,15 +2708,20 @@ const Manufacturing = () => {
               <button
                 onClick={() => {
                   console.log('🔘 Create/Update Order button clicked', { modalType, formData });
+                  console.log('🔍 Button state check:', {
+                    bomId: !!formData.bomId,
+                    quantity: !!formData.quantity,
+                    startDate: !!formData.startDate,
+                    assignedTo: !!formData.assignedTo,
+                    allValid: !formData.bomId || !formData.quantity || !formData.startDate || !formData.assignedTo ? false : true
+                  });
                   if (modalType === 'add_production') {
                     handleSaveProductionOrder();
                   } else {
                     handleUpdateProductionOrder();
                   }
                 }}
-                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={!formData.bomId || !formData.quantity || !formData.startDate || !formData.assignedTo}
-                title={!formData.bomId ? 'Please select a BOM/Product' : !formData.quantity ? 'Please enter quantity' : !formData.startDate ? 'Please enter start date' : !formData.assignedTo ? 'Please enter assigned to' : 'Create work order'}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 {modalType === 'add_production' ? 'Create Work Order' : 'Update Order'}
               </button>

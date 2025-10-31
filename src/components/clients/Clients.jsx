@@ -998,7 +998,8 @@ const Clients = React.memo(() => {
                             name: comprehensiveClient.name,
                             type: comprehensiveClient.type || 'client',
                             industry: comprehensiveClient.industry,
-                            status: comprehensiveClient.status === 'Active' ? 'active' : 'inactive',
+                            // Preserve status as-is - don't force conversion to lowercase
+                            status: comprehensiveClient.status || 'Active',
                             revenue: comprehensiveClient.revenue,
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,

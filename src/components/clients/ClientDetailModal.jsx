@@ -112,7 +112,43 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
         if (onTabChange) {
             onTabChange(tab);
         }
+        // Persist tab selection to localStorage (per client)
+        if (client?.id) {
+            try {
+                const tabKey = `client-tab-${client.id}`;
+                localStorage.setItem(tabKey, tab);
+                console.log('💾 Saved tab to localStorage:', tabKey, tab);
+            } catch (e) {
+                console.warn('⚠️ Failed to save tab to localStorage:', e);
+            }
+        }
     };
+    
+    // Load persisted tab on mount or when client changes (after initialTab has been set)
+    useEffect(() => {
+        if (client?.id) {
+            try {
+                const tabKey = `client-tab-${client.id}`;
+                const savedTab = localStorage.getItem(tabKey);
+                // Restore saved tab if:
+                // 1. A saved tab exists
+                // 2. initialTab is the default ('overview'), meaning no explicit tab was passed
+                if (savedTab && initialTab === 'overview') {
+                    // Use setTimeout to ensure this runs after initialTab useEffect
+                    const timer = setTimeout(() => {
+                        console.log('📂 Restoring saved tab from localStorage:', tabKey, savedTab);
+                        setActiveTab(savedTab);
+                        if (onTabChange) {
+                            onTabChange(savedTab);
+                        }
+                    }, 0);
+                    return () => clearTimeout(timer);
+                }
+            } catch (e) {
+                console.warn('⚠️ Failed to load tab from localStorage:', e);
+            }
+        }
+    }, [client?.id, initialTab]); // Run when client ID or initialTab changes
     const [formData, setFormData] = useState(() => {
         // Parse JSON strings to arrays/objects if needed
         const parsedClient = client ? {
