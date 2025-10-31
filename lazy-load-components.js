@@ -59,10 +59,10 @@
         './src/components/users/Users.jsx',
         './src/components/users/UserManagement.jsx',
         
-        // Manufacturing
-        './src/components/manufacturing/locations/StockLocations.jsx',
-        './src/components/manufacturing/StockTransactions.jsx',
-        './src/components/manufacturing/Manufacturing.jsx',
+        // Manufacturing - MOVED to index.html for early loading (main menu item)
+        // './src/components/manufacturing/locations/StockLocations.jsx',
+        // './src/components/manufacturing/StockTransactions.jsx',
+        // './src/components/manufacturing/Manufacturing.jsx',
         
         // Invoicing
         './src/components/invoicing/InvoicingDatabaseFirst.jsx',

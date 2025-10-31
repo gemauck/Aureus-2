@@ -1035,7 +1035,20 @@ async function handler(req, res) {
       }
     }
 
-    // DELETE (DELETE /api/manufacturing/stock-movements/:id)
+    // DELETE ALL (DELETE /api/manufacturing/stock-movements - no id)
+    if (req.method === 'DELETE' && !id) {
+      try {
+        const count = await prisma.stockMovement.count()
+        const result = await prisma.stockMovement.deleteMany({})
+        console.log(`✅ Deleted all stock movements: ${result.count} of ${count}`)
+        return ok(res, { deleted: true, count: result.count })
+      } catch (error) {
+        console.error('❌ Failed to delete all stock movements:', error)
+        return serverError(res, 'Failed to delete all stock movements', error.message)
+      }
+    }
+
+    // DELETE ONE (DELETE /api/manufacturing/stock-movements/:id)
     if (req.method === 'DELETE' && id) {
       try {
         await prisma.stockMovement.delete({ where: { id } })

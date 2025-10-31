@@ -163,7 +163,10 @@ const MainLayout = () => {
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
     const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
-    const Manufacturing = window.Manufacturing || (() => <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>);
+    const Manufacturing = window.Manufacturing || (() => {
+        console.warn('⚠️ Manufacturing component not loaded yet. window.Manufacturing:', typeof window.Manufacturing);
+        return <div className="text-center py-12 text-gray-500">Manufacturing loading... (Check console for errors)</div>;
+    });
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
