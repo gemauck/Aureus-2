@@ -32,6 +32,13 @@ fi
 echo "🔄 Regenerating Prisma client..."
 npx prisma generate
 
+echo "🏗️  Building frontend (JSX and CSS)..."
+npm run build || {
+    echo "⚠️  Build failed, trying individual steps..."
+    npm run build:jsx || echo "⚠️  JSX build had issues"
+    npm run build:css || echo "⚠️  CSS build had issues"
+}
+
 echo "🔄 Restarting application..."
 pm2 restart abcotronics-erp
 
