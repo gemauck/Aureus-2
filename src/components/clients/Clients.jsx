@@ -817,30 +817,47 @@ const Clients = React.memo(() => {
     //     };
     // }, []);
     
-    // Load opportunities when switching to pipeline view (debounced to avoid constant refreshing)
+    // Load opportunities when switching to pipeline view (bulk loading for performance)
     useEffect(() => {
         if (viewMode !== 'pipeline') return;
         
         const loadOpportunitiesForClients = async () => {
-            if (clients.length === 0 || !window.api?.getOpportunitiesByClient) return;
+            if (clients.length === 0 || !window.DatabaseAPI?.getOpportunities) return;
             
             // Check if any clients are missing opportunities
             const clientsNeedingOpps = clients.filter(c => !c.opportunities || c.opportunities.length === 0);
             if (clientsNeedingOpps.length === 0) return;
             
-            const clientsWithOpportunities = await Promise.all(clients.map(async (client) => {
-                try {
-                    const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                    const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                    return { ...client, opportunities };
-                } catch (error) {
-                    console.error(`❌ Pipeline: Failed to load opportunities for ${client.name}:`, error);
-                    return { ...client, opportunities: client.opportunities || [] };
-                }
-            }));
-            
-            setClients(clientsWithOpportunities);
-            safeStorage.setClients(clientsWithOpportunities);
+            try {
+                console.log('📡 Pipeline view: Loading all opportunities in bulk...');
+                const oppResponse = await window.DatabaseAPI.getOpportunities();
+                const allOpportunities = oppResponse?.data?.opportunities || [];
+                
+                // Group opportunities by clientId
+                const opportunitiesByClient = {};
+                allOpportunities.forEach(opp => {
+                    const clientId = opp.clientId || opp.client?.id;
+                    if (clientId) {
+                        if (!opportunitiesByClient[clientId]) {
+                            opportunitiesByClient[clientId] = [];
+                        }
+                        opportunitiesByClient[clientId].push(opp);
+                    }
+                });
+                
+                // Attach opportunities to clients
+                const clientsWithOpportunities = clients.map(client => ({
+                    ...client,
+                    opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                }));
+                
+                console.log(`✅ Pipeline view: Attached opportunities from bulk load`);
+                setClients(clientsWithOpportunities);
+                safeStorage.setClients(clientsWithOpportunities);
+            } catch (error) {
+                console.error('❌ Pipeline: Failed to load opportunities in bulk:', error);
+                // Keep existing opportunities on error
+            }
         };
         
         // Debounce to prevent constant re-runs
@@ -1557,33 +1574,40 @@ const Clients = React.memo(() => {
         // Listen for opportunity updates from ClientDetailModal
         useEffect(() => {
             const handleOpportunitiesUpdated = async (event) => {
-                if (!window.api?.getOpportunitiesByClient) return;
+                if (!window.DatabaseAPI?.getOpportunities) return;
                 
                 const { clientId } = event.detail || {};
                 if (!clientId) return;
                 
-                // Reload opportunities for the specific client that was updated
-                setClients(prevClients => {
-                    // Start async reload, but return current clients immediately
-                    Promise.all(prevClients.map(async (client) => {
-                        if (client.id === clientId) {
-                            try {
-                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                const opps = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                return { ...client, opportunities: opps };
-                            } catch (error) {
-                                console.error(`❌ Failed to reload opportunities for ${client.name}:`, error);
-                                return client;
+                // Reload all opportunities in bulk (more efficient than per-client)
+                try {
+                    const oppResponse = await window.DatabaseAPI.getOpportunities();
+                    const allOpportunities = oppResponse?.data?.opportunities || [];
+                    
+                    // Group opportunities by clientId
+                    const opportunitiesByClient = {};
+                    allOpportunities.forEach(opp => {
+                        const id = opp.clientId || opp.client?.id;
+                        if (id) {
+                            if (!opportunitiesByClient[id]) {
+                                opportunitiesByClient[id] = [];
                             }
+                            opportunitiesByClient[id].push(opp);
                         }
-                        return client;
-                    })).then(updatedClients => {
-                        setClients(updatedClients);
-                        safeStorage.setClients(updatedClients);
                     });
                     
-                    return prevClients; // Return immediately without waiting
-                });
+                    // Update clients with new opportunities
+                    setClients(prevClients => {
+                        const updatedClients = prevClients.map(client => ({
+                            ...client,
+                            opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                        }));
+                        safeStorage.setClients(updatedClients);
+                        return updatedClients;
+                    });
+                } catch (error) {
+                    console.error(`❌ Failed to reload opportunities in bulk:`, error);
+                }
             };
             
             window.addEventListener('opportunitiesUpdated', handleOpportunitiesUpdated);
@@ -2408,8 +2432,8 @@ const Clients = React.memo(() => {
                     onClick={async () => {
                         setViewMode('pipeline');
                         
-                        // Load opportunities when Pipeline tab is clicked (only if needed)
-                        if (!window.api?.getOpportunitiesByClient || clients.length === 0) {
+                        // Load opportunities when Pipeline tab is clicked (bulk loading for performance)
+                        if (!window.DatabaseAPI?.getOpportunities || clients.length === 0) {
                             return;
                         }
                         
@@ -2420,20 +2444,34 @@ const Clients = React.memo(() => {
                         }
                         
                         try {
-                            const clientsWithOpps = await Promise.all(clients.map(async (client) => {
-                                // Only fetch if client doesn't have opportunities
+                            console.log('📡 Pipeline tab clicked: Loading all opportunities in bulk...');
+                            const oppResponse = await window.DatabaseAPI.getOpportunities();
+                            const allOpportunities = oppResponse?.data?.opportunities || [];
+                            
+                            // Group opportunities by clientId
+                            const opportunitiesByClient = {};
+                            allOpportunities.forEach(opp => {
+                                const clientId = opp.clientId || opp.client?.id;
+                                if (clientId) {
+                                    if (!opportunitiesByClient[clientId]) {
+                                        opportunitiesByClient[clientId] = [];
+                                    }
+                                    opportunitiesByClient[clientId].push(opp);
+                                }
+                            });
+                            
+                            // Attach opportunities to clients (preserve existing if API doesn't have them)
+                            const clientsWithOpps = clients.map(client => {
                                 if (client.opportunities && client.opportunities.length > 0) {
                                     return client; // Keep existing
                                 }
-                                try {
-                                    const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                    const opportunities = oppResponse?.data?.opportunities || oppResponse?.opportunities || [];
-                                    return { ...client, opportunities };
-                                } catch (error) {
-                                    console.error(`❌ Failed to load opportunities for ${client.name}:`, error);
-                                    return { ...client, opportunities: client.opportunities || [] };
-                                }
-                            }));
+                                return {
+                                    ...client,
+                                    opportunities: opportunitiesByClient[client.id] || []
+                                };
+                            });
+                            
+                            console.log(`✅ Pipeline tab: Attached opportunities from bulk load`);
                             setClients(clientsWithOpps);
                             safeStorage.setClients(clientsWithOpps);
                         } catch (error) {
