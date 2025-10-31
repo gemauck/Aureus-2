@@ -60,16 +60,7 @@ async function handler(req, res) {
 
     logger.info({ email }, '🔍 Looking up user')
     
-    // Test database connection first
-    try {
-      await prisma.$connect()
-      logger.info({ email }, '✅ Database connection verified')
-    } catch (dbError) {
-      logger.error({ email, error: dbError.message, stack: dbError.stack }, '❌ Database connection failed')
-      return serverError(res, 'Database connection failed', dbError.message)
-    }
-
-    // Find user
+    // Find user (Prisma handles connection automatically)
     let user
     try {
       logger.info({ email }, '🔍 Querying database for user')
