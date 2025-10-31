@@ -21,7 +21,7 @@ fi
 
 # Restore NGINX from FINAL-WORKING-CONFIG.md (known-good)
 echo "🔧 Restoring NGINX config from FINAL-WORKING-CONFIG.md..."
-sudo bash -c 'cat > /etc/nginx/sites-available/abcotronics-erp <<EOF
+cat > /tmp/nginx-config-restore.conf <<'NGINX_EOF'
 server {
     listen 80;
     server_name abcoafrica.co.za www.abcoafrica.co.za;
@@ -29,7 +29,7 @@ server {
 }
 
 server {
-    listen 443 ssl;
+    listen 443 ssl http2;
     server_name abcoafrica.co.za www.abcoafrica.co.za;
     
     ssl_certificate /etc/letsencrypt/live/abcoafrica.co.za/fullchain.pem;
@@ -52,7 +52,9 @@ server {
         proxy_buffering off;
     }
 }
-EOF'
+NGINX_EOF
+sudo cp /tmp/nginx-config-restore.conf /etc/nginx/sites-available/abcotronics-erp
+rm /tmp/nginx-config-restore.conf
 
 # Test and reload NGINX
 echo "✅ Testing NGINX config..."
@@ -69,8 +71,21 @@ elif git show fb29033:ecosystem.config.js >/dev/null 2>&1; then
     pm2 start ecosystem.config.cjs --only abcotronics-erp || pm2 reload ecosystem.config.cjs --only abcotronics-erp
 else
     echo "ℹ️  No ecosystem config in repo. Ensuring PM2 is running..."
-    pm2 restart abcotronics-erp || pm2 start server.js --name abcotronics-erp
+    pm2 restart abcotronics-erp || {
+        echo "⚠️  PM2 restart failed, checking if app is listening..."
+        sleep 2
+        if ! ss -ltnp | grep -q ':3000'; then
+            echo "🚀 Starting app with PM2..."
+            PORT=3000 NODE_ENV=production APP_URL=https://abcoafrica.co.za pm2 start server.js --name abcotronics-erp
+        else
+            echo "✅ App is already running on port 3000"
+        fi
+    }
 fi
+
+# Wait for app to be ready
+echo "⏳ Waiting for app to be ready..."
+sleep 3
 
 pm2 save
 
