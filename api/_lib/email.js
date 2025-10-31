@@ -83,8 +83,25 @@ async function sendViaSendGridAPI(mailOptions, apiKey) {
 
     if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ SendGrid API error response:', errorText);
-        throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorText}`);
+        let errorDetails = errorText;
+        try {
+            const errorJson = JSON.parse(errorText);
+            errorDetails = JSON.stringify(errorJson, null, 2);
+            // Check for common SendGrid errors
+            if (errorJson.errors) {
+                errorJson.errors.forEach(err => {
+                    if (err.message && err.message.includes('verified')) {
+                        console.error('❌ SENDER VERIFICATION ERROR: The email address must be verified in SendGrid!');
+                        console.error('   Go to: https://app.sendgrid.com/settings/sender_auth');
+                        console.error('   Verify: ' + fromEmail);
+                    }
+                });
+            }
+        } catch (e) {
+            // Not JSON, use as-is
+        }
+        console.error('❌ SendGrid API error response:', errorDetails);
+        throw new Error(`SendGrid API error: ${response.status} ${response.statusText} - ${errorDetails}`);
     }
 
     return {
