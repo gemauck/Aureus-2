@@ -432,6 +432,11 @@
         
     </script>
     
+    <!-- Manufacturing - Load early since it's a main menu item (not lazy) -->
+    <script defer src="./dist/src/components/manufacturing/locations/StockLocations.js"></script>
+    <script defer src="./dist/src/components/manufacturing/StockTransactions.js"></script>
+    <script defer src="./dist/src/components/manufacturing/Manufacturing.js"></script>
+    
     <!-- Heavier components moved to lazy loader for faster first paint -->
     
     <!-- Projects components moved to lazy -->
@@ -522,6 +527,27 @@
         window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
         window.HR = window.HR;
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
+        // Ensure Manufacturing is available - check after lazy loading
+        setTimeout(() => {
+            if (!window.Manufacturing) {
+                console.warn('⚠️ window.Manufacturing not yet loaded after 3 seconds');
+                console.warn('⚠️ Checking lazy-load status...');
+                // Try to check if the script is still loading
+                const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                console.warn('⚠️ Manufacturing scripts found:', scripts.length);
+            } else {
+                console.log('✅ Manufacturing component available:', typeof window.Manufacturing);
+            }
+        }, 3000); // Check after lazy loading has started
+        
+        // Also check after a longer delay
+        setTimeout(() => {
+            if (!window.Manufacturing) {
+                console.error('❌ window.Manufacturing STILL not loaded after 10 seconds!');
+                console.error('❌ This suggests the Manufacturing.jsx file failed to load or has a syntax error.');
+                console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+            }
+        }, 10000);
         // Late bind Clients if it registers after this script
         (function() {
             function bindClients() {
