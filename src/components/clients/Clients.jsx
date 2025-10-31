@@ -600,10 +600,22 @@ const Clients = React.memo(() => {
                         console.log('⚡ No leads in clients API response, preserving current leads state');
                     }
                     
-                    // Save clients to localStorage
-                    safeStorage.setClients(clientsOnly);
+                    // Preserve opportunities from cached clients before saving
+                    // This ensures opportunities are immediately available even before API refresh
+                    const cachedClientsWithOpps = safeStorage.getClients() || [];
+                    const clientsWithPreservedOpps = clientsOnly.map(client => {
+                        const cachedClient = cachedClientsWithOpps.find(c => c.id === client.id);
+                        if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
+                            return { ...client, opportunities: cachedClient.opportunities };
+                        }
+                        return client;
+                    });
                     
-                    // Only load opportunities in background when Pipeline is active
+                    // Save clients with preserved opportunities to localStorage (instant display)
+                    safeStorage.setClients(clientsWithPreservedOpps);
+                    setClients(clientsWithPreservedOpps);
+                    
+                    // Load fresh opportunities from API in background (only if Pipeline is active)
                     // Use bulk fetch instead of per-client calls for much better performance
                     if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
                         console.log('📡 Loading all opportunities in bulk (much faster than per-client calls)...');
