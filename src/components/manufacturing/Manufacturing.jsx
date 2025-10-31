@@ -542,7 +542,23 @@ const Manufacturing = () => {
                     <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.sku}</td>
                     <td className="px-3 py-2">
                       {item.thumbnail ? (
-                        <img src={item.thumbnail} alt={item.name} className="w-10 h-10 object-cover rounded" />
+                        <>
+                          <img 
+                            src={item.thumbnail} 
+                            alt={item.name} 
+                            className="w-10 h-10 object-cover rounded" 
+                            onError={(e) => {
+                              console.error('Failed to load image for item:', item.name, item.thumbnail);
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                          <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400 hidden">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
+                              <path d="M2.25 6.75A2.25 2.25 0 014.5 4.5h15a2.25 2.25 0 012.25 2.25v10.5A2.25 2.25 0 0119.5 19.5h-15A2.25 2.25 0 012.25 17.25V6.75zM6 7.5a1.5 1.5 0 103 0 1.5 1.5 0 00-3 0zM3.75 16.5l4.69-4.69a1.125 1.125 0 011.59 0l3.44 3.44.53-.53a1.125 1.125 0 011.59 0l4.13 4.13H3.75z" />
+                            </svg>
+                          </div>
+                        </>
                       ) : (
                         <div className="w-10 h-10 bg-gray-100 rounded flex items-center justify-center text-gray-400">
                           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-6 h-6">
