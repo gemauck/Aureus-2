@@ -66,22 +66,64 @@ async function handler(req, res) {
       try {
         console.log('📋 GET /api/clients - Starting optimized query...')
         
+        // Ensure type column exists before querying
+        try {
+          await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+        } catch (error) {
+          // Column may already exist or error is expected
+        }
+        
         // PERFORMANCE OPTIMIZATION: Query only clients directly with WHERE clause
-        // Query for all records that are NOT leads, then filter to get clients and null types
+        // Query for type = 'client' first (most common case)
+        // Then separately query for null types and combine
         // NOTE: Tags are excluded from list query for performance - they're only needed in detail views
-        const allRecords = await prisma.client.findMany({
-          where: {
-            NOT: {
-              type: 'lead'
-            }
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
+        const clientsWithType = await prisma.client.findMany({
+          where: { type: 'client' },
+          orderBy: { createdAt: 'desc' }
         })
         
-        // Filter in memory to ensure we only get clients and null types (not any other types)
-        const clients = allRecords.filter(c => c.type === 'client' || c.type === null || c.type === undefined)
+        // For null types, use a query that works with Prisma's null handling
+        // Prisma's OR doesn't work well with null, so query all and filter, or use raw SQL for nulls
+        const rawNullClients = await prisma.$queryRaw`
+          SELECT * FROM "Client" 
+          WHERE "type" IS NULL
+          ORDER BY "createdAt" DESC
+        `
+        
+        // Map raw SQL results to match Prisma model structure
+        const clientsWithNullType = rawNullClients.map(row => ({
+          id: row.id,
+          name: row.name,
+          type: row.type,
+          industry: row.industry,
+          status: row.status,
+          revenue: row.revenue,
+          value: row.value,
+          probability: row.probability,
+          lastContact: row.lastContact,
+          address: row.address,
+          website: row.website,
+          notes: row.notes,
+          contacts: row.contacts,
+          followUps: row.followUps,
+          projectIds: row.projectIds,
+          comments: row.comments,
+          sites: row.sites,
+          contracts: row.contracts,
+          activityLog: row.activityLog,
+          services: row.services,
+          billingTerms: row.billingTerms,
+          ownerId: row.ownerId,
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt
+        }))
+        
+        // Combine and maintain sort order
+        const clients = [...clientsWithType, ...clientsWithNullType].sort((a, b) => {
+          const dateA = new Date(a.createdAt)
+          const dateB = new Date(b.createdAt)
+          return dateB - dateA
+        })
         
         console.log(`✅ Found ${clients.length} clients (filtered in database)`)
         
