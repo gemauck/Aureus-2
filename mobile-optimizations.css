@@ -51,16 +51,35 @@
   body.login-page #root {
     min-height: 100vh !important;
     min-height: 100dvh !important;
+    height: 100vh !important;
+    height: 100dvh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+    background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  body.login-page .login-outer {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    flex: 1 !important;
+    min-height: 100vh !important;
+    min-height: 100dvh !important;
   }
   
   /* Ensure login form container is visible and properly sized */
   body.login-page .login-container {
     width: calc(100% - 2rem) !important;
-    max-width: 100% !important;
-    margin: 1rem !important;
+    max-width: 420px !important;
+    margin: 1rem auto !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 10 !important;
   }
   
   /* Login form inputs must be touch-friendly */
