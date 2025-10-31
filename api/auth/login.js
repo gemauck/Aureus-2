@@ -74,15 +74,16 @@ async function handler(req, res) {
     try {
       logger.info({ email }, '🔍 Querying database for user')
       user = await prisma.user.findUnique({ 
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        passwordHash: true,
-        role: true,
-        status: true,
-        mustChangePassword: true
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          passwordHash: true,
+          role: true,
+          status: true,
+          mustChangePassword: true
+        }
       })
       logger.info({ email, userFound: !!user }, '🔍 User query completed')
     } catch (queryError) {
