@@ -283,6 +283,21 @@ const Clients = React.memo(() => {
         setLeadsCount(leads.length);
     }, [leads.length]);
 
+    // Ensure leads are loaded from localStorage if state is empty
+    useEffect(() => {
+        setLeads(prevLeads => {
+            if (prevLeads.length === 0) {
+                const cachedLeads = window.storage?.getLeads?.();
+                if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0) {
+                    console.log(`🔄 Restoring ${cachedLeads.length} leads from localStorage to state`);
+                    setLeadsCount(cachedLeads.length);
+                    return cachedLeads;
+                }
+            }
+            return prevLeads;
+        });
+    }, [leads.length]);
+
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
         const mapDbClient = (c) => {
@@ -348,25 +363,37 @@ const Clients = React.memo(() => {
                     const processed = message.data.map(mapDbClient).filter(c => c.type === 'client');
                     
                     // Load opportunities for clients from LiveDataSync
-                    if (window.api?.getOpportunitiesByClient) {
-                        console.log(`📡 LiveDataSync: Loading opportunities for ${processed.length} clients...`);
-                        const clientsWithOpportunities = await Promise.all(processed.map(async (client) => {
-                            try {
-                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                const opportunities = oppResponse?.data?.opportunities || [];
-                                return { ...client, opportunities };
-                            } catch (error) {
-                                console.warn(`⚠️ LiveDataSync: Failed to load opportunities for ${client.id}:`, error);
-                                return { ...client, opportunities: [] };
-                            }
-                        }));
-                        const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                        console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients`);
-                        setClients(clientsWithOpportunities);
-                        safeStorage.setClients(clientsWithOpportunities);
+                    // Use bulk fetch for much better performance when Pipeline view is active
+                    if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                        try {
+                            const oppResponse = await window.DatabaseAPI.getOpportunities();
+                            const allOpportunities = oppResponse?.data?.opportunities || [];
+                            const opportunitiesByClient = {};
+                            allOpportunities.forEach(opp => {
+                                const clientId = opp.clientId || opp.client?.id;
+                                if (clientId) {
+                                    if (!opportunitiesByClient[clientId]) {
+                                        opportunitiesByClient[clientId] = [];
+                                    }
+                                    opportunitiesByClient[clientId].push(opp);
+                                }
+                            });
+                            const clientsWithOpportunities = processed.map(client => ({
+                                ...client,
+                                opportunities: opportunitiesByClient[client.id] || []
+                            }));
+                            const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients (bulk)`);
+                            setClients(clientsWithOpportunities);
+                            safeStorage.setClients(clientsWithOpportunities);
+                        } catch (error) {
+                            console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, using clients without opportunities:', error);
+                            setClients(processed);
+                            safeStorage.setClients(processed);
+                        }
                     } else {
-                    setClients(processed);
-                    safeStorage.setClients(processed);
+                        setClients(processed);
+                        safeStorage.setClients(processed);
                     }
                     
                     lastLiveDataClientsHash = dataHash;
@@ -450,22 +477,29 @@ const Clients = React.memo(() => {
                 }
                 
                 // Only load opportunities in background if Pipeline view is active
-                if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient && filteredCachedClients.length > 0) {
-                    Promise.all(filteredCachedClients.map(async (client) => {
-                        try {
-                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            return { client, opportunities: oppResponse?.data?.opportunities || [] };
-                        } catch (error) {
-                            return { client, opportunities: [] };
-                        }
-                    })).then(clientsWithOpps => {
-                        const updated = filteredCachedClients.map(client => {
-                            const found = clientsWithOpps.find(c => c.client.id === client.id);
-                            return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
-                        });
-                        setClients(updated);
-                        safeStorage.setClients(updated);
-                    });
+                // Use bulk fetch for much better performance
+                if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities && filteredCachedClients.length > 0) {
+                    window.DatabaseAPI.getOpportunities()
+                        .then(oppResponse => {
+                            const allOpportunities = oppResponse?.data?.opportunities || [];
+                            const opportunitiesByClient = {};
+                            allOpportunities.forEach(opp => {
+                                const clientId = opp.clientId || opp.client?.id;
+                                if (clientId) {
+                                    if (!opportunitiesByClient[clientId]) {
+                                        opportunitiesByClient[clientId] = [];
+                                    }
+                                    opportunitiesByClient[clientId].push(opp);
+                                }
+                            });
+                            const updated = filteredCachedClients.map(client => ({
+                                ...client,
+                                opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                            }));
+                            setClients(updated);
+                            safeStorage.setClients(updated);
+                        })
+                        .catch(error => console.warn('⚠️ Failed to load opportunities in bulk from cache:', error));
                 }
             }
             
@@ -486,23 +520,29 @@ const Clients = React.memo(() => {
             
             if (timeSinceLastCall < API_CALL_INTERVAL && clients.length > 0) {
                 console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call)`);
-                // Refresh opportunities in background without blocking
-                if (window.api?.getOpportunitiesByClient) {
-                    Promise.all(clients.map(async (client) => {
-                        try {
-                            const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                            return { client, opportunities: oppResponse?.data?.opportunities || [] };
-                        } catch (error) {
-                            return { client, opportunities: [] };
-                        }
-                    })).then(clientsWithOpps => {
-                        const updated = clients.map(client => {
-                            const found = clientsWithOpps.find(c => c.client.id === client.id);
-                            return { ...client, opportunities: found?.opportunities || client.opportunities || [] };
-                        });
-                        setClients(updated);
-                        safeStorage.setClients(updated);
-                    });
+                // Refresh opportunities in background using bulk fetch (much faster)
+                if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                    window.DatabaseAPI.getOpportunities()
+                        .then(oppResponse => {
+                            const allOpportunities = oppResponse?.data?.opportunities || [];
+                            const opportunitiesByClient = {};
+                            allOpportunities.forEach(opp => {
+                                const clientId = opp.clientId || opp.client?.id;
+                                if (clientId) {
+                                    if (!opportunitiesByClient[clientId]) {
+                                        opportunitiesByClient[clientId] = [];
+                                    }
+                                    opportunitiesByClient[clientId].push(opp);
+                                }
+                            });
+                            const updated = clients.map(client => ({
+                                ...client,
+                                opportunities: opportunitiesByClient[client.id] || client.opportunities || []
+                            }));
+                            setClients(updated);
+                            safeStorage.setClients(updated);
+                        })
+                        .catch(error => console.warn('⚠️ Failed to refresh opportunities in background:', error));
                 }
                 return; // Use cached data, skip API call
             }
@@ -564,26 +604,43 @@ const Clients = React.memo(() => {
                     safeStorage.setClients(clientsOnly);
                     
                     // Only load opportunities in background when Pipeline is active
-                    if (viewMode === 'pipeline' && window.api?.getOpportunitiesByClient) {
-                        Promise.all(clientsOnly.map(async (client) => {
-                            try {
-                                const oppResponse = await window.api.getOpportunitiesByClient(client.id);
-                                return { client, opportunities: oppResponse?.data?.opportunities || oppResponse?.opportunities || [] };
-                            } catch (error) {
-                                return { client, opportunities: [] };
-                            }
-                        })).then(clientsWithOpps => {
-                            const updated = clientsOnly.map(client => {
-                                const found = clientsWithOpps.find(c => c.client.id === client.id);
-                                return { ...client, opportunities: found?.opportunities || [] };
+                    // Use bulk fetch instead of per-client calls for much better performance
+                    if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                        console.log('📡 Loading all opportunities in bulk (much faster than per-client calls)...');
+                        window.DatabaseAPI.getOpportunities()
+                            .then(oppResponse => {
+                                const allOpportunities = oppResponse?.data?.opportunities || [];
+                                console.log(`✅ Loaded ${allOpportunities.length} opportunities in bulk`);
+                                
+                                // Group opportunities by clientId
+                                const opportunitiesByClient = {};
+                                allOpportunities.forEach(opp => {
+                                    const clientId = opp.clientId || opp.client?.id;
+                                    if (clientId) {
+                                        if (!opportunitiesByClient[clientId]) {
+                                            opportunitiesByClient[clientId] = [];
+                                        }
+                                        opportunitiesByClient[clientId].push(opp);
+                                    }
+                                });
+                                
+                                // Attach opportunities to their clients
+                                const updated = clientsOnly.map(client => ({
+                                    ...client,
+                                    opportunities: opportunitiesByClient[client.id] || []
+                                }));
+                                
+                                const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                                if (totalOpps > 0) {
+                                    console.log(`✅ Attached ${totalOpps} opportunities to ${clientsOnly.length} clients (bulk load)`);
+                                }
+                                setClients(updated);
+                                safeStorage.setClients(updated);
+                            })
+                            .catch(error => {
+                                console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error);
+                                // Keep existing opportunities from cache
                             });
-                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            if (totalOpps > 0) {
-                                console.log(`✅ Loaded ${totalOpps} opportunities for ${clientsOnly.length} clients`);
-                            }
-                            setClients(updated);
-                            safeStorage.setClients(updated);
-                        });
                     }
                     
                     const loadEndTime = performance.now();
@@ -614,19 +671,32 @@ const Clients = React.memo(() => {
             // Check localStorage first to avoid unnecessary API calls if data is already loaded
             if (!forceRefresh) {
                 const cachedLeads = window.storage?.getLeads?.();
+                
+                // If we have leads in localStorage but state is empty, load them immediately
                 if (cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0 && leads.length === 0) {
-                    console.log(`⚡ Leads already in localStorage (${cachedLeads.length} leads), skipping API call to avoid duplicate load`);
-                    setLeads(cachedLeads);
+                    console.log(`⚡ Leads already in localStorage (${cachedLeads.length} leads), loading into state`);
+                    // Use functional setState to ensure it updates even if leads is empty
+                    setLeads(prevLeads => {
+                        if (prevLeads.length === 0) {
+                            return cachedLeads;
+                        }
+                        return prevLeads;
+                    });
                     setLeadsCount(cachedLeads.length);
-                    return; // Use cached data, skip API call
                 }
                 
                 const now = Date.now();
                 const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
                 
-                // Only skip if we have data AND called recently (check both state and localStorage)
-                if (timeSinceLastCall < API_CALL_INTERVAL && (leads.length > 0 || (cachedLeads && cachedLeads.length > 0))) {
-                    console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leads.length || cachedLeads?.length || 0} leads already loaded)`);
+                // Check if we should skip API call:
+                // 1. If we have leads in state AND recent API call - skip
+                // 2. If we have leads in localStorage (just loaded above) AND recent API call - skip
+                const hasLeadsInState = leads.length > 0;
+                const hasLeadsInCache = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0;
+                
+                if (timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
+                    const leadCount = hasLeadsInState ? leads.length : cachedLeads.length;
+                    console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leadCount} leads already loaded)`);
                     return; // Use cached data, skip API call
                 }
             } else {
