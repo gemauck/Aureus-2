@@ -55,7 +55,7 @@
         'components/clients/ClientDetailModal.jsx',
         'components/clients/LeadDetailModal.jsx',
         'components/clients/Clients.jsx',
-        'components/clients/ClientsCached.jsx',
+        // 'components/clients/ClientsCached.jsx', // DISABLED: Loads after Clients and overrides pagination
         'components/clients/ClientsDatabaseFirst.jsx',
         'components/clients/ClientDetailModalMobile.jsx',
         'components/clients/ClientsMobile.jsx',
