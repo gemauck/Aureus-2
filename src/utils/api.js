@@ -35,8 +35,11 @@ async function request(path, options = {}) {
   try {
     let { res, data } = await execute()
 
-    if (!res.ok && res.status === 401) {
-      // Try refresh once
+    // Only try to refresh token for 401 errors, but NOT for login/auth endpoints
+    // Login endpoints should fail immediately without refresh attempts
+    const isAuthEndpoint = path === '/auth/login' || path === '/login' || path === '/auth/2fa/verify'
+    if (!res.ok && res.status === 401 && !isAuthEndpoint) {
+      // Try refresh once for non-auth endpoints
       const refreshed = await api.refresh?.()
       if (refreshed?.data?.accessToken || refreshed?.accessToken) {
         // Update Authorization header and retry
@@ -61,11 +64,12 @@ async function request(path, options = {}) {
         throw rateLimitError
       }
       
-      // Do NOT log out on permission-related 401s (e.g., /users). Only log out if refresh failed and this looks like an auth problem on core identity endpoints.
+      // Handle 401 errors
       if (res.status === 401) {
-        const isAuthEndpoint = path === '/me' || path === '/auth/refresh' || path === '/login'
         const permissionLikely = path.startsWith('/users') || path.startsWith('/admin')
-        if (isAuthEndpoint || !permissionLikely) {
+        const isCoreAuthEndpoint = path === '/me' || path === '/auth/refresh'
+        // Only clear tokens and redirect for core auth endpoints, not for login failures
+        if ((isCoreAuthEndpoint || (!isAuthEndpoint && !permissionLikely)) && path !== '/auth/login' && path !== '/login') {
           // Token likely invalid and refresh failed → clear and redirect
           if (window.storage?.removeToken) window.storage.removeToken();
           if (window.storage?.removeUser) window.storage.removeUser();
@@ -77,7 +81,7 @@ async function request(path, options = {}) {
           }
         }
       }
-      throw new Error(data?.error?.message || `Request failed with status ${res.status}`)
+      throw new Error(data?.error?.message || data?.message || `Request failed with status ${res.status}`)
     }
 
     return data
