@@ -514,7 +514,8 @@
         (function() {
             function bindClients() {
                 if (!window.Clients) {
-                    window.Clients = window.Clients || window.ClientsCached || window.ClientsDatabaseFirst || window.ClientsSimple;
+                    // Prioritize main Clients component over cached variants
+                    window.Clients = window.Clients || window.ClientsDatabaseFirst || window.ClientsSimple || window.ClientsCached;
                     if (window.Clients) {
                         console.log('✅ Bound window.Clients dynamically');
                     }
