@@ -1402,6 +1402,9 @@ const Clients = React.memo(() => {
     const paginatedLeads = filteredLeads.slice(leadsStartIndex, leadsEndIndex);
     const totalLeadsPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
 
+    // Debug pagination
+    console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
+
     // Reset page to 1 when filters change
     useEffect(() => {
         setClientsPage(1);
