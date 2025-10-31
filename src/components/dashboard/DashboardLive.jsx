@@ -429,8 +429,8 @@ const DashboardLive = () => {
         
         return (
         <div className="space-y-4">
-            {/* Calendar Component */}
-            <div>
+            {/* Calendar Widget */}
+            <div className="flex justify-start">
                 <Calendar />
             </div>
             
