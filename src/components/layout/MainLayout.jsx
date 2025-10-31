@@ -136,12 +136,56 @@ const MainLayout = () => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, [showThemeMenu]);
 
-    // Get components from window - prioritize live dashboard over others with fallback
-    const Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
-    const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
-    const Clients = window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
-    const Pipeline = window.Pipeline;
-    const Projects = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple || (() => <div className="text-center py-12 text-gray-500">Projects loading...</div>);
+    // Get components from window - use useMemo to re-check on each render in case components load lazily
+    const Dashboard = React.useMemo(() => {
+        return window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+    }, []); // Only compute once, components should be available by render time
+    
+    const ErrorBoundary = React.useMemo(() => {
+        return window.ErrorBoundary || (({ children }) => children);
+    }, []);
+    
+    const Clients = React.useMemo(() => {
+        return window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
+    }, []);
+    
+    const Pipeline = React.useMemo(() => {
+        return window.Pipeline;
+    }, []);
+    
+    // Projects component - use state to re-check when component becomes available
+    const [projectsComponentReady, setProjectsComponentReady] = React.useState(false);
+    
+    React.useEffect(() => {
+        // Check if Projects component is available
+        const checkProjects = () => {
+            const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+            if (ProjectsComponent && !projectsComponentReady) {
+                console.log('✅ MainLayout: Projects component became available');
+                setProjectsComponentReady(true);
+            }
+        };
+        
+        // Check immediately
+        checkProjects();
+        
+        // Also check periodically in case component loads after initial render
+        const interval = setInterval(checkProjects, 500);
+        const timeout = setTimeout(() => clearInterval(interval), 10000); // Stop checking after 10 seconds
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [projectsComponentReady]);
+    
+    const Projects = React.useMemo(() => {
+        const ProjectsComponent = window.Projects || window.ProjectsDatabaseFirst || window.ProjectsSimple;
+        if (ProjectsComponent) {
+            return ProjectsComponent;
+        }
+        return () => <div className="text-center py-12 text-gray-500">Projects loading...</div>;
+    }, [projectsComponentReady]); // Re-compute when component becomes available
     // Use main Teams component first, fallback to TeamsSimple only if needed
     const Teams = window.Teams || window.TeamsSimple || (() => <div className="text-center py-12 text-gray-500">Teams module loading...</div>);
     const Users = window.UserManagement || window.Users || (() => {
@@ -350,7 +394,7 @@ const MainLayout = () => {
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         {(sidebarOpen || (mobileMenuOpen && isMobile)) ? (
                         <div className="flex-1 flex justify-center">
-                            <h1 className={`text-xl lg:text-base font-bold text-white`}>Abcotronics</h1>
+                            <h1 className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>Abcotronics</h1>
                         </div>
                     ) : (
                         <div className={`text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`}>A</div>
@@ -436,7 +480,7 @@ const MainLayout = () => {
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
                         <div className="lg:hidden">
-                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Abcotronics</h2>
+                            <h2 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-primary-600'}`}>Abcotronics</h2>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
