@@ -50,6 +50,17 @@ async function request(path, options = {}) {
     }
 
     if (!res.ok) {
+      // Handle rate limiting (429) specifically
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('Retry-After') || data?.retryAfter || 900 // Default to 15 minutes
+        const errorMessage = data?.error?.message || data?.message || 'Too many requests. Please wait before trying again.'
+        const rateLimitError = new Error(errorMessage)
+        rateLimitError.status = 429
+        rateLimitError.retryAfter = parseInt(retryAfter, 10)
+        rateLimitError.code = 'RATE_LIMIT_EXCEEDED'
+        throw rateLimitError
+      }
+      
       // Do NOT log out on permission-related 401s (e.g., /users). Only log out if refresh failed and this looks like an auth problem on core identity endpoints.
       if (res.status === 401) {
         const isAuthEndpoint = path === '/me' || path === '/auth/refresh' || path === '/login'
