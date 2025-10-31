@@ -114,6 +114,9 @@ async function loadHandler(handlerPath) {
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Trust proxy to work behind Nginx
+app.set('trust proxy', 1)
+
 // Security middleware - Helmet sets various HTTP headers for security
 app.use(helmet({
   contentSecurityPolicy: {
