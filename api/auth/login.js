@@ -103,14 +103,35 @@ async function handler(req, res) {
       return unauthorized(res, 'Account is not active')
     }
 
-    logger.info({ email, userId: user.id, passwordLength: password?.length || 0, hashLength: user.passwordHash?.length || 0, hashPrefix: user.passwordHash?.substring(0, 7) || 'N/A' }, '🔑 Verifying password')
+    logger.info({ 
+      email, 
+      userId: user.id, 
+      passwordLength: password?.length || 0, 
+      hashLength: user.passwordHash?.length || 0, 
+      hashPrefix: user.passwordHash?.substring(0, 7) || 'N/A',
+      passwordType: typeof password,
+      hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/)
+    }, '🔑 Verifying password')
     
-    // Verify password
-    const valid = await bcrypt.compare(password, user.passwordHash)
-    logger.info({ email, valid, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '🔑 Password comparison result')
+    // Verify password - ensure password is a string
+    const passwordString = typeof password === 'string' ? password : String(password || '')
+    const valid = await bcrypt.compare(passwordString, user.passwordHash)
+    logger.info({ 
+      email, 
+      valid, 
+      hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/),
+      passwordProvided: !!passwordString,
+      passwordStringLength: passwordString.length
+    }, '🔑 Password comparison result')
     
     if (!valid) {
-      logger.warn({ email, userId: user.id, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '❌ Invalid password - check: password hash format, password encoding, or password mismatch')
+      logger.warn({ 
+        email, 
+        userId: user.id, 
+        hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/),
+        passwordProvided: !!passwordString,
+        passwordStringLength: passwordString.length
+      }, '❌ Invalid password - check: password hash format, password encoding, or password mismatch')
       return unauthorized(res, 'Invalid credentials')
     }
 
