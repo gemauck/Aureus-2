@@ -23,15 +23,84 @@ async function handler(req, res) {
     // List Leads (GET /api/leads)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'leads') {
       try {
-        const leads = await prisma.client.findMany({ 
-          where: { type: 'lead' },
-          orderBy: { createdAt: 'desc' } 
-        })
-        console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
+        console.log('📋 GET /api/leads - Starting query...')
+        
+        // Ensure database connection
+        try {
+          await prisma.$connect()
+          console.log('✅ Database connected')
+        } catch (connError) {
+          console.warn('⚠️ Connection check failed (may reconnect automatically):', connError.message)
+        }
+        
+        // Ensure type column exists in database
+        try {
+          await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
+          console.log('✅ Type column ensured in database')
+        } catch (schemaError) {
+          // Column might already exist - this is expected if schema is up to date
+          console.log('ℹ️ Type column check skipped (expected if schema is up to date):', schemaError.message)
+        }
+        
+        // Try to query leads directly
+        let leads = []
+        try {
+          console.log('🔍 Querying leads with type filter...')
+          leads = await prisma.client.findMany({ 
+            where: { type: 'lead' },
+            orderBy: { createdAt: 'desc' } 
+          })
+          console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
+        } catch (queryError) {
+          console.error('❌ Primary query failed:', {
+            message: queryError.message,
+            code: queryError.code,
+            meta: queryError.meta,
+            stack: queryError.stack
+          })
+          
+          // Fallback: If query fails, try without type filter and filter in memory
+          console.warn('⚠️ Trying fallback query without type filter...')
+          try {
+            const allRecords = await prisma.client.findMany({
+              orderBy: { createdAt: 'desc' }
+            })
+            console.log(`📊 Found ${allRecords.length} total client records`)
+            // Filter to only leads
+            leads = allRecords.filter(record => {
+              // If type exists, it must be 'lead'
+              if (record.type !== null && record.type !== undefined && record.type !== '') {
+                return record.type === 'lead'
+              }
+              // If type is null/undefined/empty, skip (legacy data without type should not be treated as leads)
+              return false
+            })
+            console.log(`✅ Filtered to ${leads.length} leads`)
+          } catch (fallbackError) {
+            console.error('❌ Fallback query also failed:', {
+              message: fallbackError.message,
+              code: fallbackError.code,
+              meta: fallbackError.meta,
+              stack: fallbackError.stack
+            })
+            throw fallbackError
+          }
+        }
+        
         return ok(res, { leads })
       } catch (dbError) {
-        console.error('❌ Database error listing leads:', dbError)
-        return serverError(res, 'Failed to list leads', dbError.message)
+        console.error('❌ Database error listing leads:', {
+          message: dbError.message,
+          name: dbError.name,
+          code: dbError.code,
+          meta: dbError.meta,
+          stack: dbError.stack
+        })
+        return serverError(res, 'Failed to list leads', {
+          error: dbError.message,
+          code: dbError.code,
+          name: dbError.name
+        })
       }
     }
 
