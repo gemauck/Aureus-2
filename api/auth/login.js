@@ -113,7 +113,7 @@ async function handler(req, res) {
 
     // Check JWT_SECRET
     if (!process.env.JWT_SECRET) {
-      console.error('❌ JWT_SECRET not configured')
+      logger.error({ email }, '❌ JWT_SECRET not configured')
       return serverError(res, 'Server configuration error', 'JWT_SECRET missing')
     }
 
