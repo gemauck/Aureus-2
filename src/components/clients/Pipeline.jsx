@@ -121,12 +121,30 @@ const Pipeline = () => {
             .flatMap(c => (c.opportunities || []).map(opp => ({ ...opp, clientId: c.id })))
             .filter(opp => opp.clientId); // Only keep opportunities with valid clientId
         
-        setIsLoading(true);
+        // Show cached data immediately if available (instant display like leads)
+        if (cachedClients.length > 0) {
+            const clientsWithCachedOpps = cachedClients.map(client => ({
+                ...client,
+                opportunities: Array.isArray(client.opportunities) ? client.opportunities : []
+            }));
+            setClients(clientsWithCachedOpps);
+            const totalCachedOpps = clientsWithCachedOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+            if (totalCachedOpps > 0) {
+                console.log(`⚡ Pipeline: Showing ${totalCachedOpps} cached opportunities immediately`);
+            }
+        }
         
         try {
-            // Try to load from API first if authenticated
+            // Try to load from API if authenticated (but don't block on cached data)
             const token = storage.getToken();
             if (token && window.DatabaseAPI) {
+                // Only set loading if we have no cached data
+                if (cachedClients.length === 0) {
+                    setIsLoading(true);
+                } else {
+                    console.log('⚡ Pipeline: Using cached data, refreshing from API in background...');
+                }
+                
                 console.log('🔄 Pipeline: Refreshing data from API...');
                 
                 // Load clients, leads, and opportunities in parallel for fastest load
@@ -219,7 +237,7 @@ const Pipeline = () => {
                 const totalOpportunities = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
                 console.log(`✅ Pipeline: Total opportunities loaded: ${totalOpportunities} across ${clientsWithOpportunities.length} clients`);
                 
-                // Update state only after all data is loaded (prevents flashing)
+                // Update state with fresh API data (seamlessly replaces cached data)
                 setClients(clientsWithOpportunities);
                 setLeads(apiLeads);
                 
