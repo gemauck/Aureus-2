@@ -12,8 +12,15 @@ async function handler(req, res) {
     logger.info({ email: req.body?.email || 'unknown' }, '🔐 Login attempt started')
     
     // Validate request body
-    const { email, password } = req.body || {}
-    logger.info({ email, hasPassword: !!password, bodyKeys: Object.keys(req.body || {}) }, '📝 Request body parsed')
+    let { email, password } = req.body || {}
+    
+    // Normalize email and password - trim whitespace and remove any null bytes
+    if (email) email = String(email).trim().toLowerCase()
+    if (password) {
+      password = String(password).replace(/\0/g, '').trim()
+    }
+    
+    logger.info({ email, hasPassword: !!password, bodyKeys: Object.keys(req.body || {}), passwordLength: password?.length || 0 }, '📝 Request body parsed')
     
     if (!email || !password) {
       logger.warn({ hasEmail: !!email, hasPassword: !!password }, '❌ Missing email or password')
