@@ -38,10 +38,10 @@ git clean -fd
 echo ""
 echo "✅ Code updated"
 
-# Install dependencies if needed
+# Install dependencies (including dev dependencies for build)
 echo ""
 echo "📦 Installing dependencies..."
-npm ci --omit=dev || npm install --omit=dev || echo "⚠️  npm install had issues but continuing..."
+npm ci || npm install || echo "⚠️  npm install had issues but continuing..."
 
 # Build frontend
 echo ""
