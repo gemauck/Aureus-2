@@ -20,9 +20,11 @@ async function handler(req, res) {
 
     // Development-only shortcut to allow local login without a database
     if (process.env.DEV_LOCAL_NO_DB === 'true') {
+      logger.info({ email }, '🔧 Using DEV_LOCAL_NO_DB mode')
       const devEmail = 'admin@example.com'
       const devPassword = 'password123'
       if (email !== devEmail || password !== devPassword) {
+        logger.warn({ email }, '❌ DEV mode: Invalid credentials')
         return unauthorized(res, 'Invalid credentials')
       }
 
@@ -58,7 +60,7 @@ async function handler(req, res) {
       })
     }
 
-    logger.info({ email }, '🔍 Looking up user')
+    logger.info({ email, devMode: process.env.DEV_LOCAL_NO_DB }, '🔍 Looking up user (after dev check)')
     
     // Find user (Prisma handles connection automatically)
     let user
