@@ -45,7 +45,6 @@ const LoginPage = () => {
 
     return (
         <div className="login-outer" style={{ 
-            minHeight: '100vh', 
             minHeight: '100dvh',
             width: '100%',
             display: 'flex',
