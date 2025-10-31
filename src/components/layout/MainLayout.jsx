@@ -145,9 +145,45 @@ const MainLayout = () => {
         return window.ErrorBoundary || (({ children }) => children);
     }, []);
     
+    // Clients component - use state to re-check when component becomes available (lazy loaded)
+    const [clientsComponentReady, setClientsComponentReady] = React.useState(false);
+    
+    React.useEffect(() => {
+        // Check if Clients component is available
+        const checkClients = () => {
+            const ClientsComponent = window.Clients || window.ClientsSimple;
+            if (ClientsComponent && !clientsComponentReady) {
+                console.log('✅ MainLayout: Clients component became available');
+                setClientsComponentReady(true);
+            }
+        };
+        
+        // Check immediately
+        checkClients();
+        
+        // Re-check periodically until component is available
+        const interval = setInterval(() => {
+            if (!clientsComponentReady) {
+                checkClients();
+            } else {
+                clearInterval(interval);
+            }
+        }, 500);
+        
+        // Cleanup after 10 seconds to avoid infinite checking
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+        }, 10000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [clientsComponentReady]);
+    
     const Clients = React.useMemo(() => {
         return window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
-    }, []);
+    }, [clientsComponentReady]); // Re-compute when component becomes ready
     
     const Pipeline = React.useMemo(() => {
         return window.Pipeline;
