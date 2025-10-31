@@ -1,7 +1,8 @@
-const { useState } = window;
+const { useState, useEffect } = window;
 
 export const ReminderSettings = ({ settings, onSave, onClose }) => {
-    const [formData, setFormData] = useState(settings || {
+    // Default settings
+    const defaultSettings = {
         enabled: true,
         days: [7, 3, 0, 7], // Before due: 7 days, 3 days, 0 (due date), After due: 7 days
         autoSend: true,
@@ -9,7 +10,26 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
         includePDF: true,
         ccAccounting: false,
         servicesForEachClient: false
-    });
+    };
+    
+    // Merge settings with defaults to ensure all fields are present
+    const mergedSettings = settings ? {
+        ...defaultSettings,
+        ...settings,
+        servicesForEachClient: settings.servicesForEachClient !== undefined ? settings.servicesForEachClient : false
+    } : defaultSettings;
+    
+    const [formData, setFormData] = useState(mergedSettings);
+    
+    // Update formData when settings prop changes
+    useEffect(() => {
+        const merged = settings ? {
+            ...defaultSettings,
+            ...settings,
+            servicesForEachClient: settings.servicesForEachClient !== undefined ? settings.servicesForEachClient : false
+        } : defaultSettings;
+        setFormData(merged);
+    }, [settings]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
