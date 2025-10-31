@@ -21,15 +21,35 @@ const FeedbackViewer = () => {
         }
     }, [isAdmin]);
 
+    // Also reload when component becomes visible (in case feedback was submitted)
+    useEffect(() => {
+        if (isAdmin) {
+            // Small delay to ensure tab is fully visible
+            const timer = setTimeout(() => {
+                loadFeedback();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, []);
+
     const loadFeedback = async () => {
         setLoading(true);
         try {
-            const data = await window.api.getFeedback({
+            console.log('📥 Loading feedback from API...');
+            const response = await window.api.getFeedback({
                 includeUser: true
             });
-            setFeedback(Array.isArray(data) ? data : []);
+            console.log('📥 Feedback API response:', response);
+            
+            // API returns { data: [...] }, so extract the data array
+            const feedbackData = response?.data || response || [];
+            const feedbackArray = Array.isArray(feedbackData) ? feedbackData : [];
+            
+            console.log('📥 Extracted feedback array:', feedbackArray.length, 'items');
+            setFeedback(feedbackArray);
         } catch (error) {
-            console.error('Failed to load feedback:', error);
+            console.error('❌ Failed to load feedback:', error);
+            console.error('❌ Error details:', error.message, error.stack);
             setFeedback([]);
         } finally {
             setLoading(false);
