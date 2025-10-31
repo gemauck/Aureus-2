@@ -67,14 +67,21 @@ async function handler(req, res) {
         console.log('📋 GET /api/clients - Starting optimized query...')
         
         // PERFORMANCE OPTIMIZATION: Query only clients directly with WHERE clause
-        // This is MUCH faster than fetching all records and filtering in memory
-        // Use raw SQL to handle NULL type (legacy data) since Prisma doesn't support type: null in OR
+        // Query for all records that are NOT leads, then filter to get clients and null types
         // NOTE: Tags are excluded from list query for performance - they're only needed in detail views
-        const clients = await prisma.$queryRaw`
-          SELECT * FROM "Client" 
-          WHERE "type" = 'client' OR "type" IS NULL 
-          ORDER BY "createdAt" DESC
-        `
+        const allRecords = await prisma.client.findMany({
+          where: {
+            NOT: {
+              type: 'lead'
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        })
+        
+        // Filter in memory to ensure we only get clients and null types (not any other types)
+        const clients = allRecords.filter(c => c.type === 'client' || c.type === null || c.type === undefined)
         
         console.log(`✅ Found ${clients.length} clients (filtered in database)`)
         
