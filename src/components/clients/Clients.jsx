@@ -580,8 +580,18 @@ const Clients = React.memo(() => {
                     }
                     console.log(`🔍 Clients only: ${clientsOnly.length}, Leads only: ${leadsOnly.length}`);
                     
-                    // Show clients immediately
-                    setClients(clientsOnly);
+                    // Preserve opportunities from cached clients for instant display
+                    const cachedClientsForOpps = safeStorage.getClients() || [];
+                    const clientsWithCachedOpps = clientsOnly.map(client => {
+                        const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
+                        if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
+                            return { ...client, opportunities: cachedClient.opportunities };
+                        }
+                        return client;
+                    });
+                    
+                    // Show clients immediately with preserved opportunities
+                    setClients(clientsWithCachedOpps);
                     
                     // Only update leads if they're mixed with clients in the API response
                     // (Leads typically come from a separate getLeads() endpoint via loadLeads())
@@ -600,20 +610,8 @@ const Clients = React.memo(() => {
                         console.log('⚡ No leads in clients API response, preserving current leads state');
                     }
                     
-                    // Preserve opportunities from cached clients before saving
-                    // This ensures opportunities are immediately available even before API refresh
-                    const cachedClientsWithOpps = safeStorage.getClients() || [];
-                    const clientsWithPreservedOpps = clientsOnly.map(client => {
-                        const cachedClient = cachedClientsWithOpps.find(c => c.id === client.id);
-                        if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
-                            return { ...client, opportunities: cachedClient.opportunities };
-                        }
-                        return client;
-                    });
-                    
                     // Save clients with preserved opportunities to localStorage (instant display)
-                    safeStorage.setClients(clientsWithPreservedOpps);
-                    setClients(clientsWithPreservedOpps);
+                    safeStorage.setClients(clientsWithCachedOpps);
                     
                     // Load fresh opportunities from API in background (only if Pipeline is active)
                     // Use bulk fetch instead of per-client calls for much better performance
