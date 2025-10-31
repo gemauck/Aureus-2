@@ -256,9 +256,19 @@ const AuthProvider = ({ children }) => {
             console.error('❌ Login error details:', {
                 message: err.message,
                 stack: err.stack,
-                name: err.name
+                name: err.name,
+                status: err.status,
+                retryAfter: err.retryAfter
             });
-            throw new Error('Invalid credentials');
+            
+            // Handle rate limiting errors specifically
+            if (err.status === 429 || err.code === 'RATE_LIMIT_EXCEEDED') {
+                const retryAfter = err.retryAfter || 900; // Default to 15 minutes
+                const minutes = Math.ceil(retryAfter / 60);
+                throw new Error(`Too many login attempts. Please wait ${minutes} minute${minutes !== 1 ? 's' : ''} before trying again.`);
+            }
+            
+            throw new Error(err.message || 'Invalid credentials');
         }
     };
 
