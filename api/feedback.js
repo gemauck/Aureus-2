@@ -11,24 +11,40 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
   try {
     console.log('📧 Starting feedback email notification process...')
     
-    // Get all admin users
+    // Get all admin users (case-insensitive role check)
     const admins = await prisma.user.findMany({
       where: {
-        role: 'admin',
-        status: 'active'
+        OR: [
+          { role: 'admin' },
+          { role: 'ADMIN' },
+          { role: 'Admin' }
+        ],
+        status: {
+          in: ['active', 'Active', 'ACTIVE']
+        }
       },
       select: {
         email: true,
-        name: true
+        name: true,
+        role: true,
+        status: true
       }
     })
+    
+    // Filter out admins without email addresses
+    const adminsWithEmail = admins.filter(admin => admin.email && admin.email.trim())
 
-    if (admins.length === 0) {
+    if (adminsWithEmail.length === 0) {
       console.warn('⚠️ No admin users found for feedback notification. Feedback was still saved.')
+      console.warn('   Searched for users with role: admin/ADMIN/Admin and status: active')
+      console.warn('   Found admins:', admins.length, '| With emails:', adminsWithEmail.length)
+      if (admins.length > 0) {
+        console.warn('   Admin users found but no email addresses:', admins.map(a => ({ email: a.email, role: a.role, status: a.status })))
+      }
       return
     }
 
-    console.log(`📧 Found ${admins.length} admin(s) to notify:`, admins.map(a => a.email).join(', '))
+    console.log(`📧 Found ${adminsWithEmail.length} admin(s) to notify:`, adminsWithEmail.map(a => a.email).join(', '))
 
     // Prepare email content
     const userName = submittingUser?.name || submittingUser?.email || 'A user'
@@ -85,7 +101,7 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     let successCount = 0
     let failureCount = 0
     
-    const emailPromises = admins.map(async (admin) => {
+    const emailPromises = adminsWithEmail.map(async (admin) => {
       try {
         console.log(`📧 Attempting to send feedback email to ${admin.email}...`)
         const result = await sendNotificationEmail(
@@ -114,7 +130,8 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
     console.log(`📧 Feedback email notification summary:`)
     console.log(`   ✅ Successfully sent: ${successCount}`)
     console.log(`   ❌ Failed: ${failureCount}`)
-    console.log(`   Total admins: ${admins.length}`)
+    console.log(`   Total admins found: ${admins.length}`)
+    console.log(`   Admins with email: ${adminsWithEmail.length}`)
     
     if (failureCount > 0) {
       console.error(`⚠️ Some feedback emails failed to send. Check email configuration:`)
@@ -234,8 +251,26 @@ async function handler(req, res) {
         const createdItem = await prisma.feedback.create({ data: record })
         
         // Send email notification to admins (non-blocking)
-        notifyAdminsOfFeedback(createdItem, req.user).catch(err => {
-          console.error('Failed to send feedback notification:', err)
+        // Add explicit logging to ensure function is called
+        console.log('📝 Feedback created, triggering email notification...')
+        console.log('📝 Feedback data:', {
+          id: createdItem.id,
+          userId: createdItem.userId,
+          section: createdItem.section,
+          submittingUser: req.user ? { 
+            id: req.user.sub, 
+            email: req.user.email, 
+            name: req.user.name 
+          } : 'not logged in'
+        })
+        
+        notifyAdminsOfFeedback(createdItem, req.user)
+          .then(() => {
+            console.log('✅ Feedback notification process completed')
+          })
+          .catch(err => {
+          console.error('❌ Failed to send feedback notification:', err)
+          console.error('❌ Error stack:', err.stack)
           // Don't fail the request if notification fails
         })
         
