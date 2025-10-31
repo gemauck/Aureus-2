@@ -3,26 +3,32 @@ import bcrypt from 'bcryptjs'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { signAccessToken, signRefreshToken } from '../_lib/jwt.js'
 import { withHttp } from '../_lib/withHttp.js'
-import { withLogging } from '../_lib/logger.js'
+import { withLogging, logger } from '../_lib/logger.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
   
   try {
-    console.log('🔐 Login attempt started')
+    logger.info({ email: req.body?.email || 'unknown' }, '🔐 Login attempt started')
     
     // Validate request body
     const { email, password } = req.body || {}
+    logger.info({ email, hasPassword: !!password, bodyKeys: Object.keys(req.body || {}) }, '📝 Request body parsed')
+    
     if (!email || !password) {
-      console.log('❌ Missing email or password')
+      logger.warn({ hasEmail: !!email, hasPassword: !!password }, '❌ Missing email or password')
       return badRequest(res, 'Email and password required')
     }
 
+    logger.info({ email }, '✅ Email and password validated, proceeding...')
+
     // Development-only shortcut to allow local login without a database
     if (process.env.DEV_LOCAL_NO_DB === 'true') {
+      logger.info({ email }, '🔧 Using DEV_LOCAL_NO_DB mode')
       const devEmail = 'admin@example.com'
       const devPassword = 'password123'
       if (email !== devEmail || password !== devPassword) {
+        logger.warn({ email }, '❌ DEV mode: Invalid credentials')
         return unauthorized(res, 'Invalid credentials')
       }
 
@@ -58,60 +64,61 @@ async function handler(req, res) {
       })
     }
 
-    console.log('🔍 Looking up user:', email)
+    logger.info({ email, devMode: process.env.DEV_LOCAL_NO_DB }, '🔍 Looking up user (after dev check)')
     
-    // Test database connection first
+    // Find user (Prisma handles connection automatically)
+    let user
     try {
-      await prisma.$connect()
-      console.log('✅ Database connection verified')
-    } catch (dbError) {
-      console.error('❌ Database connection failed:', dbError)
-      return serverError(res, 'Database connection failed', dbError.message)
+      logger.info({ email }, '🔍 Querying database for user')
+      user = await prisma.user.findUnique({ 
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          passwordHash: true,
+          role: true,
+          status: true,
+          mustChangePassword: true
+        }
+      })
+      logger.info({ email, userFound: !!user }, '🔍 User query completed')
+    } catch (queryError) {
+      logger.error({ email, error: queryError.message, stack: queryError.stack }, '❌ Database query failed')
+      return serverError(res, 'Database query failed', queryError.message)
     }
-
-    // Find user
-    const user = await prisma.user.findUnique({ 
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        passwordHash: true,
-        role: true,
-        status: true,
-        mustChangePassword: true
-      }
-    })
     
     if (!user) {
-      console.log('❌ User not found:', email)
+      logger.warn({ email }, '❌ User not found')
       return unauthorized(res, 'Invalid credentials')
     }
     
     if (!user.passwordHash) {
-      console.log('❌ User has no password hash:', email)
+      logger.warn({ email, userId: user.id }, '❌ User has no password hash')
       return unauthorized(res, 'Invalid credentials')
     }
     
     if (user.status !== 'active') {
-      console.log('❌ User account is not active:', email)
+      logger.warn({ email, userId: user.id, status: user.status }, '❌ User account is not active')
       return unauthorized(res, 'Account is not active')
     }
 
-    console.log('🔑 Verifying password for user:', user.id)
+    logger.info({ email, userId: user.id, passwordLength: password?.length || 0, hashLength: user.passwordHash?.length || 0, hashPrefix: user.passwordHash?.substring(0, 7) || 'N/A' }, '🔑 Verifying password')
     
     // Verify password
     const valid = await bcrypt.compare(password, user.passwordHash)
+    logger.info({ email, valid, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '🔑 Password comparison result')
+    
     if (!valid) {
-      console.log('❌ Invalid password for user:', email)
+      logger.warn({ email, userId: user.id, hashFormatValid: !!user.passwordHash.match(/^\$2[ayb]\$.{56}$/) }, '❌ Invalid password - check: password hash format, password encoding, or password mismatch')
       return unauthorized(res, 'Invalid credentials')
     }
 
-    console.log('✅ Password verified, generating tokens')
+    logger.info({ email, userId: user.id }, '✅ Password verified, generating tokens')
 
     // Check JWT_SECRET
     if (!process.env.JWT_SECRET) {
-      console.error('❌ JWT_SECRET not configured')
+      logger.error({ email }, '❌ JWT_SECRET not configured')
       return serverError(res, 'Server configuration error', 'JWT_SECRET missing')
     }
 
@@ -142,7 +149,7 @@ async function handler(req, res) {
     const cookieValue = `refreshToken=${refreshToken}; HttpOnly; Path=/; SameSite=Lax${isSecure ? '; Secure' : ''}${domainAttr}`
     res.setHeader('Set-Cookie', [cookieValue])
     
-    console.log('✅ Login successful for user:', user.email)
+    logger.info({ email, userId: user.id, role: user.role }, '✅ Login successful')
     
     return ok(res, { 
       accessToken,
@@ -156,11 +163,12 @@ async function handler(req, res) {
     })
     
   } catch (e) {
-    console.error('❌ Login error:', {
-      message: e.message,
-      stack: e.stack,
-      code: e.code
-    })
+    logger.error({ 
+      email: req.body?.email || 'unknown',
+      error: e.message, 
+      stack: e.stack, 
+      code: e.code 
+    }, '❌ Login error')
     return serverError(res, 'Login failed', e.message)
   }
 }
