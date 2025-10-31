@@ -41,17 +41,17 @@ model User {
   address          String    @default("")
   emergencyContact String    @default("")
 
-  memberships   Membership[]
-  ownedClients  Client[]     @relation("ClientOwner")
-  ownedProjects Project[]    @relation("ProjectOwner")
-  tasks         Task[]       @relation("TaskAssignee")
-  auditLogs     AuditLog[]   @relation("AuditActor")
-  feedback      Feedback[]   @relation("UserFeedback")
-  sentMessages  Message[]    @relation("MessageSender")
+  memberships    Membership[]
+  ownedClients   Client[]        @relation("ClientOwner")
+  ownedProjects  Project[]       @relation("ProjectOwner")
+  tasks          Task[]          @relation("TaskAssignee")
+  auditLogs      AuditLog[]      @relation("AuditActor")
+  feedback       Feedback[]      @relation("UserFeedback")
+  sentMessages   Message[]       @relation("MessageSender")
   passwordResets PasswordReset[]
-  calendarNotes CalendarNote[]
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  calendarNotes  CalendarNote[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 }
 
 model Team {
@@ -288,7 +288,7 @@ model Feedback {
   meta      String?
   user      User?    @relation("UserFeedback", fields: [userId], references: [id])
   createdAt DateTime @default(now())
-  
+
   @@index([pageUrl])
   @@index([section])
   @@index([userId])
@@ -368,44 +368,44 @@ model WorkflowExecution {
 }
 
 model TeamTask {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   team        String // Team ID (management, technical, etc.)
   title       String
-  description String   @default("")
-  status      String   @default("todo") // todo, in-progress, completed, blocked
-  priority    String   @default("Medium") // Low, Medium, High, Critical
+  description String    @default("")
+  status      String    @default("todo") // todo, in-progress, completed, blocked
+  priority    String    @default("Medium") // Low, Medium, High, Critical
   assigneeId  String?
   dueDate     DateTime?
-  tags        String   @default("[]")
-  attachments String   @default("[]")
+  tags        String    @default("[]")
+  attachments String    @default("[]")
   ownerId     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // Manufacturing Models
 model InventoryItem {
-  id            String   @id @default(cuid())
-  sku           String
-  name          String
-  thumbnail     String   @default("")
-  category      String   @default("components") // components, packaging, accessories, finished_goods, work_in_progress
-  type          String   @default("raw_material") // raw_material, finished_good, wip
-  quantity      Float    @default(0)
-  unit          String   @default("pcs")
-  reorderPoint  Float    @default(0)
-  reorderQty    Float    @default(0)
-  location      String   @default("")
-  unitCost      Float    @default(0)
-  totalValue    Float    @default(0)
-  supplier      String   @default("")
-  supplierPartNumbers String @default("[]") // JSON array of {supplier: string, partNumber: string}
-  legacyPartNumber String @default("")
-  status        String   @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
-  lastRestocked DateTime?
-  ownerId       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  sku                 String
+  name                String
+  thumbnail           String    @default("")
+  category            String    @default("components") // components, packaging, accessories, finished_goods, work_in_progress
+  type                String    @default("raw_material") // raw_material, finished_good, wip
+  quantity            Float     @default(0)
+  unit                String    @default("pcs")
+  reorderPoint        Float     @default(0)
+  reorderQty          Float     @default(0)
+  location            String    @default("")
+  unitCost            Float     @default(0)
+  totalValue          Float     @default(0)
+  supplier            String    @default("")
+  supplierPartNumbers String    @default("[]") // JSON array of {supplier: string, partNumber: string}
+  legacyPartNumber    String    @default("")
+  status              String    @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
+  lastRestocked       DateTime?
+  ownerId             String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([sku])
   @@index([category])
@@ -424,7 +424,7 @@ model BOM {
   overheadCost      Float    @default(0)
   totalMaterialCost Float    @default(0)
   totalCost         Float    @default(0)
-  estimatedTime    Int      @default(0)
+  estimatedTime     Int      @default(0)
   components        String   @default("[]") // JSON array of components
   notes             String   @default("")
   ownerId           String?
@@ -437,24 +437,24 @@ model BOM {
 }
 
 model ProductionOrder {
-  id              String    @id @default(cuid())
-  bomId           String    @default("")
-  productSku      String
-  productName     String
-  quantity        Int       @default(0)
-  quantityProduced Int      @default(0)
-  status          String    @default("in_progress") // in_progress, completed, cancelled
-  priority        String    @default("normal") // low, normal, high
-  startDate       DateTime  @default(now())
-  targetDate      DateTime?
-  completedDate   DateTime?
-  assignedTo      String    @default("")
-  totalCost       Float     @default(0)
-  notes           String    @default("")
-  createdBy       String    @default("")
-  ownerId         String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  bomId            String    @default("")
+  productSku       String
+  productName      String
+  quantity         Int       @default(0)
+  quantityProduced Int       @default(0)
+  status           String    @default("in_progress") // in_progress, completed, cancelled
+  priority         String    @default("normal") // low, normal, high
+  startDate        DateTime  @default(now())
+  targetDate       DateTime?
+  completedDate    DateTime?
+  assignedTo       String    @default("")
+  totalCost        Float     @default(0)
+  notes            String    @default("")
+  createdBy        String    @default("")
+  ownerId          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([status])
   @@index([bomId])
@@ -463,9 +463,9 @@ model ProductionOrder {
 
 model StockMovement {
   id           String   @id @default(cuid())
-  movementId   String   // Human-readable ID like "MOV001"
-  date         DateTime  @default(now())
-  type         String   // consumption, receipt, production, transfer, adjustment
+  movementId   String // Human-readable ID like "MOV001"
+  date         DateTime @default(now())
+  type         String // consumption, receipt, production, transfer, adjustment
   itemName     String
   sku          String
   quantity     Float
@@ -486,19 +486,19 @@ model StockMovement {
 
 // Physical stock locations (warehouses, vehicles, stores)
 model StockLocation {
-  id          String   @id @default(cuid())
-  code        String   @unique
-  name        String
-  type        String   @default("warehouse") // warehouse, vehicle, store, site
-  status      String   @default("active")
-  address     String   @default("")
-  contactPerson String @default("")
-  contactPhone String  @default("")
-  meta        String   @default("{}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  
-  inventory   LocationInventory[]
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  type          String   @default("warehouse") // warehouse, vehicle, store, site
+  status        String   @default("active")
+  address       String   @default("")
+  contactPerson String   @default("")
+  contactPhone  String   @default("")
+  meta          String   @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  inventory LocationInventory[]
 
   @@index([type])
   @@index([status])
@@ -506,19 +506,19 @@ model StockLocation {
 
 // Inventory quantity per location by SKU
 model LocationInventory {
-  id          String   @id @default(cuid())
-  locationId  String
-  sku         String
-  itemName    String
-  quantity    Float    @default(0)
-  unitCost    Float    @default(0)
-  reorderPoint Float   @default(0)
+  id            String    @id @default(cuid())
+  locationId    String
+  sku           String
+  itemName      String
+  quantity      Float     @default(0)
+  unitCost      Float     @default(0)
+  reorderPoint  Float     @default(0)
   lastRestocked DateTime?
-  status      String   @default("in_stock")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status        String    @default("in_stock")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  location    StockLocation @relation(fields: [locationId], references: [id])
+  location StockLocation @relation(fields: [locationId], references: [id])
 
   @@unique([locationId, sku])
   @@index([sku])
@@ -549,7 +549,7 @@ model Supplier {
 // Employee Chat Messages
 model Message {
   id        String   @id @default(cuid())
-  senderId String
+  senderId  String
   sender    User     @relation("MessageSender", fields: [senderId], references: [id])
   content   String
   read      Boolean  @default(false)
@@ -563,13 +563,13 @@ model Message {
 
 // Password reset tokens for forgot-password flow
 model PasswordReset {
-  id         String   @id @default(cuid())
-  userId     String
-  user       User     @relation(fields: [userId], references: [id])
-  token      String   @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  createdAt  DateTime @default(now())
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])
