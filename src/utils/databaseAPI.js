@@ -287,8 +287,10 @@ const DatabaseAPI = {
 
     // CLIENT OPERATIONS
     async getClients() {
-        // Silent fetch - makeRequest handles cache logging, reduces console noise
+        console.log('📡 Fetching clients from database...');
         const response = await this.makeRequest('/clients');
+        const clients = response?.data?.clients || [];
+        console.log(`✅ Clients fetched from database: ${clients.length}`);
         return response;
     },
 
