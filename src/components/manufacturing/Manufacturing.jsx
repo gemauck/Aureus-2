@@ -1269,12 +1269,28 @@ const Manufacturing = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(errorData.message || 'Failed to delete stock movements');
+        const errorText = await response.text().catch(() => response.statusText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { message: errorText || 'Unknown error' };
+        }
+        console.error('❌ API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorData
+        });
+        throw new Error(errorData.message || `Failed to delete stock movements: ${response.status} ${response.statusText}`);
       }
 
       const result = await response.json();
+      console.log('📥 API Response:', result);
       const deletedCount = result?.count || result?.data?.count || count;
+      
+      if (deletedCount === 0) {
+        console.warn('⚠️ API returned 0 deleted count, but response was OK');
+      }
 
       // Clear local state and cache
       setMovements([]);
