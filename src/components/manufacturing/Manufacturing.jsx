@@ -276,7 +276,7 @@ const Manufacturing = () => {
         );
       }
 
-      // Production Orders
+      // Work Orders
       if (window.DatabaseAPI?.getProductionOrders) {
         apiCalls.push(
           window.DatabaseAPI.getProductionOrders()
@@ -1588,6 +1588,12 @@ const Manufacturing = () => {
   const handleSaveProductionOrder = async () => {
     try {
       console.log('🔍 Starting work order save...', { formData });
+      console.log('🔍 Form validation:', {
+        bomId: !!formData.bomId,
+        quantity: !!formData.quantity,
+        startDate: !!formData.startDate,
+        assignedTo: !!formData.assignedTo
+      });
       const selectedBom = boms.find(b => b.id === formData.bomId);
       if (!selectedBom) {
         alert('Please select a BOM/Product');
@@ -2692,6 +2698,7 @@ const Manufacturing = () => {
               </button>
               <button
                 onClick={() => {
+                  console.log('🔘 Create/Update Order button clicked', { modalType, formData });
                   if (modalType === 'add_production') {
                     handleSaveProductionOrder();
                   } else {

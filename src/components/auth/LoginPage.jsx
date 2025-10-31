@@ -35,20 +35,44 @@ const LoginPage = () => {
     };
 
 
+    // Add mobile-specific body class on mount
+    useEffect(() => {
+        document.body.classList.add('login-page');
+        return () => {
+            document.body.classList.remove('login-page');
+        };
+    }, []);
+
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4" style={{ minHeight: '100dvh' }}>
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-500 to-blue-700 p-4 login-outer" style={{ minHeight: '100dvh' }}>
             <style>{`
                 /* Mobile-specific login page fixes */
                 @media (max-width: 768px) {
+                    .login-outer {
+                        padding: 0.5rem !important;
+                        align-items: flex-start !important;
+                        padding-top: 1rem !important;
+                        padding-bottom: 1rem !important;
+                    }
+                    
                     .login-container {
                         width: 100% !important;
                         max-width: 100% !important;
                         margin: 0 !important;
-                        padding: 1rem !important;
+                        border-radius: 0.75rem !important;
                     }
                     
                     .login-form-wrapper {
                         padding: 1.5rem !important;
+                    }
+                    
+                    .login-form-wrapper h2 {
+                        font-size: 1.5rem !important;
+                        margin-bottom: 0.5rem !important;
+                    }
+                    
+                    .login-form-wrapper p {
+                        font-size: 0.875rem !important;
                     }
                     
                     .login-form-wrapper input,
@@ -56,45 +80,85 @@ const LoginPage = () => {
                     .login-form-wrapper select {
                         font-size: 16px !important;
                         min-height: 48px !important;
-                        padding: 14px 16px !important;
+                        padding: 12px 16px !important;
                         -webkit-appearance: none;
                         appearance: none;
+                        border-radius: 0.5rem !important;
+                        width: 100% !important;
+                        box-sizing: border-box !important;
                     }
                     
-                    .login-form-wrapper button {
+                    .login-form-wrapper button[type="submit"],
+                    .login-form-wrapper button[type="button"]:not(.text-xs) {
                         min-height: 48px !important;
                         font-size: 16px !important;
                         padding: 14px 18px !important;
                         touch-action: manipulation;
+                        width: 100% !important;
                     }
                     
                     .login-form-wrapper label {
                         font-size: 14px !important;
                         margin-bottom: 8px !important;
                         display: block !important;
+                        font-weight: 500 !important;
                     }
                     
                     .login-branding {
                         display: flex !important;
                         justify-content: center !important;
                         align-items: center !important;
-                        padding: 2rem 1rem !important;
-                        margin-bottom: 1rem !important;
+                        padding: 1.5rem 1rem !important;
+                        margin-bottom: 0 !important;
                     }
                     
                     .login-branding h1 {
-                        font-size: 2rem !important;
+                        font-size: 1.75rem !important;
                         color: #ffffff !important;
+                        margin: 0 !important;
+                    }
+                    
+                    /* Ensure form spacing is mobile-friendly */
+                    .login-form-wrapper form {
+                        margin-top: 0 !important;
+                    }
+                    
+                    .login-form-wrapper .space-y-4 > * {
+                        margin-bottom: 1rem !important;
+                    }
+                }
+                
+                /* Very small mobile devices */
+                @media (max-width: 375px) {
+                    .login-form-wrapper {
+                        padding: 1.25rem !important;
+                    }
+                    
+                    .login-branding {
+                        padding: 1.25rem 0.75rem !important;
+                    }
+                    
+                    .login-form-wrapper h2 {
+                        font-size: 1.25rem !important;
                     }
                 }
                 
                 /* Ensure login form is interactive on mobile */
-                #root > div input,
-                #root > div button {
+                .login-outer input,
+                .login-outer button {
                     -webkit-user-select: text;
                     user-select: text;
                     pointer-events: auto;
                     touch-action: manipulation;
+                }
+                
+                /* Prevent zoom on input focus (iOS Safari) */
+                @media screen and (max-width: 768px) {
+                    .login-outer input[type="text"],
+                    .login-outer input[type="email"],
+                    .login-outer input[type="password"] {
+                        font-size: 16px !important;
+                    }
                 }
                 
                 /* Prevent body scroll issues on mobile */
@@ -103,6 +167,7 @@ const LoginPage = () => {
                     width: 100% !important;
                     height: 100% !important;
                     overflow: hidden !important;
+                    -webkit-overflow-scrolling: touch;
                 }
                 
                 body.login-page #root {
@@ -110,6 +175,13 @@ const LoginPage = () => {
                     height: 100% !important;
                     overflow: auto !important;
                     -webkit-overflow-scrolling: touch !important;
+                }
+                
+                /* Ensure container doesn't overflow on mobile */
+                @media (max-width: 768px) {
+                    html, body {
+                        overflow-x: hidden !important;
+                    }
                 }
             `}</style>
             <div className="bg-white rounded-xl shadow-xl w-full max-w-xl overflow-hidden login-container">
