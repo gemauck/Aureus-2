@@ -144,6 +144,9 @@ const Clients = React.memo(() => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
+    const [clientsPage, setClientsPage] = useState(1);
+    const [leadsPage, setLeadsPage] = useState(1);
+    const ITEMS_PER_PAGE = 25;
     const { isDark } = window.useTheme();
     
     // Removed expensive state tracking logging
@@ -1388,6 +1391,23 @@ const Clients = React.memo(() => {
         return matchesSearch && matchesIndustry && matchesStatus;
     });
 
+    // Paginate clients and leads
+    const clientsStartIndex = (clientsPage - 1) * ITEMS_PER_PAGE;
+    const clientsEndIndex = clientsStartIndex + ITEMS_PER_PAGE;
+    const paginatedClients = sortedClients.slice(clientsStartIndex, clientsEndIndex);
+    const totalClientsPages = Math.ceil(sortedClients.length / ITEMS_PER_PAGE);
+
+    const leadsStartIndex = (leadsPage - 1) * ITEMS_PER_PAGE;
+    const leadsEndIndex = leadsStartIndex + ITEMS_PER_PAGE;
+    const paginatedLeads = filteredLeads.slice(leadsStartIndex, leadsEndIndex);
+    const totalLeadsPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE);
+
+    // Reset page to 1 when filters change
+    useEffect(() => {
+        setClientsPage(1);
+        setLeadsPage(1);
+    }, [searchTerm, filterIndustry, filterStatus]);
+
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
     const handleOpenClient = (client) => {
@@ -1865,7 +1885,7 @@ const Clients = React.memo(() => {
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
-                        {sortedClients.length === 0 ? (
+                        {paginatedClients.length === 0 ? (
                             <tr>
                                     <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
@@ -1873,7 +1893,7 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            sortedClients.filter(client => {
+                            paginatedClients.filter(client => {
                                 // Final render-time safety check: ensure type is 'client' and not 'Potential' status
                                 return client.type === 'client' && client.status !== 'Potential';
                             }).map(client => (
@@ -1913,6 +1933,33 @@ const Clients = React.memo(() => {
                     </tbody>
                 </table>
             </div>
+            {/* Pagination Controls */}
+            {totalClientsPages > 1 && (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Showing {clientsStartIndex + 1} to {Math.min(clientsEndIndex, sortedClients.length)} of {sortedClients.length} clients
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setClientsPage(clientsPage - 1)}
+                            disabled={clientsPage === 1}
+                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            Previous
+                        </button>
+                        <span className={`px-3 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Page {clientsPage} of {totalClientsPages}
+                        </span>
+                        <button
+                            onClick={() => setClientsPage(clientsPage + 1)}
+                            disabled={clientsPage === totalClientsPages}
+                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 
@@ -1933,7 +1980,7 @@ const Clients = React.memo(() => {
                         </tr>
                     </thead>
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
-                        {filteredLeads.length === 0 ? (
+                        {paginatedLeads.length === 0 ? (
                             <tr>
                                 <td colSpan="5" className={`px-6 py-12 text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                     <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
@@ -1944,7 +1991,7 @@ const Clients = React.memo(() => {
                                 </td>
                             </tr>
                         ) : (
-                            filteredLeads.map(lead => (
+                            paginatedLeads.map(lead => (
                                 <tr 
                                     key={`lead-${lead.id}-${lead.name}`}
                                     onClick={() => handleOpenLead(lead)}
@@ -1994,6 +2041,33 @@ const Clients = React.memo(() => {
                     </tbody>
                 </table>
             </div>
+            {/* Pagination Controls */}
+            {totalLeadsPages > 1 && (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, filteredLeads.length)} of {filteredLeads.length} leads
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setLeadsPage(leadsPage - 1)}
+                            disabled={leadsPage === 1}
+                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            Previous
+                        </button>
+                        <span className={`px-3 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Page {leadsPage} of {totalLeadsPages}
+                        </span>
+                        <button
+                            onClick={() => setLeadsPage(leadsPage + 1)}
+                            disabled={leadsPage === totalLeadsPages}
+                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                        >
+                            Next
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 
