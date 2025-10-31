@@ -160,3 +160,16 @@ body {
         min-height: 44px;
     }
 }
+
+/* Force Abcotronics logo to be blue in light mode */
+:not(.dark) .abcotronics-logo,
+:not(.dark) .abcotronics-logo-text,
+html:not(.dark) .abcotronics-logo,
+html:not(.dark) .abcotronics-logo-text {
+    color: #0369a1 !important;
+}
+
+/* Ensure text-primary-600 works */
+.text-primary-600 {
+    color: #0369a1 !important;
+}
