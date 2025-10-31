@@ -1,0 +1,16 @@
+# Commands to delete specific stock movements on the server
+
+# Option 1: Using Prisma directly (Recommended)
+cd /var/www/abcotronics-erp
+node delete-movements-server.js cmhekkpro0003rbqgof3r5c4i cmhekkoc50001rbqgfbtjwhp4
+
+# Option 2: Using SQL directly
+# Connect to database first:
+# psql $DATABASE_URL
+# Then run:
+# DELETE FROM "StockMovement" WHERE id IN ('cmhekkpro0003rbqgof3r5c4i', 'cmhekkoc50001rbqgfbtjwhp4');
+
+# Option 3: Using npx prisma studio (GUI)
+# npx prisma studio
+# Navigate to StockMovement table and delete manually
+
