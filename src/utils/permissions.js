@@ -32,6 +32,11 @@ export const PERMISSIONS = {
     VIEW_TEAM: 'view_team',
     MANAGE_TEAM: 'manage_team',
     
+    // Manufacturing permissions
+    VIEW_MANUFACTURING: 'view_manufacturing',
+    EDIT_MANUFACTURING: 'edit_manufacturing',
+    MANAGE_MANUFACTURING: 'manage_manufacturing',
+    
     // Reporting permissions
     VIEW_REPORTS: 'view_reports',
     EXPORT_DATA: 'export_data',
@@ -68,7 +73,11 @@ export const ROLE_PERMISSIONS = {
             // All users can access Clients and Leads
             PERMISSIONS.VIEW_CLIENTS,
             PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
+            PERMISSIONS.MANAGE_LEADS,
+            // All users can access Manufacturing (temporary for testing)
+            PERMISSIONS.VIEW_MANUFACTURING,
+            PERMISSIONS.EDIT_MANUFACTURING,
+            PERMISSIONS.MANAGE_MANUFACTURING
         ],
         color: 'orange'
     }
@@ -109,6 +118,16 @@ export class PermissionChecker {
             return true;
         }
         
+        // All users can access Manufacturing - no restrictions (temporary for testing)
+        const manufacturingPermissions = [
+            PERMISSIONS.VIEW_MANUFACTURING,
+            PERMISSIONS.EDIT_MANUFACTURING,
+            PERMISSIONS.MANAGE_MANUFACTURING
+        ];
+        if (manufacturingPermissions.includes(permission)) {
+            return true;
+        }
+        
         // Admin has all permissions (unless explicitly overridden)
         if (this.userRole?.toLowerCase() === 'admin' && !this.customPermissions.length) {
             return true;
@@ -145,6 +164,11 @@ export class PermissionChecker {
 
     canManageClients() {
         // All users can manage clients - always return true
+        return true;
+    }
+
+    canManageManufacturing() {
+        // All users can manage manufacturing - always return true (temporary for testing)
         return true;
     }
 
@@ -195,6 +219,16 @@ export function requirePermission(permission) {
             return next();
         }
         
+        // Always allow Manufacturing permissions - no restrictions (temporary for testing)
+        const manufacturingPermissions = [
+            PERMISSIONS.VIEW_MANUFACTURING,
+            PERMISSIONS.EDIT_MANUFACTURING,
+            PERMISSIONS.MANAGE_MANUFACTURING
+        ];
+        if (manufacturingPermissions.includes(permission)) {
+            return next();
+        }
+        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasPermission(permission)) {
@@ -219,6 +253,16 @@ export function requireAnyPermission(permissions) {
             PERMISSIONS.MANAGE_LEADS
         ];
         if (permissions.some(p => clientLeadPermissions.includes(p))) {
+            return next();
+        }
+        
+        // Always allow if any permission is a Manufacturing permission (temporary for testing)
+        const manufacturingPermissions = [
+            PERMISSIONS.VIEW_MANUFACTURING,
+            PERMISSIONS.EDIT_MANUFACTURING,
+            PERMISSIONS.MANAGE_MANUFACTURING
+        ];
+        if (permissions.some(p => manufacturingPermissions.includes(p))) {
             return next();
         }
         
@@ -249,6 +293,16 @@ export function requireAllPermissions(permissions) {
             return next();
         }
         
+        // Always allow if all permissions are Manufacturing permissions (temporary for testing)
+        const manufacturingPermissions = [
+            PERMISSIONS.VIEW_MANUFACTURING,
+            PERMISSIONS.EDIT_MANUFACTURING,
+            PERMISSIONS.MANAGE_MANUFACTURING
+        ];
+        if (permissions.every(p => manufacturingPermissions.includes(p))) {
+            return next();
+        }
+        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasAllPermissions(permissions)) {
@@ -274,6 +328,7 @@ export function usePermissions(user) {
         canManageUsers: () => checker.canManageUsers(),
         canManageProjects: () => checker.canManageProjects(),
         canManageClients: () => checker.canManageClients(),
+        canManageManufacturing: () => checker.canManageManufacturing(),
         canManageInvoicing: () => checker.canManageInvoicing(),
         canViewReports: () => checker.canViewReports(),
         canExportData: () => checker.canExportData(),
@@ -295,21 +350,29 @@ export function PermissionGate({ permission, permissions, requireAll = false, ch
         PERMISSIONS.MANAGE_LEADS
     ];
     
+    // Always allow Manufacturing - no restrictions (temporary for testing)
+    const manufacturingPermissions = [
+        PERMISSIONS.VIEW_MANUFACTURING,
+        PERMISSIONS.EDIT_MANUFACTURING,
+        PERMISSIONS.MANAGE_MANUFACTURING
+    ];
+    
     let hasAccess = false;
     
     if (permission) {
-        // Always allow if it's a Clients/Leads permission
-        if (clientLeadPermissions.includes(permission)) {
+        // Always allow if it's a Clients/Leads or Manufacturing permission
+        if (clientLeadPermissions.includes(permission) || manufacturingPermissions.includes(permission)) {
             hasAccess = true;
         } else {
             const checker = new PermissionChecker(user);
             hasAccess = checker.hasPermission(permission);
         }
     } else if (permissions) {
-        // Always allow if all/any permissions are Clients/Leads permissions
-        if (requireAll && permissions.every(p => clientLeadPermissions.includes(p))) {
+        // Always allow if all/any permissions are Clients/Leads or Manufacturing permissions
+        const allAllowedPermissions = [...clientLeadPermissions, ...manufacturingPermissions];
+        if (requireAll && permissions.every(p => allAllowedPermissions.includes(p))) {
             hasAccess = true;
-        } else if (!requireAll && permissions.some(p => clientLeadPermissions.includes(p))) {
+        } else if (!requireAll && permissions.some(p => allAllowedPermissions.includes(p))) {
             hasAccess = true;
         } else {
             const checker = new PermissionChecker(user);
