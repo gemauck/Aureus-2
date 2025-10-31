@@ -64,7 +64,11 @@ export const ROLE_PERMISSIONS = {
         permissions: [
             PERMISSIONS.VIEW_ASSIGNED,
             PERMISSIONS.EDIT_ASSIGNED,
-            PERMISSIONS.TIME_TRACKING
+            PERMISSIONS.TIME_TRACKING,
+            // All users can access Clients and Leads
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
         ],
         color: 'orange'
     }
@@ -95,6 +99,16 @@ export class PermissionChecker {
     }
 
     hasPermission(permission) {
+        // All users can access Clients and Leads - no restrictions
+        const clientLeadPermissions = [
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
+        ];
+        if (clientLeadPermissions.includes(permission)) {
+            return true;
+        }
+        
         // Admin has all permissions (unless explicitly overridden)
         if (this.userRole?.toLowerCase() === 'admin' && !this.customPermissions.length) {
             return true;
@@ -130,7 +144,8 @@ export class PermissionChecker {
     }
 
     canManageClients() {
-        return this.hasPermission(PERMISSIONS.EDIT_CLIENTS);
+        // All users can manage clients - always return true
+        return true;
     }
 
     canManageInvoicing() {
@@ -170,6 +185,16 @@ export class PermissionChecker {
 // Middleware for API routes
 export function requirePermission(permission) {
     return (req, res, next) => {
+        // Always allow Clients and Leads permissions - no restrictions
+        const clientLeadPermissions = [
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
+        ];
+        if (clientLeadPermissions.includes(permission)) {
+            return next();
+        }
+        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasPermission(permission)) {
@@ -187,6 +212,16 @@ export function requirePermission(permission) {
 // Middleware for multiple permissions (any)
 export function requireAnyPermission(permissions) {
     return (req, res, next) => {
+        // Always allow if any permission is a Clients/Leads permission
+        const clientLeadPermissions = [
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
+        ];
+        if (permissions.some(p => clientLeadPermissions.includes(p))) {
+            return next();
+        }
+        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasAnyPermission(permissions)) {
@@ -204,6 +239,16 @@ export function requireAnyPermission(permissions) {
 // Middleware for multiple permissions (all)
 export function requireAllPermissions(permissions) {
     return (req, res, next) => {
+        // Always allow if all permissions are Clients/Leads permissions
+        const clientLeadPermissions = [
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
+        ];
+        if (permissions.every(p => clientLeadPermissions.includes(p))) {
+            return next();
+        }
+        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasAllPermissions(permissions)) {
@@ -242,16 +287,36 @@ export function usePermissions(user) {
 // Component wrapper for permission-based rendering
 export function PermissionGate({ permission, permissions, requireAll = false, children, fallback = null }) {
     const user = window.storage?.getUser?.();
-    const checker = new PermissionChecker(user);
+    
+    // Always allow Clients and Leads - no restrictions
+    const clientLeadPermissions = [
+        PERMISSIONS.VIEW_CLIENTS,
+        PERMISSIONS.EDIT_CLIENTS,
+        PERMISSIONS.MANAGE_LEADS
+    ];
     
     let hasAccess = false;
     
     if (permission) {
-        hasAccess = checker.hasPermission(permission);
+        // Always allow if it's a Clients/Leads permission
+        if (clientLeadPermissions.includes(permission)) {
+            hasAccess = true;
+        } else {
+            const checker = new PermissionChecker(user);
+            hasAccess = checker.hasPermission(permission);
+        }
     } else if (permissions) {
-        hasAccess = requireAll 
-            ? checker.hasAllPermissions(permissions)
-            : checker.hasAnyPermission(permissions);
+        // Always allow if all/any permissions are Clients/Leads permissions
+        if (requireAll && permissions.every(p => clientLeadPermissions.includes(p))) {
+            hasAccess = true;
+        } else if (!requireAll && permissions.some(p => clientLeadPermissions.includes(p))) {
+            hasAccess = true;
+        } else {
+            const checker = new PermissionChecker(user);
+            hasAccess = requireAll 
+                ? checker.hasAllPermissions(permissions)
+                : checker.hasAnyPermission(permissions);
+        }
     }
     
     return hasAccess ? children : fallback;
