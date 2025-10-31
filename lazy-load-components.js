@@ -118,20 +118,140 @@
     
     function loadComponent(src) {
         return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
             // Convert src/ paths to dist/src/ paths if needed
             const scriptSrc = src.startsWith('./src/') ? src.replace('./src/', './dist/src/').replace('.jsx', '.js') : src;
-            script.src = scriptSrc;
-            script.async = true;
-            script.onload = () => {
-                loadedComponents++;
-                resolve();
-            };
-            script.onerror = () => {
-                resolve(); // Continue even if one fails
-            };
-            document.body.appendChild(script);
+            
+            // First, fetch the file to validate it's JavaScript before loading as script
+            // This prevents HTML (404 pages) from being executed as JavaScript
+            fetch(scriptSrc)
+                .then(response => {
+                    if (!response.ok) {
+                        // File doesn't exist - skip silently
+                        console.warn(`⚠️ Component not found: ${scriptSrc} (skipping)`);
+                        resolve();
+                        return;
+                    }
+                    
+                    // Check content type
+                    const contentType = response.headers.get('content-type') || '';
+                    const isJavaScript = contentType.includes('javascript') || 
+                                        contentType.includes('text/plain') ||
+                                        contentType.includes('application/json'); // Some servers serve JS as JSON
+                    
+                    if (!isJavaScript && !scriptSrc.endsWith('.js')) {
+                        // If it's not JavaScript and not a .js file, skip it
+                        console.warn(`⚠️ Component not JavaScript: ${scriptSrc} (content-type: ${contentType}, skipping)`);
+                        resolve();
+                        return;
+                    }
+                    
+                    // Validate content by checking first few characters
+                    return response.text().then(text => {
+                        // Check if response looks like HTML (common for 404 pages)
+                        const trimmedText = text.trim();
+                        if (trimmedText.startsWith('<') || trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<!doctype')) {
+                            console.warn(`⚠️ Component appears to be HTML (404 page?): ${scriptSrc} (skipping)`);
+                            resolve();
+                            return;
+                        }
+                        
+                        // Content looks valid - load it as a script
+                        const script = document.createElement('script');
+                        script.type = 'text/javascript';
+                        script.async = true;
+                        
+                        // Create blob URL from validated JavaScript content
+                        const blob = new Blob([text], { type: 'application/javascript' });
+                        const blobUrl = URL.createObjectURL(blob);
+                        script.src = blobUrl;
+                        
+                        script.onload = () => {
+                            URL.revokeObjectURL(blobUrl); // Clean up blob URL
+                            loadedComponents++;
+                            resolve();
+                        };
+                        
+                        script.onerror = () => {
+                            URL.revokeObjectURL(blobUrl); // Clean up blob URL
+                            console.warn(`⚠️ Failed to execute component: ${scriptSrc}`);
+                            resolve(); // Continue even if one fails
+                        };
+                        
+                        document.body.appendChild(script);
+                    });
+                })
+                .catch(error => {
+                    // Network error or CORS issue - fallback to direct script loading
+                    // Some servers might not allow fetch due to CORS, so try direct loading
+                    // BUT: We need to be careful not to execute HTML
+                    console.warn(`⚠️ Fetch failed for ${scriptSrc}, trying direct load with validation...`);
+                    
+                    // Try to fetch with a text request to validate before loading as script
+                    fetch(scriptSrc, { 
+                        method: 'GET',
+                        headers: { 'Accept': 'text/plain,application/javascript,*/*' }
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            console.warn(`⚠️ Component not found (fallback): ${scriptSrc} (skipping)`);
+                            resolve();
+                            return;
+                        }
+                        return response.text().then(text => {
+                            // Validate it's not HTML
+                            const trimmedText = text.trim();
+                            if (trimmedText.startsWith('<') || trimmedText.startsWith('<!DOCTYPE') || trimmedText.startsWith('<!doctype')) {
+                                console.warn(`⚠️ Component appears to be HTML in fallback: ${scriptSrc} (skipping)`);
+                                resolve();
+                                return;
+                            }
+                            
+                            // Content is valid - load via blob URL
+                            const script = document.createElement('script');
+                            script.type = 'text/javascript';
+                            script.async = true;
+                            
+                            const blob = new Blob([text], { type: 'application/javascript' });
+                            const blobUrl = URL.createObjectURL(blob);
+                            script.src = blobUrl;
+                            
+                            script.onload = () => {
+                                URL.revokeObjectURL(blobUrl);
+                                loadedComponents++;
+                                resolve();
+                            };
+                            
+                            script.onerror = () => {
+                                URL.revokeObjectURL(blobUrl);
+                                console.warn(`⚠️ Failed to execute component (fallback): ${scriptSrc}`);
+                                resolve();
+                            };
+                            
+                            document.body.appendChild(script);
+                        });
+                    })
+                    .catch(() => {
+                        // Final fallback - direct load (but this could execute HTML, so log warning)
+                        console.warn(`⚠️ All validation failed for ${scriptSrc}, direct loading (may fail if file missing)...`);
+                        
+                        const script = document.createElement('script');
+                        script.type = 'text/javascript';
+                        script.async = true;
+                        script.src = scriptSrc;
+                        
+                        script.onerror = () => {
+                            console.warn(`⚠️ Failed to load component: ${scriptSrc} (skipping)`);
+                            resolve();
+                        };
+                        
+                        script.onload = () => {
+                            loadedComponents++;
+                            resolve();
+                        };
+                        
+                        document.body.appendChild(script);
+                    });
+                });
         });
     }
     
