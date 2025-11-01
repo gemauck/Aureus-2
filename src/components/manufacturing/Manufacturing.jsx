@@ -1790,15 +1790,17 @@ const Manufacturing = () => {
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
         
-        // Refresh inventory if status changed to in_production (stock was deducted)
-        if (formData.status === 'in_production' && selectedItem.status === 'requested') {
-          console.log('🔄 Refreshing inventory after stock deduction...');
+        // Always refresh inventory after work order update to show latest stock levels
+        console.log('🔄 Refreshing inventory after work order update...');
+        try {
           const inventoryResponse = await safeCallAPI('getInventory');
           if (inventoryResponse?.data?.inventory) {
             setInventory(inventoryResponse.data.inventory);
             localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
-            console.log('✅ Inventory refreshed');
+            console.log('✅ Inventory refreshed:', inventoryResponse.data.inventory.length, 'items');
           }
+        } catch (invError) {
+          console.error('⚠️ Failed to refresh inventory:', invError);
         }
         
         alert('Work order updated successfully!');

@@ -1094,7 +1094,8 @@ async function handler(req, res) {
         if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
         
         // Handle status change from 'requested' to 'in_production' - deduct stock
-        console.log(`🔄 Status change check: ${existingOrder.status} -> ${body.status}`)
+        console.log(`🔄 Status change check: "${existingOrder.status}" -> "${body.status}"`)
+        console.log(`🔍 Full order data:`, JSON.stringify(existingOrder, null, 2))
         if (body.status === 'in_production' && existingOrder.status === 'requested') {
           console.log(`✅ Triggering stock deduction for work order ${id} (status: ${existingOrder.status} -> ${body.status})`)
           if (existingOrder.bomId) {
