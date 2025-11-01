@@ -1042,17 +1042,39 @@ const Manufacturing = () => {
     setShowModal(true);
   };
 
+  // Generate next PSKU number
+  const getNextPSKU = () => {
+    if (!boms || boms.length === 0) {
+      return 'PSKU001';
+    }
+    
+    // Extract all PSKU numbers and find the highest
+    const pskuNumbers = boms
+      .map(bom => bom.productSku)
+      .filter(sku => sku && sku.startsWith('PSKU'))
+      .map(sku => {
+        const match = sku.match(/PSKU(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      });
+    
+    const maxNumber = pskuNumbers.length > 0 ? Math.max(...pskuNumbers) : 0;
+    const nextNumber = maxNumber + 1;
+    return `PSKU${String(nextNumber).padStart(3, '0')}`;
+  };
+
   const openAddBomModal = () => {
+    const nextPSKU = getNextPSKU();
     setFormData({
-      productSku: '',
+      productSku: nextPSKU,
       productName: '',
-      version: '1.0',
       status: 'active',
       effectiveDate: new Date().toISOString().split('T')[0],
       laborCost: 0,
       overheadCost: 0,
       estimatedTime: 0,
-      notes: ''
+      notes: '',
+      thumbnail: '',
+      instructions: ''
     });
     setBomComponents([]);
     setModalType('add_bom');
@@ -1060,8 +1082,17 @@ const Manufacturing = () => {
   };
 
   const openEditBomModal = (bom) => {
-    setFormData({ ...bom });
-    setBomComponents([...bom.components]);
+    // Ensure components have location field
+    const componentsWithLocation = bom.components.map(comp => ({
+      ...comp,
+      location: comp.location || ''
+    }));
+    setFormData({ 
+      ...bom,
+      thumbnail: bom.thumbnail || '',
+      instructions: bom.instructions || ''
+    });
+    setBomComponents(componentsWithLocation);
     setSelectedItem(bom);
     setModalType('edit_bom');
     setShowModal(true);
@@ -1173,9 +1204,12 @@ const Manufacturing = () => {
 
   const handleSaveBom = async () => {
     try {
+      // Ensure PSKU is set for new BOMs
+      const productSku = formData.productSku || getNextPSKU();
+      
       // Validate required fields per backend requirements
-      if (!formData.productSku || !formData.productName) {
-        alert('Please enter both Product SKU and Product Name before saving the BOM.');
+      if (!productSku || !formData.productName) {
+        alert('Please enter Product Name before saving the BOM.');
         return;
       }
 
@@ -1186,6 +1220,7 @@ const Manufacturing = () => {
 
       const bomData = {
         ...formData,
+        productSku: productSku,
         components: bomComponents,
         totalMaterialCost,
         laborCost,
@@ -1674,7 +1709,8 @@ const Manufacturing = () => {
       quantity: 1,
       unit: 'pcs',
       unitCost: 0,
-      totalCost: 0
+      totalCost: 0,
+      location: ''
     }]);
   };
 
@@ -2169,13 +2205,9 @@ const Manufacturing = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product SKU *</label>
-                  <input
-                    type="text"
-                    value={formData.productSku || ''}
-                    onChange={(e) => setFormData({ ...formData, productSku: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="e.g., FT-BASIC-V1"
-                  />
+                  <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-mono">
+                    {formData.productSku || getNextPSKU()}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
@@ -2185,15 +2217,6 @@ const Manufacturing = () => {
                     onChange={(e) => setFormData({ ...formData, productName: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="e.g., Device Basic v1"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
-                  <input
-                    type="text"
-                    value={formData.version || '1.0'}
-                    onChange={(e) => setFormData({ ...formData, version: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div>
@@ -2247,6 +2270,88 @@ const Manufacturing = () => {
                 </div>
               </div>
 
+              {/* Image and Instructions Upload Section */}
+              <div className="grid grid-cols-2 gap-4 border-t border-gray-200 pt-4">
+                {/* Product Thumbnail Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Thumbnail</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setFormData(prev => ({ ...prev, thumbnail: reader.result }));
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="w-full text-sm"
+                  />
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="Or paste image URL (https://...)"
+                      value={formData.thumbnail || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, thumbnail: e.target.value }))}
+                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          const clip = await navigator.clipboard.readText();
+                          if (clip) setFormData(prev => ({ ...prev, thumbnail: clip }));
+                        } catch (_) {}
+                      }}
+                      className="px-3 py-2 text-sm bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
+                    >
+                      Paste
+                    </button>
+                  </div>
+                  {formData.thumbnail && (
+                    <div className="mt-2">
+                      <img src={formData.thumbnail} alt="Thumbnail Preview" className="w-20 h-20 object-cover rounded border" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Instructions Upload */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Product Instructions</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.md"
+                    onChange={(e) => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = () => {
+                        setFormData(prev => ({ ...prev, instructions: reader.result }));
+                      };
+                      reader.readAsDataURL(file);
+                    }}
+                    className="w-full text-sm"
+                  />
+                  <div className="mt-2">
+                    <input
+                      type="url"
+                      placeholder="Or paste instructions URL (https://...)"
+                      value={formData.instructions || ''}
+                      onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  {formData.instructions && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      <i className="fas fa-file-alt mr-1"></i>
+                      Instructions file/URL added
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Components Section */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex items-center justify-between mb-3">
@@ -2268,7 +2373,7 @@ const Manufacturing = () => {
                   <div className="space-y-2">
                     {bomComponents.map((comp, index) => (
                       <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                           <label className="block text-xs font-medium text-gray-700 mb-1">SKU / Select from Inventory</label>
                           <select
                             value={comp.sku}
@@ -2292,6 +2397,16 @@ const Manufacturing = () => {
                           />
                         </div>
                         <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Component Location</label>
+                          <input
+                            type="text"
+                            value={comp.location || ''}
+                            onChange={(e) => updateBomComponent(index, 'location', e.target.value)}
+                            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="e.g., A1-B2"
+                          />
+                        </div>
+                        <div className="col-span-2">
                           <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                           <input
                             type="number"
@@ -2310,7 +2425,7 @@ const Manufacturing = () => {
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <label className="block text-xs font-medium text-gray-700 mb-1">Unit Cost (R)</label>
                           <input
                             type="number"
