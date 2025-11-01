@@ -301,6 +301,20 @@ const Clients = React.memo(() => {
         });
     }, [leads.length]);
 
+    // Ensure clients are loaded from localStorage if state is empty  
+    useEffect(() => {
+        if (clients.length === 0) {
+            const cachedClients = safeStorage.getClients();
+            if (cachedClients && Array.isArray(cachedClients) && cachedClients.length > 0) {
+                const filteredClients = cachedClients.filter(c => c.type === 'client' || !c.type);
+                if (filteredClients.length > 0) {
+                    console.log(`🔄 Restoring ${filteredClients.length} clients from localStorage to state`);
+                    setClients(filteredClients);
+                }
+            }
+        }
+    }, [clients.length]);
+
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
         const mapDbClient = (c) => {
