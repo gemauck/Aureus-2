@@ -431,6 +431,8 @@ model BOM {
   estimatedTime     Int      @default(0)
   components        String   @default("[]") // JSON array of components
   notes             String   @default("")
+  thumbnail         String   @default("") // Product thumbnail image URL or data URL
+  instructions      String   @default("") // Product instructions file URL or data URL
   ownerId           String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
