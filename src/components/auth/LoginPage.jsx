@@ -84,7 +84,7 @@ const LoginPage = () => {
                     overflow-x: hidden;
                     overflow-y: auto;
                     -webkit-overflow-scrolling: touch;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
@@ -135,7 +135,7 @@ const LoginPage = () => {
                 /* Login Card - Dynamic Sizing */
                 .login-card {
                     width: 100%;
-                    max-width: min(calc(100vw - clamp(1.5rem, 6vw, 3rem)), 420px);
+                    max-width: min(calc(100vw - clamp(1.5rem, 6vw, 3rem)), 500px);
                     background: #ffffff;
                     border-radius: clamp(1rem, 4vw, 1.5rem);
                     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
@@ -155,10 +155,10 @@ const LoginPage = () => {
                     }
                 }
                 
-                /* Branding Header - Mobile Optimized */
+                /* Branding Header - Mobile Optimized (Thinner) */
                 .login-header {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    padding: clamp(1.5rem, 6vw, 2.5rem) clamp(1.25rem, 5vw, 2rem);
+                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+                    padding: clamp(1rem, 3vw, 1.5rem) clamp(1.25rem, 5vw, 2rem);
                     text-align: center;
                     color: #ffffff;
                 }
@@ -230,8 +230,8 @@ const LoginPage = () => {
                 
                 .form-input:focus {
                     outline: none;
-                    border-color: #667eea;
-                    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                    border-color: #3b82f6;
+                    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
                 }
                 
                 .form-input::placeholder {
@@ -283,7 +283,7 @@ const LoginPage = () => {
                 .submit-button {
                     width: 100%;
                     padding: clamp(0.875rem, 3vw, 1rem) clamp(1.25rem, 4vw, 1.5rem);
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
                     color: #ffffff;
                     border: none;
                     border-radius: clamp(0.5rem, 2vw, 0.75rem);
@@ -293,12 +293,12 @@ const LoginPage = () => {
                     transition: all 0.2s ease;
                     touch-action: manipulation;
                     min-height: 52px;
-                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
                 }
                 
                 .submit-button:hover:not(:disabled) {
                     transform: translateY(-1px);
-                    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+                    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
                 }
                 
                 .submit-button:active:not(:disabled) {
@@ -318,7 +318,7 @@ const LoginPage = () => {
                 
                 .forgot-link {
                     font-size: clamp(0.875rem, 3vw, 0.9375rem);
-                    color: #667eea;
+                    color: #3b82f6;
                     background: none;
                     border: none;
                     cursor: pointer;
@@ -329,7 +329,7 @@ const LoginPage = () => {
                 
                 .forgot-link:hover,
                 .forgot-link:active {
-                    color: #764ba2;
+                    color: #1e40af;
                 }
                 
                 /* Forgot Password Form */
@@ -356,9 +356,9 @@ const LoginPage = () => {
                 /* Desktop Styles */
                 @media (min-width: 768px) {
                     .login-card {
-                        max-width: 480px;
+                        max-width: 600px;
                         display: grid;
-                        grid-template-columns: 1fr 1.2fr;
+                        grid-template-columns: 0.8fr 1.5fr;
                         border-radius: clamp(1rem, 2vw, 1.5rem);
                     }
                     
@@ -367,7 +367,7 @@ const LoginPage = () => {
                         flex-direction: column;
                         justify-content: center;
                         align-items: center;
-                        padding: clamp(2rem, 5vw, 3rem);
+                        padding: clamp(1.5rem, 3vw, 2rem);
                     }
                     
                     .login-form-container {
@@ -378,7 +378,7 @@ const LoginPage = () => {
                 /* Large Desktop */
                 @media (min-width: 1024px) {
                     .login-card {
-                        max-width: 520px;
+                        max-width: 650px;
                     }
                 }
                 
@@ -446,60 +446,60 @@ const LoginPage = () => {
                         <p className="login-subtitle">Sign in to continue to your account</p>
                         
                         <form onSubmit={handleSubmit} className="login-form">
-                            {error && (
+                                {error && (
                                 <div className="error-message" role="alert">
-                                    {error}
-                                </div>
-                            )}
-                            
+                                        {error}
+                                    </div>
+                                )}
+
                             <div className="form-group">
                                 <label htmlFor="email" className="form-label">
-                                    Email Address
-                                </label>
-                                <input
-                                    id="email"
-                                    type="email"
-                                    name="email"
-                                    autoComplete="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                        Email Address
+                                    </label>
+                                    <input
+                                        id="email"
+                                        type="email"
+                                        name="email"
+                                        autoComplete="email"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
                                     className="form-input"
-                                    placeholder="you@company.com"
+                                        placeholder="you@company.com"
                                     required
-                                />
-                            </div>
-                            
+                                    />
+                                </div>
+
                             <div className="form-group">
                                 <label htmlFor="password" className="form-label">
-                                    Password
-                                </label>
+                                        Password
+                                    </label>
                                 <div className="password-wrapper">
-                                    <input
-                                        id="password"
-                                        type={showPassword ? "text" : "password"}
-                                        name="password"
-                                        autoComplete="current-password"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
+                                        <input
+                                            id="password"
+                                            type={showPassword ? "text" : "password"}
+                                            name="password"
+                                            autoComplete="current-password"
+                                            value={password}
+                                            onChange={(e) => setPassword(e.target.value)}
                                         className="form-input"
                                         placeholder="Enter your password"
                                         required
                                         style={{ paddingRight: '3rem' }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowPassword(!showPassword)}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPassword(!showPassword)}
                                         className="password-toggle"
                                         aria-label={showPassword ? "Hide password" : "Show password"}
-                                    >
-                                        <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                                    </button>
+                                        >
+                                            <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            <button
-                                type="submit"
-                                disabled={submitting}
+
+                                <button
+                                    type="submit"
+                                    disabled={submitting}
                                 className="submit-button"
                             >
                                 {submitting ? 'Signing In...' : 'Sign In'}
@@ -511,45 +511,45 @@ const LoginPage = () => {
                                     onClick={() => setShowForgot(!showForgot)}
                                     className="forgot-link"
                                 >
-                                    {showForgot ? 'Hide' : 'Forgot password?'}
-                                </button>
-                            </div>
-                            
-                            {showForgot && (
+                                        {showForgot ? 'Hide' : 'Forgot password?'}
+                                    </button>
+                                </div>
+
+                                {showForgot && (
                                 <div className="forgot-form">
                                     <label htmlFor="resetEmail" className="form-label">
                                         Enter your email
                                     </label>
-                                    <input
-                                        id="resetEmail"
-                                        type="email"
-                                        value={resetEmail}
-                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        <input
+                                            id="resetEmail"
+                                            type="email"
+                                            value={resetEmail}
+                                            onChange={(e) => setResetEmail(e.target.value)}
                                         className="form-input"
-                                        placeholder="you@company.com"
+                                            placeholder="you@company.com"
                                         style={{ marginBottom: '0.75rem' }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={async () => {
-                                            setResetStatus('');
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                setResetStatus('');
                                             if (!resetEmail) {
                                                 setResetStatus('Please enter your email');
                                                 return;
                                             }
-                                            try {
-                                                await window.api.requestPasswordReset(resetEmail);
-                                                setResetStatus('If the email exists, a reset link has been sent.');
-                                            } catch (e) {
-                                                setResetStatus('If the email exists, a reset link has been sent.');
-                                            }
-                                        }}
+                                                try {
+                                                    await window.api.requestPasswordReset(resetEmail);
+                                                    setResetStatus('If the email exists, a reset link has been sent.');
+                                                } catch (e) {
+                                                    setResetStatus('If the email exists, a reset link has been sent.');
+                                                }
+                                            }}
                                         className="submit-button"
                                         style={{ marginTop: '0.5rem' }}
-                                    >
+                                        >
                                         Send Reset Link
-                                    </button>
-                                    {resetStatus && (
+                                        </button>
+                                        {resetStatus && (
                                         <p style={{ 
                                             marginTop: '0.75rem', 
                                             fontSize: '0.875rem', 
@@ -558,10 +558,10 @@ const LoginPage = () => {
                                         }}>
                                             {resetStatus}
                                         </p>
-                                    )}
-                                </div>
-                            )}
-                        </form>
+                                        )}
+                                    </div>
+                                )}
+                            </form>
                     </div>
                 </div>
             </div>
