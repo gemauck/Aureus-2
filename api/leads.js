@@ -6,6 +6,69 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
+// Helper function to parse JSON fields from database responses
+function parseClientJsonFields(client) {
+  try {
+    const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+    const parsed = { ...client }
+    
+    // Extract tags from ClientTag relations if present
+    if (client.tags && Array.isArray(client.tags)) {
+      parsed.tags = client.tags.map(ct => ct.tag).filter(Boolean)
+    } else {
+      parsed.tags = []
+    }
+    
+    // Parse JSON fields
+    for (const field of jsonFields) {
+      const value = parsed[field]
+      
+      if (typeof value === 'string' && value) {
+        try {
+          parsed[field] = JSON.parse(value)
+        } catch (e) {
+          // Set safe defaults on parse error
+          if (field === 'services') {
+            parsed[field] = []
+          } else if (field === 'billingTerms') {
+            parsed[field] = {
+              paymentTerms: 'Net 30',
+              billingFrequency: 'Monthly',
+              currency: 'ZAR',
+              retainerAmount: 0,
+              taxExempt: false,
+              notes: ''
+            }
+          } else {
+            parsed[field] = []
+          }
+        }
+      } else if (value === null || value === undefined) {
+        // Set safe defaults for null/undefined
+        if (field === 'services') {
+          parsed[field] = []
+        } else if (field === 'billingTerms') {
+          parsed[field] = {
+            paymentTerms: 'Net 30',
+            billingFrequency: 'Monthly',
+            currency: 'ZAR',
+            retainerAmount: 0,
+            taxExempt: false,
+            notes: ''
+          }
+        } else {
+          parsed[field] = []
+        }
+      }
+    }
+    
+    return parsed
+  } catch (error) {
+    console.error('Error parsing client JSON fields:', error)
+    return client // Return original on error
+  }
+}
+
 async function handler(req, res) {
   try {
     console.log('🔍 Leads API Debug:', {
@@ -65,14 +128,19 @@ async function handler(req, res) {
           }
         }
         
-        // PERFORMANCE OPTIMIZATION: Tags excluded from list query - only fetch when viewing individual lead detail
-        // This is MUCH faster than fetching tags for every lead in the list
+        // Include tags for list view - needed for Tags column
         let leads = []
         try {
-          console.log('🔍 Querying leads with type filter (tags excluded for performance)...')
+          console.log('🔍 Querying leads with type filter (including tags)...')
           leads = await prisma.client.findMany({ 
             where: { type: 'lead' },
-            // Tags excluded for performance - only fetch when viewing individual lead detail
+            include: {
+              tags: {
+                include: {
+                  tag: true
+                }
+              }
+            },
             orderBy: { createdAt: 'desc' } 
           })
           console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
@@ -88,7 +156,13 @@ async function handler(req, res) {
           console.warn('⚠️ Trying fallback query without type filter...')
           try {
             const allRecords = await prisma.client.findMany({
-              // Tags excluded for performance
+              include: {
+                tags: {
+                  include: {
+                    tag: true
+                  }
+                }
+              },
               orderBy: { createdAt: 'desc' }
             })
             console.log(`📊 Found ${allRecords.length} total client records`)
@@ -113,7 +187,13 @@ async function handler(req, res) {
           }
         }
         
-        return ok(res, { leads })
+        // Parse JSON fields (services, contacts, etc.) and extract tags
+        const parsedLeads = leads.map(lead => {
+          const parsed = parseClientJsonFields(lead);
+          return parsed;
+        });
+        
+        return ok(res, { leads: parsedLeads })
       } catch (dbError) {
         console.error('❌ Database error listing leads:', {
           message: dbError.message,

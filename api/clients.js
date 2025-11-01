@@ -73,17 +73,27 @@ async function handler(req, res) {
           // Column may already exist or error is expected
         }
         
-        // PERFORMANCE OPTIMIZATION: Use raw SQL for reliable query that handles null types
-        // This avoids Prisma validation issues with nullable fields
-        // NOTE: Tags are excluded from list query for performance - they're only needed in detail views
-        const rawClients = await prisma.$queryRaw`
-          SELECT * FROM "Client" 
-          WHERE ("type" = 'client' OR "type" IS NULL)
-          ORDER BY "createdAt" DESC
-        `
+        // Use Prisma to include tags relation - needed for list view
+        const rawClients = await prisma.client.findMany({
+          where: {
+            OR: [
+              { type: 'client' },
+              { type: null }
+            ]
+          },
+          include: {
+            tags: {
+              include: {
+                tag: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          }
+        })
         
-        // Raw SQL returns plain objects - use them directly (already sorted by SQL query)
-        // The parseClientJsonFields function will handle JSON field parsing
+        // Prisma returns objects with relations - parse JSON fields
         const clients = rawClients
         
         console.log(`✅ Found ${clients.length} clients (filtered in database)`)
