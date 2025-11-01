@@ -1017,7 +1017,7 @@ const Manufacturing = () => {
                             className="text-green-600 hover:text-green-800 text-sm font-medium"
                             title="Edit Work Order"
                           >
-                            <i className="fas fa-eye"></i>
+                            <i className="fas fa-edit"></i>
                           </button>
                           {user?.role === 'Admin' && (
                             <button
