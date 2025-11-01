@@ -28,26 +28,20 @@ const LoginPage = () => {
 
         try {
             setSubmitting(true);
-            console.log('🔐 Login form submitted on mobile:', { email, hasPassword: !!password });
             await login(email, password);
-            console.log('✅ Login successful');
         } catch (err) {
-            console.error('❌ Login error:', err.message, err);
-            // Show more specific error messages
-            const errorMessage = err.message || 'Invalid credentials';
+            const errorMessage = err.message || 'Invalid credentials. Please try again.';
             setError(errorMessage);
-            // Don't prevent user from trying again
         } finally {
             setSubmitting(false);
         }
     };
 
-
-    // Add mobile-specific body class on mount and handle viewport fixes
+    // Mobile viewport and keyboard handling
     useEffect(() => {
         document.body.classList.add('login-page');
         
-        // Fix viewport height on mobile when keyboard appears
+        // Dynamic viewport height calculation for mobile
         const setViewportHeight = () => {
             const vh = window.innerHeight * 0.01;
             document.documentElement.style.setProperty('--vh', `${vh}px`);
@@ -55,581 +49,523 @@ const LoginPage = () => {
         
         setViewportHeight();
         window.addEventListener('resize', setViewportHeight);
-        window.addEventListener('orientationchange', setViewportHeight);
-        
-        // Prevent body scroll on mobile but allow login-outer scroll
-        const originalOverflow = document.body.style.overflow;
-        document.body.style.overflow = 'hidden';
+        window.addEventListener('orientationchange', () => {
+            setTimeout(setViewportHeight, 100);
+        });
         
         return () => {
             document.body.classList.remove('login-page');
-            document.body.style.overflow = originalOverflow;
             window.removeEventListener('resize', setViewportHeight);
             window.removeEventListener('orientationchange', setViewportHeight);
         };
     }, []);
 
     return (
-        <div className="login-outer" style={{ 
-            minHeight: '100dvh',
-            width: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '1rem',
-            boxSizing: 'border-box',
-            background: 'linear-gradient(to bottom right, #3b82f6, #1e40af)'
-        }}>
+        <>
             <style>{`
-                /* Critical: Reset everything for mobile login */
-                @media (max-width: 768px) {
-                    * {
-                        box-sizing: border-box !important;
-                    }
-                    
-                    html, body {
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        width: 100% !important;
-                        height: 100% !important;
-                        height: 100dvh !important;
-                        overflow-x: hidden !important;
-                        position: relative !important;
-                        -webkit-text-size-adjust: 100% !important;
-                        -ms-text-size-adjust: 100% !important;
-                        background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
-                    }
-                    
-                    #root {
-                        width: 100% !important;
-                        min-height: 100vh !important;
-                        min-height: 100dvh !important;
-                        height: 100vh !important;
-                        height: 100dvh !important;
-                        margin: 0 !important;
-                        padding: 0 !important;
-                        overflow-x: hidden !important;
-                        overflow-y: auto !important;
-                        -webkit-overflow-scrolling: touch !important;
-                        background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
-                        position: relative !important;
-                        display: flex !important;
-                        flex-direction: column !important;
-                    }
-                    
-                    .login-outer {
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        min-height: 100vh !important;
-                        min-height: 100dvh !important;
-                        min-height: calc(var(--vh, 1vh) * 100) !important;
-                        height: 100vh !important;
-                        height: 100dvh !important;
-                        height: calc(var(--vh, 1vh) * 100) !important;
-                        padding: 1rem !important;
-                        padding-top: max(1rem, env(safe-area-inset-top)) !important;
-                        padding-bottom: max(1rem, env(safe-area-inset-bottom)) !important;
-                        padding-left: max(1rem, env(safe-area-inset-left)) !important;
-                        padding-right: max(1rem, env(safe-area-inset-right)) !important;
-                        margin: 0 !important;
-                        display: flex !important;
-                        align-items: center !important;
-                        justify-content: center !important;
-                        background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
-                        position: relative !important;
-                        overflow-y: auto !important;
-                        -webkit-overflow-scrolling: touch !important;
-                        z-index: 1 !important;
-                    }
-                    
-                    .login-container {
-                        width: 90% !important;
-                        max-width: 320px !important;
-                        margin: 0 auto !important;
-                        border-radius: 1rem !important;
-                        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
-                        overflow: hidden !important;
-                        position: relative !important;
-                        z-index: 1001 !important;
-                        background: white !important;
-                        display: block !important;
-                        visibility: visible !important;
-                        opacity: 1 !important;
-                        transform: none !important;
-                        isolation: isolate !important;
-                    }
-                    
-                    /* Prevent overlapping text inside container */
-                    .login-container * {
-                        position: relative !important;
-                        z-index: auto !important;
-                    }
-                    
-                    .login-form-wrapper {
-                        padding: 1.5rem !important;
-                        padding-top: 1.25rem !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        box-sizing: border-box !important;
-                        display: block !important;
-                        visibility: visible !important;
-                        opacity: 1 !important;
-                        position: relative !important;
-                        z-index: auto !important;
-                        overflow: visible !important;
-                    }
-                    
-                    /* Prevent text overlap in form */
-                    .login-form-wrapper * {
-                        max-width: 100% !important;
-                        word-wrap: break-word !important;
-                        overflow-wrap: break-word !important;
-                    }
-                    
-                    .login-form-wrapper h2 {
-                        font-size: 1.5rem !important;
-                        margin-bottom: 0.5rem !important;
-                        line-height: 1.2 !important;
-                    }
-                    
-                    .login-form-wrapper p {
-                        font-size: 0.875rem !important;
-                        margin-bottom: 1.5rem !important;
-                    }
-                    
-                    /* Critical: Input fields must be large and visible */
-                    .login-form-wrapper input[type="email"],
-                    .login-form-wrapper input[type="password"],
-                    .login-form-wrapper input[type="text"] {
-                        font-size: 16px !important;
-                        min-height: 52px !important;
-                        height: 52px !important;
-                        padding: 14px 16px !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        -webkit-appearance: none !important;
-                        appearance: none !important;
-                        border-radius: 0.5rem !important;
-                        border: 2px solid #d1d5db !important;
-                        box-sizing: border-box !important;
-                        display: block !important;
-                        margin: 0 !important;
-                        background: #ffffff !important;
-                        color: #000000 !important;
-                        line-height: 1.5 !important;
-                        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
-                        opacity: 1 !important;
-                        visibility: visible !important;
-                        pointer-events: auto !important;
-                    }
-                    
-                    .login-form-wrapper input:focus {
-                        outline: none !important;
-                        border-color: #3b82f6 !important;
-                        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
-                    }
-                    
-                    /* Buttons must be large and touchable */
-                    .login-form-wrapper button[type="submit"],
-                    .login-form-wrapper button[type="button"]:not(.text-xs) {
-                        min-height: 52px !important;
-                        height: auto !important;
-                        font-size: 16px !important;
-                        font-weight: 600 !important;
-                        padding: 14px 20px !important;
-                        touch-action: manipulation !important;
-                        width: 100% !important;
-                        max-width: 100% !important;
-                        box-sizing: border-box !important;
-                        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
-                        cursor: pointer !important;
-                        border: none !important;
-                        border-radius: 0.5rem !important;
-                        opacity: 1 !important;
-                        visibility: visible !important;
-                        pointer-events: auto !important;
-                        display: block !important;
-                    }
-                    
-                    .login-form-wrapper label {
-                        font-size: 15px !important;
-                        margin-bottom: 8px !important;
-                        display: block !important;
-                        font-weight: 600 !important;
-                        color: #374151 !important;
-                        line-height: 1.4 !important;
-                    }
-                    
-                    .login-branding {
-                        display: flex !important;
-                        justify-content: center !important;
-                        align-items: center !important;
-                        padding: 1.25rem 1rem !important;
-                        margin-bottom: 0 !important;
-                        width: 100% !important;
-                    }
-                    
-                    .login-branding h1 {
-                        font-size: 1.5rem !important;
-                        color: #ffffff !important;
-                        margin: 0 !important;
-                        font-weight: 700 !important;
-                    }
-                    
-                    /* Form spacing */
-                    .login-form-wrapper form {
-                        margin-top: 0 !important;
-                        width: 100% !important;
-                    }
-                    
-                    .login-form-wrapper form > div {
-                        margin-bottom: 1.25rem !important;
-                    }
-                    
-                    /* Error messages */
-                    .login-form-wrapper .bg-red-50 {
-                        padding: 12px 16px !important;
-                        font-size: 14px !important;
-                        line-height: 1.5 !important;
-                        margin-bottom: 1rem !important;
-                    }
-                    
-                    /* Forgot password link */
-                    .login-form-wrapper .text-xs {
-                        font-size: 14px !important;
-                        padding: 8px 0 !important;
-                        min-height: 44px !important;
-                        display: inline-block !important;
-                        touch-action: manipulation !important;
-                    }
+                /* ============================================
+                   MODERN LOGIN PAGE - FULLY RESPONSIVE
+                   Works on all devices from 320px to 4K
+                   ============================================ */
+                
+                /* Base Reset */
+                body.login-page,
+                body.login-page * {
+                    box-sizing: border-box;
                 }
                 
-                /* Very small devices */
-                @media (max-width: 375px) {
-                    .login-outer {
-                        padding: 0.25rem !important;
-                        padding-top: 1rem !important;
-                    }
-                    
-                    .login-form-wrapper {
-                        padding: 1.25rem !important;
-                    }
-                    
-                    .login-branding {
-                        padding: 1rem 0.75rem !important;
-                    }
-                    
-                    .login-branding h1 {
-                        font-size: 1.25rem !important;
-                    }
-                    
-                    .login-form-wrapper h2 {
-                        font-size: 1.25rem !important;
-                    }
-                }
-                
-                /* Landscape orientation on mobile */
-                @media (max-width: 768px) and (orientation: landscape) {
-                    .login-outer {
-                        padding-top: max(0.5rem, env(safe-area-inset-top)) !important;
-                        padding-bottom: max(0.5rem, env(safe-area-inset-bottom)) !important;
-                        align-items: center !important;
-                    }
-                    
-                    .login-branding {
-                        padding: 0.75rem 1rem !important;
-                    }
-                    
-                    .login-branding h1 {
-                        font-size: 1.25rem !important;
-                    }
-                    
-                    .login-container {
-                        max-width: 380px !important;
-                    }
-                }
-                
-                /* Desktop styles - wider login box */
-                @media (min-width: 768px) {
-                    .login-container {
-                        width: 100% !important;
-                        max-width: 700px !important;
-                    }
-                }
-                
-                /* Ensure all inputs are interactive */
-                .login-outer input,
-                .login-outer button {
-                    -webkit-user-select: text !important;
-                    user-select: text !important;
-                    pointer-events: auto !important;
-                    touch-action: manipulation !important;
-                    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
-                }
-                
-                /* Prevent zoom on input focus - CRITICAL for iOS */
-                @media screen and (max-width: 768px) {
-                    input[type="text"],
-                    input[type="email"],
-                    input[type="password"],
-                    input[type="tel"],
-                    input[type="number"],
-                    textarea,
-                    select {
-                        font-size: 16px !important;
-                    }
-                }
-                
-                /* Body fixes for login page */
                 body.login-page {
-                    position: relative !important;
-                    width: 100% !important;
-                    height: 100vh !important;
-                    height: 100dvh !important;
-                    overflow-x: hidden !important;
-                    overflow-y: auto !important;
-                    -webkit-overflow-scrolling: touch !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
+                    margin: 0;
+                    padding: 0;
+                    width: 100%;
+                    min-height: 100vh;
+                    min-height: 100dvh;
+                    min-height: calc(var(--vh, 1vh) * 100);
+                    overflow-x: hidden;
+                    overflow-y: auto;
+                    -webkit-overflow-scrolling: touch;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+                    -webkit-font-smoothing: antialiased;
+                    -moz-osx-font-smoothing: grayscale;
                 }
                 
                 body.login-page #root {
-                    width: 100% !important;
-                    min-height: 100vh !important;
-                    min-height: 100dvh !important;
-                    height: 100vh !important;
-                    height: 100dvh !important;
-                    overflow-x: hidden !important;
-                    overflow-y: auto !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    display: flex !important;
-                    flex-direction: column !important;
-                    background: linear-gradient(to bottom right, #3b82f6, #1e40af) !important;
-                    position: relative !important;
+                    width: 100%;
+                    min-height: 100vh;
+                    min-height: 100dvh;
+                    min-height: calc(var(--vh, 1vh) * 100);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 0;
+                    margin: 0;
                 }
                 
-                /* Ensure login page elements are always visible */
-                body.login-page .login-outer,
-                body.login-page .login-container,
-                body.login-page .login-form-wrapper {
-                    display: flex !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                }
-                
-                body.login-page .login-container {
-                    display: block !important;
-                }
-                
-                /* Hide ALL non-login elements - AGGRESSIVE CLEANUP */
-                body.login-page header:not(.login-outer header),
-                body.login-page nav:not(.login-outer nav),
-                body.login-page aside:not(.login-outer aside),
-                body.login-page footer:not(.login-outer footer),
-                body.login-page .sidebar:not(.login-outer .sidebar),
-                body.login-page [class*="sidebar"]:not(.login-outer [class*="sidebar"]),
-                body.login-page [class*="header"]:not(.login-outer [class*="header"]),
-                body.login-page [class*="navigation"]:not(.login-outer [class*="navigation"]),
-                body.login-page [class*="nav-"]:not(.login-outer [class*="nav-"]),
-                body.login-page [class*="layout"]:not(.login-outer [class*="layout"]),
-                body.login-page [class*="MainLayout"]:not(.login-outer [class*="MainLayout"]),
-                body.login-page .overlay:not(.login-outer .overlay),
-                body.login-page .modal-backdrop:not(.login-outer .modal-backdrop),
-                body.login-page [class*="backdrop"]:not(.login-outer [class*="backdrop"]),
-                body.login-page [class*="overlay"]:not(.login-outer [class*="overlay"]),
-                body.login-page [class*="modal"]:not(.login-container):not(.login-outer [class*="modal"]),
-                body.login-page [class*="fixed"]:not(.login-outer):not(.login-container):not(.login-outer [class*="fixed"]),
-                body.login-page [class*="sticky"]:not(.login-container):not(.login-outer [class*="sticky"]) {
+                /* Hide all non-login elements */
+                body.login-page header,
+                body.login-page nav,
+                body.login-page aside,
+                body.login-page footer,
+                body.login-page .sidebar,
+                body.login-page [class*="MainLayout"],
+                body.login-page [class*="overlay"],
+                body.login-page [class*="modal"]:not(.login-modal),
+                body.login-page #root > *:not(.login-wrapper) {
                     display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    z-index: -9999 !important;
-                    pointer-events: none !important;
-                    position: absolute !important;
-                    left: -9999px !important;
                 }
                 
-                /* Hide direct children of root that aren't login-outer */
-                body.login-page #root > *:not(.login-outer) {
-                    display: none !important;
-                    visibility: hidden !important;
-                    opacity: 0 !important;
-                    z-index: -9999 !important;
-                    pointer-events: none !important;
+                /* Login Wrapper - Fully Responsive Container */
+                .login-wrapper {
+                    width: 100%;
+                    min-height: 100vh;
+                    min-height: 100dvh;
+                    min-height: calc(var(--vh, 1vh) * 100);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: clamp(1rem, 4vw, 2rem);
+                    padding-top: max(clamp(1rem, 4vw, 2rem), env(safe-area-inset-top));
+                    padding-bottom: max(clamp(1rem, 4vw, 2rem), env(safe-area-inset-bottom));
+                    padding-left: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-left));
+                    padding-right: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-right));
+                    position: relative;
                 }
                 
-                /* Ensure login-outer is the ONLY visible container */
-                body.login-page #root {
-                    position: relative !important;
-                    z-index: 1 !important;
+                /* Login Card - Dynamic Sizing */
+                .login-card {
+                    width: 100%;
+                    max-width: min(calc(100vw - clamp(1.5rem, 6vw, 3rem)), 420px);
+                    background: #ffffff;
+                    border-radius: clamp(1rem, 4vw, 1.5rem);
+                    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+                    overflow: hidden;
+                    position: relative;
+                    animation: slideUp 0.4s ease-out;
                 }
                 
-                body.login-page .login-outer {
-                    position: relative !important;
-                    z-index: 1000 !important;
+                @keyframes slideUp {
+                    from {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
                 }
                 
-                body.login-page .login-container {
-                    position: relative !important;
-                    z-index: 1001 !important;
+                /* Branding Header - Mobile Optimized */
+                .login-header {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: clamp(1.5rem, 6vw, 2.5rem) clamp(1.25rem, 5vw, 2rem);
+                    text-align: center;
+                    color: #ffffff;
                 }
                 
-                /* Prevent any text overflow or overlapping */
-                body.login-page .login-container * {
-                    overflow: visible !important;
-                    text-overflow: clip !important;
-                    white-space: normal !important;
-                    word-wrap: break-word !important;
+                .login-brand {
+                    font-size: clamp(1.75rem, 6vw, 2.5rem);
+                    font-weight: 700;
+                    margin: 0;
+                    letter-spacing: -0.02em;
+                    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+                }
+                
+                /* Form Container */
+                .login-form-container {
+                    padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 4vw, 2rem);
+                }
+                
+                .login-title {
+                    font-size: clamp(1.5rem, 5vw, 1.875rem);
+                    font-weight: 700;
+                    color: #1f2937;
+                    margin: 0 0 0.5rem 0;
+                    letter-spacing: -0.01em;
+                }
+                
+                .login-subtitle {
+                    font-size: clamp(0.875rem, 3vw, 1rem);
+                    color: #6b7280;
+                    margin: 0 0 clamp(1.5rem, 5vw, 2rem) 0;
+                    line-height: 1.5;
+                }
+                
+                /* Form Elements */
+                .login-form {
+                    display: flex;
+                    flex-direction: column;
+                    gap: clamp(1.25rem, 4vw, 1.5rem);
+                }
+                
+                .form-group {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.5rem;
+                }
+                
+                .form-label {
+                    font-size: clamp(0.875rem, 3vw, 0.9375rem);
+                    font-weight: 600;
+                    color: #374151;
+                    display: block;
+                }
+                
+                /* Input Fields - Touch Optimized */
+                .form-input {
+                    width: 100%;
+                    font-size: 16px; /* Prevents iOS zoom */
+                    padding: clamp(0.875rem, 3vw, 1rem) clamp(0.875rem, 3vw, 1.125rem);
+                    border: 2px solid #e5e7eb;
+                    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+                    background: #ffffff;
+                    color: #1f2937;
+                    transition: all 0.2s ease;
+                    -webkit-appearance: none;
+                    appearance: none;
+                    touch-action: manipulation;
+                    min-height: 48px;
+                    line-height: 1.5;
+                }
+                
+                .form-input:focus {
+                    outline: none;
+                    border-color: #667eea;
+                    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+                }
+                
+                .form-input::placeholder {
+                    color: #9ca3af;
+                }
+                
+                /* Password Input Wrapper */
+                .password-wrapper {
+                    position: relative;
+                }
+                
+                .password-toggle {
+                    position: absolute;
+                    right: clamp(0.75rem, 3vw, 1rem);
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: none;
+                    border: none;
+                    color: #6b7280;
+                    cursor: pointer;
+                    padding: 0.5rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    touch-action: manipulation;
+                    min-width: 44px;
+                    min-height: 44px;
+                    transition: color 0.2s ease;
+                }
+                
+                .password-toggle:hover,
+                .password-toggle:active {
+                    color: #374151;
+                }
+                
+                /* Error Message */
+                .error-message {
+                    padding: clamp(0.75rem, 3vw, 1rem);
+                    background: #fef2f2;
+                    border: 1px solid #fecaca;
+                    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+                    color: #dc2626;
+                    font-size: clamp(0.875rem, 3vw, 0.9375rem);
+                    line-height: 1.5;
+                    margin: 0;
+                }
+                
+                /* Submit Button */
+                .submit-button {
+                    width: 100%;
+                    padding: clamp(0.875rem, 3vw, 1rem) clamp(1.25rem, 4vw, 1.5rem);
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: #ffffff;
+                    border: none;
+                    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+                    font-size: clamp(0.9375rem, 3vw, 1rem);
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    touch-action: manipulation;
+                    min-height: 52px;
+                    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+                }
+                
+                .submit-button:hover:not(:disabled) {
+                    transform: translateY(-1px);
+                    box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+                }
+                
+                .submit-button:active:not(:disabled) {
+                    transform: translateY(0);
+                }
+                
+                .submit-button:disabled {
+                    opacity: 0.7;
+                    cursor: not-allowed;
+                }
+                
+                /* Forgot Password Link */
+                .forgot-password {
+                    text-align: center;
+                    margin-top: -0.5rem;
+                }
+                
+                .forgot-link {
+                    font-size: clamp(0.875rem, 3vw, 0.9375rem);
+                    color: #667eea;
+                    background: none;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0.5rem;
+                    text-decoration: underline;
+                    touch-action: manipulation;
+                }
+                
+                .forgot-link:hover,
+                .forgot-link:active {
+                    color: #764ba2;
+                }
+                
+                /* Forgot Password Form */
+                .forgot-form {
+                    margin-top: 1rem;
+                    padding: clamp(1rem, 4vw, 1.5rem);
+                    background: #f9fafb;
+                    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+                    border: 1px solid #e5e7eb;
+                    animation: slideDown 0.3s ease-out;
+                }
+                
+                @keyframes slideDown {
+                    from {
+                        opacity: 0;
+                        transform: translateY(-10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                
+                /* Desktop Styles */
+                @media (min-width: 768px) {
+                    .login-card {
+                        max-width: 480px;
+                        display: grid;
+                        grid-template-columns: 1fr 1.2fr;
+                        border-radius: clamp(1rem, 2vw, 1.5rem);
+                    }
+                    
+                    .login-header {
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        padding: clamp(2rem, 5vw, 3rem);
+                    }
+                    
+                    .login-form-container {
+                        padding: clamp(2rem, 5vw, 3rem);
+                    }
+                }
+                
+                /* Large Desktop */
+                @media (min-width: 1024px) {
+                    .login-card {
+                        max-width: 520px;
+                    }
+                }
+                
+                /* Landscape Mobile */
+                @media (max-height: 600px) and (orientation: landscape) {
+                    .login-wrapper {
+                        padding-top: 0.5rem;
+                        padding-bottom: 0.5rem;
+                    }
+                    
+                    .login-header {
+                        padding: 1rem;
+                    }
+                    
+                    .login-brand {
+                        font-size: 1.5rem;
+                    }
+                    
+                    .login-form-container {
+                        padding: 1.25rem;
+                    }
+                    
+                    .login-form {
+                        gap: 1rem;
+                    }
+                }
+                
+                /* Very Small Devices (iPhone SE, etc.) */
+                @media (max-width: 360px) {
+                    .login-wrapper {
+                        padding: 0.75rem;
+                    }
+                    
+                    .login-card {
+                        border-radius: 0.875rem;
+                    }
+                    
+                    .login-header {
+                        padding: 1.25rem 1rem;
+                    }
+                    
+                    .login-form-container {
+                        padding: 1.25rem 1rem;
+                    }
+                }
+                
+                /* High DPI Displays */
+                @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+                    .login-card {
+                        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(255, 255, 255, 0.15);
+                    }
                 }
             `}</style>
-            <div className="bg-white rounded-xl shadow-xl w-full overflow-hidden login-container" style={{ margin: '0 auto', position: 'relative', zIndex: 1001, isolation: 'isolate' }}>
-                <div className="grid md:grid-cols-2" style={{ position: 'relative', zIndex: 'auto' }}>
-                    {/* Left Side - Branding */}
-                    <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex-col justify-center items-center text-center" style={{ position: 'relative', zIndex: 'auto' }}>
-                        <style>{`#loginBrand,.login-brand{color:#ffffff !important;text-align:center !important;}`}</style>
-                        <div className="mb-8 w-full flex justify-center">
-                            <h1 id="loginBrand" className="login-brand text-3xl font-bold mb-2">Abcotronics</h1>
-                        </div>
+            
+            <div className="login-wrapper">
+                <div className="login-card login-modal">
+                    {/* Header */}
+                    <div className="login-header">
+                        <h1 className="login-brand">Abcotronics</h1>
                     </div>
                     
-                    {/* Mobile Branding - visible on mobile */}
-                    <div className="md:hidden bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white text-center login-branding" style={{ position: 'relative', zIndex: 'auto', width: '100%', overflow: 'hidden' }}>
-                        <h1 className="login-brand text-3xl font-bold" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Abcotronics</h1>
-                    </div>
-
-                    {/* Right Side - Login */}
-                    <div className="p-6 sm:p-8 login-form-wrapper" style={{ position: 'relative', zIndex: 'auto', width: '100%', boxSizing: 'border-box' }}>
-                        <div className="mb-6" style={{ width: '100%', overflow: 'hidden' }}>
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Welcome</h2>
-                            <p className="text-sm text-gray-600" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Sign in to access your dashboard</p>
-                        </div>
-
-                        {/* Email Login Form */}
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                                {error && (
-                                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
-                                        {error}
-                                    </div>
-                                )}
-
-                                <div>
-                                    <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Email Address
-                                    </label>
+                    {/* Form */}
+                    <div className="login-form-container">
+                        <h2 className="login-title">Welcome Back</h2>
+                        <p className="login-subtitle">Sign in to continue to your account</p>
+                        
+                        <form onSubmit={handleSubmit} className="login-form">
+                            {error && (
+                                <div className="error-message" role="alert">
+                                    {error}
+                                </div>
+                            )}
+                            
+                            <div className="form-group">
+                                <label htmlFor="email" className="form-label">
+                                    Email Address
+                                </label>
+                                <input
+                                    id="email"
+                                    type="email"
+                                    name="email"
+                                    autoComplete="email"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="form-input"
+                                    placeholder="you@company.com"
+                                    required
+                                />
+                            </div>
+                            
+                            <div className="form-group">
+                                <label htmlFor="password" className="form-label">
+                                    Password
+                                </label>
+                                <div className="password-wrapper">
                                     <input
-                                        id="email"
-                                        type="email"
-                                        name="email"
-                                        autoComplete="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        placeholder="you@company.com"
-                                        style={{
-                                            fontSize: '16px',
-                                            WebkitAppearance: 'none',
-                                            touchAction: 'manipulation'
-                                        }}
+                                        id="password"
+                                        type={showPassword ? "text" : "password"}
+                                        name="password"
+                                        autoComplete="current-password"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="form-input"
+                                        placeholder="Enter your password"
+                                        required
+                                        style={{ paddingRight: '3rem' }}
                                     />
-                                </div>
-
-                                <div>
-                                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        Password
-                                    </label>
-                                    <div className="relative">
-                                        <input
-                                            id="password"
-                                            type={showPassword ? "text" : "password"}
-                                            name="password"
-                                            autoComplete="current-password"
-                                            value={password}
-                                            onChange={(e) => setPassword(e.target.value)}
-                                            className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            placeholder="••••••••"
-                                            style={{
-                                                fontSize: '16px',
-                                                WebkitAppearance: 'none',
-                                                touchAction: 'manipulation'
-                                            }}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                                        >
-                                            <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <button
-                                    type="submit"
-                                    disabled={submitting}
-                                    onClick={(e) => {
-                                        // Ensure form submission on mobile
-                                        if (!email || !password) {
-                                            e.preventDefault();
-                                            setError('Please enter both email and password');
-                                            return;
-                                        }
-                                    }}
-                                    className={`w-full bg-blue-600 text-white py-3 text-sm rounded-lg transition font-medium ${submitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700 active:bg-blue-800'}`}
-                                    style={{
-                                        touchAction: 'manipulation',
-                                        WebkitTapHighlightColor: 'rgba(0, 0, 0, 0.1)',
-                                        minHeight: '44px',
-                                        cursor: submitting ? 'not-allowed' : 'pointer'
-                                    }}
-                                >
-                                    {submitting ? 'Signing In…' : 'Sign In'}
-                                </button>
-                                <div className="mt-3 text-right">
-                                    <button type="button" onClick={() => setShowForgot(v => !v)} className="text-xs text-blue-600 hover:underline">
-                                        {showForgot ? 'Hide' : 'Forgot password?'}
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="password-toggle"
+                                        aria-label={showPassword ? "Hide password" : "Show password"}
+                                    >
+                                        <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                                     </button>
                                 </div>
-
-                                {showForgot && (
-                                    <div className="mt-4 p-3 border rounded-md bg-gray-50">
-                                        <label htmlFor="resetEmail" className="block text-xs font-medium text-gray-700 mb-1.5">Enter your email</label>
-                                        <input
-                                            id="resetEmail"
-                                            type="email"
-                                            value={resetEmail}
-                                            onChange={(e) => setResetEmail(e.target.value)}
-                                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                            placeholder="you@company.com"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={async () => {
-                                                setResetStatus('');
-                                                if (!resetEmail) { setResetStatus('Please enter your email'); return; }
-                                                try {
-                                                    await window.api.requestPasswordReset(resetEmail);
-                                                    setResetStatus('If the email exists, a reset link has been sent.');
-                                                } catch (e) {
-                                                    setResetStatus('If the email exists, a reset link has been sent.');
-                                                }
-                                            }}
-                                            className="mt-2 w-full bg-gray-800 text-white py-2 text-sm rounded-lg hover:bg-gray-900"
-                                        >
-                                            Send reset link
-                                        </button>
-                                        {resetStatus && (
-                                            <div className="mt-2 text-xs text-gray-700">{resetStatus}</div>
-                                        )}
-                                    </div>
-                                )}
-
-                            </form>
+                            </div>
+                            
+                            <button
+                                type="submit"
+                                disabled={submitting}
+                                className="submit-button"
+                            >
+                                {submitting ? 'Signing In...' : 'Sign In'}
+                            </button>
+                            
+                            <div className="forgot-password">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowForgot(!showForgot)}
+                                    className="forgot-link"
+                                >
+                                    {showForgot ? 'Hide' : 'Forgot password?'}
+                                </button>
+                            </div>
+                            
+                            {showForgot && (
+                                <div className="forgot-form">
+                                    <label htmlFor="resetEmail" className="form-label">
+                                        Enter your email
+                                    </label>
+                                    <input
+                                        id="resetEmail"
+                                        type="email"
+                                        value={resetEmail}
+                                        onChange={(e) => setResetEmail(e.target.value)}
+                                        className="form-input"
+                                        placeholder="you@company.com"
+                                        style={{ marginBottom: '0.75rem' }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            setResetStatus('');
+                                            if (!resetEmail) {
+                                                setResetStatus('Please enter your email');
+                                                return;
+                                            }
+                                            try {
+                                                await window.api.requestPasswordReset(resetEmail);
+                                                setResetStatus('If the email exists, a reset link has been sent.');
+                                            } catch (e) {
+                                                setResetStatus('If the email exists, a reset link has been sent.');
+                                            }
+                                        }}
+                                        className="submit-button"
+                                        style={{ marginTop: '0.5rem' }}
+                                    >
+                                        Send Reset Link
+                                    </button>
+                                    {resetStatus && (
+                                        <p style={{ 
+                                            marginTop: '0.75rem', 
+                                            fontSize: '0.875rem', 
+                                            color: '#059669',
+                                            textAlign: 'center'
+                                        }}>
+                                            {resetStatus}
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+                        </form>
                     </div>
                 </div>
             </div>
-        </div>
+        </>
     );
 };
 
