@@ -452,8 +452,9 @@ const MainLayout = () => {
                 ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
-                ${mobileMenuOpen ? 'fixed inset-y-0 left-0 z-50 lg:relative lg:z-auto sidebar-mobile open' : 'hidden lg:flex'}
-                lg:flex
+                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open' : ''}
+                ${!mobileMenuOpen && isMobile ? 'hidden' : ''}
+                lg:flex lg:relative lg:z-auto
             `}>
                 {/* Logo */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
@@ -525,12 +526,16 @@ const MainLayout = () => {
             <div className="flex-1 overflow-auto">
                 {/* Header - Fixed on mobile, static on desktop */}
                 <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
-                    <div className="flex items-center">
+                    <div className="flex items-center flex-1">
                         <button 
-                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                            className={`lg:hidden ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target`}
+                            onClick={() => {
+                                console.log('🍔 Hamburger clicked, mobileMenuOpen:', mobileMenuOpen);
+                                setMobileMenuOpen(!mobileMenuOpen);
+                            }}
+                            className={`flex lg:hidden items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn`}
+                            aria-label="Toggle menu"
                         >
-                            <i className="fas fa-bars text-base"></i>
+                            <i className="fas fa-bars text-xl"></i>
                         </button>
                         <div className="relative hidden lg:block">
                             <input
