@@ -1,8 +1,11 @@
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
+import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 
 async function handler(req, res) {
+  // Ensure BOM migration is applied (non-blocking, safe)
+  await ensureBOMMigration().catch(() => {}) // Ignore errors
   const urlPath = req.url.replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
   const resourceType = pathSegments[1] // inventory, boms, production-orders, stock-movements, locations, location-inventory, stock-transactions
@@ -746,24 +749,41 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
-        const boms = await prisma.bOM.findMany({
-          orderBy: { createdAt: 'desc' }
-        })
-        console.log('🧪 Manufacturing List boms', { owner, count: boms.length })
+        console.log('🧪 Manufacturing List boms - Starting query...', { owner })
         
-        const formatted = boms.map(bom => ({
-          ...bom,
-          id: bom.id,
-          components: parseJson(bom.components),
-          effectiveDate: formatDate(bom.effectiveDate),
-          createdAt: formatDate(bom.createdAt),
-          updatedAt: formatDate(bom.updatedAt)
-        }))
-        
-        return ok(res, { boms: formatted })
+        // Verify BOM table exists first
+        try {
+          const boms = await prisma.bOM.findMany({
+            orderBy: { createdAt: 'desc' }
+          })
+          console.log('🧪 Manufacturing List boms', { owner, count: boms.length })
+          
+          const formatted = boms.map(bom => ({
+            ...bom,
+            id: bom.id,
+            components: parseJson(bom.components),
+            effectiveDate: formatDate(bom.effectiveDate),
+            createdAt: formatDate(bom.createdAt),
+            updatedAt: formatDate(bom.updatedAt)
+          }))
+          
+          return ok(res, { boms: formatted })
+        } catch (queryError) {
+          // If table doesn't exist, check if it's a migration issue
+          if (queryError.code === 'P2021' || queryError.message?.includes('does not exist')) {
+            console.error('❌ BOM table does not exist. Run migrations:', queryError.message)
+            return serverError(res, 'BOM table not found. Please run database migrations.', 'P2021')
+          }
+          throw queryError
+        }
       } catch (error) {
-        console.error('❌ Failed to list BOMs:', error)
-        return serverError(res, 'Failed to list BOMs', error.message)
+        console.error('❌ Failed to list BOMs:', {
+          message: error.message,
+          code: error.code,
+          name: error.name,
+          meta: error.meta
+        })
+        return serverError(res, 'Failed to list BOMs', error.message || 'Unknown database error')
       }
     }
 
@@ -802,15 +822,34 @@ async function handler(req, res) {
           type: typeof body,
           keys: Object.keys(body || {}),
           productSku: body?.productSku,
-          productName: body?.productName
+          productName: body?.productName,
+          inventoryItemId: body?.inventoryItemId
         })
       } catch (_) {}
       
       if (!body.productSku || !body.productName) {
         return badRequest(res, 'productSku and productName required')
       }
+      
+      // REQUIRE inventoryItemId - BOM must be linked to an inventory item
+      if (!body.inventoryItemId) {
+        return badRequest(res, 'inventoryItemId is required. Please create the finished product inventory item first, then select it when creating the BOM.')
+      }
 
       try {
+        // Validate that the inventory item exists
+        const inventoryItem = await prisma.inventoryItem.findUnique({
+          where: { id: body.inventoryItemId }
+        })
+        if (!inventoryItem) {
+          return badRequest(res, 'Inventory item not found. Please create the finished product inventory item first.')
+        }
+        
+        // Verify that the productSku matches the inventory item's SKU
+        if (inventoryItem.sku !== body.productSku) {
+          return badRequest(res, `Product SKU (${body.productSku}) must match the selected inventory item SKU (${inventoryItem.sku})`)
+        }
+        
         const components = Array.isArray(body.components) ? body.components : parseJson(body.components, [])
         const totalMaterialCost = components.reduce((sum, comp) => sum + (parseFloat(comp.totalCost) || 0), 0)
         const laborCost = parseFloat(body.laborCost) || 0
@@ -821,6 +860,7 @@ async function handler(req, res) {
           data: {
             productSku: body.productSku,
             productName: body.productName,
+            inventoryItemId: body.inventoryItemId,
             version: body.version || '1.0',
             status: body.status || 'active',
             effectiveDate: body.effectiveDate ? new Date(body.effectiveDate) : new Date(),
@@ -862,6 +902,22 @@ async function handler(req, res) {
         
         if (body.productSku !== undefined) updateData.productSku = body.productSku
         if (body.productName !== undefined) updateData.productName = body.productName
+        if (body.inventoryItemId !== undefined) {
+          // Validate inventory item exists if being updated
+          if (body.inventoryItemId) {
+            const inventoryItem = await prisma.inventoryItem.findUnique({
+              where: { id: body.inventoryItemId }
+            })
+            if (!inventoryItem) {
+              return badRequest(res, 'Inventory item not found')
+            }
+            // Verify SKU matches if productSku is also being updated
+            if (body.productSku && inventoryItem.sku !== body.productSku) {
+              return badRequest(res, `Product SKU must match the selected inventory item SKU (${inventoryItem.sku})`)
+            }
+          }
+          updateData.inventoryItemId = body.inventoryItemId || null
+        }
         if (body.version !== undefined) updateData.version = body.version
         if (body.status !== undefined) updateData.status = body.status
         if (body.effectiveDate !== undefined) updateData.effectiveDate = body.effectiveDate ? new Date(body.effectiveDate) : null
@@ -1128,11 +1184,109 @@ async function handler(req, res) {
         if (body.clientId !== undefined) updateData.clientId = body.clientId || null
         if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
         
-        // Handle status change from 'requested' to 'in_production' - deduct stock
+        // Handle status change to 'completed' - add finished goods to inventory
         const oldStatus = String(existingOrder.status || '').trim()
         const newStatus = String(body.status || '').trim()
         console.log(`🔄 Status change check: "${oldStatus}" -> "${newStatus}"`)
         console.log(`🔍 Order ID: ${id}, BOM ID: ${existingOrder.bomId || 'none'}`)
+        
+        // Handle status change to 'completed' - add finished goods to inventory with cost = sum of parts
+        if (newStatus === 'completed' && oldStatus !== 'completed') {
+          console.log(`✅ Triggering finished goods addition for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          
+          if (!existingOrder.bomId) {
+            return badRequest(res, 'Order has no BOM - cannot complete production')
+          }
+          
+          await prisma.$transaction(async (tx) => {
+            // Re-fetch order within transaction for consistency
+            const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
+            if (!orderInTx) {
+              throw new Error(`Order ${id} not found`)
+            }
+            
+            const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+            if (!bom) {
+              throw new Error(`BOM not found: ${orderInTx.bomId}`)
+            }
+            
+            // Get the finished product inventory item
+            // Backward compatibility: Try to find by productSku if inventoryItemId is missing
+            let finishedProduct;
+            if (bom.inventoryItemId) {
+              finishedProduct = await tx.inventoryItem.findUnique({
+                where: { id: bom.inventoryItemId }
+              })
+            } else {
+              // Fallback: Find by SKU (for older BOMs without inventoryItemId)
+              finishedProduct = await tx.inventoryItem.findFirst({
+                where: { sku: bom.productSku, type: 'finished_good' }
+              })
+              if (!finishedProduct) {
+                // Also try by category
+                finishedProduct = await tx.inventoryItem.findFirst({
+                  where: { sku: bom.productSku, category: 'finished_goods' }
+                })
+              }
+            }
+            
+            if (!finishedProduct) {
+              throw new Error(`Finished product inventory item not found for BOM ${bom.id}. Product SKU: ${bom.productSku}. Please update the BOM to link it to a finished product inventory item, or create the inventory item first.`)
+            }
+            
+            // Use the finishedProduct we already found above
+            
+            const quantityProduced = orderInTx.quantityProduced || orderInTx.quantity
+            if (quantityProduced <= 0) {
+              throw new Error(`Cannot complete order: quantity produced must be greater than 0`)
+            }
+            
+            // Calculate unit cost from BOM (material cost only, sum of parts)
+            const unitCost = bom.totalMaterialCost // Cost per unit = sum of all component costs
+            
+            // Calculate new quantity and value
+            const newQuantity = (finishedProduct.quantity || 0) + quantityProduced
+            const newTotalValue = newQuantity * unitCost
+            
+            // Update inventory item with new quantity and cost
+            await tx.inventoryItem.update({
+              where: { id: finishedProduct.id },
+              data: {
+                quantity: newQuantity,
+                unitCost: unitCost, // Set to sum of parts
+                totalValue: newTotalValue,
+                status: newQuantity > (finishedProduct.reorderPoint || 0) ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock'),
+                lastRestocked: new Date()
+              }
+            })
+            
+            // Create stock movement record for production
+            const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+            let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+              : 1
+            
+            await tx.stockMovement.create({
+              data: {
+                movementId: `MOV${String(seq).padStart(4, '0')}`,
+                date: new Date(),
+                type: 'production',
+                itemName: finishedProduct.name,
+                sku: finishedProduct.sku,
+                quantity: quantityProduced,
+                fromLocation: '',
+                toLocation: '',
+                reference: orderInTx.workOrderNumber || id,
+                performedBy: req.user?.name || 'System',
+                notes: `Production completion for ${orderInTx.productName} - Cost: ${unitCost.toFixed(2)} per unit (sum of parts)`
+              }
+            })
+            
+            console.log(`✅ Added ${quantityProduced} units of ${finishedProduct.name} to inventory with cost ${unitCost} per unit`)
+          }, {
+            timeout: 30000
+          })
+        }
         
         // Handle status change from 'requested' to 'in_production' - deduct stock
         // WRAPPED IN TRANSACTION to ensure atomicity (deduction + movement + status update)

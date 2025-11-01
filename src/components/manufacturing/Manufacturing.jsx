@@ -1391,6 +1391,7 @@ const Manufacturing = () => {
   const openAddBomModal = () => {
     const nextPSKU = getNextPSKU();
     setFormData({
+      inventoryItemId: '', // REQUIRED - must be selected
       productSku: nextPSKU,
       productName: '',
       status: 'active',
@@ -1415,6 +1416,7 @@ const Manufacturing = () => {
     }));
     setFormData({ 
       ...bom,
+      inventoryItemId: bom.inventoryItemId || '', // Include inventoryItemId
       thumbnail: bom.thumbnail || '',
       instructions: bom.instructions || ''
     });
@@ -1530,6 +1532,12 @@ const Manufacturing = () => {
 
   const handleSaveBom = async () => {
     try {
+      // Validate inventory item is selected (REQUIRED)
+      if (!formData.inventoryItemId) {
+        alert('Please select a finished product inventory item before saving the BOM. Create the inventory item first if it does not exist.');
+        return;
+      }
+      
       // Ensure PSKU is set for new BOMs
       const productSku = formData.productSku || getNextPSKU();
       
@@ -1547,6 +1555,7 @@ const Manufacturing = () => {
       const bomData = {
         ...formData,
         productSku: productSku,
+        inventoryItemId: formData.inventoryItemId, // REQUIRED
         components: bomComponents,
         totalMaterialCost,
         laborCost,
@@ -2586,6 +2595,51 @@ const Manufacturing = () => {
               </button>
             </div>
             <div className="p-4 space-y-4">
+              {/* IMPORTANT: Select Finished Product Inventory Item First */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <div className="flex items-start gap-2 mb-3">
+                  <i className="fas fa-info-circle text-blue-600 text-sm mt-0.5"></i>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-900 mb-1">Select Finished Product Inventory Item *</p>
+                    <p className="text-xs text-blue-700">
+                      Every BOM must be linked to a finished product inventory item. If you haven't created the finished product yet, 
+                      go to the Inventory tab and create it first (set type to "finished_good").
+                    </p>
+                  </div>
+                </div>
+                <select
+                  value={formData.inventoryItemId || ''}
+                  onChange={(e) => {
+                    const selectedItem = inventory.find(item => item.id === e.target.value);
+                    if (selectedItem) {
+                      setFormData({
+                        ...formData,
+                        inventoryItemId: selectedItem.id,
+                        productSku: selectedItem.sku,
+                        productName: selectedItem.name
+                      });
+                    } else {
+                      setFormData({ ...formData, inventoryItemId: '' });
+                    }
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  required
+                >
+                  <option value="">-- Select finished product inventory item --</option>
+                  {inventory.filter(item => item.type === 'finished_good' || item.category === 'finished_goods').map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.sku} - {item.name} {item.type !== 'finished_good' ? '(⚠️ Type: ' + item.type + ')' : ''}
+                    </option>
+                  ))}
+                </select>
+                {!formData.inventoryItemId && (
+                  <div className="mt-2 text-xs text-red-600 flex items-center gap-1">
+                    <i className="fas fa-exclamation-circle"></i>
+                    <span>You must select a finished product inventory item before creating the BOM</span>
+                  </div>
+                )}
+              </div>
+
               {/* BOM Header */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2593,6 +2647,7 @@ const Manufacturing = () => {
                   <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-mono">
                     {formData.productSku || getNextPSKU()}
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">Auto-filled from selected inventory item</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Product Name *</label>
@@ -2603,6 +2658,7 @@ const Manufacturing = () => {
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="e.g., Device Basic v1"
                   />
+                  <p className="text-xs text-gray-500 mt-1">Auto-filled from selected inventory item</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Effective Date</label>
@@ -2898,7 +2954,7 @@ const Manufacturing = () => {
                 <button
                   onClick={handleSaveBom}
                   className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                  disabled={bomComponents.length === 0}
+                  disabled={bomComponents.length === 0 || !formData.inventoryItemId}
                 >
                   {modalType === 'edit_bom' ? 'Update BOM' : 'Create BOM'}
                 </button>
