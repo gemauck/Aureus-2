@@ -2506,6 +2506,8 @@ const Clients = React.memo(() => {
         </div>
     );
 
+    console.log('🎨 Clients component rendering...', { clientsLength: clients.length, leadsLength: leads.length });
+
     return (
         <div className="space-y-6">
             {/* Modern Header */}
