@@ -8,6 +8,16 @@ import { withLogging } from './_lib/logger.js'
 
 async function handler(req, res) {
   try {
+    // Log all calendar-notes requests for debugging
+    console.log('📅 Calendar notes handler called:', {
+      method: req.method,
+      url: req.url,
+      pathname: req.url.split('?')[0],
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : [],
+      userId: req.user?.sub
+    })
+    
     // Parse the URL path and query (already has /api/ stripped by server)
     const url = new URL(req.url, 'http://localhost')
     const pathSegments = url.pathname.split('/').filter(Boolean)
