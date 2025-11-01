@@ -1094,7 +1094,9 @@ async function handler(req, res) {
         if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
         
         // Handle status change from 'requested' to 'in_production' - deduct stock
+        console.log(`🔄 Status change check: ${existingOrder.status} -> ${body.status}`)
         if (body.status === 'in_production' && existingOrder.status === 'requested') {
+          console.log(`✅ Triggering stock deduction for work order ${id} (status: ${existingOrder.status} -> ${body.status})`)
           if (existingOrder.bomId) {
             const bom = await prisma.bOM.findUnique({ where: { id: existingOrder.bomId } })
             if (bom) {

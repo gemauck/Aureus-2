@@ -381,11 +381,11 @@ const Manufacturing = () => {
       in_stock: 'text-green-600 bg-green-50',
       low_stock: 'text-yellow-600 bg-yellow-50',
       out_of_stock: 'text-red-600 bg-red-50',
-      requested: 'text-yellow-600 bg-yellow-50',
+      requested: 'text-orange-600 bg-orange-50',
       in_production: 'text-blue-600 bg-blue-50',
       in_progress: 'text-blue-600 bg-blue-50', // Keep for backwards compatibility
       completed: 'text-green-600 bg-green-50',
-      cancelled: 'text-gray-600 bg-gray-50',
+      cancelled: 'text-red-600 bg-red-50',
       active: 'text-green-600 bg-green-50',
       inactive: 'text-gray-600 bg-gray-50',
       draft: 'text-gray-600 bg-gray-50',
@@ -692,6 +692,8 @@ const Manufacturing = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Category</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Allocated</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Available</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Location</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Unit Cost</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total Value</th>
@@ -768,6 +770,16 @@ const Manufacturing = () => {
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.type.replace('_', ' ')}</td>
                     <td className="px-3 py-2 text-right">
                       <div className="text-sm font-semibold text-gray-900">{item.quantity || 0}</div>
+                      <div className="text-xs text-gray-500">{item.unit}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="text-sm font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
+                      <div className="text-xs text-gray-500">{item.unit}</div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <div className="text-sm font-semibold text-green-700">
+                        {(item.quantity || 0) - (item.allocatedQuantity || 0)}
+                      </div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600">
@@ -1762,7 +1774,15 @@ const Manufacturing = () => {
         completedDate: formData.status === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
+      console.log('📤 Updating work order:', {
+        id: selectedItem.id,
+        oldStatus: selectedItem.status,
+        newStatus: formData.status,
+        orderData
+      });
+
       const response = await safeCallAPI('updateProductionOrder', selectedItem.id, orderData);
+      console.log('📥 Update response:', response);
       if (response?.data?.order) {
         const updatedOrders = productionOrders.map(order => 
           order.id === selectedItem.id ? response.data.order : order
