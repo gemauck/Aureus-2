@@ -452,11 +452,11 @@ const MainLayout = () => {
                 flex-shrink-0
                 min-w-[144px]
             `}
-            style={{ display: 'flex' }} // Force display: flex - never hide
+            style={{ display: 'flex', position: 'relative' }} // Force display: flex - never hide, ensure proper positioning
             >
-                {/* Logo - Always show "Abcotronics" text */}
+                {/* Logo - Always show "Abcotronics" text ONLY in sidebar */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                    {/* Always show "Abcotronics" text - adjust size based on sidebar state */}
+                    {/* Always show "Abcotronics" text - adjust size based on sidebar state - ONLY in sidebar, never in header */}
                     <div className="flex-1 flex justify-center min-w-0">
                         <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} ${
                             sidebarOpen 
