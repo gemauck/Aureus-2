@@ -66,32 +66,46 @@ async function handler(req, res) {
       try {
         console.log('📋 GET /api/clients - Starting optimized query...')
         
-        // Ensure type column exists before querying
+        // Try query with type filter first, fallback to all clients if type column doesn't exist
+        let rawClients
         try {
-          await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
-        } catch (error) {
-          // Column may already exist or error is expected
-        }
-        
-        // Use Prisma to include tags relation - needed for list view
-        const rawClients = await prisma.client.findMany({
-          where: {
-            OR: [
-              { type: 'client' },
-              { type: null }
-            ]
-          },
-          include: {
-            tags: {
-              include: {
-                tag: true
+          // Use Prisma to include tags relation - needed for list view
+          rawClients = await prisma.client.findMany({
+            where: {
+              OR: [
+                { type: 'client' },
+                { type: null }
+              ]
+            },
+            include: {
+              tags: {
+                include: {
+                  tag: true
+                }
               }
+            },
+            orderBy: {
+              createdAt: 'desc'
             }
-          },
-          orderBy: {
-            createdAt: 'desc'
-          }
-        })
+          })
+        } catch (typeError) {
+          // If type column doesn't exist or query fails, try without type filter
+          console.warn('⚠️ Type filter failed, trying without filter:', typeError.message)
+          rawClients = await prisma.client.findMany({
+            include: {
+              tags: {
+                include: {
+                  tag: true
+                }
+              }
+            },
+            orderBy: {
+              createdAt: 'desc'
+            }
+          })
+          // Filter manually in case type column doesn't exist in DB but we want to exclude leads
+          rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === null)
+        }
         
         // Prisma returns objects with relations - parse JSON fields
         const clients = rawClients
@@ -111,12 +125,8 @@ async function handler(req, res) {
           meta: dbError.meta,
           stack: dbError.stack
         })
-        // Return detailed error for debugging (in production, you might want to hide details)
-        return serverError(res, 'Failed to list clients', {
-          error: dbError.message,
-          code: dbError.code,
-          name: dbError.name
-        })
+        // Return detailed error for debugging
+        return serverError(res, 'Failed to list clients', dbError.message || 'Unknown database error')
       }
     }
 
