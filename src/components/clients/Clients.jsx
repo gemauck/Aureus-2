@@ -2789,6 +2789,8 @@ window.Clients = Clients;
 window.Clients._isPaginated = true;
 window.Clients._version = 'paginated-v1';
 console.log('✅ Clients.jsx component registered (with Pipeline opportunity fixes and pagination)');
+console.log('🔍 window.Clients type:', typeof window.Clients, 'is function?', typeof window.Clients === 'function');
+console.log('🔍 window.Clients value:', window.Clients);
 
 // Notify MainLayout that Clients component is now available
 // Use multiple notification methods for maximum compatibility
