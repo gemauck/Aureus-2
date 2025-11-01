@@ -18,6 +18,7 @@ const LoginPage = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         setError('');
         
         if (!email || !password) {
@@ -27,9 +28,15 @@ const LoginPage = () => {
 
         try {
             setSubmitting(true);
+            console.log('🔐 Login form submitted on mobile:', { email, hasPassword: !!password });
             await login(email, password);
+            console.log('✅ Login successful');
         } catch (err) {
-            setError('Invalid credentials');
+            console.error('❌ Login error:', err.message, err);
+            // Show more specific error messages
+            const errorMessage = err.message || 'Invalid credentials';
+            setError(errorMessage);
+            // Don't prevent user from trying again
         } finally {
             setSubmitting(false);
         }
@@ -136,8 +143,8 @@ const LoginPage = () => {
                     }
                     
                     .login-container {
-                        width: 100% !important;
-                        max-width: 420px !important;
+                        width: 90% !important;
+                        max-width: 320px !important;
                         margin: 0 auto !important;
                         border-radius: 1rem !important;
                         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
@@ -320,7 +327,15 @@ const LoginPage = () => {
                     }
                     
                     .login-container {
-                        max-width: 500px !important;
+                        max-width: 380px !important;
+                    }
+                }
+                
+                /* Desktop styles - wider login box */
+                @media (min-width: 768px) {
+                    .login-container {
+                        width: 100% !important;
+                        max-width: 700px !important;
                     }
                 }
                 
@@ -401,7 +416,7 @@ const LoginPage = () => {
                     z-index: -1 !important;
                 }
             `}</style>
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-xl overflow-hidden login-container" style={{ width: '100%', maxWidth: '100%', margin: '0 auto' }}>
+            <div className="bg-white rounded-xl shadow-xl w-full overflow-hidden login-container" style={{ margin: '0 auto' }}>
                 <div className="grid md:grid-cols-2">
                     {/* Left Side - Branding */}
                     <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex-col justify-center items-center text-center">
@@ -444,6 +459,11 @@ const LoginPage = () => {
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         placeholder="you@company.com"
+                                        style={{
+                                            fontSize: '16px',
+                                            WebkitAppearance: 'none',
+                                            touchAction: 'manipulation'
+                                        }}
                                     />
                                 </div>
 
@@ -461,6 +481,11 @@ const LoginPage = () => {
                                             onChange={(e) => setPassword(e.target.value)}
                                             className="w-full px-3 py-2 pr-10 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                             placeholder="••••••••"
+                                            style={{
+                                                fontSize: '16px',
+                                                WebkitAppearance: 'none',
+                                                touchAction: 'manipulation'
+                                            }}
                                         />
                                         <button
                                             type="button"
@@ -475,7 +500,21 @@ const LoginPage = () => {
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                    className={`w-full bg-blue-600 text-white py-3 text-sm rounded-lg transition font-medium ${submitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700'}`}
+                                    onClick={(e) => {
+                                        // Ensure form submission on mobile
+                                        if (!email || !password) {
+                                            e.preventDefault();
+                                            setError('Please enter both email and password');
+                                            return;
+                                        }
+                                    }}
+                                    className={`w-full bg-blue-600 text-white py-3 text-sm rounded-lg transition font-medium ${submitting ? 'opacity-70 cursor-not-allowed' : 'hover:bg-blue-700 active:bg-blue-800'}`}
+                                    style={{
+                                        touchAction: 'manipulation',
+                                        WebkitTapHighlightColor: 'rgba(0, 0, 0, 0.1)',
+                                        minHeight: '44px',
+                                        cursor: submitting ? 'not-allowed' : 'pointer'
+                                    }}
                                 >
                                     {submitting ? 'Signing In…' : 'Sign In'}
                                 </button>

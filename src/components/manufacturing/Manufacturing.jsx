@@ -400,7 +400,11 @@ const Manufacturing = () => {
 
   const getInventoryStats = () => {
     const totalValue = inventory.reduce((sum, item) => sum + item.totalValue, 0);
-    const lowStockItems = inventory.filter(item => item.quantity <= item.reorderPoint).length;
+    // Use available quantity (quantity - allocatedQuantity) for low stock calculation
+    const lowStockItems = inventory.filter(item => {
+      const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+      return availableQty <= item.reorderPoint;
+    }).length;
     const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
     const categories = [...new Set(inventory.map(item => item.category))].length;
     
@@ -491,18 +495,27 @@ const Manufacturing = () => {
             </div>
             <div className="p-3">
               <div className="space-y-2">
-                {inventory.filter(item => item.quantity <= item.reorderPoint).slice(0, 5).map(item => (
-                  <div key={item.id} className="flex items-center justify-between p-2 bg-yellow-50 rounded border border-yellow-200">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                      <p className="text-xs text-gray-500">{item.sku} • {item.location}</p>
+                {inventory.filter(item => {
+                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                  return availableQty <= item.reorderPoint;
+                }).slice(0, 5).map(item => {
+                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                  return (
+                    <div key={item.id} className="flex items-center justify-between p-2 bg-yellow-50 rounded border border-yellow-200">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.sku} • {item.location}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-yellow-700">{availableQty} / {item.quantity} {item.unit}</p>
+                        <p className="text-xs text-gray-500">Reorder: {item.reorderPoint}</p>
+                        {(item.allocatedQuantity || 0) > 0 && (
+                          <p className="text-xs text-orange-600">Allocated: {item.allocatedQuantity}</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-yellow-700">{item.quantity} {item.unit}</p>
-                      <p className="text-xs text-gray-500">Reorder: {item.reorderPoint}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
