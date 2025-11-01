@@ -990,14 +990,47 @@ async function handler(req, res) {
       }
 
       try {
+        const orderQuantity = parseInt(body.quantity) || 0
+        const orderStatus = body.status || 'requested'
+        
+        // Allocate stock if BOM is provided and status is 'requested'
+        if (body.bomId && orderStatus === 'requested') {
+          const bom = await prisma.bOM.findUnique({ where: { id: body.bomId } })
+          if (bom) {
+            const components = parseJson(bom.components, [])
+            for (const component of components) {
+              if (component.sku && component.quantity) {
+                const requiredQty = parseFloat(component.quantity) * orderQuantity
+                const inventoryItem = await prisma.inventoryItem.findFirst({
+                  where: { sku: component.sku }
+                })
+                if (inventoryItem) {
+                  const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
+                  if (availableQty < requiredQty) {
+                    return badRequest(res, `Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`)
+                  }
+                  // Allocate stock (reserve but don't deduct yet)
+                  await prisma.inventoryItem.update({
+                    where: { id: inventoryItem.id },
+                    data: {
+                      allocatedQuantity: (inventoryItem.allocatedQuantity || 0) + requiredQty
+                    }
+                  })
+                  console.log(`📦 Allocated ${requiredQty} of ${component.sku} for work order`)
+                }
+              }
+            }
+          }
+        }
+        
         const order = await prisma.productionOrder.create({
           data: {
             bomId: body.bomId || '',
             productSku: body.productSku,
             productName: body.productName,
-            quantity: parseInt(body.quantity) || 0,
+            quantity: orderQuantity,
             quantityProduced: parseInt(body.quantityProduced) || 0,
-            status: body.status || 'in_progress',
+            status: orderStatus,
             priority: body.priority || 'normal',
             startDate: body.startDate ? new Date(body.startDate) : new Date(),
             targetDate: body.targetDate ? new Date(body.targetDate) : null,
@@ -1081,13 +1114,18 @@ async function handler(req, res) {
                     where: { sku: component.sku }
                   })
                   if (inventoryItem) {
-                    // Verify sufficient stock
+                    // Verify allocation exists and sufficient stock
+                    const allocatedQty = inventoryItem.allocatedQuantity || 0
+                    if (allocatedQty < requiredQty) {
+                      return badRequest(res, `Allocation error for ${component.name || component.sku}. Allocated: ${allocatedQty}, Required: ${requiredQty}`)
+                    }
                     if ((inventoryItem.quantity || 0) < requiredQty) {
                       return badRequest(res, `Insufficient stock for ${component.name || component.sku}. Available: ${inventoryItem.quantity}, Required: ${requiredQty}`)
                     }
                     
-                    // Deduct stock
+                    // Deduct stock and reduce allocation
                     const newQty = (inventoryItem.quantity || 0) - requiredQty
+                    const newAllocatedQty = allocatedQty - requiredQty
                     const totalValue = newQty * (inventoryItem.unitCost || 0)
                     const reorderPoint = inventoryItem.reorderPoint || 0
                     const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
@@ -1096,11 +1134,12 @@ async function handler(req, res) {
                       where: { id: inventoryItem.id },
                       data: {
                         quantity: newQty,
+                        allocatedQuantity: newAllocatedQty,
                         totalValue: totalValue,
                         status: status
                       }
                     })
-                    console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id}`)
+                    console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id} (allocation reduced)`)
                     
                     // Create stock movement record
                     await prisma.stockMovement.create({
