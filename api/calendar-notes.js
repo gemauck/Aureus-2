@@ -92,7 +92,16 @@ async function handler(req, res) {
     if ((req.method === 'POST' || req.method === 'PUT') && pathSegments.length === 1 && pathSegments[0] === 'calendar-notes') {
       const body = await parseJsonBody(req)
       
+      console.log('📝 Calendar notes POST request:', {
+        method: req.method,
+        body: body,
+        hasDate: !!body.date,
+        dateValue: body.date,
+        noteLength: body.note?.length || 0
+      })
+      
       if (!body.date) {
+        console.error('❌ Calendar note save failed: date is missing', { body, userId })
         return badRequest(res, 'date is required (YYYY-MM-DD format)')
       }
 

@@ -103,18 +103,42 @@ const Calendar = () => {
             const token = window.storage?.getToken?.();
             if (token) {
                 try {
+                    // Validate dateString format before sending
+                    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                        console.error('❌ Invalid date format:', dateString);
+                        return;
+                    }
+                    
+                    const requestBody = { 
+                        date: dateString, 
+                        note: noteText || '' 
+                    };
+                    
+                    console.log('📤 Sending calendar note to server:', requestBody);
+                    
                     const res = await fetch('/api/calendar-notes', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        headers: { 
+                            'Content-Type': 'application/json', 
+                            Authorization: `Bearer ${token}` 
+                        },
                         credentials: 'include',
-                        body: JSON.stringify({ date: dateString, note: noteText })
+                        body: JSON.stringify(requestBody)
                     });
                     
                     if (res.ok) {
                         const data = await res.json();
                         console.log('✅ Saved note to server:', dateString, data);
                     } else {
-                        console.error('❌ Failed to save note to server:', res.status, await res.text());
+                        const errorText = await res.text();
+                        let errorData;
+                        try {
+                            errorData = JSON.parse(errorText);
+                        } catch (e) {
+                            errorData = { message: errorText };
+                        }
+                        console.error('❌ Failed to save note to server:', res.status, errorData);
+                        console.error('Request body was:', requestBody);
                     }
                 } catch (error) {
                     console.error('❌ Error saving note to server:', error);
