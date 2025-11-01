@@ -25,35 +25,6 @@ const SettingsPortal = ({ isOpen, onClose }) => {
         { id: 'security', label: 'Security', icon: 'fa-shield-alt' }
     ];
 
-    useEffect(() => {
-        if (isOpen) {
-            // Always load fresh data from server when modal opens
-            if (user && user.id) {
-                loadProfile();
-            } else {
-                // If user isn't loaded yet, wait a bit and try again
-                const timer = setTimeout(() => {
-                    const storedUser = window.storage?.getUser?.();
-                    if (storedUser && storedUser.id) {
-                        loadProfile();
-                    }
-                }, 100);
-                return () => clearTimeout(timer);
-            }
-        }
-    }, [isOpen, user, loadProfile]);
-
-    useEffect(() => {
-        // Close on Escape key
-        const handleEscape = (e) => {
-            if (e.key === 'Escape' && isOpen) {
-                onClose();
-            }
-        };
-        document.addEventListener('keydown', handleEscape);
-        return () => document.removeEventListener('keydown', handleEscape);
-    }, [isOpen, onClose]);
-
     const loadProfile = useCallback(async () => {
         try {
             setIsLoading(true);
@@ -98,6 +69,35 @@ const SettingsPortal = ({ isOpen, onClose }) => {
             setIsLoading(false);
         }
     }, []);
+
+    useEffect(() => {
+        if (isOpen) {
+            // Always load fresh data from server when modal opens
+            if (user && user.id) {
+                loadProfile();
+            } else {
+                // If user isn't loaded yet, wait a bit and try again
+                const timer = setTimeout(() => {
+                    const storedUser = window.storage?.getUser?.();
+                    if (storedUser && storedUser.id) {
+                        loadProfile();
+                    }
+                }, 100);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [isOpen, user, loadProfile]);
+
+    useEffect(() => {
+        // Close on Escape key
+        const handleEscape = (e) => {
+            if (e.key === 'Escape' && isOpen) {
+                onClose();
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
+    }, [isOpen, onClose]);
 
     const handleProfileSave = async () => {
         setIsLoading(true);
