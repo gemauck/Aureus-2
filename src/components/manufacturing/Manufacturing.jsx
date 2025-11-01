@@ -1686,6 +1686,10 @@ const Manufacturing = () => {
       }
 
       const totalCost = selectedBom.totalCost * quantity;
+      // Ensure work order number is set
+      if (!formData.workOrderNumber) {
+        setFormData({ ...formData, workOrderNumber: getNextWorkOrderNumber() });
+      }
       const workOrderNumber = formData.workOrderNumber || getNextWorkOrderNumber();
       
       // Determine client allocation
