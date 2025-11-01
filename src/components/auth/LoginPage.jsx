@@ -148,24 +148,42 @@ const LoginPage = () => {
                         margin: 0 auto !important;
                         border-radius: 1rem !important;
                         box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1) !important;
-                        overflow: visible !important;
+                        overflow: hidden !important;
                         position: relative !important;
-                        z-index: 10 !important;
+                        z-index: 1001 !important;
                         background: white !important;
                         display: block !important;
                         visibility: visible !important;
                         opacity: 1 !important;
                         transform: none !important;
+                        isolation: isolate !important;
+                    }
+                    
+                    /* Prevent overlapping text inside container */
+                    .login-container * {
+                        position: relative !important;
+                        z-index: auto !important;
                     }
                     
                     .login-form-wrapper {
                         padding: 1.5rem !important;
                         padding-top: 1.25rem !important;
                         width: 100% !important;
+                        max-width: 100% !important;
                         box-sizing: border-box !important;
                         display: block !important;
                         visibility: visible !important;
                         opacity: 1 !important;
+                        position: relative !important;
+                        z-index: auto !important;
+                        overflow: visible !important;
+                    }
+                    
+                    /* Prevent text overlap in form */
+                    .login-form-wrapper * {
+                        max-width: 100% !important;
+                        word-wrap: break-word !important;
+                        overflow-wrap: break-word !important;
                     }
                     
                     .login-form-wrapper h2 {
@@ -405,21 +423,71 @@ const LoginPage = () => {
                     display: block !important;
                 }
                 
-                /* Hide any overlay elements that might cover login */
-                body.login-page .overlay,
-                body.login-page .modal-backdrop,
-                body.login-page [class*="backdrop"],
-                body.login-page [class*="overlay"] {
+                /* Hide ALL non-login elements - AGGRESSIVE CLEANUP */
+                body.login-page header:not(.login-outer header),
+                body.login-page nav:not(.login-outer nav),
+                body.login-page aside:not(.login-outer aside),
+                body.login-page footer:not(.login-outer footer),
+                body.login-page .sidebar:not(.login-outer .sidebar),
+                body.login-page [class*="sidebar"]:not(.login-outer [class*="sidebar"]),
+                body.login-page [class*="header"]:not(.login-outer [class*="header"]),
+                body.login-page [class*="navigation"]:not(.login-outer [class*="navigation"]),
+                body.login-page [class*="nav-"]:not(.login-outer [class*="nav-"]),
+                body.login-page [class*="layout"]:not(.login-outer [class*="layout"]),
+                body.login-page [class*="MainLayout"]:not(.login-outer [class*="MainLayout"]),
+                body.login-page .overlay:not(.login-outer .overlay),
+                body.login-page .modal-backdrop:not(.login-outer .modal-backdrop),
+                body.login-page [class*="backdrop"]:not(.login-outer [class*="backdrop"]),
+                body.login-page [class*="overlay"]:not(.login-outer [class*="overlay"]),
+                body.login-page [class*="modal"]:not(.login-container):not(.login-outer [class*="modal"]),
+                body.login-page [class*="fixed"]:not(.login-outer):not(.login-container):not(.login-outer [class*="fixed"]),
+                body.login-page [class*="sticky"]:not(.login-container):not(.login-outer [class*="sticky"]) {
                     display: none !important;
                     visibility: hidden !important;
                     opacity: 0 !important;
-                    z-index: -1 !important;
+                    z-index: -9999 !important;
+                    pointer-events: none !important;
+                    position: absolute !important;
+                    left: -9999px !important;
+                }
+                
+                /* Hide direct children of root that aren't login-outer */
+                body.login-page #root > *:not(.login-outer) {
+                    display: none !important;
+                    visibility: hidden !important;
+                    opacity: 0 !important;
+                    z-index: -9999 !important;
+                    pointer-events: none !important;
+                }
+                
+                /* Ensure login-outer is the ONLY visible container */
+                body.login-page #root {
+                    position: relative !important;
+                    z-index: 1 !important;
+                }
+                
+                body.login-page .login-outer {
+                    position: relative !important;
+                    z-index: 1000 !important;
+                }
+                
+                body.login-page .login-container {
+                    position: relative !important;
+                    z-index: 1001 !important;
+                }
+                
+                /* Prevent any text overflow or overlapping */
+                body.login-page .login-container * {
+                    overflow: visible !important;
+                    text-overflow: clip !important;
+                    white-space: normal !important;
+                    word-wrap: break-word !important;
                 }
             `}</style>
-            <div className="bg-white rounded-xl shadow-xl w-full overflow-hidden login-container" style={{ margin: '0 auto' }}>
-                <div className="grid md:grid-cols-2">
+            <div className="bg-white rounded-xl shadow-xl w-full overflow-hidden login-container" style={{ margin: '0 auto', position: 'relative', zIndex: 1001, isolation: 'isolate' }}>
+                <div className="grid md:grid-cols-2" style={{ position: 'relative', zIndex: 'auto' }}>
                     {/* Left Side - Branding */}
-                    <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex-col justify-center items-center text-center">
+                    <div className="hidden md:flex bg-gradient-to-br from-blue-600 to-blue-800 p-8 text-white flex-col justify-center items-center text-center" style={{ position: 'relative', zIndex: 'auto' }}>
                         <style>{`#loginBrand,.login-brand{color:#ffffff !important;text-align:center !important;}`}</style>
                         <div className="mb-8 w-full flex justify-center">
                             <h1 id="loginBrand" className="login-brand text-3xl font-bold mb-2">Abcotronics</h1>
@@ -427,15 +495,15 @@ const LoginPage = () => {
                     </div>
                     
                     {/* Mobile Branding - visible on mobile */}
-                    <div className="md:hidden bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white text-center login-branding">
-                        <h1 className="login-brand text-3xl font-bold">Abcotronics</h1>
+                    <div className="md:hidden bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white text-center login-branding" style={{ position: 'relative', zIndex: 'auto', width: '100%', overflow: 'hidden' }}>
+                        <h1 className="login-brand text-3xl font-bold" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Abcotronics</h1>
                     </div>
 
                     {/* Right Side - Login */}
-                    <div className="p-6 sm:p-8 login-form-wrapper">
-                        <div className="mb-6">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-1">Welcome</h2>
-                            <p className="text-sm text-gray-600">Sign in to access your dashboard</p>
+                    <div className="p-6 sm:p-8 login-form-wrapper" style={{ position: 'relative', zIndex: 'auto', width: '100%', boxSizing: 'border-box' }}>
+                        <div className="mb-6" style={{ width: '100%', overflow: 'hidden' }}>
+                            <h2 className="text-2xl font-bold text-gray-900 mb-1" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Welcome</h2>
+                            <p className="text-sm text-gray-600" style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}>Sign in to access your dashboard</p>
                         </div>
 
                         {/* Email Login Form */}
