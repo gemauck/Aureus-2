@@ -555,10 +555,7 @@ const MainLayout = () => {
                             />
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
-                        {/* Mobile header branding - Always visible on mobile */}
-                        <div className="lg:hidden flex-shrink-0">
-                            <h2 className={`abcotronics-logo abcotronics-logo-text text-base sm:text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-primary-600'} whitespace-nowrap`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h2>
-                        </div>
+                        {/* Mobile header branding removed - sidebar always shows Abcotronics, no duplication needed */}
                     </div>
                     <div className="flex items-center space-x-2">
                         {/* Settings Button */}
