@@ -910,7 +910,9 @@ const Manufacturing = () => {
             <h3 className="text-sm font-semibold text-gray-900">Work Orders</h3>
             <button
               onClick={() => { 
+                const nextWO = getNextWorkOrderNumber();
                 setFormData({ 
+                  workOrderNumber: nextWO,
                   startDate: new Date().toISOString().split('T')[0],
                   priority: 'normal',
                   status: 'in_progress'
@@ -1060,6 +1062,26 @@ const Manufacturing = () => {
     const maxNumber = pskuNumbers.length > 0 ? Math.max(...pskuNumbers) : 0;
     const nextNumber = maxNumber + 1;
     return `PSKU${String(nextNumber).padStart(3, '0')}`;
+  };
+
+  // Generate next Work Order number
+  const getNextWorkOrderNumber = () => {
+    if (!productionOrders || productionOrders.length === 0) {
+      return 'WO0001';
+    }
+    
+    // Extract all WO numbers and find the highest
+    const woNumbers = productionOrders
+      .map(order => order.workOrderNumber)
+      .filter(wo => wo && wo.startsWith('WO'))
+      .map(wo => {
+        const match = wo.match(/WO(\d+)/);
+        return match ? parseInt(match[1]) : 0;
+      });
+    
+    const maxNumber = woNumbers.length > 0 ? Math.max(...woNumbers) : 0;
+    const nextNumber = maxNumber + 1;
+    return `WO${String(nextNumber).padStart(4, '0')}`;
   };
 
   const openAddBomModal = () => {
@@ -1636,6 +1658,7 @@ const Manufacturing = () => {
       }
 
       const totalCost = selectedBom.totalCost * (parseInt(formData.quantity) || 0);
+      const workOrderNumber = formData.workOrderNumber || getNextWorkOrderNumber();
       const orderData = {
         bomId: formData.bomId,
         productSku: formData.productSku || selectedBom.productSku,
@@ -1649,6 +1672,7 @@ const Manufacturing = () => {
         assignedTo: formData.assignedTo || '',
         totalCost: totalCost,
         notes: formData.notes || '',
+        workOrderNumber: workOrderNumber,
         createdBy: user?.name || 'System'
       };
 
@@ -2647,6 +2671,14 @@ const Manufacturing = () => {
             </div>
             <div className="p-4">
               <div className="space-y-4">
+                {/* Work Order Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Work Order Number</label>
+                  <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-mono">
+                    {formData.workOrderNumber || getNextWorkOrderNumber()}
+                  </div>
+                </div>
+
                 {/* Select BOM/Product */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Select Product (BOM) *</label>

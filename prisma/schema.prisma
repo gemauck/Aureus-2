@@ -457,6 +457,7 @@ model ProductionOrder {
   assignedTo       String    @default("")
   totalCost        Float     @default(0)
   notes            String    @default("")
+  workOrderNumber  String    @default("") // Auto-generated work order number (WO0001, WO0002, etc.)
   createdBy        String    @default("")
   ownerId          String?
   createdAt        DateTime  @default(now())
