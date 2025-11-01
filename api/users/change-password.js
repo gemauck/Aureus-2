@@ -59,7 +59,16 @@ async function handler(req, res) {
                 console.log('❌ Current password required for users with existing password')
                 return badRequest(res, 'Current password is required')
             }
+            console.log('🔍 Verifying password:', {
+                userId: user.id,
+                email: user.email,
+                hasPasswordHash: !!user.passwordHash,
+                passwordHashLength: user.passwordHash?.length,
+                currentPasswordLength: currentPassword.trim().length,
+                passwordHashPrefix: user.passwordHash?.substring(0, 10) + '...'
+            })
             const valid = await bcrypt.compare(currentPassword.trim(), user.passwordHash)
+            console.log('🔍 Bcrypt compare result:', valid)
             if (!valid) {
                 console.log('❌ Current password is incorrect')
                 return unauthorized(res, 'Current password is incorrect')
