@@ -396,6 +396,7 @@ model InventoryItem {
   category            String    @default("components") // components, packaging, accessories, finished_goods, work_in_progress
   type                String    @default("raw_material") // raw_material, finished_good, wip
   quantity            Float     @default(0)
+  allocatedQuantity   Float     @default(0) // Quantity reserved/allocated to work orders
   unit                String    @default("pcs")
   reorderPoint        Float     @default(0)
   reorderQty          Float     @default(0)
