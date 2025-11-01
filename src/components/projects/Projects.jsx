@@ -178,8 +178,10 @@ const Projects = () => {
                 setProjects(normalizedProjects);
                 setIsLoading(false);
                 
-                // Sync existing projects with clients
-                syncProjectsWithClients(apiProjects);
+                // Sync existing projects with clients (non-blocking, won't crash on failure)
+                syncProjectsWithClients(apiProjects).catch(err => {
+                    console.warn('⚠️ Projects: Client sync failed, but continuing anyway:', err.message);
+                });
                 
                 // Check if there's a project to open immediately after loading
                 const projectIdToOpen = sessionStorage.getItem('openProjectId');
@@ -226,25 +228,60 @@ const Projects = () => {
     }, []); // Only run once on initial mount
 
     // Helper function to sync existing projects with clients
+    // This is a non-critical operation - failures won't crash the component
     const syncProjectsWithClients = async (projectsList) => {
         try {
-            if (window.dataService && typeof window.dataService.getClients === 'function' && typeof window.dataService.setClients === 'function') {
-                const clients = await window.dataService.getClients() || [];
-                const updatedClients = clients.map(client => {
-                    const clientProjects = projectsList.filter(p => p.client === client.name);
-                    const projectIds = clientProjects.map(p => p.id);
-                    return {
-                        ...client,
-                        projectIds: projectIds
-                    };
-                });
-                await window.dataService.setClients(updatedClients);
-                
-                // Dispatch event to notify other components
+            // Don't sync if clients API is failing - skip silently to prevent crashes
+            if (!window.dataService) {
+                console.log('⚠️ Projects: dataService not available, skipping client sync');
+                return;
+            }
+            
+            if (typeof window.dataService.getClients !== 'function' || typeof window.dataService.setClients !== 'function') {
+                console.log('⚠️ Projects: dataService methods not available, skipping client sync');
+                return;
+            }
+            
+            // Try to get clients with timeout and error handling
+            const getClientsPromise = window.dataService.getClients();
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Client sync timeout')), 5000)
+            );
+            
+            const clients = await Promise.race([getClientsPromise, timeoutPromise]).catch(error => {
+                // If clients API fails, just skip the sync - don't crash
+                console.warn('⚠️ Projects: Failed to get clients for sync (non-critical):', error.message);
+                return null;
+            });
+            
+            if (!clients || !Array.isArray(clients)) {
+                console.log('⚠️ Projects: No clients available for sync, skipping');
+                return;
+            }
+            
+            const updatedClients = clients.map(client => {
+                const clientProjects = projectsList.filter(p => p.client === client.name || p.clientName === client.name);
+                const projectIds = clientProjects.map(p => p.id);
+                return {
+                    ...client,
+                    projectIds: projectIds
+                };
+            });
+            
+            await window.dataService.setClients(updatedClients).catch(err => {
+                console.warn('⚠️ Projects: Failed to save clients (non-critical):', err.message);
+            });
+            
+            // Dispatch event to notify other components (optional, non-blocking)
+            try {
                 window.dispatchEvent(new CustomEvent('clientsUpdated'));
+            } catch (eventError) {
+                console.warn('⚠️ Projects: Failed to dispatch clientsUpdated event:', eventError);
             }
         } catch (error) {
-            console.warn('Error syncing projects with clients:', error);
+            // This is a non-critical operation - log but don't throw
+            console.warn('⚠️ Projects: Error syncing projects with clients (non-critical):', error.message);
+            // Don't rethrow - we want this to fail silently
         }
     };
     
@@ -650,6 +687,33 @@ const Projects = () => {
     }).sort((a, b) => a.client.localeCompare(b.client));
 
     if (showProgressTracker) {
+        // Ensure ProjectProgressTracker is available before rendering
+        if (!window.ProjectProgressTracker) {
+            return (
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <button 
+                            onClick={() => setShowProgressTracker(false)} 
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <div className="flex items-start">
+                            <i className="fas fa-spinner fa-spin text-yellow-600 mt-0.5 mr-3"></i>
+                            <div className="flex-1">
+                                <h3 className="text-sm font-semibold text-yellow-800 mb-1">Loading Progress Tracker...</h3>
+                                <p className="text-sm text-yellow-700">
+                                    The Progress Tracker component is still loading. Please wait a moment...
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
         return <window.ProjectProgressTracker onBack={() => setShowProgressTracker(false)} />;
     }
 
