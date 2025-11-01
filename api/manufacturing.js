@@ -1128,7 +1128,9 @@ async function handler(req, res) {
                     const newAllocatedQty = allocatedQty - requiredQty
                     const totalValue = newQty * (inventoryItem.unitCost || 0)
                     const reorderPoint = inventoryItem.reorderPoint || 0
-                    const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+                    // Use available quantity (quantity - allocatedQuantity) for status
+                    const availableQty = newQty - newAllocatedQty
+                    const status = availableQty > reorderPoint ? 'in_stock' : (availableQty > 0 ? 'low_stock' : 'out_of_stock')
                     
                     await prisma.inventoryItem.update({
                       where: { id: inventoryItem.id },
