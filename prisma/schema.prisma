@@ -449,7 +449,7 @@ model ProductionOrder {
   productName      String
   quantity         Int       @default(0)
   quantityProduced Int       @default(0)
-  status           String    @default("in_progress") // in_progress, completed, cancelled
+  status           String    @default("requested") // requested, in_production, completed, cancelled
   priority         String    @default("normal") // low, normal, high
   startDate        DateTime  @default(now())
   targetDate       DateTime?
