@@ -102,7 +102,7 @@
         // Account & Settings
         './src/components/account/Account.jsx',
         './src/components/settings/Settings.jsx',
-        './src/components/settings/SettingsPortal.jsx',
+        // SettingsPortal moved to early load in index.html
         
         // Feedback widgets
         './src/components/feedback/FeedbackWidget.jsx',
