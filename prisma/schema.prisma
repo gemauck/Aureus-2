@@ -41,21 +41,21 @@ model User {
   address          String    @default("")
   emergencyContact String    @default("")
 
-  memberships    Membership[]
-  ownedClients   Client[]        @relation("ClientOwner")
-  ownedProjects  Project[]       @relation("ProjectOwner")
-  tasks          Task[]          @relation("TaskAssignee")
-  auditLogs      AuditLog[]      @relation("AuditActor")
-  feedback       Feedback[]      @relation("UserFeedback")
-  sentMessages   Message[]       @relation("MessageSender")
-  passwordResets PasswordReset[]
-  calendarNotes  CalendarNote[]
-  sessions       Session[]
-  twoFactor      TwoFactor?
-  securityEvents SecurityEvent[]
+  memberships     Membership[]
+  ownedClients    Client[]          @relation("ClientOwner")
+  ownedProjects   Project[]         @relation("ProjectOwner")
+  tasks           Task[]            @relation("TaskAssignee")
+  auditLogs       AuditLog[]        @relation("AuditActor")
+  feedback        Feedback[]        @relation("UserFeedback")
+  sentMessages    Message[]         @relation("MessageSender")
+  passwordResets  PasswordReset[]
+  calendarNotes   CalendarNote[]
+  sessions        Session[]
+  twoFactor       TwoFactor?
+  securityEvents  SecurityEvent[]
   passwordHistory PasswordHistory[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
 }
 
 model Team {
@@ -412,6 +412,9 @@ model InventoryItem {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
+  // Relation: BOMs that produce this finished product
+  boms BOM[] @relation("BOMFinishedProduct")
+
   @@index([sku])
   @@index([category])
   @@index([status])
@@ -419,28 +422,31 @@ model InventoryItem {
 }
 
 model BOM {
-  id                String   @id @default(cuid())
+  id                String         @id @default(cuid())
   productSku        String
   productName       String
-  version           String   @default("1.0")
-  status            String   @default("active") // active, draft
-  effectiveDate     DateTime @default(now())
-  laborCost         Float    @default(0)
-  overheadCost      Float    @default(0)
-  totalMaterialCost Float    @default(0)
-  totalCost         Float    @default(0)
-  estimatedTime     Int      @default(0)
-  components        String   @default("[]") // JSON array of components
-  notes             String   @default("")
-  thumbnail         String   @default("") // Product thumbnail image URL or data URL
-  instructions      String   @default("") // Product instructions file URL or data URL
+  inventoryItemId   String? // Required: links BOM to the finished product inventory item
+  inventoryItem     InventoryItem? @relation("BOMFinishedProduct", fields: [inventoryItemId], references: [id])
+  version           String         @default("1.0")
+  status            String         @default("active") // active, draft
+  effectiveDate     DateTime       @default(now())
+  laborCost         Float          @default(0)
+  overheadCost      Float          @default(0)
+  totalMaterialCost Float          @default(0)
+  totalCost         Float          @default(0)
+  estimatedTime     Int            @default(0)
+  components        String         @default("[]") // JSON array of components
+  notes             String         @default("")
+  thumbnail         String         @default("") // Product thumbnail image URL or data URL
+  instructions      String         @default("") // Product instructions file URL or data URL
   ownerId           String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([productSku])
   @@index([status])
   @@index([ownerId])
+  @@index([inventoryItemId])
 }
 
 model ProductionOrder {
@@ -459,7 +465,7 @@ model ProductionOrder {
   totalCost        Float     @default(0)
   notes            String    @default("")
   workOrderNumber  String    @default("") // Auto-generated work order number (WO0001, WO0002, etc.)
-  clientId         String?   // Client allocation - null means allocated to stock
+  clientId         String? // Client allocation - null means allocated to stock
   allocationType   String    @default("stock") // "client" or "stock"
   createdBy        String    @default("")
   ownerId          String?
@@ -607,10 +613,10 @@ model Session {
   userId       String
   user         User     @relation(fields: [userId], references: [id])
   token        String   @unique
-  deviceInfo   String?  // Device type, browser, OS info
+  deviceInfo   String? // Device type, browser, OS info
   ipAddress    String?
   userAgent    String?
-  location     String?  // IP-based location
+  location     String? // IP-based location
   lastActiveAt DateTime @default(now())
   createdAt    DateTime @default(now())
   expiresAt    DateTime
@@ -625,8 +631,8 @@ model TwoFactor {
   id          String   @id @default(cuid())
   userId      String   @unique
   user        User     @relation(fields: [userId], references: [id])
-  secret      String   // TOTP secret
-  backupCodes String   // JSON array of backup codes
+  secret      String // TOTP secret
+  backupCodes String // JSON array of backup codes
   enabled     Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -636,14 +642,14 @@ model TwoFactor {
 
 // Security Events - Audit log for security-related events
 model SecurityEvent {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  eventType   String   // login_success, login_failed, 2fa_enabled, password_changed, session_revoked, etc.
-  ipAddress   String?
-  userAgent   String?
-  details     String?  // JSON string with additional details
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  eventType String // login_success, login_failed, 2fa_enabled, password_changed, session_revoked, etc.
+  ipAddress String?
+  userAgent String?
+  details   String? // JSON string with additional details
+  createdAt DateTime @default(now())
 
   @@index([userId])
   @@index([eventType])
@@ -659,5 +665,39 @@ model PasswordHistory {
   createdAt    DateTime @default(now())
 
   @@index([userId])
+  @@index([createdAt])
+}
+
+// Field Agent Job Cards
+model JobCard {
+  id               String    @id @default(cuid())
+  jobCardNumber    String    @unique // Auto-generated: JC0001, JC0002, etc.
+  agentName        String    @default("") // Name of agent filling out the form
+  otherTechnicians String    @default("[]") // JSON array of technician names
+  clientId         String? // Reference to client
+  clientName       String    @default("") // Client name
+  siteId           String    @default("") // Site/location ID
+  siteName         String    @default("") // Site name
+  location         String    @default("") // Specific location details
+  timeOfDeparture  DateTime? // When agent left
+  timeOfArrival    DateTime? // When agent arrived
+  vehicleUsed      String    @default("") // Vehicle information
+  kmReadingBefore  Float     @default(0) // Odometer reading before
+  kmReadingAfter   Float     @default(0) // Odometer reading after
+  travelKilometers Float     @default(0) // Calculated distance
+  reasonForVisit   String    @default("") // Why requested to come out
+  diagnosis        String    @default("") // Notes and comments about diagnosis
+  otherComments    String    @default("") // Additional comments
+  photos           String    @default("[]") // JSON array of photo URLs
+  status           String    @default("draft") // draft, submitted, completed
+  submittedAt      DateTime?
+  completedAt      DateTime?
+  ownerId          String? // User who created the job card
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([ownerId])
+  @@index([status])
   @@index([createdAt])
 }

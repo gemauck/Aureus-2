@@ -49,6 +49,7 @@
         './src/components/teams/ChecklistModal.jsx',
         './src/components/teams/NoticeModal.jsx',
         './src/components/teams/WorkflowExecutionModal.jsx',
+        './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
         './src/components/teams/Teams.jsx',
         './src/components/teams/TeamsSimple.jsx',

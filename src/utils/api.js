@@ -406,6 +406,32 @@ const api = {
     })
     return res
   },
+
+  // Job Cards
+  async getJobCards() {
+    const res = await request('/jobcards')
+    return res
+  },
+
+  async getJobCard(id) {
+    const res = await request(`/jobcards/${id}`)
+    return res
+  },
+
+  async createJobCard(jobCardData) {
+    const res = await request('/jobcards', { method: 'POST', body: JSON.stringify(jobCardData) })
+    return res
+  },
+
+  async updateJobCard(id, jobCardData) {
+    const res = await request(`/jobcards/${id}`, { method: 'PATCH', body: JSON.stringify(jobCardData) })
+    return res
+  },
+
+  async deleteJobCard(id) {
+    const res = await request(`/jobcards/${id}`, { method: 'DELETE' })
+    return res
+  },
 }
 
 // Expose globally for prototype
