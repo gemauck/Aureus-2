@@ -994,46 +994,71 @@ async function handler(req, res) {
         const orderStatus = body.status || 'requested'
         
         // Allocate stock if BOM is provided and status is 'requested'
+        // WRAPPED IN TRANSACTION to ensure atomicity (allocation + order creation)
         console.log(`📦 Stock allocation check: bomId=${body.bomId}, status=${orderStatus}`)
-        if (body.bomId && orderStatus === 'requested') {
-          const bom = await prisma.bOM.findUnique({ where: { id: body.bomId } })
-          console.log(`📦 BOM found:`, bom ? `Yes (${bom.id})` : 'No')
-          if (bom) {
+        
+        const order = await prisma.$transaction(async (tx) => {
+          // First, allocate stock if needed
+          if (body.bomId && orderStatus === 'requested') {
+            const bom = await tx.bOM.findUnique({ where: { id: body.bomId } })
+            console.log(`📦 BOM found:`, bom ? `Yes (${bom.id})` : 'No')
+            if (!bom) {
+              throw new Error(`BOM not found: ${body.bomId}`)
+            }
+            
             const components = parseJson(bom.components, [])
             console.log(`📦 BOM has ${components.length} components`)
             if (components.length === 0) {
-              console.log(`⚠️ BOM ${body.bomId} has no components - skipping allocation`)
+              throw new Error(`BOM ${body.bomId} has no components`)
             }
+            
+            // Validate all components before allocating (fail fast)
+            const componentChecks = []
             for (const component of components) {
               console.log(`📦 Processing component:`, { sku: component.sku, quantity: component.quantity, name: component.name })
               if (component.sku && component.quantity) {
                 const requiredQty = parseFloat(component.quantity) * orderQuantity
+                if (requiredQty <= 0) {
+                  throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
+                }
+                
                 console.log(`📦 Looking for inventory item with SKU: ${component.sku}, required: ${requiredQty}`)
-                const inventoryItem = await prisma.inventoryItem.findFirst({
+                const inventoryItem = await tx.inventoryItem.findFirst({
                   where: { sku: component.sku }
                 })
-                console.log(`📦 Inventory item found:`, inventoryItem ? `Yes (qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})` : 'No')
-                if (inventoryItem) {
-                  const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
-                  if (availableQty < requiredQty) {
-                    return badRequest(res, `Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`)
-                  }
-                  // Allocate stock (reserve but don't deduct yet)
-                  await prisma.inventoryItem.update({
-                    where: { id: inventoryItem.id },
-                    data: {
-                      allocatedQuantity: (inventoryItem.allocatedQuantity || 0) + requiredQty
-                    }
-                  })
-                  console.log(`📦 Allocated ${requiredQty} of ${component.sku} for work order`)
+                
+                if (!inventoryItem) {
+                  throw new Error(`Inventory item not found for SKU: ${component.sku}`)
                 }
+                
+                console.log(`📦 Inventory item found: Yes (qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
+                const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
+                if (availableQty < requiredQty) {
+                  throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${availableQty}, Required: ${requiredQty}`)
+                }
+                
+                componentChecks.push({ inventoryItem, requiredQty, component })
               }
             }
+            
+            // Allocate all components atomically
+            await Promise.all(
+              componentChecks.map(({ inventoryItem, requiredQty }) =>
+                tx.inventoryItem.update({
+                  where: { id: inventoryItem.id },
+                  data: {
+                    allocatedQuantity: { increment: requiredQty }
+                  }
+                })
+              )
+            )
+            
+            console.log(`📦 Allocated stock for ${componentChecks.length} components`)
           }
-        }
-        
-        const order = await prisma.productionOrder.create({
-          data: {
+          
+          // Create order (will rollback allocations if this fails)
+          return await tx.productionOrder.create({
+            data: {
             bomId: body.bomId || '',
             productSku: body.productSku,
             productName: body.productName,
@@ -1052,7 +1077,8 @@ async function handler(req, res) {
             allocationType: body.allocationType || 'stock',
             createdBy: body.createdBy || req.user?.name || 'System',
             ownerId: null
-          }
+            }
+          })
         })
         
         console.log('✅ Created production order:', order.id)
@@ -1107,88 +1133,153 @@ async function handler(req, res) {
         const newStatus = String(body.status || '').trim()
         console.log(`🔄 Status change check: "${oldStatus}" -> "${newStatus}"`)
         console.log(`🔍 Order ID: ${id}, BOM ID: ${existingOrder.bomId || 'none'}`)
+        
+        // Handle status change from 'requested' to 'in_production' - deduct stock
+        // WRAPPED IN TRANSACTION to ensure atomicity (deduction + movement + status update)
         if (newStatus === 'in_production' && oldStatus === 'requested') {
           console.log(`✅ Triggering stock deduction for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
-          if (existingOrder.bomId) {
-            console.log(`📉 Looking up BOM: ${existingOrder.bomId}`)
-            const bom = await prisma.bOM.findUnique({ where: { id: existingOrder.bomId } })
-            console.log(`📉 BOM found:`, bom ? `Yes` : 'No')
-            if (bom) {
-              const components = parseJson(bom.components, [])
-              console.log(`📉 BOM has ${components.length} components to process`)
-              if (components.length === 0) {
-                console.log(`⚠️ BOM ${existingOrder.bomId} has no components - cannot deduct stock`)
-              }
-              const now = new Date()
-              
-              // Generate next movement number
-              const lastMovement = await prisma.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
-              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
-                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
-                : 1
-              
-              for (const component of components) {
-                console.log(`📉 Processing component for deduction:`, { sku: component.sku, quantity: component.quantity, name: component.name })
-                if (component.sku && component.quantity) {
-                  const requiredQty = parseFloat(component.quantity) * existingOrder.quantity
-                  console.log(`📉 Required quantity: ${requiredQty} (component qty: ${component.quantity} × order qty: ${existingOrder.quantity})`)
-                  const inventoryItem = await prisma.inventoryItem.findFirst({
+          
+          // IDEMPOTENCY CHECK: Verify status hasn't changed (prevent double deduction)
+          if (existingOrder.status !== 'requested') {
+            return badRequest(res, `Order status is already ${existingOrder.status}, cannot process stock deduction`)
+          }
+          
+          if (!existingOrder.bomId) {
+            return badRequest(res, 'Order has no BOM - cannot deduct stock')
+          }
+          
+          await prisma.$transaction(async (tx) => {
+            // Re-fetch order within transaction for consistency
+            const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
+            if (!orderInTx || orderInTx.status !== 'requested') {
+              throw new Error(`Order ${id} not found or already processed (status: ${orderInTx?.status || 'unknown'})`)
+            }
+            
+            console.log(`📉 Looking up BOM: ${orderInTx.bomId}`)
+            const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+            if (!bom) {
+              throw new Error(`BOM not found: ${orderInTx.bomId}`)
+            }
+            
+            console.log(`📉 BOM found: Yes`)
+            const components = parseJson(bom.components, [])
+            console.log(`📉 BOM has ${components.length} components to process`)
+            
+            if (components.length === 0) {
+              throw new Error(`BOM ${orderInTx.bomId} has no components - cannot deduct stock`)
+            }
+            
+            const now = new Date()
+            
+            // Generate next movement number (within transaction)
+            const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+            let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+              ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+              : 1
+            
+            // Process all components atomically
+            await Promise.all(
+              components
+                .filter(c => c.sku && c.quantity)
+                .map(async (component) => {
+                  const requiredQty = parseFloat(component.quantity) * orderInTx.quantity
+                  if (requiredQty <= 0) {
+                    throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
+                  }
+                  
+                  console.log(`📉 Processing component for deduction:`, { sku: component.sku, quantity: component.quantity, name: component.name })
+                  console.log(`📉 Required quantity: ${requiredQty} (component qty: ${component.quantity} × order qty: ${orderInTx.quantity})`)
+                  
+                  const inventoryItem = await tx.inventoryItem.findFirst({
                     where: { sku: component.sku }
                   })
-                  console.log(`📉 Inventory item found:`, inventoryItem ? `Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})` : `No item with SKU ${component.sku}`)
-                  if (inventoryItem) {
-                    // Verify allocation exists and sufficient stock
-                    const allocatedQty = inventoryItem.allocatedQuantity || 0
-                    if (allocatedQty < requiredQty) {
-                      return badRequest(res, `Allocation error for ${component.name || component.sku}. Allocated: ${allocatedQty}, Required: ${requiredQty}`)
+                  
+                  if (!inventoryItem) {
+                    throw new Error(`Inventory item not found for SKU: ${component.sku}`)
+                  }
+                  
+                  console.log(`📉 Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
+                  
+                  // Verify allocation exists and sufficient stock
+                  const allocatedQty = inventoryItem.allocatedQuantity || 0
+                  if (allocatedQty < requiredQty) {
+                    throw new Error(`Allocation error for ${component.name || component.sku}. Allocated: ${allocatedQty}, Required: ${requiredQty}`)
+                  }
+                  if ((inventoryItem.quantity || 0) < requiredQty) {
+                    throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${inventoryItem.quantity}, Required: ${requiredQty}`)
+                  }
+                  
+                  // Use atomic update with optimistic locking (decrement operations)
+                  const result = await tx.inventoryItem.updateMany({
+                    where: {
+                      id: inventoryItem.id,
+                      quantity: { gte: requiredQty },
+                      allocatedQuantity: { gte: requiredQty }
+                    },
+                    data: {
+                      quantity: { decrement: requiredQty },
+                      allocatedQuantity: { decrement: requiredQty }
                     }
-                    if ((inventoryItem.quantity || 0) < requiredQty) {
-                      return badRequest(res, `Insufficient stock for ${component.name || component.sku}. Available: ${inventoryItem.quantity}, Required: ${requiredQty}`)
-                    }
-                    
-                    // Deduct stock and reduce allocation
-                    const newQty = (inventoryItem.quantity || 0) - requiredQty
-                    const newAllocatedQty = allocatedQty - requiredQty
-                    const totalValue = newQty * (inventoryItem.unitCost || 0)
-                    const reorderPoint = inventoryItem.reorderPoint || 0
-                    // Use available quantity (quantity - allocatedQuantity) for status
+                  })
+                  
+                  if (result.count === 0) {
+                    // Re-fetch to see current state
+                    const current = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
+                    throw new Error(`Cannot deduct ${requiredQty} of ${component.sku}. Current qty: ${current?.quantity || 0}, allocated: ${current?.allocatedQuantity || 0}`)
+                  }
+                  
+                  // Update status based on new available quantity
+                  const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
+                  if (updated) {
+                    const newQty = updated.quantity
+                    const newAllocatedQty = updated.allocatedQuantity
                     const availableQty = newQty - newAllocatedQty
+                    const reorderPoint = updated.reorderPoint || 0
                     const status = availableQty > reorderPoint ? 'in_stock' : (availableQty > 0 ? 'low_stock' : 'out_of_stock')
                     
-                    await prisma.inventoryItem.update({
-                      where: { id: inventoryItem.id },
+                    await tx.inventoryItem.update({
+                      where: { id: updated.id },
                       data: {
-                        quantity: newQty,
-                        allocatedQuantity: newAllocatedQty,
-                        totalValue: totalValue,
+                        totalValue: newQty * (updated.unitCost || 0),
                         status: status
                       }
                     })
-                    console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id} (allocation reduced)`)
-                    
-                    // Create stock movement record
-                    await prisma.stockMovement.create({
-                      data: {
-                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
-                        date: now,
-                        type: 'consumption',
-                        itemName: component.name || component.sku,
-                        sku: component.sku,
-                        quantity: requiredQty,
-                        fromLocation: '',
-                        toLocation: '',
-                        reference: existingOrder.workOrderNumber || id,
-                        performedBy: req.user?.name || 'System',
-                        notes: `Production consumption for ${existingOrder.productName} (${existingOrder.workOrderNumber || id})`
-                      }
-                    })
                   }
-                }
-              }
-            }
-          }
+                  
+                  console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id}`)
+                  
+                  // Create stock movement record
+                  await tx.stockMovement.create({
+                    data: {
+                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                      date: now,
+                      type: 'consumption',
+                      itemName: component.name || component.sku,
+                      sku: component.sku,
+                      quantity: requiredQty,
+                      fromLocation: '',
+                      toLocation: '',
+                      reference: orderInTx.workOrderNumber || id,
+                      performedBy: req.user?.name || 'System',
+                      notes: `Production consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
+                    }
+                  })
+                })
+            )
+            
+            // Update order status (final step - ensures everything else succeeded)
+            await tx.productionOrder.update({
+              where: { id },
+              data: { status: 'in_production' }
+            })
+            
+            console.log(`✅ Stock deduction completed for work order ${id}`)
+          }, {
+            timeout: 30000 // 30 second timeout for transaction
+          })
         }
         
+        // Update order with other fields (status already updated in transaction above if applicable)
         const order = await prisma.productionOrder.update({
           where: { id },
           data: updateData

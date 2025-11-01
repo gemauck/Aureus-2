@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Remember Me Functionality Test</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            border-left: 4px solid #3b82f6;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .pass {
+            background: #d1fae5;
+            color: #065f46;
+        }
+        .fail {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        code {
+            background: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="password"] {
+            width: 300px;
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Remember Me Functionality - Browser Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: localStorage Functions</h2>
+        <div id="storage-test-results"></div>
+        <button onclick="testStorage()">Run Storage Test</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 2: Form Attributes Verification</h2>
+        <div id="form-test-results"></div>
+        <button onclick="testFormAttributes()">Check Form Attributes</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 3: Browser Password Manager Detection</h2>
+        <div id="browser-test-results"></div>
+        <p class="info">
+            <strong>Manual Check:</strong> Look at the email input field below. 
+            If you've saved passwords before, you should see autocomplete suggestions.
+        </p>
+        <form id="test-form">
+            <label for="test-email">Email:</label><br>
+            <input 
+                type="email" 
+                id="test-email" 
+                name="email" 
+                autocomplete="username email"
+                placeholder="you@example.com"
+            /><br><br>
+            
+            <label for="test-password">Password:</label><br>
+            <input 
+                type="password" 
+                id="test-password" 
+                name="password" 
+                autocomplete="current-password"
+                placeholder="Enter password"
+            /><br><br>
+            
+            <button type="submit">Test Submit</button>
+        </form>
+    </div>
+    
+    <div class="test-section">
+        <h2>Test 4: Expected Behavior Checklist</h2>
+        <ul>
+            <li>✅ Email field should auto-focus when page loads</li>
+            <li>✅ Email field should show autocomplete dropdown (if passwords saved)</li>
+            <li>✅ Password field should show browser password manager icon</li>
+            <li>✅ After login, browser should prompt to save password</li>
+            <li>✅ Next visit: Email should be pre-filled automatically</li>
+            <li>✅ Password manager extensions should detect the form</li>
+        </ul>
+    </div>
+
+    <script>
+        // Mock storage for testing
+        const mockStorage = {
+            getLastLoginEmail: () => {
+                try {
+                    return localStorage.getItem('abcotronics_last_login_email') || null;
+                } catch (e) {
+                    return null;
+                }
+            },
+            setLastLoginEmail: (email) => {
+                try {
+                    if (email) {
+                        localStorage.setItem('abcotronics_last_login_email', email);
+                    } else {
+                        localStorage.removeItem('abcotronics_last_login_email');
+                    }
+                } catch (e) {
+                    console.error('Error:', e);
+                }
+            }
+        };
+
+        function testStorage() {
+            const results = document.getElementById('storage-test-results');
+            results.innerHTML = '<p>Running tests...</p>';
+            
+            let html = '';
+            
+            // Test 1: Save email
+            mockStorage.setLastLoginEmail('test@example.com');
+            const saved = mockStorage.getLastLoginEmail();
+            if (saved === 'test@example.com') {
+                html += '<div class="test-result pass">✅ Email saved successfully</div>';
+            } else {
+                html += '<div class="test-result fail">❌ Email save failed</div>';
+            }
+            
+            // Test 2: Retrieve email
+            const retrieved = mockStorage.getLastLoginEmail();
+            if (retrieved === 'test@example.com') {
+                html += '<div class="test-result pass">✅ Email retrieved successfully</div>';
+            } else {
+                html += '<div class="test-result fail">❌ Email retrieval failed</div>';
+            }
+            
+            // Test 3: Clear email
+            mockStorage.setLastLoginEmail(null);
+            const cleared = mockStorage.getLastLoginEmail();
+            if (cleared === null) {
+                html += '<div class="test-result pass">✅ Email cleared successfully</div>';
+            } else {
+                html += '<div class="test-result fail">❌ Email clear failed</div>';
+            }
+            
+            results.innerHTML = html;
+        }
+
+        function testFormAttributes() {
+            const results = document.getElementById('form-test-results');
+            const emailInput = document.getElementById('test-email');
+            const passwordInput = document.getElementById('test-password');
+            
+            const checks = [
+                {
+                    name: 'Email has type="email"',
+                    pass: emailInput.type === 'email'
+                },
+                {
+                    name: 'Email has name="email"',
+                    pass: emailInput.name === 'email'
+                },
+                {
+                    name: 'Email has autocomplete="username email"',
+                    pass: emailInput.autocomplete === 'username email' || emailInput.getAttribute('autocomplete') === 'username email'
+                },
+                {
+                    name: 'Email has id="test-email"',
+                    pass: emailInput.id === 'test-email'
+                },
+                {
+                    name: 'Password has type="password"',
+                    pass: passwordInput.type === 'password'
+                },
+                {
+                    name: 'Password has name="password"',
+                    pass: passwordInput.name === 'password'
+                },
+                {
+                    name: 'Password has autocomplete="current-password"',
+                    pass: passwordInput.autocomplete === 'current-password' || passwordInput.getAttribute('autocomplete') === 'current-password'
+                },
+                {
+                    name: 'Password has id="test-password"',
+                    pass: passwordInput.id === 'test-password'
+                },
+                {
+                    name: 'Form has proper label associations',
+                    pass: document.querySelector('label[for="test-email"]') !== null && 
+                          document.querySelector('label[for="test-password"]') !== null
+                }
+            ];
+            
+            let html = '';
+            let allPassed = true;
+            checks.forEach(check => {
+                const status = check.pass ? 'pass' : 'fail';
+                const icon = check.pass ? '✅' : '❌';
+                html += `<div class="test-result ${status}">${icon} ${check.name}</div>`;
+                if (!check.pass) allPassed = false;
+            });
+            
+            if (allPassed) {
+                html += '<div class="test-result pass"><strong>✅ All form attributes are correct!</strong></div>';
+            }
+            
+            results.innerHTML = html;
+        }
+
+        // Auto-run form test on load
+        window.addEventListener('DOMContentLoaded', () => {
+            testFormAttributes();
+            
+            // Auto-focus email field
+            document.getElementById('test-email').focus();
+            
+            // Check for browser password manager
+            const browserCheck = document.getElementById('browser-test-results');
+            const hasAutocomplete = document.getElementById('test-password').hasAttribute('autocomplete');
+            const isHTTPS = window.location.protocol === 'https:';
+            
+            let browserHtml = '';
+            browserHtml += `<div class="test-result ${hasAutocomplete ? 'pass' : 'info'}">`;
+            browserHtml += `Autocomplete attribute: ${hasAutocomplete ? '✅ Present' : '⚠️ Missing'}`;
+            browserHtml += `</div>`;
+            browserHtml += `<div class="test-result ${isHTTPS ? 'pass' : 'info'}">`;
+            browserHtml += `HTTPS connection: ${isHTTPS ? '✅ Secure (required for password saving)' : '⚠️ Not HTTPS (password saving may be disabled)'}`;
+            browserHtml += `</div>`;
+            
+            browserCheck.innerHTML = browserHtml;
+        });
+
+        // Prevent form submission in test
+        document.getElementById('test-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            alert('Form submitted (test mode). In production, this would save credentials.');
+        });
+    </script>
+</body>
+</html>
+
