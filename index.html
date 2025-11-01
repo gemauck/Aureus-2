@@ -469,6 +469,9 @@
     
     <!-- Reports moved to lazy -->
     
+    <!-- Settings Portal - Load early since it's accessed from main navigation -->
+    <script defer src="./dist/src/components/settings/SettingsPortal.js"></script>
+    
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>
     
