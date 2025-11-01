@@ -1058,7 +1058,7 @@ async function handler(req, res) {
           
           // Create order (will rollback allocations if this fails)
           return await tx.productionOrder.create({
-            data: {
+          data: {
             bomId: body.bomId || '',
             productSku: body.productSku,
             productName: body.productName,
@@ -1077,7 +1077,7 @@ async function handler(req, res) {
             allocationType: body.allocationType || 'stock',
             createdBy: body.createdBy || req.user?.name || 'System',
             ownerId: null
-            }
+          }
           })
         })
         
@@ -1177,11 +1177,12 @@ async function handler(req, res) {
               ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
               : 1
             
-            // Process all components atomically
-            await Promise.all(
-              components
-                .filter(c => c.sku && c.quantity)
-                .map(async (component) => {
+            // Process all components sequentially to avoid transaction conflicts
+            // Sequential processing ensures one failure doesn't cause "transaction already closed" errors
+            const validComponents = components.filter(c => c.sku && c.quantity)
+            
+            for (const component of validComponents) {
+              try {
                   const requiredQty = parseFloat(component.quantity) * orderInTx.quantity
                   if (requiredQty <= 0) {
                     throw new Error(`Invalid quantity for component ${component.name || component.sku}: ${requiredQty}`)
@@ -1272,24 +1273,28 @@ async function handler(req, res) {
                   
                   console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id}`)
                   
-                  // Create stock movement record
-                  await tx.stockMovement.create({
-                    data: {
-                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
-                      date: now,
-                      type: 'consumption',
-                      itemName: component.name || component.sku,
-                      sku: component.sku,
-                      quantity: requiredQty,
-                      fromLocation: '',
-                      toLocation: '',
-                      reference: orderInTx.workOrderNumber || id,
-                      performedBy: req.user?.name || 'System',
-                      notes: `Production consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
-                    }
-                  })
+                // Create stock movement record
+                await tx.stockMovement.create({
+                  data: {
+                    movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                    date: now,
+                    type: 'consumption',
+                    itemName: component.name || component.sku,
+                    sku: component.sku,
+                    quantity: requiredQty,
+                    fromLocation: '',
+                    toLocation: '',
+                    reference: orderInTx.workOrderNumber || id,
+                    performedBy: req.user?.name || 'System',
+                    notes: `Production consumption for ${orderInTx.productName} (${orderInTx.workOrderNumber || id})`
+                  }
                 })
-            )
+              } catch (componentError) {
+                // Log the error and re-throw to rollback the entire transaction
+                console.error(`❌ Failed to process component ${component.sku}:`, componentError.message)
+                throw componentError
+              }
+            }
             
             // Update order status (final step - ensures everything else succeeded)
             await tx.productionOrder.update({
