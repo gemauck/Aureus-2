@@ -152,7 +152,12 @@ const MainLayout = () => {
         // Check if Clients component is available
         const checkClients = () => {
             const ClientsComponent = window.Clients || window.ClientsSimple;
-            if (ClientsComponent && typeof ClientsComponent === 'function') {
+            // Accept both regular functions and React.memo components
+            const isValidComponent = ClientsComponent && (
+                typeof ClientsComponent === 'function' || 
+                (typeof ClientsComponent === 'object' && ClientsComponent.$$typeof)
+            );
+            if (isValidComponent) {
                 if (!clientsComponentReady) {
                     console.log('✅ MainLayout: Clients component became available', ClientsComponent);
                     setClientsComponentReady(true);
