@@ -2864,91 +2864,103 @@ const Manufacturing = () => {
               {selectedItem && (
                 <div className="space-y-4">
                   {/* Product Thumbnail and Instructions Section */}
-                  {(selectedItem.thumbnail || selectedItem.instructions) && (
-                    <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
-                      {/* Thumbnail */}
-                      {selectedItem.thumbnail && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-2">Product Thumbnail</p>
-                          <div className="relative">
-                            <img 
-                              src={selectedItem.thumbnail} 
-                              alt={selectedItem.productName} 
-                              className="w-full max-w-xs h-48 object-contain border border-gray-200 rounded-lg bg-gray-50"
-                              onError={(e) => {
-                                e.target.style.display = 'none';
-                                if (e.target.nextSibling) {
-                                  e.target.nextSibling.style.display = 'flex';
-                                }
-                              }}
-                            />
-                            <div className="w-full max-w-xs h-48 border border-gray-200 rounded-lg bg-gray-50 hidden items-center justify-center text-gray-400">
-                              <div className="text-center">
-                                <i className="fas fa-image text-3xl mb-2"></i>
-                                <p className="text-xs">Image not available</p>
-                              </div>
+                  <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
+                    {/* Thumbnail */}
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Product Thumbnail</p>
+                      {selectedItem.thumbnail ? (
+                        <div className="relative">
+                          <img 
+                            src={selectedItem.thumbnail} 
+                            alt={selectedItem.productName} 
+                            className="w-full max-w-xs h-48 object-contain border border-gray-200 rounded-lg bg-gray-50"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              if (e.target.nextSibling) {
+                                e.target.nextSibling.style.display = 'flex';
+                              }
+                            }}
+                          />
+                          <div className="w-full max-w-xs h-48 border border-gray-200 rounded-lg bg-gray-50 hidden items-center justify-center text-gray-400">
+                            <div className="text-center">
+                              <i className="fas fa-image text-3xl mb-2"></i>
+                              <p className="text-xs">Image not available</p>
                             </div>
-                            <button
-                              onClick={() => {
-                                const img = new Image();
-                                img.src = selectedItem.thumbnail;
-                                const w = window.open();
-                                w.document.write(`<img src="${selectedItem.thumbnail}" style="max-width: 100%; height: auto;" />`);
-                              }}
-                              className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                              title="View full size"
-                            >
-                              <i className="fas fa-expand"></i>
-                              View Full Size
-                            </button>
                           </div>
+                          <button
+                            onClick={() => {
+                              const img = new Image();
+                              img.src = selectedItem.thumbnail;
+                              const w = window.open();
+                              w.document.write(`<img src="${selectedItem.thumbnail}" style="max-width: 100%; height: auto;" />`);
+                            }}
+                            className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                            title="View full size"
+                          >
+                            <i className="fas fa-expand"></i>
+                            View Full Size
+                          </button>
                         </div>
-                      )}
-                      
-                      {/* Instructions */}
-                      {selectedItem.instructions && (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-2">Product Instructions</p>
-                          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                            <div className="flex items-center gap-2 mb-2">
-                              <i className="fas fa-file-alt text-blue-600"></i>
-                              <span className="text-sm font-medium text-gray-900">Instructions Available</span>
-                            </div>
-                            {selectedItem.instructions.startsWith('data:') ? (
-                              <div className="space-y-2">
-                                <p className="text-xs text-gray-600">File uploaded as base64</p>
-                                <button
-                                  onClick={() => {
-                                    // Convert data URL to blob and download
-                                    const link = document.createElement('a');
-                                    link.href = selectedItem.instructions;
-                                    link.download = `${selectedItem.productSku || 'bom'}_instructions.pdf`;
-                                    document.body.appendChild(link);
-                                    link.click();
-                                    document.body.removeChild(link);
-                                  }}
-                                  className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-                                >
-                                  <i className="fas fa-download"></i>
-                                  Download Instructions
-                                </button>
-                              </div>
-                            ) : (
-                              <a
-                                href={selectedItem.instructions}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-                              >
-                                <i className="fas fa-external-link-alt"></i>
-                                Open Instructions
-                              </a>
-                            )}
+                      ) : (
+                        <div className="w-full max-w-xs h-48 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400">
+                          <div className="text-center">
+                            <i className="fas fa-image text-3xl mb-2"></i>
+                            <p className="text-xs">No thumbnail available</p>
+                            <p className="text-xs mt-1 text-gray-500">Edit BOM to add one</p>
                           </div>
                         </div>
                       )}
                     </div>
-                  )}
+                    
+                    {/* Instructions */}
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Product Instructions</p>
+                      {selectedItem.instructions ? (
+                        <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center gap-2 mb-2">
+                            <i className="fas fa-file-alt text-blue-600"></i>
+                            <span className="text-sm font-medium text-gray-900">Instructions Available</span>
+                          </div>
+                          {selectedItem.instructions.startsWith('data:') ? (
+                            <div className="space-y-2">
+                              <p className="text-xs text-gray-600">File uploaded as base64</p>
+                              <button
+                                onClick={() => {
+                                  // Convert data URL to blob and download
+                                  const link = document.createElement('a');
+                                  link.href = selectedItem.instructions;
+                                  link.download = `${selectedItem.productSku || 'bom'}_instructions.pdf`;
+                                  document.body.appendChild(link);
+                                  link.click();
+                                  document.body.removeChild(link);
+                                }}
+                                className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                              >
+                                <i className="fas fa-download"></i>
+                                Download Instructions
+                              </button>
+                            </div>
+                          ) : (
+                            <a
+                              href={selectedItem.instructions}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                            >
+                              <i className="fas fa-external-link-alt"></i>
+                              Open Instructions
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 bg-gray-50 text-center">
+                          <i className="fas fa-file-alt text-3xl text-gray-400 mb-2"></i>
+                          <p className="text-xs text-gray-500">No instructions available</p>
+                          <p className="text-xs mt-1 text-gray-400">Edit BOM to add instructions</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
