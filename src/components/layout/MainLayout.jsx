@@ -23,10 +23,11 @@ const MainLayout = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     
-    // Track mobile state
+    // Track mobile state - use 1024px as breakpoint to show hamburger menu on tablets and below
     React.useEffect(() => {
         const checkMobile = () => {
-            setIsMobile(window.innerWidth < 1024);
+            const width = window.innerWidth;
+            setIsMobile(width < 1024); // Show hamburger menu below 1024px (includes tablets)
         };
         checkMobile();
         window.addEventListener('resize', checkMobile);
@@ -92,12 +93,16 @@ const MainLayout = () => {
         window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
     }, []);
 
-    // Auto-close sidebar on mobile when page changes
+    // Auto-close sidebar on mobile/tablet when page changes
     React.useEffect(() => {
         const handleResize = () => {
             if (window.innerWidth < 1024) {
-                setSidebarOpen(false);
+                // On mobile/tablet, sidebar is controlled by mobileMenuOpen
+                if (!mobileMenuOpen) {
+                    setSidebarOpen(false);
+                }
             } else {
+                // On desktop (>= 1024px), default to open
                 setSidebarOpen(true);
             }
         };
@@ -105,7 +110,7 @@ const MainLayout = () => {
         handleResize(); // Set initial state
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [mobileMenuOpen]);
 
     // Close mobile menu when page changes
     React.useEffect(() => {
@@ -440,10 +445,13 @@ const MainLayout = () => {
     return (
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Mobile Overlay */}
-            {mobileMenuOpen && (
+            {mobileMenuOpen && isMobile && (
                 <div 
                     className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden sidebar-overlay"
-                    onClick={() => setMobileMenuOpen(false)}
+                    onClick={() => {
+                        setMobileMenuOpen(false);
+                        setSidebarOpen(false);
+                    }}
                 ></div>
             )}
 
@@ -451,9 +459,9 @@ const MainLayout = () => {
             <div className={`
                 ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
-                border-r transition-all duration-300 flex flex-col
-                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open' : ''}
-                ${!mobileMenuOpen && isMobile ? 'hidden' : ''}
+                border-r transition-all duration-300 flex-col
+                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open flex' : ''}
+                ${!mobileMenuOpen && isMobile ? 'hidden' : 'flex'}
                 lg:flex lg:relative lg:z-auto
             `}>
                 {/* Logo */}
@@ -503,13 +511,13 @@ const MainLayout = () => {
                         <div className="w-8 h-8 lg:w-6 lg:h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm lg:text-xs">
                             {user?.name?.charAt(0) || 'U'}
                         </div>
-                        {(sidebarOpen || (mobileMenuOpen && window.innerWidth < 1024)) && (
-                            <div className="ml-3 lg:ml-2 flex-1 min-w-0">
-                                <p className={`text-base lg:text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
-                                <p className={`text-sm lg:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
+                        {(sidebarOpen || (mobileMenuOpen && isMobile)) && (
+                            <div className="ml-3 md:ml-2 flex-1 min-w-0">
+                                <p className={`text-base md:text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'} truncate`}>{user?.name}</p>
+                                <p className={`text-sm md:text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} truncate`}>{user?.role}</p>
                             </div>
                         )}
-                        {(sidebarOpen || (mobileMenuOpen && window.innerWidth < 1024)) && (
+                        {(sidebarOpen || (mobileMenuOpen && isMobile)) && (
                             <button 
                                 onClick={logout}
                                 className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
@@ -527,13 +535,22 @@ const MainLayout = () => {
                 {/* Header - Fixed on mobile, static on desktop */}
                 <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
                     <div className="flex items-center flex-1">
+                        {/* Hamburger Menu Button - Show when sidebar is hidden on smaller screens (< 1024px) */}
                         <button 
                             onClick={() => {
-                                console.log('🍔 Hamburger clicked, mobileMenuOpen:', mobileMenuOpen);
-                                setMobileMenuOpen(!mobileMenuOpen);
+                                console.log('🍔 Hamburger clicked, mobileMenuOpen:', mobileMenuOpen, 'isMobile:', isMobile, 'window.innerWidth:', window.innerWidth);
+                                const newState = !mobileMenuOpen;
+                                setMobileMenuOpen(newState);
+                                // Toggle sidebar on mobile/tablet
+                                if (isMobile) {
+                                    setSidebarOpen(newState);
+                                }
                             }}
-                            className={`flex lg:hidden items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn`}
-                            aria-label="Toggle menu"
+                            className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50 lg:hidden`}
+                            aria-label="Toggle sidebar menu"
+                            style={{ 
+                                display: isMobile ? 'flex' : 'none'
+                            }}
                         >
                             <i className="fas fa-bars text-xl"></i>
                         </button>
