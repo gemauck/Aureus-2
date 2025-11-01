@@ -347,6 +347,21 @@ const storage = {
         localStorage.setItem('abcotronics_payroll_records', JSON.stringify(records));
     },
 
+    // Job Cards
+    getJobCards: () => {
+        try {
+            const jobCards = localStorage.getItem('abcotronics_job_cards');
+            return jobCards ? JSON.parse(jobCards) : null;
+        } catch (e) {
+            console.error('Error loading job cards:', e);
+            return null;
+        }
+    },
+    
+    setJobCards: (jobCards) => {
+        localStorage.setItem('abcotronics_job_cards', JSON.stringify(jobCards));
+    },
+
     // QuickBooks Integration
     getQBConnection: () => {
         try {

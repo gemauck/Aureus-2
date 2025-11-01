@@ -300,6 +300,17 @@
         }
     },
 
+    // Job Cards (localStorage)
+    async getJobCards() {
+        return safeStorageCall(window.storage, 'getJobCards', []);
+    },
+
+    async setJobCards(jobCards) {
+        if (typeof window.storage?.setJobCards === 'function') {
+            window.storage.setJobCards(jobCards);
+        }
+    },
+
     // HR - Employees (API with localStorage fallback)
     async getEmployees() {
         if (window.api?.getEmployees) {

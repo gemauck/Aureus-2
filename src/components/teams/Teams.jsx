@@ -6,6 +6,7 @@ const WorkflowModal = window.WorkflowModal;
 const ChecklistModal = window.ChecklistModal;
 const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
+const JobCardModal = window.JobCardModal;
 
 // Team definitions - defined outside component to avoid recreation on every render
 const TEAMS = [
@@ -88,6 +89,7 @@ const Teams = () => {
     const [showNoticeModal, setShowNoticeModal] = useState(false);
     const [showWorkflowExecutionModal, setShowWorkflowExecutionModal] = useState(false);
     const [showDocumentViewModal, setShowDocumentViewModal] = useState(false);
+    const [showJobCardModal, setShowJobCardModal] = useState(false);
     
     // Data states
     const [documents, setDocuments] = useState([]);
@@ -95,6 +97,8 @@ const Teams = () => {
     const [checklists, setChecklists] = useState([]);
     const [notices, setNotices] = useState([]);
     const [workflowExecutions, setWorkflowExecutions] = useState([]);
+    const [jobCards, setJobCards] = useState([]);
+    const [clients, setClients] = useState([]);
     
     // Edit states
     const [editingDocument, setEditingDocument] = useState(null);
@@ -103,6 +107,7 @@ const Teams = () => {
     const [editingNotice, setEditingNotice] = useState(null);
     const [executingWorkflow, setExecutingWorkflow] = useState(null);
     const [viewingDocument, setViewingDocument] = useState(null);
+    const [editingJobCard, setEditingJobCard] = useState(null);
 
     // Check modal components on mount only
     useEffect(() => {
@@ -120,11 +125,12 @@ const Teams = () => {
             try {
                 console.log('🔄 Teams: Loading data from data service');
                 
-                const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
+                const [savedDocuments, savedWorkflows, savedChecklists, savedNotices, savedJobCards] = await Promise.all([
                     window.dataService?.getTeamDocuments?.() || [],
                     window.dataService?.getTeamWorkflows?.() || [],
                     window.dataService?.getTeamChecklists?.() || [],
-                    window.dataService?.getTeamNotices?.() || []
+                    window.dataService?.getTeamNotices?.() || [],
+                    window.dataService?.getJobCards?.() || []
                 ]);
                 
                 const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
@@ -134,7 +140,8 @@ const Teams = () => {
                     workflows: savedWorkflows.length,
                     checklists: savedChecklists.length,
                     notices: savedNotices.length,
-                    executions: savedExecutions.length
+                    executions: savedExecutions.length,
+                    jobCards: savedJobCards.length
                 });
 
                 setDocuments(savedDocuments);
@@ -142,6 +149,15 @@ const Teams = () => {
                 setChecklists(savedChecklists);
                 setNotices(savedNotices);
                 setWorkflowExecutions(savedExecutions);
+                setJobCards(savedJobCards);
+                
+                // Load clients for job cards
+                try {
+                    const clientsData = await window.dataService?.getClients?.() || [];
+                    setClients(clientsData);
+                } catch (error) {
+                    console.error('Error loading clients:', error);
+                }
                 
                 // Delay rendering significantly to prevent renderer crash
                 setTimeout(() => setIsReady(true), 500);
@@ -150,7 +166,7 @@ const Teams = () => {
                 setIsReady(true); // Show error state
             }
         };
-
+        
         loadData();
     }, []);
 
@@ -233,6 +249,22 @@ const Teams = () => {
             )
         );
     }, [filteredNotices, searchTerm]);
+
+    // Filter job cards for technical team only
+    const filteredJobCards = useMemo(() => {
+        return selectedTeam && selectedTeam.id === 'technical'
+            ? jobCards
+            : selectedTeam ? [] : jobCards;
+    }, [selectedTeam, jobCards]);
+
+    const displayJobCards = useMemo(() => {
+        if (!searchTerm) return filteredJobCards;
+        return filteredJobCards.filter(item => 
+            ['jobCardNumber', 'agentName', 'clientName', 'siteName', 'reasonForVisit', 'diagnosis'].some(field => 
+                item[field]?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
+        );
+    }, [filteredJobCards, searchTerm]);
 
     // Recent activity across all teams - memoized to avoid recalculation on every render
     const recentActivity = useMemo(() => {
@@ -325,7 +357,50 @@ const Teams = () => {
         localStorage.setItem('abcotronics_workflow_executions', JSON.stringify(updatedExecutions));
     };
 
+    const handleSaveJobCard = async (jobCardData) => {
+        const existingIndex = jobCards.findIndex(j => j.id === jobCardData.id);
+        let updatedJobCards;
+        
+        if (existingIndex >= 0) {
+            updatedJobCards = [...jobCards];
+            updatedJobCards[existingIndex] = jobCardData;
+        } else {
+            updatedJobCards = [...jobCards, jobCardData];
+        }
+        
+        setJobCards(updatedJobCards);
+        await window.dataService.setJobCards(updatedJobCards);
+        setEditingJobCard(null);
+        
+        // Try to sync with API if available
+        try {
+            if (window.api && existingIndex >= 0 && window.api.updateJobCard) {
+                await window.api.updateJobCard(jobCardData.id, jobCardData);
+            } else if (window.api && existingIndex < 0 && window.api.createJobCard) {
+                await window.api.createJobCard(jobCardData);
+            }
+        } catch (error) {
+            console.warn('API sync failed for job card:', error);
+        }
+    };
+
     // Delete handlers
+    const handleDeleteJobCard = async (id) => {
+        if (confirm('Are you sure you want to delete this job card?')) {
+            const updatedJobCards = jobCards.filter(j => j.id !== id);
+            setJobCards(updatedJobCards);
+            await window.dataService.setJobCards(updatedJobCards);
+            
+            // Try to delete from API
+            try {
+                if (window.api?.deleteJobCard) {
+                    await window.api.deleteJobCard(id);
+                }
+            } catch (error) {
+                console.warn('API delete failed for job card:', error);
+            }
+        }
+    };
     const handleDeleteDocument = async (id) => {
         if (confirm('Are you sure you want to delete this document?')) {
             const updatedDocuments = documents.filter(d => d.id !== id);
@@ -469,6 +544,19 @@ const Teams = () => {
                                 <i className="fas fa-bullhorn mr-1"></i>
                                 Notices
                             </button>
+                            {selectedTeam && selectedTeam.id === 'technical' && (
+                                <button
+                                    onClick={() => setActiveTab('jobcards')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                        activeTab === 'jobcards'
+                                            ? 'bg-primary-600 text-white'
+											: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                                    }`}
+                                >
+                                    <i className="fas fa-clipboard-list mr-1"></i>
+                                    Job Cards
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -683,6 +771,19 @@ const Teams = () => {
                             <i className="fas fa-plus mr-1.5"></i>
                             Post Notice
                         </button>
+                        {selectedTeam && selectedTeam.id === 'technical' && (
+                            <button
+                                onClick={() => {
+                                    console.log('🟢 New Job Card button clicked');
+                                    setEditingJobCard(null);
+                                    setShowJobCardModal(true);
+                                }}
+                                className="flex-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-xs font-medium"
+                            >
+                                <i className="fas fa-plus mr-1.5"></i>
+                                New Job Card
+                            </button>
+                        )}
                     </div>
 
                     {/* Content Display Based on Active Tab */}
@@ -984,6 +1085,92 @@ const Teams = () => {
                                 )}
                             </div>
                         )}
+
+                        {activeTab === 'jobcards' && selectedTeam && selectedTeam.id === 'technical' && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Field Agent Job Cards</h3>
+                                {displayJobCards.length > 0 ? (
+                                    <div className="space-y-3">
+                                        {displayJobCards.map(jobCard => (
+                                            <div key={jobCard.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition dark:bg-slate-800 dark:border-slate-700">
+                                                <div className="flex items-start justify-between mb-2">
+                                                    <div className="flex items-center gap-3 flex-1">
+                                                        <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center dark:bg-indigo-900">
+                                                            <i className="fas fa-clipboard-list text-indigo-600 dark:text-indigo-300"></i>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">
+                                                                {jobCard.jobCardNumber || `Job Card ${jobCard.id.slice(-6)}`}
+                                                            </h4>
+                                                            <p className="text-xs text-gray-600 dark:text-slate-400">
+                                                                <span className="font-medium">{jobCard.agentName}</span>
+                                                                {jobCard.clientName && (
+                                                                    <> • {jobCard.clientName}{jobCard.siteName && ` - ${jobCard.siteName}`}</>
+                                                                )}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex gap-1">
+                                                        <span className={`px-2 py-1 text-xs rounded font-medium ${
+                                                            jobCard.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300' :
+                                                            jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' :
+                                                            'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+                                                        }`}>
+                                                            {jobCard.status || 'draft'}
+                                                        </span>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingJobCard(jobCard);
+                                                                setShowJobCardModal(true);
+                                                            }}
+                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
+                                                            title="Edit"
+                                                        >
+                                                            <i className="fas fa-edit text-xs"></i>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteJobCard(jobCard.id)}
+                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
+                                                            title="Delete"
+                                                        >
+                                                            <i className="fas fa-trash text-xs"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {jobCard.reasonForVisit && (
+                                                    <p className="text-sm text-gray-700 mb-2 dark:text-slate-300 line-clamp-2">{jobCard.reasonForVisit}</p>
+                                                )}
+                                                <div className="flex items-center justify-between text-xs text-gray-600 dark:text-slate-400">
+                                                    <div className="flex items-center gap-3">
+                                                        {jobCard.timeOfArrival && (
+                                                            <span><i className="fas fa-clock mr-1"></i>{new Date(jobCard.timeOfArrival).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
+                                                        )}
+                                                        {jobCard.travelKilometers > 0 && (
+                                                            <span><i className="fas fa-route mr-1"></i>{jobCard.travelKilometers} km</span>
+                                                        )}
+                                                    </div>
+                                                    <span>{new Date(jobCard.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">No job cards yet</p>
+                                        <button 
+                                            onClick={() => {
+                                                setEditingJobCard(null);
+                                                setShowJobCardModal(true);
+                                            }}
+                                            className="mt-3 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-xs"
+                                        >
+                                            Create First Job Card
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
@@ -1050,6 +1237,19 @@ const Teams = () => {
                     }}
                     workflow={executingWorkflow}
                     onComplete={handleWorkflowExecutionComplete}
+                />
+            )}
+
+            {showJobCardModal && JobCardModal && (
+                <JobCardModal
+                    isOpen={showJobCardModal}
+                    onClose={() => {
+                        setShowJobCardModal(false);
+                        setEditingJobCard(null);
+                    }}
+                    jobCard={editingJobCard}
+                    onSave={handleSaveJobCard}
+                    clients={clients}
                 />
             )}
 
