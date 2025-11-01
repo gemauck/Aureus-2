@@ -678,8 +678,161 @@ const Manufacturing = () => {
           </div>
         )}
 
-        {/* Inventory Table */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {/* Mobile Card View - Shows on mobile devices */}
+        <div className="table-mobile space-y-3">
+          {filteredInventory.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <i className="fas fa-box-open text-4xl mb-4 text-gray-300"></i>
+              <p className="text-sm">No inventory items found</p>
+            </div>
+          ) : (
+            filteredInventory.map(item => {
+              const supplierParts = (() => {
+                try {
+                  return (item.supplierPartNumbers !== undefined && item.supplierPartNumbers !== null)
+                    ? (typeof item.supplierPartNumbers === 'string' 
+                        ? JSON.parse(item.supplierPartNumbers || '[]') 
+                        : (item.supplierPartNumbers || []))
+                    : [];
+                } catch (e) {
+                  return [];
+                }
+              })();
+              const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+              
+              return (
+                <div key={item.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start gap-3 mb-3">
+                    {/* Thumbnail */}
+                    <div className="flex-shrink-0">
+                      {item.thumbnail ? (
+                        <img 
+                          src={item.thumbnail} 
+                          alt={item.name} 
+                          className="w-16 h-16 object-cover rounded border border-gray-200" 
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                          }}
+                        />
+                      ) : null}
+                      <div className={`w-16 h-16 bg-gray-100 rounded border border-gray-200 flex items-center justify-center text-gray-400 ${item.thumbnail ? 'hidden' : ''}`}>
+                        <i className="fas fa-box text-2xl"></i>
+                      </div>
+                    </div>
+                    
+                    {/* Item Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between mb-1">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base font-semibold text-gray-900 truncate">{item.name}</h3>
+                          <p className="text-xs text-gray-500 mt-0.5">SKU: {item.sku}</p>
+                        </div>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize ml-2 flex-shrink-0 ${getStatusColor(item.status)}`}>
+                          {item.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                        <div>
+                          <span className="text-gray-500">Category:</span>
+                          <span className="ml-1 text-gray-900 capitalize">{item.category.replace('_', ' ')}</span>
+                        </div>
+                        <div>
+                          <span className="text-gray-500">Type:</span>
+                          <span className="ml-1 text-gray-900 capitalize">{item.type.replace('_', ' ')}</span>
+                        </div>
+                        {item.location && (
+                          <div>
+                            <span className="text-gray-500">Location:</span>
+                            <span className="ml-1 text-gray-900">{item.location}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Stock Info */}
+                      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-gray-900">{item.quantity || 0}</div>
+                          <div className="text-xs text-gray-500">Total {item.unit}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-yellow-700">{item.allocatedQuantity || 0}</div>
+                          <div className="text-xs text-gray-500">Allocated</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-green-700">{availableQty}</div>
+                          <div className="text-xs text-gray-500">Available</div>
+                        </div>
+                      </div>
+                      
+                      {/* Cost Info */}
+                      {(item.unitCost > 0 || item.totalValue > 0) && (
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
+                          {item.unitCost > 0 && (
+                            <div>
+                              <span className="text-xs text-gray-500">Unit Cost:</span>
+                              <span className="ml-1 text-sm font-semibold text-gray-900">{formatCurrency(item.unitCost)}</span>
+                            </div>
+                          )}
+                          {item.totalValue > 0 && (
+                            <div className="text-right">
+                              <span className="text-xs text-gray-500">Total Value:</span>
+                              <span className="ml-1 text-sm font-bold text-blue-600">{formatCurrency(item.totalValue)}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Supplier Parts */}
+                      {supplierParts.length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="text-xs text-gray-500 mb-1">Supplier Parts:</div>
+                          <div className="space-y-1">
+                            {supplierParts.slice(0, 2).map((sp, idx) => (
+                              <div key={idx} className="text-xs">
+                                <span className="font-medium text-gray-700">{sp.supplier}:</span>
+                                <span className="ml-1 text-gray-600">{sp.partNumber}</span>
+                              </div>
+                            ))}
+                            {supplierParts.length > 2 && (
+                              <div className="text-xs text-gray-500">+{supplierParts.length - 2} more</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                        <button
+                          onClick={() => { setSelectedItem(item); setModalType('view_item'); setShowModal(true); }}
+                          className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+                        >
+                          <i className="fas fa-eye mr-1"></i> View
+                        </button>
+                        <button
+                          onClick={() => openEditItemModal(item)}
+                          className="flex-1 px-3 py-2 text-sm bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-medium"
+                        >
+                          <i className="fas fa-edit mr-1"></i> Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteItem(item.id)}
+                          className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+                        >
+                          <i className="fas fa-trash"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View - Shows on desktop */}
+        <div className="table-responsive bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -976,8 +1129,111 @@ const Manufacturing = () => {
           </div>
         </div>
 
-        {/* Work Orders Table */}
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        {/* Mobile Card View - Shows on mobile devices */}
+        <div className="table-mobile space-y-3">
+          {productionOrders.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <i className="fas fa-industry text-4xl mb-4 text-gray-300"></i>
+              <p className="text-sm">No work orders found</p>
+            </div>
+          ) : (
+            productionOrders.map(order => {
+              const progress = (order.quantityProduced / order.quantity) * 100;
+              return (
+                <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2 mb-2">
+                        <h3 className="text-base font-semibold text-gray-900">{order.productName}</h3>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize flex-shrink-0 ${getStatusColor(order.status)}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1">Order ID: {order.id}</p>
+                      <p className="text-xs text-gray-500">SKU: {order.productSku}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mb-3 pt-3 border-t border-gray-200">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Progress</div>
+                      <div className="text-lg font-bold text-gray-900">{order.quantityProduced}/{order.quantity}</div>
+                      <div className="text-xs text-gray-500">{progress.toFixed(0)}% complete</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Priority</div>
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize ${
+                        order.priority === 'high' ? 'text-red-600 bg-red-50' : 
+                        order.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        'text-gray-600 bg-gray-50'
+                      }`}>
+                        {order.priority}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 mb-3 pt-3 border-t border-gray-200 text-sm">
+                    <div>
+                      <span className="text-gray-500">Start Date:</span>
+                      <span className="ml-2 text-gray-900">{order.startDate}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Target Date:</span>
+                      <span className="ml-2 text-gray-900">{order.targetDate}</span>
+                    </div>
+                    {order.completedDate && (
+                      <div>
+                        <span className="text-gray-500">Completed:</span>
+                        <span className="ml-2 text-green-600">{order.completedDate}</span>
+                      </div>
+                    )}
+                    {order.assignedTo && (
+                      <div>
+                        <span className="text-gray-500">Assigned To:</span>
+                        <span className="ml-2 text-gray-900">{order.assignedTo}</span>
+                      </div>
+                    )}
+                    {order.totalCost > 0 && (
+                      <div>
+                        <span className="text-gray-500">Total Cost:</span>
+                        <span className="ml-2 text-sm font-bold text-blue-600">{formatCurrency(order.totalCost)}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => { setSelectedItem(order); setModalType('view_production'); setShowModal(true); }}
+                      className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+                    >
+                      <i className="fas fa-eye mr-1"></i> View
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedItem(order);
+                        setModalType('edit_production');
+                        setShowModal(true);
+                      }}
+                      className="flex-1 px-3 py-2 text-sm bg-green-50 text-green-600 rounded-lg hover:bg-green-100 font-medium"
+                    >
+                      <i className="fas fa-edit mr-1"></i> Edit
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProductionOrder(order.id)}
+                      className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View - Shows on desktop */}
+        <div className="table-responsive bg-white rounded-lg border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">

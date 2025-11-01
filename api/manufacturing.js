@@ -1308,6 +1308,173 @@ async function handler(req, res) {
           })
         }
         
+        // Handle stock return: status change from 'in_production' to 'requested' or 'cancelled'
+        // Also handle cancellation of 'requested' orders (return allocated stock)
+        if ((newStatus === 'requested' && oldStatus === 'in_production') || 
+            newStatus === 'cancelled') {
+          console.log(`↩️ Triggering stock return for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          
+          if (!existingOrder.bomId) {
+            console.log(`⚠️ Order ${id} has no BOM - skipping stock return`)
+          } else {
+            await prisma.$transaction(async (tx) => {
+              // Re-fetch order within transaction
+              const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
+              if (!orderInTx) {
+                throw new Error(`Order ${id} not found`)
+              }
+              
+              console.log(`↩️ Looking up BOM: ${orderInTx.bomId}`)
+              const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+              if (!bom) {
+                throw new Error(`BOM not found: ${orderInTx.bomId}`)
+              }
+              
+              const components = parseJson(bom.components, [])
+              console.log(`↩️ BOM has ${components.length} components to return`)
+              
+              if (components.length === 0) {
+                console.log(`⚠️ BOM ${orderInTx.bomId} has no components - skipping stock return`)
+                return
+              }
+              
+              const now = new Date()
+              
+              // Generate next movement number
+              const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+                : 1
+              
+              // Process components sequentially
+              const validComponents = components.filter(c => c.sku && c.quantity)
+              
+              for (const component of validComponents) {
+                try {
+                  const returnQty = parseFloat(component.quantity) * orderInTx.quantity
+                  if (returnQty <= 0) {
+                    console.log(`⚠️ Invalid quantity for component ${component.sku}: ${returnQty}`)
+                    continue
+                  }
+                  
+                  console.log(`↩️ Processing component for return:`, { sku: component.sku, quantity: component.quantity, name: component.name })
+                  console.log(`↩️ Return quantity: ${returnQty} (component qty: ${component.quantity} × order qty: ${orderInTx.quantity})`)
+                  
+                  const inventoryItem = await tx.inventoryItem.findFirst({
+                    where: { sku: component.sku }
+                  })
+                  
+                  if (!inventoryItem) {
+                    console.log(`⚠️ Inventory item not found for SKU: ${component.sku} - skipping`)
+                    continue
+                  }
+                  
+                  console.log(`↩️ Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
+                  
+                  // Determine what to return based on order's previous state
+                  // Scenario 1: In Production -> Requested/Cancelled
+                  //   - Stock was deducted from quantity (and allocatedQuantity if it existed)
+                  //   - Return stock to quantity
+                  //   - If going back to "requested", also re-allocate it
+                  // Scenario 2: Requested -> Cancelled
+                  //   - Stock was only allocated (not deducted)
+                  //   - Release allocation (reduce allocatedQuantity, quantity unchanged)
+                  
+                  const updateData = {}
+                  
+                  if (oldStatus === 'in_production') {
+                    // Stock was deducted - return it to quantity
+                    updateData.quantity = { increment: returnQty }
+                    console.log(`↩️ Returning ${returnQty} to quantity for ${component.sku} (was in production)`)
+                    
+                    // If reverting to "requested", re-allocate the stock
+                    if (newStatus === 'requested') {
+                      updateData.allocatedQuantity = { increment: returnQty }
+                      console.log(`↩️ Re-allocating ${returnQty} for ${component.sku} (back to requested)`)
+                    }
+                    // If cancelling, just return to quantity (don't re-allocate)
+                    
+                  } else if (oldStatus === 'requested' && newStatus === 'cancelled') {
+                    // Stock was only allocated, not deducted - release allocation
+                    const currentAllocated = inventoryItem.allocatedQuantity || 0
+                    if (currentAllocated >= returnQty) {
+                      updateData.allocatedQuantity = { decrement: returnQty }
+                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (cancelled requested order)`)
+                    } else {
+                      // Release whatever is allocated (handle edge cases)
+                      if (currentAllocated > 0) {
+                        updateData.allocatedQuantity = 0
+                        console.log(`↩️ Releasing ${currentAllocated} from allocation for ${component.sku} (was less than ${returnQty})`)
+                      } else {
+                        console.log(`⚠️ No allocation to release for ${component.sku} (already at 0)`)
+                      }
+                    }
+                  }
+                  
+                  // Perform the update
+                  if (Object.keys(updateData).length > 0) {
+                    const result = await tx.inventoryItem.updateMany({
+                      where: { id: inventoryItem.id },
+                      data: updateData
+                    })
+                    
+                    if (result.count === 0) {
+                      console.log(`⚠️ Could not return stock for ${component.sku} - update failed`)
+                      continue
+                    }
+                    
+                    // Update status based on new available quantity
+                    const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
+                    if (updated) {
+                      const newQty = updated.quantity
+                      const newAllocatedQty = updated.allocatedQuantity || 0
+                      const availableQty = newQty - newAllocatedQty
+                      const reorderPoint = updated.reorderPoint || 0
+                      const status = availableQty > reorderPoint ? 'in_stock' : (availableQty > 0 ? 'low_stock' : 'out_of_stock')
+                      
+                      await tx.inventoryItem.update({
+                        where: { id: updated.id },
+                        data: {
+                          totalValue: newQty * (updated.unitCost || 0),
+                          status: status
+                        }
+                      })
+                    }
+                    
+                    console.log(`↩️ Returned ${returnQty} of ${component.sku} for work order ${id}`)
+                    
+                    // Create stock movement record for return
+                    const movementType = newStatus === 'cancelled' ? 'adjustment' : 'return'
+                    await tx.stockMovement.create({
+                      data: {
+                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                        date: now,
+                        type: movementType,
+                        itemName: component.name || component.sku,
+                        sku: component.sku,
+                        quantity: returnQty,
+                        fromLocation: '',
+                        toLocation: '',
+                        reference: orderInTx.workOrderNumber || id,
+                        performedBy: req.user?.name || 'System',
+                        notes: `Stock return for ${orderInTx.productName} - Order ${newStatus === 'cancelled' ? 'cancelled' : 'reverted to requested'} (${orderInTx.workOrderNumber || id})`
+                      }
+                    })
+                  }
+                } catch (componentError) {
+                  console.error(`❌ Failed to return component ${component.sku}:`, componentError.message)
+                  // Don't throw - continue with other components
+                  // But log the error
+                }
+              }
+              
+              console.log(`✅ Stock return completed for work order ${id}`)
+            }, {
+              timeout: 30000
+            })
+          }
+        }
+        
         // Update order with other fields (status already updated in transaction above if applicable)
         const order = await prisma.productionOrder.update({
           where: { id },
