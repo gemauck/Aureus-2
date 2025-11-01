@@ -93,6 +93,8 @@ function processClientData(rawClients, cacheKey) {
             taxExempt: false,
             notes: ''
         }),
+        services: Array.isArray(c.services) ? c.services : (typeof c.services === 'string' ? JSON.parse(c.services || '[]') : []),
+        tags: Array.isArray(c.tags) ? c.tags.map(ct => ct.tag || ct).filter(Boolean) : (c.tags ? [c.tags] : []),
         ownerId: c.ownerId || null,
         createdAt: c.createdAt,
         updatedAt: c.updatedAt
@@ -141,6 +143,7 @@ const Clients = React.memo(() => {
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
+    const [filterServices, setFilterServices] = useState([]); // Array of selected services
     const [refreshKey, setRefreshKey] = useState(0);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
@@ -1583,12 +1586,19 @@ const Clients = React.memo(() => {
         
         // Enhanced search across multiple fields
         const searchLower = searchTerm.toLowerCase();
+        const services = Array.isArray(client.services)
+            ? client.services
+            : (typeof client.services === 'string' ? (()=>{ try { return JSON.parse(client.services||'[]'); } catch { return []; } })() : []);
         const matchesSearch = searchTerm === '' || 
             client.name.toLowerCase().includes(searchLower) ||
             client.industry.toLowerCase().includes(searchLower) ||
             client.address.toLowerCase().includes(searchLower) ||
             client.website.toLowerCase().includes(searchLower) ||
             client.notes.toLowerCase().includes(searchLower) ||
+            // Search in services
+            services.some(service => 
+                service.toLowerCase().includes(searchLower)
+            ) ||
             // Search in all contacts
             (client.contacts || []).some(contact => 
                 contact.name.toLowerCase().includes(searchLower) ||
@@ -1604,7 +1614,11 @@ const Clients = React.memo(() => {
         const matchesIndustry = filterIndustry === 'All Industries' || client.industry === filterIndustry;
         const matchesStatus = filterStatus === 'All Status' || client.status === filterStatus;
         
-        return matchesSearch && matchesIndustry && matchesStatus;
+        // Check if client matches selected services (if any are selected)
+        const matchesServices = filterServices.length === 0 || 
+            services.some(service => filterServices.includes(service));
+        
+        return matchesSearch && matchesIndustry && matchesStatus && matchesServices;
     });
 
     // Sort the filtered clients
@@ -1616,11 +1630,16 @@ const Clients = React.memo(() => {
             lead.name.toLowerCase().includes(searchTerm.toLowerCase());
             // Contact search removed for leads
         
+        const leadServices = Array.isArray(lead.services)
+            ? lead.services
+            : (typeof lead.services === 'string' ? (()=>{ try { return JSON.parse(lead.services||'[]'); } catch { return []; } })() : []);
         const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
         // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
         const matchesStatus = true;
+        const matchesServices = filterServices.length === 0 || 
+            leadServices.some(service => filterServices.includes(service));
         
-        return matchesSearch && matchesIndustry && matchesStatus;
+        return matchesSearch && matchesIndustry && matchesStatus && matchesServices;
     });
 
     // Sort the filtered leads (default to alphabetical by name)
@@ -1640,11 +1659,23 @@ const Clients = React.memo(() => {
     // Debug pagination
     console.log(`📄 PAGINATION DEBUG: ${sortedClients.length} clients, showing ${paginatedClients.length} on page ${clientsPage} of ${totalClientsPages}`);
 
+    // Extract all unique services from clients and leads for filter dropdown
+    const allServices = useMemo(() => {
+        const serviceSet = new Set();
+        [...clients, ...leads].forEach(item => {
+            const itemServices = Array.isArray(item.services)
+                ? item.services
+                : (typeof item.services === 'string' ? (()=>{ try { return JSON.parse(item.services||'[]'); } catch { return []; } })() : []);
+            itemServices.forEach(service => serviceSet.add(service));
+        });
+        return Array.from(serviceSet).sort();
+    }, [clients, leads]);
+
     // Reset page to 1 when filters or sort changes
     useEffect(() => {
         setClientsPage(1);
         setLeadsPage(1);
-    }, [searchTerm, filterIndustry, filterStatus, sortField, sortDirection, leadSortField, leadSortDirection]);
+    }, [searchTerm, filterIndustry, filterStatus, filterServices, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
@@ -2108,6 +2139,9 @@ const Clients = React.memo(() => {
                             <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
                                 Services
                             </th>
+                            <th className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider`}>
+                                Tags
+                            </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('status')}
@@ -2124,7 +2158,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedClients.length === 0 ? (
                             <tr>
-                                    <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -2176,6 +2210,44 @@ const Clients = React.memo(() => {
                                                             <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
                                                         )}
                                                         {services.length === 0 && (
+                                                            <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
+                                                        )}
+                                                    </>
+                                                );
+                                            })()}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {(() => {
+                                                const tags = Array.isArray(client.tags) 
+                                                    ? client.tags 
+                                                    : (client.tags ? [client.tags] : []);
+                                                // Handle tags that might be objects with name property
+                                                const tagNames = tags.map(tag => typeof tag === 'object' && tag.name ? tag.name : tag).filter(Boolean);
+                                                const MAX = 3;
+                                                const visible = tagNames.slice(0, MAX);
+                                                const remaining = tagNames.length - visible.length;
+                                                return (
+                                                    <>
+                                                        {visible.map((tag, idx) => {
+                                                            const tagObj = typeof tags[idx] === 'object' && tags[idx] ? tags[idx] : { name: tag, color: '#3B82F6' };
+                                                            const tagColor = tagObj.color || '#3B82F6';
+                                                            const tagName = typeof tag === 'object' && tag.name ? tag.name : tag;
+                                                            return (
+                                                                <span 
+                                                                    key={idx} 
+                                                                    className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded text-white`}
+                                                                    style={{ backgroundColor: tagColor }}
+                                                                >
+                                                                    <i className="fas fa-tag mr-1"></i>{tagName}
+                                                                </span>
+                                                            );
+                                                        })}
+                                                        {remaining > 0 && (
+                                                            <span className={`inline-flex items-center px-2 py-0.5 text-[10px] rounded ${isDark ? 'bg-primary-900 text-primary-200' : 'bg-primary-100 text-primary-700'}`}>+{remaining}</span>
+                                                        )}
+                                                        {tagNames.length === 0 && (
                                                             <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>None</span>
                                                         )}
                                                     </>
@@ -2680,12 +2752,12 @@ const Clients = React.memo(() => {
             {/* Modern Search and Filters */}
             {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-6 shadow-sm`}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
                                 <input
                                     type="text"
-                                    placeholder="Search by name, industry, or contact..."
+                                    placeholder="Search by name, industry, contact, or services..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
@@ -2743,10 +2815,53 @@ const Clients = React.memo(() => {
                                 <option value="Disinterested">Disinterested</option>
                             </select>
                         </div>
+                        <div>
+                            <div className="relative">
+                                <select
+                                    multiple
+                                    value={filterServices}
+                                    onChange={(e) => {
+                                        const selected = Array.from(e.target.selectedOptions, option => option.value);
+                                        setFilterServices(selected);
+                                    }}
+                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
+                                        isDark 
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
+                                            : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                                    }`}
+                                    size={allServices.length > 0 ? Math.min(allServices.length + 1, 5) : 1}
+                                    title="Hold Ctrl/Cmd to select multiple services"
+                                >
+                                    {allServices.length === 0 ? (
+                                        <option disabled>No services available</option>
+                                    ) : (
+                                        allServices.map(service => (
+                                            <option key={service} value={service}>{service}</option>
+                                        ))
+                                    )}
+                                </select>
+                                {filterServices.length > 0 && (
+                                    <button
+                                        onClick={() => setFilterServices([])}
+                                        className={`absolute right-2 top-2 transition-colors ${
+                                            isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
+                                        }`}
+                                        title="Clear services filter"
+                                    >
+                                        <i className="fas fa-times text-xs"></i>
+                                    </button>
+                                )}
+                            </div>
+                            {filterServices.length > 0 && (
+                                <div className="mt-1 text-xs text-gray-500">
+                                    {filterServices.length} selected
+                                </div>
+                            )}
+                        </div>
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status') && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || filterServices.length > 0) && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
@@ -2761,6 +2876,7 @@ const Clients = React.memo(() => {
                                         setSearchTerm('');
                                         setFilterIndustry('All Industries');
                                         setFilterStatus('All Status');
+                                        setFilterServices([]);
                                     }}
                                     className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
                                 >
