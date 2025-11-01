@@ -263,12 +263,14 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                 return;
             }
 
-            if (response.ok && (data.success || data.message)) {
+            // Handle both wrapped { data: { success: ... } } and unwrapped responses
+            const result = data.data || data;
+            if (response.ok && (result.success || result.message)) {
                 setSaveStatus('Password changed successfully!');
                 setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
                 setTimeout(() => setSaveStatus(''), 3000);
             } else {
-                const errorMessage = data.error?.message || data.error || data.message || 'Failed to change password';
+                const errorMessage = data.error?.message || data.error || result.message || 'Failed to change password';
                 console.error('❌ Password change failed:', errorMessage);
                 setSaveStatus(errorMessage);
                 setTimeout(() => setSaveStatus(''), 5000);
