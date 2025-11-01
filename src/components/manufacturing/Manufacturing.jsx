@@ -44,6 +44,7 @@ const Manufacturing = () => {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [clients, setClients] = useState([]);
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -215,6 +216,24 @@ const Manufacturing = () => {
           if (loadedSuppliers.length > 0) {
             setSuppliers(loadedSuppliers.length ? loadedSuppliers : getInitialSuppliers());
           }
+        }
+
+        // Clients (for work order allocation)
+        if (typeof window.DatabaseAPI.getClients === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI.getClients()
+              .then(clientsData => {
+                const processed = Array.isArray(clientsData) ? clientsData : [];
+                const activeClients = processed.filter(c => c.status === 'active' && c.type === 'client');
+                setClients(activeClients);
+                console.log('✅ Manufacturing: Clients loaded:', activeClients.length);
+                return { type: 'clients', data: activeClients };
+              })
+              .catch(error => {
+                console.error('Error loading clients:', error);
+                return { type: 'clients', error };
+              })
+          );
         }
 
         // Execute all API calls in parallel
@@ -915,7 +934,9 @@ const Manufacturing = () => {
                   workOrderNumber: nextWO,
                   startDate: new Date().toISOString().split('T')[0],
                   priority: 'normal',
-                  status: 'in_progress'
+                  status: 'in_progress',
+                  clientId: 'stock',
+                  allocationType: 'stock'
                 });
                 setModalType('add_production'); 
                 setShowModal(true); 
@@ -1645,25 +1666,37 @@ const Manufacturing = () => {
   const handleSaveProductionOrder = async () => {
     try {
       console.log('🔍 Starting work order save...', { formData });
-      console.log('🔍 Form validation:', {
-        bomId: !!formData.bomId,
-        quantity: !!formData.quantity,
-        startDate: !!formData.startDate,
-        assignedTo: !!formData.assignedTo
-      });
       const selectedBom = boms.find(b => b.id === formData.bomId);
       if (!selectedBom) {
         alert('Please select a BOM/Product');
         return;
       }
 
-      const totalCost = selectedBom.totalCost * (parseInt(formData.quantity) || 0);
+      // Validate quantity is greater than 0
+      const quantity = parseInt(formData.quantity);
+      if (!quantity || quantity <= 0) {
+        alert('Please enter a valid quantity greater than 0');
+        return;
+      }
+
+      // Validate required fields
+      if (!formData.startDate || !formData.assignedTo) {
+        alert('Please fill in all required fields (Start Date and Assigned To)');
+        return;
+      }
+
+      const totalCost = selectedBom.totalCost * quantity;
       const workOrderNumber = formData.workOrderNumber || getNextWorkOrderNumber();
+      
+      // Determine client allocation
+      const allocationType = formData.clientId && formData.clientId !== 'stock' ? 'client' : 'stock';
+      const clientId = allocationType === 'client' ? formData.clientId : null;
+      
       const orderData = {
         bomId: formData.bomId,
         productSku: formData.productSku || selectedBom.productSku,
         productName: formData.productName || selectedBom.productName,
-        quantity: parseInt(formData.quantity) || 0,
+        quantity: quantity,
         quantityProduced: 0,
         status: formData.status || 'in_progress',
         priority: formData.priority || 'normal',
@@ -1673,6 +1706,8 @@ const Manufacturing = () => {
         totalCost: totalCost,
         notes: formData.notes || '',
         workOrderNumber: workOrderNumber,
+        clientId: clientId,
+        allocationType: allocationType,
         createdBy: user?.name || 'System'
       };
 
@@ -2790,10 +2825,26 @@ const Manufacturing = () => {
                       value={formData.status || 'in_progress'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={modalType === 'view_production'}
                     >
                       <option value="in_progress">In Progress</option>
                       <option value="completed">Completed</option>
                       <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Allocate To</label>
+                    <select
+                      value={formData.clientId || 'stock'}
+                      onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      disabled={modalType === 'view_production'}
+                    >
+                      <option value="stock">Allocate to Stock</option>
+                      {clients.map(client => (
+                        <option key={client.id} value={client.id}>{client.name}</option>
+                      ))}
                     </select>
                   </div>
 

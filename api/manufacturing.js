@@ -1006,6 +1006,8 @@ async function handler(req, res) {
             totalCost: parseFloat(body.totalCost) || 0,
             notes: body.notes || '',
             workOrderNumber: body.workOrderNumber || '',
+            clientId: body.clientId || null,
+            allocationType: body.allocationType || 'stock',
             createdBy: body.createdBy || req.user?.name || 'System',
             ownerId: null
           }
@@ -1049,6 +1051,8 @@ async function handler(req, res) {
         if (body.totalCost !== undefined) updateData.totalCost = parseFloat(body.totalCost)
         if (body.notes !== undefined) updateData.notes = body.notes
         if (body.workOrderNumber !== undefined) updateData.workOrderNumber = body.workOrderNumber || ''
+        if (body.clientId !== undefined) updateData.clientId = body.clientId || null
+        if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
         
         const order = await prisma.productionOrder.update({
           where: { id },
