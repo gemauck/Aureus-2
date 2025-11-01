@@ -29,28 +29,28 @@ const Calendar = () => {
                 }
 
                 // STEP 2: Fetch ALL notes from server (no date filter = all notes)
+                // Server data ALWAYS takes priority to ensure cross-device sync
                 const token = window.storage?.getToken?.();
                 if (token) {
                     try {
                         const res = await fetch('/api/calendar-notes', {
                             headers: { Authorization: `Bearer ${token}` },
-                            credentials: 'include'
+                            credentials: 'include',
+                            cache: 'no-store' // Prevent browser caching
                         });
                         if (res.ok) {
                             const data = await res.json();
                             const serverNotes = data?.notes || {};
                             console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
                             
-                            // Merge server notes with existing (server takes priority)
-                            setNotes(prev => ({ ...prev, ...serverNotes }));
+                            // SERVER DATA ALWAYS TAKES PRIORITY - replace entirely, not merge
+                            // This ensures cross-device synchronization
+                            setNotes(serverNotes);
                             
-                            // Update localStorage with server data
-                            try {
-                                const currentLocalNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                                localStorage.setItem(notesKey, JSON.stringify({ ...currentLocalNotes, ...serverNotes }));
-                            } catch (e) {
-                                console.error('Error updating localStorage:', e);
-                            }
+                            // REPLACE localStorage entirely with server data (not merge)
+                            // This ensures phone gets PC's data and vice versa
+                            localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                            console.log('✅ Calendar notes synchronized with server');
                         } else {
                             console.warn('Failed to load notes from server:', res.status);
                         }
@@ -63,6 +63,21 @@ const Calendar = () => {
             }
         };
         loadNotes();
+        
+        // Also refresh when page becomes visible again (user switches back to tab/window)
+        // This helps sync data when user opens calendar after notes were saved on another device
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                console.log('📝 Page visible - refreshing calendar notes from server');
+                loadNotes();
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []); // Only load once on mount, not when month changes
     
     // Save notes to server if authenticated, always cache in localStorage
