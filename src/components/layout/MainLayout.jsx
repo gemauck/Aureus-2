@@ -445,24 +445,25 @@ const MainLayout = () => {
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Sidebar - Always visible at ALL screen sizes (including 300px, 772px, etc.) - responsive width */}
             <div className={`
-                ${sidebarOpen ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-12'} 
+                ${sidebarOpen ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-36'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
                 relative z-auto
                 flex-shrink-0
-                min-w-[48px]
+                min-w-[144px]
             `}
             style={{ display: 'flex' }} // Force display: flex - never hide
             >
-                {/* Logo */}
+                {/* Logo - Always show "Abcotronics" text */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                        {sidebarOpen ? (
-                        <div className="flex-1 flex justify-center min-w-0">
-                            <h1 className={`abcotronics-logo abcotronics-logo-text text-base sm:text-lg lg:text-base font-bold truncate ${isDark ? 'text-white' : 'text-primary-600'}`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h1>
-                        </div>
-                    ) : (
-                        <div className={`abcotronics-logo text-base sm:text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'} flex-shrink-0`} style={!isDark ? { color: '#0369a1' } : {}}>A</div>
-                    )}
+                    {/* Always show "Abcotronics" text - adjust size based on sidebar state */}
+                    <div className="flex-1 flex justify-center min-w-0">
+                        <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} ${
+                            sidebarOpen 
+                                ? 'text-sm sm:text-base lg:text-base' 
+                                : 'text-[10px] sm:text-xs'
+                        } truncate`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h1>
+                    </div>
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
                         className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1.5 sm:p-2 lg:p-1 rounded transition-colors touch-target flex-shrink-0`}
@@ -554,8 +555,9 @@ const MainLayout = () => {
                             />
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
-                        <div className="lg:hidden">
-                            <h2 className={`abcotronics-logo abcotronics-logo-text text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-primary-600'}`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h2>
+                        {/* Mobile header branding - Always visible on mobile */}
+                        <div className="lg:hidden flex-shrink-0">
+                            <h2 className={`abcotronics-logo abcotronics-logo-text text-base sm:text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-primary-600'} whitespace-nowrap`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h2>
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
