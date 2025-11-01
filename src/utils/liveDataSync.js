@@ -219,7 +219,34 @@ class LiveDataSync {
             }
             
             const response = await fetchFunction();
-            const data = response.data || response;
+            
+            // Extract the array from the response structure
+            // API returns { data: { clients: [...] } } or { data: { leads: [...] } } etc.
+            let data = null;
+            if (response?.data && typeof response.data === 'object') {
+                // Try to extract array from nested structure using dataType
+                const arrayKey = dataType === 'clients' ? 'clients' : 
+                               dataType === 'leads' ? 'leads' : 
+                               dataType === 'projects' ? 'projects' : 
+                               dataType === 'invoices' ? 'invoices' : 
+                               dataType === 'timeEntries' ? 'timeEntries' : 
+                               dataType === 'users' ? 'users' : 
+                               null;
+                
+                if (arrayKey && Array.isArray(response.data[arrayKey])) {
+                    data = response.data[arrayKey];
+                } else if (Array.isArray(response.data)) {
+                    // Sometimes response.data is already an array (like projects, invoices)
+                    data = response.data;
+                } else if (response.data) {
+                    // Fallback: use response.data as-is
+                    data = response.data;
+                }
+            } else if (Array.isArray(response)) {
+                data = response;
+            } else {
+                data = response;
+            }
             
             // Cache the data
             this.dataCache.set(dataType, {
