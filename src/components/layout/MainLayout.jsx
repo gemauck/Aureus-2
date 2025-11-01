@@ -548,7 +548,11 @@ const MainLayout = () => {
                         <button 
                             className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'}`}
                             title="Settings"
-                            onClick={() => setShowSettingsPortal(true)}
+                            onClick={() => {
+                                console.log('🔧 Settings button clicked');
+                                console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
+                                setShowSettingsPortal(true);
+                            }}
                         >
                             <i className="fas fa-cog text-sm"></i>
                         </button>
@@ -629,7 +633,7 @@ const MainLayout = () => {
                 {/* Settings Portal */}
                 {window.SettingsPortal && showSettingsPortal ? (
                     <window.SettingsPortal isOpen={showSettingsPortal} onClose={() => setShowSettingsPortal(false)} />
-                ) : null}
+                ) : showSettingsPortal && !window.SettingsPortal ? console.log('⚠️ SettingsPortal not loaded yet') : null}
             </div>
         </div>
     );
