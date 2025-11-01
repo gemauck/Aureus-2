@@ -1011,11 +1011,11 @@ const Manufacturing = () => {
                             onClick={() => { 
                               setSelectedItem(order); 
                               setFormData({ ...order }); 
-                              setModalType('view_production'); 
+                              setModalType('edit_production'); 
                               setShowModal(true); 
                             }}
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                            title="View Details"
+                            className="text-green-600 hover:text-green-800 text-sm font-medium"
+                            title="Edit Work Order"
                           >
                             <i className="fas fa-eye"></i>
                           </button>
@@ -2683,7 +2683,7 @@ const Manufacturing = () => {
       );
     }
 
-    if (modalType === 'add_production' || modalType === 'view_production') {
+    if (modalType === 'add_production' || modalType === 'edit_production') {
       const selectedBom = formData.bomId ? boms.find(b => b.id === formData.bomId) : null;
       const totalCost = selectedBom ? selectedBom.totalCost * (formData.quantity || 0) : 0;
       
@@ -2701,7 +2701,7 @@ const Manufacturing = () => {
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-lg font-semibold text-gray-900">
-                {modalType === 'add_production' ? 'New Work Order' : 'Work Order Details'}
+                {modalType === 'add_production' ? 'New Work Order' : 'Edit Work Order'}
               </h2>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
@@ -2750,7 +2750,7 @@ const Manufacturing = () => {
                         }
                       }}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     >
                       <option value="">Select a product...</option>
                       {boms.filter(b => b.status === 'active').map(bom => (
@@ -2772,7 +2772,7 @@ const Manufacturing = () => {
                       onChange={(e) => setFormData({ ...formData, quantity: e.target.value ? parseInt(e.target.value) : undefined })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       min="1"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                       placeholder="Enter quantity"
                     />
                   </div>
@@ -2783,7 +2783,7 @@ const Manufacturing = () => {
                       value={formData.priority || 'normal'}
                       onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     >
                       <option value="low">Low</option>
                       <option value="normal">Normal</option>
@@ -2798,7 +2798,7 @@ const Manufacturing = () => {
                       value={formData.startDate || new Date().toISOString().split('T')[0]}
                       onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     />
                   </div>
 
@@ -2809,7 +2809,7 @@ const Manufacturing = () => {
                       value={formData.targetDate || ''}
                       onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     />
                   </div>
 
@@ -2821,7 +2821,7 @@ const Manufacturing = () => {
                       onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="e.g., Production Team A"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     />
                   </div>
 
@@ -2831,7 +2831,7 @@ const Manufacturing = () => {
                       value={formData.status || 'requested'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     >
                       <option value="requested">Requested</option>
                       <option value="in_production">In Production</option>
@@ -2846,7 +2846,7 @@ const Manufacturing = () => {
                       value={formData.clientId || 'stock'}
                       onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      disabled={modalType === 'view_production'}
+                      disabled={false}
                     >
                       <option value="stock">Allocate to Stock</option>
                       {clients.map(client => (
@@ -2855,7 +2855,7 @@ const Manufacturing = () => {
                     </select>
                   </div>
 
-                  {modalType === 'view_production' && (
+                  {modalType === 'edit_production' && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Produced</label>
                       <input
@@ -2879,7 +2879,7 @@ const Manufacturing = () => {
                     rows={3}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="Additional notes or instructions..."
-                    disabled={modalType === 'view_production' && formData.status === 'completed'}
+                    disabled={formData.status === 'completed'}
                   />
                 </div>
 
@@ -2925,7 +2925,7 @@ const Manufacturing = () => {
                   });
                   if (modalType === 'add_production') {
                     handleSaveProductionOrder();
-                  } else {
+                  } else if (modalType === 'edit_production') {
                     handleUpdateProductionOrder();
                   }
                 }}

@@ -1035,6 +1035,12 @@ async function handler(req, res) {
       const body = req.body || {}
       
       try {
+        // Get existing order to check status change
+        const existingOrder = await prisma.productionOrder.findUnique({ where: { id } })
+        if (!existingOrder) {
+          return notFound(res, 'Production order not found')
+        }
+        
         const updateData = {}
         
         if (body.bomId !== undefined) updateData.bomId = body.bomId
@@ -1053,6 +1059,71 @@ async function handler(req, res) {
         if (body.workOrderNumber !== undefined) updateData.workOrderNumber = body.workOrderNumber || ''
         if (body.clientId !== undefined) updateData.clientId = body.clientId || null
         if (body.allocationType !== undefined) updateData.allocationType = body.allocationType || 'stock'
+        
+        // Handle status change from 'requested' to 'in_production' - deduct stock
+        if (body.status === 'in_production' && existingOrder.status === 'requested') {
+          if (existingOrder.bomId) {
+            const bom = await prisma.bOM.findUnique({ where: { id: existingOrder.bomId } })
+            if (bom) {
+              const components = parseJson(bom.components, [])
+              const now = new Date()
+              
+              // Generate next movement number
+              const lastMovement = await prisma.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+                : 1
+              
+              for (const component of components) {
+                if (component.sku && component.quantity) {
+                  const requiredQty = parseFloat(component.quantity) * existingOrder.quantity
+                  const inventoryItem = await prisma.inventoryItem.findFirst({
+                    where: { sku: component.sku }
+                  })
+                  if (inventoryItem) {
+                    // Verify sufficient stock
+                    if ((inventoryItem.quantity || 0) < requiredQty) {
+                      return badRequest(res, `Insufficient stock for ${component.name || component.sku}. Available: ${inventoryItem.quantity}, Required: ${requiredQty}`)
+                    }
+                    
+                    // Deduct stock
+                    const newQty = (inventoryItem.quantity || 0) - requiredQty
+                    const totalValue = newQty * (inventoryItem.unitCost || 0)
+                    const reorderPoint = inventoryItem.reorderPoint || 0
+                    const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
+                    
+                    await prisma.inventoryItem.update({
+                      where: { id: inventoryItem.id },
+                      data: {
+                        quantity: newQty,
+                        totalValue: totalValue,
+                        status: status
+                      }
+                    })
+                    console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id}`)
+                    
+                    // Create stock movement record
+                    await prisma.stockMovement.create({
+                      data: {
+                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                        date: now,
+                        type: 'consumption',
+                        itemName: component.name || component.sku,
+                        sku: component.sku,
+                        quantity: requiredQty,
+                        fromLocation: '',
+                        toLocation: '',
+                        reference: existingOrder.workOrderNumber || id,
+                        performedBy: req.user?.name || 'System',
+                        notes: `Production consumption for ${existingOrder.productName} (${existingOrder.workOrderNumber || id})`
+                      }
+                    })
+                  }
+                }
+              }
+            }
+          }
+        }
         
         const order = await prisma.productionOrder.update({
           where: { id },
