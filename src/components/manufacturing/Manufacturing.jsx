@@ -1789,6 +1789,19 @@ const Manufacturing = () => {
         );
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
+        
+        // Refresh inventory if status changed to in_production (stock was deducted)
+        if (formData.status === 'in_production' && selectedItem.status === 'requested') {
+          console.log('🔄 Refreshing inventory after stock deduction...');
+          const inventoryResponse = await safeCallAPI('getInventory');
+          if (inventoryResponse?.data?.inventory) {
+            setInventory(inventoryResponse.data.inventory);
+            localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryResponse.data.inventory));
+            console.log('✅ Inventory refreshed');
+          }
+        }
+        
+        alert('Work order updated successfully!');
       }
 
       setShowModal(false);
