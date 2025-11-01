@@ -755,16 +755,6 @@ const Manufacturing = () => {
                       <div className="text-sm font-semibold text-gray-900">{item.quantity || 0}</div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="text-sm font-medium text-yellow-700">{item.allocatedQuantity || 0}</div>
-                      <div className="text-xs text-gray-500">{item.unit}</div>
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <div className="text-sm font-semibold text-green-700">
-                        {(item.quantity || 0) - (item.allocatedQuantity || 0)}
-                      </div>
-                      <div className="text-xs text-gray-500">{item.unit}</div>
-                    </td>
                     <td className="px-3 py-2 text-sm text-gray-600">
                       {item.location ? item.location : <span className="text-gray-400">-</span>}
                     </td>
