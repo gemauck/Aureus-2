@@ -381,7 +381,9 @@ const Manufacturing = () => {
       in_stock: 'text-green-600 bg-green-50',
       low_stock: 'text-yellow-600 bg-yellow-50',
       out_of_stock: 'text-red-600 bg-red-50',
-      in_progress: 'text-blue-600 bg-blue-50',
+      requested: 'text-yellow-600 bg-yellow-50',
+      in_production: 'text-blue-600 bg-blue-50',
+      in_progress: 'text-blue-600 bg-blue-50', // Keep for backwards compatibility
       completed: 'text-green-600 bg-green-50',
       cancelled: 'text-gray-600 bg-gray-50',
       active: 'text-green-600 bg-green-50',
@@ -407,10 +409,11 @@ const Manufacturing = () => {
 
 
   const getProductionStats = () => {
-    const activeOrders = productionOrders.filter(o => o.status === 'in_progress').length;
+    const requestedOrders = productionOrders.filter(o => o.status === 'requested').length;
+    const activeOrders = productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').length;
     const completedOrders = productionOrders.filter(o => o.status === 'completed').length;
     const totalProduction = productionOrders.reduce((sum, o) => sum + o.quantityProduced, 0);
-    const pendingUnits = productionOrders.filter(o => o.status === 'in_progress').reduce((sum, o) => sum + (o.quantity - o.quantityProduced), 0);
+    const pendingUnits = productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').reduce((sum, o) => sum + (o.quantity - o.quantityProduced), 0);
     
     return { activeOrders, completedOrders, totalProduction, pendingUnits };
   };
@@ -514,7 +517,7 @@ const Manufacturing = () => {
             </div>
             <div className="p-3">
               <div className="space-y-2">
-                {productionOrders.filter(o => o.status === 'in_progress').map(order => (
+                {productionOrders.filter(o => o.status === 'in_production' || o.status === 'in_progress').map(order => (
                   <div key={order.id} className="flex items-center justify-between p-2 bg-blue-50 rounded border border-blue-200">
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">{order.productName}</p>
@@ -933,7 +936,7 @@ const Manufacturing = () => {
                   workOrderNumber: nextWO,
                   startDate: new Date().toISOString().split('T')[0],
                   priority: 'normal',
-                  status: 'in_progress',
+                  status: 'requested',
                   clientId: 'stock',
                   allocationType: 'stock'
                 });
@@ -1701,7 +1704,7 @@ const Manufacturing = () => {
         productName: formData.productName || selectedBom.productName,
         quantity: quantity,
         quantityProduced: 0,
-        status: formData.status || 'in_progress',
+        status: formData.status || 'requested',
         priority: formData.priority || 'normal',
         startDate: formData.startDate || new Date().toISOString().split('T')[0],
         targetDate: formData.targetDate || null,
@@ -2825,12 +2828,13 @@ const Manufacturing = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
-                      value={formData.status || 'in_progress'}
+                      value={formData.status || 'requested'}
                       onChange={(e) => setFormData({ ...formData, status: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={modalType === 'view_production'}
                     >
-                      <option value="in_progress">In Progress</option>
+                      <option value="requested">Requested</option>
+                      <option value="in_production">In Production</option>
                       <option value="completed">Completed</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
