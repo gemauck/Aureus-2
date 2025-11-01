@@ -2372,7 +2372,7 @@ const Manufacturing = () => {
                 ) : (
                   <div className="space-y-2">
                     {bomComponents.map((comp, index) => (
-                      <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div key={index} className="grid grid-cols-12 gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 items-end">
                         <div className="col-span-2">
                           <label className="block text-xs font-medium text-gray-700 mb-1">SKU / Select from Inventory</label>
                           <select
@@ -2386,7 +2386,7 @@ const Manufacturing = () => {
                             ))}
                           </select>
                         </div>
-                        <div className="col-span-3">
+                        <div className="col-span-2">
                           <label className="block text-xs font-medium text-gray-700 mb-1">Component Name</label>
                           <input
                             type="text"
@@ -2406,7 +2406,7 @@ const Manufacturing = () => {
                             placeholder="e.g., A1-B2"
                           />
                         </div>
-                        <div className="col-span-2">
+                        <div className="col-span-1">
                           <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
                           <input
                             type="number"
@@ -2435,18 +2435,20 @@ const Manufacturing = () => {
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           />
                         </div>
-                        <div className="col-span-1 flex items-end">
+                        <div className="col-span-2 flex items-center">
+                          <div className="w-full text-right">
+                            <span className="text-xs text-gray-500">Total: </span>
+                            <span className="text-sm font-semibold text-gray-900">{formatCurrency(comp.totalCost)}</span>
+                          </div>
+                        </div>
+                        <div className="col-span-1 flex items-center justify-center">
                           <button
                             onClick={() => removeBomComponent(index)}
-                            className="w-full px-2 py-1.5 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200"
+                            className="px-2 py-1.5 text-sm bg-red-100 text-red-600 rounded hover:bg-red-200"
                             title="Remove"
                           >
                             <i className="fas fa-trash"></i>
                           </button>
-                        </div>
-                        <div className="col-span-12 text-right">
-                          <span className="text-xs text-gray-500">Total: </span>
-                          <span className="text-sm font-semibold text-gray-900">{formatCurrency(comp.totalCost)}</span>
                         </div>
                       </div>
                     ))}
