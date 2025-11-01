@@ -2863,6 +2863,93 @@ const Manufacturing = () => {
             <div className="p-4">
               {selectedItem && (
                 <div className="space-y-4">
+                  {/* Product Thumbnail and Instructions Section */}
+                  {(selectedItem.thumbnail || selectedItem.instructions) && (
+                    <div className="grid grid-cols-2 gap-4 border-b border-gray-200 pb-4">
+                      {/* Thumbnail */}
+                      {selectedItem.thumbnail && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Product Thumbnail</p>
+                          <div className="relative">
+                            <img 
+                              src={selectedItem.thumbnail} 
+                              alt={selectedItem.productName} 
+                              className="w-full max-w-xs h-48 object-contain border border-gray-200 rounded-lg bg-gray-50"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                if (e.target.nextSibling) {
+                                  e.target.nextSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                            <div className="w-full max-w-xs h-48 border border-gray-200 rounded-lg bg-gray-50 hidden items-center justify-center text-gray-400">
+                              <div className="text-center">
+                                <i className="fas fa-image text-3xl mb-2"></i>
+                                <p className="text-xs">Image not available</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const img = new Image();
+                                img.src = selectedItem.thumbnail;
+                                const w = window.open();
+                                w.document.write(`<img src="${selectedItem.thumbnail}" style="max-width: 100%; height: auto;" />`);
+                              }}
+                              className="mt-2 text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                              title="View full size"
+                            >
+                              <i className="fas fa-expand"></i>
+                              View Full Size
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Instructions */}
+                      {selectedItem.instructions && (
+                        <div>
+                          <p className="text-xs text-gray-500 mb-2">Product Instructions</p>
+                          <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                            <div className="flex items-center gap-2 mb-2">
+                              <i className="fas fa-file-alt text-blue-600"></i>
+                              <span className="text-sm font-medium text-gray-900">Instructions Available</span>
+                            </div>
+                            {selectedItem.instructions.startsWith('data:') ? (
+                              <div className="space-y-2">
+                                <p className="text-xs text-gray-600">File uploaded as base64</p>
+                                <button
+                                  onClick={() => {
+                                    // Convert data URL to blob and download
+                                    const link = document.createElement('a');
+                                    link.href = selectedItem.instructions;
+                                    link.download = `${selectedItem.productSku || 'bom'}_instructions.pdf`;
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                  }}
+                                  className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                                >
+                                  <i className="fas fa-download"></i>
+                                  Download Instructions
+                                </button>
+                              </div>
+                            ) : (
+                              <a
+                                href={selectedItem.instructions}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                              >
+                                <i className="fas fa-external-link-alt"></i>
+                                Open Instructions
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">BOM ID</p>
@@ -2878,10 +2965,12 @@ const Manufacturing = () => {
                       <p className="text-xs text-gray-500">Product SKU</p>
                       <p className="text-sm text-gray-900">{selectedItem.productSku}</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Version</p>
-                      <p className="text-sm text-gray-900">{selectedItem.version}</p>
-                    </div>
+                    {selectedItem.version && (
+                      <div>
+                        <p className="text-xs text-gray-500">Version</p>
+                        <p className="text-sm text-gray-900">{selectedItem.version}</p>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <p className="text-xs text-gray-500">Product Name</p>
                       <p className="text-sm font-semibold text-gray-900">{selectedItem.productName}</p>
@@ -2904,6 +2993,7 @@ const Manufacturing = () => {
                           <tr>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Component</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Location</th>
                             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Qty</th>
                             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Unit Cost</th>
                             <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total</th>
@@ -2914,6 +3004,7 @@ const Manufacturing = () => {
                             <tr key={idx}>
                               <td className="px-3 py-2 text-sm text-gray-900">{comp.sku}</td>
                               <td className="px-3 py-2 text-sm text-gray-900">{comp.name}</td>
+                              <td className="px-3 py-2 text-sm text-gray-600">{comp.location || '-'}</td>
                               <td className="px-3 py-2 text-sm text-right text-gray-900">{comp.quantity} {comp.unit}</td>
                               <td className="px-3 py-2 text-sm text-right text-gray-900">{formatCurrency(comp.unitCost)}</td>
                               <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(comp.totalCost)}</td>
