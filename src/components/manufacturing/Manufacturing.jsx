@@ -1767,17 +1767,33 @@ const Manufacturing = () => {
 
   const handleUpdateProductionOrder = async () => {
     try {
+      const oldStatus = String(selectedItem.status || '').trim()
+      const newStatus = String(formData.status || selectedItem.status || 'requested').trim()
+      
       const orderData = {
-        ...formData,
+        bomId: formData.bomId !== undefined ? formData.bomId : selectedItem.bomId,
+        productSku: formData.productSku !== undefined ? formData.productSku : selectedItem.productSku,
+        productName: formData.productName !== undefined ? formData.productName : selectedItem.productName,
         quantity: parseInt(formData.quantity) || selectedItem.quantity,
         quantityProduced: parseInt(formData.quantityProduced) || selectedItem.quantityProduced || 0,
-        completedDate: formData.status === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
+        status: newStatus, // Explicitly set status
+        priority: formData.priority !== undefined ? formData.priority : selectedItem.priority,
+        startDate: formData.startDate || selectedItem.startDate,
+        targetDate: formData.targetDate !== undefined ? formData.targetDate : selectedItem.targetDate,
+        assignedTo: formData.assignedTo !== undefined ? formData.assignedTo : selectedItem.assignedTo,
+        notes: formData.notes !== undefined ? formData.notes : selectedItem.notes,
+        workOrderNumber: formData.workOrderNumber || selectedItem.workOrderNumber,
+        clientId: formData.clientId !== undefined ? formData.clientId : selectedItem.clientId,
+        allocationType: formData.allocationType !== undefined ? formData.allocationType : selectedItem.allocationType,
+        completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
       console.log('📤 Updating work order:', {
         id: selectedItem.id,
-        oldStatus: selectedItem.status,
-        newStatus: formData.status,
+        oldStatus: oldStatus,
+        newStatus: newStatus,
+        willDeductStock: (newStatus === 'in_production' && oldStatus === 'requested'),
+        hasBomId: !!orderData.bomId,
         orderData
       });
 
