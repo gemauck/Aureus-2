@@ -72,10 +72,7 @@ async function handler(req, res) {
           // Use Prisma to include tags relation - needed for list view
           rawClients = await prisma.client.findMany({
             where: {
-              OR: [
-                { type: 'client' },
-                { type: null }
-              ]
+              type: 'client'
             },
             include: {
               tags: {
