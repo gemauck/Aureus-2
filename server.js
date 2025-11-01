@@ -303,6 +303,27 @@ app.all('/api/users/accept-invitation', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for change-password endpoint
+app.all('/api/users/change-password', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'change-password.js'))
+    if (!handler) {
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in change-password handler:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for invitation management (update, delete, resend /api/users/invitation/[id])
 app.all('/api/users/invitation/:id', async (req, res, next) => {
   try {
