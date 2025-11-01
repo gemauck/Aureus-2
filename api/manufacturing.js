@@ -1200,26 +1200,50 @@ async function handler(req, res) {
                   
                   console.log(`📉 Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                   
-                  // Verify allocation exists and sufficient stock
+                  // Verify sufficient stock (check total quantity, not just allocation)
+                  // This handles both:
+                  // 1. New orders with proper allocation (allocatedQty >= requiredQty)
+                  // 2. Old orders created before allocation tracking (allocatedQty = 0, but quantity >= requiredQty)
                   const allocatedQty = inventoryItem.allocatedQuantity || 0
-                  if (allocatedQty < requiredQty) {
-                    throw new Error(`Allocation error for ${component.name || component.sku}. Allocated: ${allocatedQty}, Required: ${requiredQty}`)
+                  const totalQty = inventoryItem.quantity || 0
+                  
+                  if (totalQty < requiredQty) {
+                    throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${totalQty}, Required: ${requiredQty}`)
                   }
-                  if ((inventoryItem.quantity || 0) < requiredQty) {
-                    throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${inventoryItem.quantity}, Required: ${requiredQty}`)
+                  
+                  // Warn if allocation doesn't match (for orders created before allocation tracking)
+                  if (allocatedQty > 0 && allocatedQty < requiredQty) {
+                    console.log(`⚠️ Allocation mismatch for ${component.sku}: allocated=${allocatedQty}, required=${requiredQty}. Proceeding with deduction from total stock.`)
                   }
                   
                   // Use atomic update with optimistic locking (decrement operations)
+                  // Handle both cases: allocated stock or unallocated stock (for legacy orders)
+                  // For legacy orders (allocatedQty = 0), we can still deduct from total quantity
+                  const updateData = {
+                    quantity: { decrement: requiredQty }
+                  }
+                  
+                  // Only decrement allocatedQuantity if it exists (handle legacy orders)
+                  if (allocatedQty > 0) {
+                    updateData.allocatedQuantity = { decrement: requiredQty }
+                  }
+                  
+                  // Build where clause: must have enough quantity, and either enough allocation OR no allocation (legacy)
+                  const whereClause = {
+                    id: inventoryItem.id,
+                    quantity: { gte: requiredQty }
+                  }
+                  
+                  // If there's allocation, require it to be sufficient. If no allocation (legacy), allow deduction
+                  if (allocatedQty > 0) {
+                    whereClause.allocatedQuantity = { gte: requiredQty }
+                  } else {
+                    whereClause.allocatedQuantity = 0
+                  }
+                  
                   const result = await tx.inventoryItem.updateMany({
-                    where: {
-                      id: inventoryItem.id,
-                      quantity: { gte: requiredQty },
-                      allocatedQuantity: { gte: requiredQty }
-                    },
-                    data: {
-                      quantity: { decrement: requiredQty },
-                      allocatedQuantity: { decrement: requiredQty }
-                    }
+                    where: whereClause,
+                    data: updateData
                   })
                   
                   if (result.count === 0) {
