@@ -994,16 +994,25 @@ async function handler(req, res) {
         const orderStatus = body.status || 'requested'
         
         // Allocate stock if BOM is provided and status is 'requested'
+        console.log(`📦 Stock allocation check: bomId=${body.bomId}, status=${orderStatus}`)
         if (body.bomId && orderStatus === 'requested') {
           const bom = await prisma.bOM.findUnique({ where: { id: body.bomId } })
+          console.log(`📦 BOM found:`, bom ? `Yes (${bom.id})` : 'No')
           if (bom) {
             const components = parseJson(bom.components, [])
+            console.log(`📦 BOM has ${components.length} components`)
+            if (components.length === 0) {
+              console.log(`⚠️ BOM ${body.bomId} has no components - skipping allocation`)
+            }
             for (const component of components) {
+              console.log(`📦 Processing component:`, { sku: component.sku, quantity: component.quantity, name: component.name })
               if (component.sku && component.quantity) {
                 const requiredQty = parseFloat(component.quantity) * orderQuantity
+                console.log(`📦 Looking for inventory item with SKU: ${component.sku}, required: ${requiredQty}`)
                 const inventoryItem = await prisma.inventoryItem.findFirst({
                   where: { sku: component.sku }
                 })
+                console.log(`📦 Inventory item found:`, inventoryItem ? `Yes (qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})` : 'No')
                 if (inventoryItem) {
                   const availableQty = inventoryItem.quantity - (inventoryItem.allocatedQuantity || 0)
                   if (availableQty < requiredQty) {
@@ -1101,9 +1110,15 @@ async function handler(req, res) {
         if (newStatus === 'in_production' && oldStatus === 'requested') {
           console.log(`✅ Triggering stock deduction for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
           if (existingOrder.bomId) {
+            console.log(`📉 Looking up BOM: ${existingOrder.bomId}`)
             const bom = await prisma.bOM.findUnique({ where: { id: existingOrder.bomId } })
+            console.log(`📉 BOM found:`, bom ? `Yes` : 'No')
             if (bom) {
               const components = parseJson(bom.components, [])
+              console.log(`📉 BOM has ${components.length} components to process`)
+              if (components.length === 0) {
+                console.log(`⚠️ BOM ${existingOrder.bomId} has no components - cannot deduct stock`)
+              }
               const now = new Date()
               
               // Generate next movement number
@@ -1113,11 +1128,14 @@ async function handler(req, res) {
                 : 1
               
               for (const component of components) {
+                console.log(`📉 Processing component for deduction:`, { sku: component.sku, quantity: component.quantity, name: component.name })
                 if (component.sku && component.quantity) {
                   const requiredQty = parseFloat(component.quantity) * existingOrder.quantity
+                  console.log(`📉 Required quantity: ${requiredQty} (component qty: ${component.quantity} × order qty: ${existingOrder.quantity})`)
                   const inventoryItem = await prisma.inventoryItem.findFirst({
                     where: { sku: component.sku }
                   })
+                  console.log(`📉 Inventory item found:`, inventoryItem ? `Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})` : `No item with SKU ${component.sku}`)
                   if (inventoryItem) {
                     // Verify allocation exists and sufficient stock
                     const allocatedQty = inventoryItem.allocatedQuantity || 0
