@@ -34,6 +34,37 @@ const storage = {
         localStorage.removeItem('abcotronics_user');
     },
     
+    // Remember last email used for login
+    getLastLoginEmail: () => {
+        try {
+            return localStorage.getItem('abcotronics_last_login_email') || null;
+        } catch (e) {
+            console.error('Error loading last login email:', e);
+            return null;
+        }
+    },
+    
+    setLastLoginEmail: (email) => {
+        try {
+            if (email) {
+                localStorage.setItem('abcotronics_last_login_email', email);
+            } else {
+                // Clear if email is null/empty
+                localStorage.removeItem('abcotronics_last_login_email');
+            }
+        } catch (e) {
+            console.error('Error saving last login email:', e);
+        }
+    },
+    
+    clearLastLoginEmail: () => {
+        try {
+            localStorage.removeItem('abcotronics_last_login_email');
+        } catch (e) {
+            console.error('Error clearing last login email:', e);
+        }
+    },
+    
     // Get current user name for logging
     getUserName: () => {
         try {

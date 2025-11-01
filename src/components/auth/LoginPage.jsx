@@ -11,10 +11,33 @@ const LoginPage = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [rememberMe, setRememberMe] = useState(true);
     const { login } = useAuth();
     const [showForgot, setShowForgot] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
     const [resetStatus, setResetStatus] = useState('');
+
+    // Load last used email on mount
+    useEffect(() => {
+        try {
+            // Check if localStorage is available
+            const testKey = 'abcotronics_storage_test';
+            try {
+                localStorage.setItem(testKey, 'test');
+                localStorage.removeItem(testKey);
+            } catch (storageErr) {
+                console.info('💡 Note: localStorage is not available. "Remember me" will work within this session, but may not persist (this is normal in incognito/private mode). Browser password managers will still work normally.');
+            }
+            
+            const lastEmail = storage?.getLastLoginEmail?.();
+            if (lastEmail) {
+                setEmail(lastEmail);
+            }
+        } catch (err) {
+            // localStorage might not be available (e.g., incognito mode, privacy settings)
+            // This is not an error - browser password manager will still work
+        }
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -29,6 +52,18 @@ const LoginPage = () => {
         try {
             setSubmitting(true);
             await login(email, password);
+            // Save email for next time if remember me is checked, otherwise clear it
+            try {
+                if (rememberMe && storage?.setLastLoginEmail) {
+                    storage.setLastLoginEmail(email);
+                } else if (storage?.setLastLoginEmail) {
+                    storage.setLastLoginEmail(null); // Clear saved email
+                }
+            } catch (storageErr) {
+                // localStorage might not be available (e.g., incognito mode)
+                // This is not critical - browser password manager will still work
+                console.warn('Could not save email preference (this is normal in incognito mode):', storageErr);
+            }
         } catch (err) {
             const errorMessage = err.message || 'Invalid credentials. Please try again.';
             setError(errorMessage);
@@ -136,12 +171,15 @@ const LoginPage = () => {
                 .login-card {
                     width: 100%;
                     max-width: min(calc(100vw - clamp(1.5rem, 6vw, 3rem)), 500px);
+                    max-height: calc(100vh - 2rem);
                     background: #ffffff;
                     border-radius: clamp(1rem, 4vw, 1.5rem);
                     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
                     overflow: hidden;
                     position: relative;
                     animation: slideUp 0.4s ease-out;
+                    display: flex;
+                    flex-direction: column;
                 }
                 
                 @keyframes slideUp {
@@ -174,6 +212,9 @@ const LoginPage = () => {
                 /* Form Container */
                 .login-form-container {
                     padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 4vw, 2rem);
+                    overflow-y: auto;
+                    max-height: 100vh;
+                    -webkit-overflow-scrolling: touch;
                 }
                 
                 .login-title {
@@ -236,6 +277,62 @@ const LoginPage = () => {
                 
                 .form-input::placeholder {
                     color: #9ca3af;
+                }
+                
+                /* Remember Me Checkbox */
+                .remember-me-container {
+                    display: flex;
+                    align-items: center;
+                    margin: 0.75rem 0;
+                    padding: 0.5rem 0;
+                    min-height: 44px; /* Ensure touch target size */
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                }
+                
+                .remember-me-label {
+                    display: flex;
+                    align-items: center;
+                    gap: 0.625rem;
+                    cursor: pointer;
+                    user-select: none;
+                    font-size: clamp(0.875rem, 3vw, 0.9375rem);
+                    color: #374151;
+                    width: 100%;
+                    padding: 0.25rem 0;
+                }
+                
+                .remember-me-checkbox {
+                    width: 20px;
+                    height: 20px;
+                    min-width: 20px;
+                    min-height: 20px;
+                    cursor: pointer;
+                    accent-color: #3b82f6;
+                    flex-shrink: 0;
+                    margin: 0;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                }
+                
+                .remember-me-text {
+                    font-weight: 500;
+                    flex: 1;
+                }
+                
+                /* Ensure remember me is always visible on all screen sizes */
+                @media (max-width: 480px) {
+                    .remember-me-container {
+                        margin: 0.5rem 0;
+                        padding: 0.25rem 0;
+                    }
+                    
+                    .remember-me-checkbox {
+                        width: 18px;
+                        height: 18px;
+                        min-width: 18px;
+                        min-height: 18px;
+                    }
                 }
                 
                 /* Password Input Wrapper */
@@ -410,10 +507,14 @@ const LoginPage = () => {
                 @media (max-width: 360px) {
                     .login-wrapper {
                         padding: 0.75rem;
+                        align-items: flex-start;
+                        padding-top: 1rem;
                     }
                     
                     .login-card {
                         border-radius: 0.875rem;
+                        max-height: calc(100vh - 2rem);
+                        overflow-y: auto;
                     }
                     
                     .login-header {
@@ -422,6 +523,38 @@ const LoginPage = () => {
                     
                     .login-form-container {
                         padding: 1.25rem 1rem;
+                    }
+                    
+                    .login-form {
+                        gap: 1rem;
+                    }
+                    
+                    /* Ensure remember me is visible */
+                    .remember-me-container {
+                        margin: 0.5rem 0;
+                        display: flex !important;
+                        visibility: visible !important;
+                    }
+                }
+                
+                /* Extra small screens - ensure nothing is hidden */
+                @media (max-height: 600px) {
+                    .login-form-container {
+                        padding: 1rem;
+                    }
+                    
+                    .login-form {
+                        gap: 0.75rem;
+                    }
+                    
+                    .form-group {
+                        gap: 0.375rem;
+                    }
+                    
+                    .remember-me-container {
+                        margin: 0.5rem 0;
+                        display: flex !important;
+                        visibility: visible !important;
                     }
                 }
                 
@@ -460,12 +593,13 @@ const LoginPage = () => {
                                         id="email"
                                         type="email"
                                         name="email"
-                                        autoComplete="email"
+                                        autoComplete="username email"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
-                                    className="form-input"
+                                        className="form-input"
                                         placeholder="you@company.com"
-                                    required
+                                        autoFocus
+                                        required
                                     />
                                 </div>
 
@@ -481,10 +615,10 @@ const LoginPage = () => {
                                             autoComplete="current-password"
                                             value={password}
                                             onChange={(e) => setPassword(e.target.value)}
-                                        className="form-input"
-                                        placeholder="Enter your password"
-                                        required
-                                        style={{ paddingRight: '3rem' }}
+                                            className="form-input"
+                                            placeholder="Enter your password"
+                                            required
+                                            style={{ paddingRight: '3rem' }}
                                         />
                                         <button
                                             type="button"
@@ -497,13 +631,28 @@ const LoginPage = () => {
                                     </div>
                                 </div>
 
+                                <div className="remember-me-container">
+                                    <label className="remember-me-label">
+                                        <input
+                                            type="checkbox"
+                                            id="remember-me"
+                                            name="remember-me"
+                                            checked={rememberMe}
+                                            onChange={(e) => setRememberMe(e.target.checked)}
+                                            className="remember-me-checkbox"
+                                            aria-label="Remember my email address"
+                                        />
+                                        <span className="remember-me-text">Remember me</span>
+                                    </label>
+                                </div>
+
                                 <button
                                     type="submit"
                                     disabled={submitting}
-                                className="submit-button"
-                            >
-                                {submitting ? 'Signing In...' : 'Sign In'}
-                            </button>
+                                    className="submit-button"
+                                >
+                                    {submitting ? 'Signing In...' : 'Sign In'}
+                                </button>
                             
                             <div className="forgot-password">
                                 <button
