@@ -95,20 +95,21 @@ const MainLayout = () => {
         window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
     }, []);
 
-    // Auto-expand sidebar on desktop, keep state on mobile
+    // Ensure sidebar is always accessible - never auto-close
     React.useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 1024) {
-                // On desktop (>= 1024px), default to open
+            // Always keep sidebar accessible - user can toggle manually
+            // Don't auto-close at any screen size
+            if (window.innerWidth >= 1024 && !sidebarOpen) {
+                // Only auto-open on desktop if it was never set
                 setSidebarOpen(true);
             }
-            // On mobile/tablet, maintain current sidebar state (don't auto-close)
         };
         
         handleResize(); // Set initial state
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, []);
+    }, [sidebarOpen]);
 
     // Close mobile menu when page changes
     React.useEffect(() => {
@@ -442,26 +443,17 @@ const MainLayout = () => {
 
     return (
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-            {/* Mobile Overlay - Only show when sidebar is expanded on very small screens */}
-            {sidebarOpen && isMobile && windowWidth < 640 && (
-                <div 
-                    className="fixed inset-0 bg-black bg-opacity-30 z-40 lg:hidden sidebar-overlay"
-                    onClick={() => {
-                        setSidebarOpen(false);
-                        setMobileMenuOpen(false);
-                    }}
-                ></div>
-            )}
-
-            {/* Sidebar - Always visible, responsive width */}
+            {/* Sidebar - Always visible at ALL screen sizes (including 300px, 772px, etc.) - responsive width */}
             <div className={`
-                ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-12'} 
+                ${sidebarOpen ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
-                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open' : ''}
                 relative z-auto
                 flex-shrink-0
-            `}>
+                min-w-[48px]
+            `}
+            style={{ display: 'flex' }} // Force display: flex - never hide
+            >
                 {/* Logo */}
                 <div className={`h-14 lg:h-12 flex items-center justify-between px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                         {sidebarOpen ? (
@@ -537,11 +529,10 @@ const MainLayout = () => {
                         {/* Hamburger Menu Button - Toggle sidebar expand/collapse on mobile/tablet */}
                         <button 
                             onClick={() => {
-                                console.log('🍔 Hamburger clicked, mobileMenuOpen:', mobileMenuOpen, 'isMobile:', isMobile, 'window.innerWidth:', window.innerWidth);
-                                const newState = !mobileMenuOpen;
-                                setMobileMenuOpen(newState);
-                                // Toggle sidebar expanded/collapsed state
-                                setSidebarOpen(newState);
+                                console.log('🍔 Hamburger clicked, sidebarOpen:', sidebarOpen, 'isMobile:', isMobile, 'window.innerWidth:', window.innerWidth);
+                                // Toggle sidebar expanded/collapsed state - sidebar always visible, just expands/collapses
+                                setSidebarOpen(!sidebarOpen);
+                                setMobileMenuOpen(!sidebarOpen);
                             }}
                             className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50 lg:hidden`}
                             aria-label="Toggle sidebar expand/collapse"
