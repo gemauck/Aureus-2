@@ -579,10 +579,37 @@
     z-index: 1000;
     transform: translateX(-100%);
     transition: transform 0.3s ease;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   }
   
   .sidebar-mobile.open {
     transform: translateX(0);
+  }
+  
+  /* Ensure hamburger menu button is always visible on mobile */
+  @media (max-width: 1023px) {
+    header.header-mobile button[aria-label="Toggle menu"],
+    header.header-mobile button:has(.fa-bars),
+    header .fa-bars {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+      pointer-events: auto !important;
+      z-index: 1001 !important;
+    }
+    
+    /* Ensure hamburger button is large enough for touch */
+    header.header-mobile button[aria-label="Toggle menu"] {
+      min-width: 44px !important;
+      min-height: 44px !important;
+      padding: 8px !important;
+    }
+  }
+  
+  @media (min-width: 1024px) {
+    header.header-mobile button[aria-label="Toggle menu"] {
+      display: none !important;
+    }
   }
   
   /* Ensure sidebar text is visible on mobile */
