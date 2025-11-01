@@ -831,6 +831,8 @@ async function handler(req, res) {
             estimatedTime: parseInt(body.estimatedTime) || 0,
             components: JSON.stringify(components),
             notes: body.notes || '',
+            thumbnail: body.thumbnail || '',
+            instructions: body.instructions || '',
             ownerId: null
           }
         })
@@ -867,6 +869,8 @@ async function handler(req, res) {
         if (body.overheadCost !== undefined) updateData.overheadCost = parseFloat(body.overheadCost)
         if (body.estimatedTime !== undefined) updateData.estimatedTime = parseInt(body.estimatedTime)
         if (body.notes !== undefined) updateData.notes = body.notes
+        if (body.thumbnail !== undefined) updateData.thumbnail = body.thumbnail || ''
+        if (body.instructions !== undefined) updateData.instructions = body.instructions || ''
         
         // Recalculate costs if components or cost fields changed
         if (body.components !== undefined || body.laborCost !== undefined || body.overheadCost !== undefined) {
