@@ -19,15 +19,17 @@ const MainLayout = () => {
             window.history.replaceState({ page: 'dashboard' }, '', '/');
         }
     }, []);
-    const [sidebarOpen, setSidebarOpen] = useState(false); // Start closed on mobile
+    const [sidebarOpen, setSidebarOpen] = useState(true); // Start open - always visible
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
     
-    // Track mobile state - use 1024px as breakpoint to show hamburger menu on tablets and below
+    // Track mobile state and window width - use 1024px as breakpoint for hamburger menu behavior
     React.useEffect(() => {
         const checkMobile = () => {
             const width = window.innerWidth;
-            setIsMobile(width < 1024); // Show hamburger menu below 1024px (includes tablets)
+            setWindowWidth(width);
+            setIsMobile(width < 1024); // Use hamburger menu below 1024px
         };
         checkMobile();
         window.addEventListener('resize', checkMobile);
@@ -93,24 +95,20 @@ const MainLayout = () => {
         window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
     }, []);
 
-    // Auto-close sidebar on mobile/tablet when page changes
+    // Auto-expand sidebar on desktop, keep state on mobile
     React.useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth < 1024) {
-                // On mobile/tablet, sidebar is controlled by mobileMenuOpen
-                if (!mobileMenuOpen) {
-                    setSidebarOpen(false);
-                }
-            } else {
+            if (window.innerWidth >= 1024) {
                 // On desktop (>= 1024px), default to open
                 setSidebarOpen(true);
             }
+            // On mobile/tablet, maintain current sidebar state (don't auto-close)
         };
         
         handleResize(); // Set initial state
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, [mobileMenuOpen]);
+    }, []);
 
     // Close mobile menu when page changes
     React.useEffect(() => {
@@ -444,40 +442,41 @@ const MainLayout = () => {
 
     return (
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
-            {/* Mobile Overlay */}
-            {mobileMenuOpen && isMobile && (
+            {/* Mobile Overlay - Only show when sidebar is expanded on very small screens */}
+            {sidebarOpen && isMobile && windowWidth < 640 && (
                 <div 
-                    className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden sidebar-overlay"
+                    className="fixed inset-0 bg-black bg-opacity-30 z-40 lg:hidden sidebar-overlay"
                     onClick={() => {
-                        setMobileMenuOpen(false);
                         setSidebarOpen(false);
+                        setMobileMenuOpen(false);
                     }}
                 ></div>
             )}
 
-            {/* Sidebar */}
+            {/* Sidebar - Always visible, responsive width */}
             <div className={`
-                ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-64 lg:w-48' : 'w-12'} 
+                ${sidebarOpen || (mobileMenuOpen && isMobile) ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-12'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
-                border-r transition-all duration-300 flex-col
-                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open flex' : ''}
-                ${!mobileMenuOpen && isMobile ? 'hidden' : 'flex'}
-                lg:flex lg:relative lg:z-auto
+                border-r transition-all duration-300 flex flex-col
+                ${mobileMenuOpen && isMobile ? 'fixed inset-y-0 left-0 z-50 sidebar-mobile open' : ''}
+                relative z-auto
+                flex-shrink-0
             `}>
                 {/* Logo */}
-                <div className={`h-14 lg:h-12 flex items-center justify-between px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                        {(sidebarOpen || (mobileMenuOpen && isMobile)) ? (
-                        <div className="flex-1 flex justify-center">
-                            <h1 className={`abcotronics-logo abcotronics-logo-text text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h1>
+                <div className={`h-14 lg:h-12 flex items-center justify-between px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        {sidebarOpen ? (
+                        <div className="flex-1 flex justify-center min-w-0">
+                            <h1 className={`abcotronics-logo abcotronics-logo-text text-base sm:text-lg lg:text-base font-bold truncate ${isDark ? 'text-white' : 'text-primary-600'}`} style={!isDark ? { color: '#0369a1' } : {}}>Abcotronics</h1>
                         </div>
                     ) : (
-                        <div className={`abcotronics-logo text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'}`} style={!isDark ? { color: '#0369a1' } : {}}>A</div>
+                        <div className={`abcotronics-logo text-base sm:text-xl lg:text-base font-bold ${isDark ? 'text-white' : 'text-primary-600'} flex-shrink-0`} style={!isDark ? { color: '#0369a1' } : {}}>A</div>
                     )}
                     <button 
                         onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-2 lg:p-1 rounded transition-colors touch-target`}
+                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} p-1.5 sm:p-2 lg:p-1 rounded transition-colors touch-target flex-shrink-0`}
+                        aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
                     >
-                        <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-base lg:text-sm`}></i>
+                        <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'chevron-right'} text-sm sm:text-base lg:text-sm`}></i>
                     </button>
                 </div>
 
@@ -535,24 +534,22 @@ const MainLayout = () => {
                 {/* Header - Fixed on mobile, static on desktop */}
                 <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
                     <div className="flex items-center flex-1">
-                        {/* Hamburger Menu Button - Show when sidebar is hidden on smaller screens (< 1024px) */}
+                        {/* Hamburger Menu Button - Toggle sidebar expand/collapse on mobile/tablet */}
                         <button 
                             onClick={() => {
                                 console.log('🍔 Hamburger clicked, mobileMenuOpen:', mobileMenuOpen, 'isMobile:', isMobile, 'window.innerWidth:', window.innerWidth);
                                 const newState = !mobileMenuOpen;
                                 setMobileMenuOpen(newState);
-                                // Toggle sidebar on mobile/tablet
-                                if (isMobile) {
-                                    setSidebarOpen(newState);
-                                }
+                                // Toggle sidebar expanded/collapsed state
+                                setSidebarOpen(newState);
                             }}
                             className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50 lg:hidden`}
-                            aria-label="Toggle sidebar menu"
+                            aria-label="Toggle sidebar expand/collapse"
                             style={{ 
                                 display: isMobile ? 'flex' : 'none'
                             }}
                         >
-                            <i className="fas fa-bars text-xl"></i>
+                            <i className={`fas fa-${sidebarOpen ? 'chevron-left' : 'bars'} text-xl`}></i>
                         </button>
                         <div className="relative hidden lg:block">
                             <input
