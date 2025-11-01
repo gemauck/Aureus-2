@@ -381,7 +381,6 @@ const Manufacturing = () => {
       in_stock: 'text-green-600 bg-green-50',
       low_stock: 'text-yellow-600 bg-yellow-50',
       out_of_stock: 'text-red-600 bg-red-50',
-      in_production: 'text-blue-600 bg-blue-50',
       in_progress: 'text-blue-600 bg-blue-50',
       completed: 'text-green-600 bg-green-50',
       cancelled: 'text-gray-600 bg-gray-50',
