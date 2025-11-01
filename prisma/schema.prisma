@@ -458,6 +458,8 @@ model ProductionOrder {
   totalCost        Float     @default(0)
   notes            String    @default("")
   workOrderNumber  String    @default("") // Auto-generated work order number (WO0001, WO0002, etc.)
+  clientId         String?   // Client allocation - null means allocated to stock
+  allocationType   String    @default("stock") // "client" or "stock"
   createdBy        String    @default("")
   ownerId          String?
   createdAt        DateTime  @default(now())
@@ -466,6 +468,7 @@ model ProductionOrder {
   @@index([status])
   @@index([bomId])
   @@index([ownerId])
+  @@index([clientId])
 }
 
 model StockMovement {
