@@ -170,6 +170,12 @@ const DashboardLive = () => {
                     console.log('✅ DashboardLive: Stored leads in localStorage:', leadsFromAPI.length);
                 }
                 
+                // Store clients in localStorage for next load (even if empty to prevent stale cache)
+                if (window.storage?.setClients) {
+                    window.storage.setClients(clients);
+                    console.log('✅ DashboardLive: Stored clients in localStorage:', clients.length);
+                }
+                
                 // Handle different API response formats
                 const projects = Array.isArray(projectsRes.data?.projects) ? projectsRes.data.projects : 
                                 Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
