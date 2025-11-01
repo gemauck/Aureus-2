@@ -1066,7 +1066,7 @@ async function handler(req, res) {
             quantityProduced: parseInt(body.quantityProduced) || 0,
             status: orderStatus,
             priority: body.priority || 'normal',
-            startDate: body.startDate ? new Date(body.startDate) : new Date(),
+            startDate: body.startDate ? new Date(body.startDate) : null,
             targetDate: body.targetDate ? new Date(body.targetDate) : null,
             completedDate: body.completedDate ? new Date(body.completedDate) : null,
             assignedTo: body.assignedTo || '',
@@ -1504,7 +1504,118 @@ async function handler(req, res) {
     // DELETE (DELETE /api/manufacturing/production-orders/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        await prisma.productionOrder.delete({ where: { id } })
+        // First, get the order to handle stock return before deletion
+        const orderToDelete = await prisma.productionOrder.findUnique({ where: { id } })
+        if (!orderToDelete) {
+          return notFound(res, 'Production order not found')
+        }
+        
+        // Return stock before deleting (wrapped in transaction)
+        if (orderToDelete.bomId && (orderToDelete.status === 'requested' || orderToDelete.status === 'in_production')) {
+          console.log(`🗑️ Deleting work order ${id} with stock return (status: ${orderToDelete.status})`)
+          
+          await prisma.$transaction(async (tx) => {
+            const bom = await tx.bOM.findUnique({ where: { id: orderToDelete.bomId } })
+            if (bom) {
+              const components = parseJson(bom.components, [])
+              const now = new Date()
+              
+              // Generate next movement number
+              const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+              let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+                ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+                : 1
+              
+              const validComponents = components.filter(c => c.sku && c.quantity)
+              
+              for (const component of validComponents) {
+                try {
+                  const returnQty = parseFloat(component.quantity) * orderToDelete.quantity
+                  if (returnQty <= 0) continue
+                  
+                  const inventoryItem = await tx.inventoryItem.findFirst({
+                    where: { sku: component.sku }
+                  })
+                  
+                  if (!inventoryItem) continue
+                  
+                  const updateData = {}
+                  
+                  if (orderToDelete.status === 'in_production') {
+                    // Stock was deducted - return to quantity
+                    updateData.quantity = { increment: returnQty }
+                    console.log(`↩️ Returning ${returnQty} to quantity for ${component.sku} (deleting in_production order)`)
+                  } else if (orderToDelete.status === 'requested') {
+                    // Stock was only allocated - release allocation
+                    const currentAllocated = inventoryItem.allocatedQuantity || 0
+                    if (currentAllocated >= returnQty) {
+                      updateData.allocatedQuantity = { decrement: returnQty }
+                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (deleting requested order)`)
+                    } else if (currentAllocated > 0) {
+                      updateData.allocatedQuantity = 0
+                      console.log(`↩️ Releasing ${currentAllocated} from allocation for ${component.sku}`)
+                    }
+                  }
+                  
+                  if (Object.keys(updateData).length > 0) {
+                    await tx.inventoryItem.updateMany({
+                      where: { id: inventoryItem.id },
+                      data: updateData
+                    })
+                    
+                    // Update status
+                    const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
+                    if (updated) {
+                      const newQty = updated.quantity
+                      const newAllocatedQty = updated.allocatedQuantity || 0
+                      const availableQty = newQty - newAllocatedQty
+                      const reorderPoint = updated.reorderPoint || 0
+                      const status = availableQty > reorderPoint ? 'in_stock' : (availableQty > 0 ? 'low_stock' : 'out_of_stock')
+                      
+                      await tx.inventoryItem.update({
+                        where: { id: updated.id },
+                        data: {
+                          totalValue: newQty * (updated.unitCost || 0),
+                          status: status
+                        }
+                      })
+                    }
+                    
+                    // Create stock movement record
+                    await tx.stockMovement.create({
+                      data: {
+                        movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                        date: now,
+                        type: 'adjustment',
+                        itemName: component.name || component.sku,
+                        sku: component.sku,
+                        quantity: returnQty,
+                        fromLocation: '',
+                        toLocation: '',
+                        reference: orderToDelete.workOrderNumber || id,
+                        performedBy: req.user?.name || 'System',
+                        notes: `Stock return - Work order deleted (${orderToDelete.workOrderNumber || id})`
+                      }
+                    })
+                  }
+                } catch (componentError) {
+                  console.error(`❌ Failed to return component ${component.sku}:`, componentError.message)
+                }
+              }
+              
+              console.log(`✅ Stock returned for deleted work order ${id}`)
+            }
+            
+            // Delete the order
+            await tx.productionOrder.delete({ where: { id } })
+          }, {
+            timeout: 30000
+          })
+        } else {
+          // No stock to return - just delete
+          await prisma.productionOrder.delete({ where: { id } })
+        }
+        
         console.log('✅ Deleted production order:', id)
         return ok(res, { deleted: true })
       } catch (error) {

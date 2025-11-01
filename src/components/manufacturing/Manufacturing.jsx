@@ -1112,7 +1112,7 @@ const Manufacturing = () => {
                 const nextWO = getNextWorkOrderNumber();
                 setFormData({ 
                   workOrderNumber: nextWO,
-                  startDate: new Date().toISOString().split('T')[0],
+                  startDate: null,
                   priority: 'normal',
                   status: 'requested',
                   clientId: 'stock',
@@ -1962,9 +1962,9 @@ const Manufacturing = () => {
         return;
       }
 
-      // Validate required fields
-      if (!formData.startDate || !formData.assignedTo) {
-        alert('Please fill in all required fields (Start Date and Assigned To)');
+      // Validate required fields (startDate is now optional)
+      if (!formData.assignedTo) {
+        alert('Please fill in all required fields (Assigned To)');
         return;
       }
 
@@ -1987,7 +1987,7 @@ const Manufacturing = () => {
         quantityProduced: 0,
         status: formData.status || 'requested',
         priority: formData.priority || 'normal',
-        startDate: formData.startDate || new Date().toISOString().split('T')[0],
+        startDate: formData.startDate || null,
         targetDate: formData.targetDate || null,
         assignedTo: formData.assignedTo || '',
         totalCost: totalCost,
@@ -3112,11 +3112,11 @@ const Manufacturing = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                     <input
                       type="date"
-                      value={formData.startDate || new Date().toISOString().split('T')[0]}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      value={formData.startDate || ''}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value || null })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={false}
                     />
