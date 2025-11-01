@@ -455,6 +455,7 @@ const Clients = React.memo(() => {
     // Function to load clients (can be called to refresh)
     const loadClients = async () => {
         console.log('🔄 Clients: loadClients() called');
+        const loadStartTime = performance.now();
         try {
             // IMMEDIATELY show cached data without waiting for API
             const cachedClients = safeStorage.getClients();
@@ -573,103 +574,103 @@ const Clients = React.memo(() => {
                 // DatabaseAPI returns { data: { clients: [...] } }, while api.listClients might return { data: { clients: [...] } }
                 const apiClients = res?.data?.clients || res?.clients || [];
                 console.log(`🔍 Raw API clients received: ${apiClients.length}`, apiClients);
-                    
-                    // If API returns no clients, use cached data
-                    if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
-                        return; // Keep showing cached data
+                
+                // If API returns no clients, use cached data
+                if (apiClients.length === 0 && cachedClients && cachedClients.length > 0) {
+                    return; // Keep showing cached data
+                }
+                
+                // Use memoized data processor for better performance
+                const processStartTime = performance.now();
+                const processedClients = processClientData(apiClients);
+                console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
+                
+                // Separate clients and leads based on type
+                // Include records with type='client' OR null/undefined (legacy clients without type field)
+                const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
+                const leadsOnly = processedClients.filter(c => c.type === 'lead');
+                // Log any records with unexpected types for debugging
+                const unexpectedType = processedClients.filter(c => c.type && c.type !== 'client' && c.type !== 'lead');
+                if (unexpectedType.length > 0) {
+                    console.warn(`⚠️ Found ${unexpectedType.length} records with unexpected type:`, unexpectedType.map(c => ({ id: c.id, name: c.name, type: c.type })));
+                }
+                console.log(`🔍 Clients only: ${clientsOnly.length} (including ${processedClients.filter(c => c.type === null || c.type === undefined).length} legacy/null), Leads only: ${leadsOnly.length}`);
+                
+                // Preserve opportunities from cached clients for instant display
+                const cachedClientsForOpps = safeStorage.getClients() || [];
+                const clientsWithCachedOpps = clientsOnly.map(client => {
+                    const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
+                    if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
+                        return { ...client, opportunities: cachedClient.opportunities };
                     }
-                    
-                    // Use memoized data processor for better performance
-                    const processStartTime = performance.now();
-                    const processedClients = processClientData(apiClients);
-                    console.log(`🔍 Processed clients: ${processedClients.length}`, processedClients);
-                    
-                    // Separate clients and leads based on type
-                    // Include records with type='client' OR null/undefined (legacy clients without type field)
-                    const clientsOnly = processedClients.filter(c => c.type === 'client' || c.type === null || c.type === undefined);
-                    const leadsOnly = processedClients.filter(c => c.type === 'lead');
-                    // Log any records with unexpected types for debugging
-                    const unexpectedType = processedClients.filter(c => c.type && c.type !== 'client' && c.type !== 'lead');
-                    if (unexpectedType.length > 0) {
-                        console.warn(`⚠️ Found ${unexpectedType.length} records with unexpected type:`, unexpectedType.map(c => ({ id: c.id, name: c.name, type: c.type })));
+                    return client;
+                });
+                
+                // Show clients immediately with preserved opportunities
+                setClients(clientsWithCachedOpps);
+                
+                // Only update leads if they're mixed with clients in the API response
+                // (Leads typically come from a separate getLeads() endpoint via loadLeads())
+                if (leadsOnly.length > 0) {
+                    // API returned leads mixed with clients - use them
+                    setLeads(leadsOnly);
+                    setLeadsCount(leadsOnly.length);
+                    // Save to localStorage
+                    if (window.storage?.setLeads) {
+                        window.storage.setLeads(leadsOnly);
+                        console.log(`✅ Saved ${leadsOnly.length} leads from clients API to localStorage`);
                     }
-                    console.log(`🔍 Clients only: ${clientsOnly.length} (including ${processedClients.filter(c => c.type === null || c.type === undefined).length} legacy/null), Leads only: ${leadsOnly.length}`);
-                    
-                    // Preserve opportunities from cached clients for instant display
-                    const cachedClientsForOpps = safeStorage.getClients() || [];
-                    const clientsWithCachedOpps = clientsOnly.map(client => {
-                        const cachedClient = cachedClientsForOpps.find(c => c.id === client.id);
-                        if (cachedClient?.opportunities && Array.isArray(cachedClient.opportunities) && cachedClient.opportunities.length > 0) {
-                            return { ...client, opportunities: cachedClient.opportunities };
-                        }
-                        return client;
-                    });
-                    
-                    // Show clients immediately with preserved opportunities
-                    setClients(clientsWithCachedOpps);
-                    
-                    // Only update leads if they're mixed with clients in the API response
-                    // (Leads typically come from a separate getLeads() endpoint via loadLeads())
-                    if (leadsOnly.length > 0) {
-                        // API returned leads mixed with clients - use them
-                        setLeads(leadsOnly);
-                        setLeadsCount(leadsOnly.length);
-                        // Save to localStorage
-                        if (window.storage?.setLeads) {
-                            window.storage.setLeads(leadsOnly);
-                            console.log(`✅ Saved ${leadsOnly.length} leads from clients API to localStorage`);
-                        }
-                    } else {
-                        // No leads in clients API - preserve current leads state (from separate getLeads() call or cache)
-                        // Don't overwrite leads here - let loadLeads() handle it
-                        console.log('⚡ No leads in clients API response, preserving current leads state');
-                    }
-                    
-                    // Save clients with preserved opportunities to localStorage (instant display)
-                    safeStorage.setClients(clientsWithCachedOpps);
-                    
-                    // Load fresh opportunities from API in background (only if Pipeline is active)
-                    // Use bulk fetch instead of per-client calls for much better performance
-                    if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
-                        console.log('📡 Loading all opportunities in bulk (much faster than per-client calls)...');
-                        window.DatabaseAPI.getOpportunities()
-                            .then(oppResponse => {
-                                const allOpportunities = oppResponse?.data?.opportunities || [];
-                                console.log(`✅ Loaded ${allOpportunities.length} opportunities in bulk`);
-                                
-                                // Group opportunities by clientId
-                                const opportunitiesByClient = {};
-                                allOpportunities.forEach(opp => {
-                                    const clientId = opp.clientId || opp.client?.id;
-                                    if (clientId) {
-                                        if (!opportunitiesByClient[clientId]) {
-                                            opportunitiesByClient[clientId] = [];
-                                        }
-                                        opportunitiesByClient[clientId].push(opp);
+                } else {
+                    // No leads in clients API - preserve current leads state (from separate getLeads() call or cache)
+                    // Don't overwrite leads here - let loadLeads() handle it
+                    console.log('⚡ No leads in clients API response, preserving current leads state');
+                }
+                
+                // Save clients with preserved opportunities to localStorage (instant display)
+                safeStorage.setClients(clientsWithCachedOpps);
+                
+                // Load fresh opportunities from API in background (only if Pipeline is active)
+                // Use bulk fetch instead of per-client calls for much better performance
+                if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                    console.log('📡 Loading all opportunities in bulk (much faster than per-client calls)...');
+                    window.DatabaseAPI.getOpportunities()
+                        .then(oppResponse => {
+                            const allOpportunities = oppResponse?.data?.opportunities || [];
+                            console.log(`✅ Loaded ${allOpportunities.length} opportunities in bulk`);
+                            
+                            // Group opportunities by clientId
+                            const opportunitiesByClient = {};
+                            allOpportunities.forEach(opp => {
+                                const clientId = opp.clientId || opp.client?.id;
+                                if (clientId) {
+                                    if (!opportunitiesByClient[clientId]) {
+                                        opportunitiesByClient[clientId] = [];
                                     }
-                                });
-                                
-                                // Attach opportunities to their clients
-                                const updated = clientsOnly.map(client => ({
-                                    ...client,
-                                    opportunities: opportunitiesByClient[client.id] || []
-                                }));
-                                
-                                const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                                if (totalOpps > 0) {
-                                    console.log(`✅ Attached ${totalOpps} opportunities to ${clientsOnly.length} clients (bulk load)`);
+                                    opportunitiesByClient[clientId].push(opp);
                                 }
-                                setClients(updated);
-                                safeStorage.setClients(updated);
-                            })
-                            .catch(error => {
-                                console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error);
-                                // Keep existing opportunities from cache
                             });
-                    }
-                    
-                    const loadEndTime = performance.now();
-                    console.log(`⚡ TOTAL loadClients: ${(loadEndTime - loadStartTime).toFixed(1)}ms`);
+                            
+                            // Attach opportunities to their clients
+                            const updated = clientsOnly.map(client => ({
+                                ...client,
+                                opportunities: opportunitiesByClient[client.id] || []
+                            }));
+                            
+                            const totalOpps = updated.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            if (totalOpps > 0) {
+                                console.log(`✅ Attached ${totalOpps} opportunities to ${clientsOnly.length} clients (bulk load)`);
+                            }
+                            setClients(updated);
+                            safeStorage.setClients(updated);
+                        })
+                        .catch(error => {
+                            console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error);
+                            // Keep existing opportunities from cache
+                        });
+                }
+                
+                const loadEndTime = performance.now();
+                console.log(`⚡ TOTAL loadClients: ${(loadEndTime - loadStartTime).toFixed(1)}ms`);
             } catch (apiError) {
                 // On API error, just keep showing cached data
                 if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
