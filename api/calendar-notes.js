@@ -74,11 +74,29 @@ async function handler(req, res) {
           const day = String(note.date.getUTCDate()).padStart(2, '0')
           const dateStr = `${year}-${month}-${day}`
           notesByDate[dateStr] = note.note
+          
+          console.log('📝 Processing note:', {
+            rawDate: note.date,
+            dateStr,
+            notePreview: note.note?.substring(0, 20) || 'empty'
+          })
         })
         
-        console.log('📅 Returning notesByDate with keys:', Object.keys(notesByDate))
+        console.log('📅 Returning notesByDate:', {
+          keys: Object.keys(notesByDate),
+          count: Object.keys(notesByDate).length,
+          sample: Object.keys(notesByDate).slice(0, 3)
+        })
         
-        return ok(res, { notes: notesByDate })
+        const responseData = { notes: notesByDate }
+        console.log('📤 Response data structure:', {
+          hasNotes: !!responseData.notes,
+          notesType: typeof responseData.notes,
+          notesKeys: Object.keys(responseData.notes || {}),
+          notesCount: Object.keys(responseData.notes || {}).length
+        })
+        
+        return ok(res, responseData)
       } catch (dbError) {
         console.error('❌ Database error listing calendar notes:', dbError)
         return serverError(res, 'Failed to list calendar notes', dbError.message)
