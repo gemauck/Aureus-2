@@ -824,12 +824,42 @@ const Projects = () => {
             );
         }
         
+        // Check if ProjectProgressTracker is actually callable
+        let ComponentToRender = ProjectProgressTracker;
+        if (typeof ProjectProgressTracker === 'object' && ProjectProgressTracker.type) {
+            // It's a React.memo or forwardRef component - use the .type
+            ComponentToRender = ProjectProgressTracker.type;
+            console.log('🔍 Using ProjectProgressTracker.type (React.memo/forwardRef detected)');
+        }
+        
+        if (typeof ComponentToRender !== 'function') {
+            console.error('❌ ComponentToRender is not a function:', typeof ComponentToRender, ComponentToRender);
+            return (
+                <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                        <button 
+                            onClick={() => setShowProgressTracker(false)} 
+                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <i className="fas fa-arrow-left"></i>
+                        </button>
+                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                        <p className="text-sm text-red-700">
+                            Component is not a valid function. Type: {typeof ComponentToRender}
+                        </p>
+                    </div>
+                </div>
+            );
+        }
+        
         try {
             console.log('🔍 Creating ProjectProgressTracker element...');
             console.log('🔍 React available:', !!React);
-            console.log('🔍 React.createElement available:', typeof React.createElement);
+            console.log('🔍 ComponentToRender type:', typeof ComponentToRender);
             
-            // Create the props object
+            // Create the props object - ensure all values are primitives or valid React elements
             const trackerProps = {
                 onBack: () => {
                     console.log('🔍 ProjectProgressTracker onBack called');
@@ -842,10 +872,16 @@ const Projects = () => {
             // Use React.createElement to ensure proper component rendering
             let trackerElement;
             try {
-                trackerElement = React.createElement(ProjectProgressTracker, trackerProps);
+                trackerElement = React.createElement(ComponentToRender, trackerProps);
                 console.log('✅ ProjectProgressTracker element created:', trackerElement);
+                
+                // Validate the element
+                if (!trackerElement || typeof trackerElement !== 'object') {
+                    throw new Error('React.createElement did not return a valid element');
+                }
             } catch (createError) {
                 console.error('❌ Error creating ProjectProgressTracker element:', createError);
+                console.error('❌ CreateError stack:', createError.stack);
                 throw createError;
             }
             
