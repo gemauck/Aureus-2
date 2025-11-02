@@ -441,8 +441,16 @@ const Calendar = () => {
                     date={selectedDate.date}
                     dateString={selectedDate.dateString}
                     initialNote={notes[selectedDate.dateString] || ''}
-                    onSave={(noteText) => {
-                        saveNotes(selectedDate.dateString, noteText);
+                    onSave={async (noteText) => {
+                        console.log('📝 Calendar: onSave called with noteText length:', noteText?.length || 0);
+                        try {
+                            await saveNotes(selectedDate.dateString, noteText);
+                            console.log('✅ Calendar: saveNotes completed');
+                        } catch (error) {
+                            console.error('❌ Calendar: Error in saveNotes:', error);
+                            alert(`Failed to save calendar note: ${error.message || 'Unknown error'}`);
+                            return; // Don't close modal on error
+                        }
                         setShowNotesModal(false);
                     }}
                     onClose={() => setShowNotesModal(false)}
@@ -462,8 +470,15 @@ const DayNotesModal = ({ date, dateString, initialNote, onSave, onClose, isDark 
         return date.toLocaleDateString('en-US', options);
     };
     
-    const handleSave = () => {
-        onSave(note);
+    const handleSave = async () => {
+        console.log('💾 DayNotesModal: Save button clicked, note:', note.substring(0, 50));
+        try {
+            await onSave(note);
+            console.log('✅ DayNotesModal: onSave completed');
+        } catch (error) {
+            console.error('❌ DayNotesModal: Error in onSave:', error);
+            alert(`Failed to save: ${error.message || 'Unknown error'}`);
+        }
     };
     
     return (
