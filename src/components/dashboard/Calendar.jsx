@@ -49,8 +49,20 @@ const Calendar = () => {
                         });
                         if (res.ok) {
                             const data = await res.json();
-                            const serverNotes = data?.notes || {};
+                            console.log('📋 Raw API response:', data);
+                            console.log('📋 Response structure:', {
+                                hasData: !!data,
+                                hasNotes: !!data.notes,
+                                notesType: typeof data.notes,
+                                notesKeys: data.notes ? Object.keys(data.notes) : [],
+                                dataKeys: Object.keys(data || {}),
+                                fullResponse: JSON.stringify(data, null, 2)
+                            });
+                            const serverNotes = data?.notes || data?.data?.notes || {};
                             console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length, 'dates');
+                            if (Object.keys(serverNotes).length > 0) {
+                                console.log('📅 Note dates found:', Object.keys(serverNotes));
+                            }
                             
                             // SERVER DATA ALWAYS TAKES PRIORITY - replace entirely, not merge
                             // This ensures cross-device synchronization
@@ -216,11 +228,23 @@ const Calendar = () => {
                                 
                                 if (refreshRes.ok) {
                                     const refreshData = await refreshRes.json();
-                                    const serverNotes = refreshData?.notes || {};
+                                    console.log('📋 Refresh response:', refreshData);
+                                    console.log('📋 Refresh response structure:', {
+                                        hasData: !!refreshData,
+                                        hasNotes: !!refreshData.notes,
+                                        notesType: typeof refreshData.notes,
+                                        dataKeys: Object.keys(refreshData || {}),
+                                        fullResponse: JSON.stringify(refreshData, null, 2)
+                                    });
+                                    const serverNotes = refreshData?.notes || refreshData?.data?.notes || {};
                                     
                                     console.log('📋 Server notes keys:', Object.keys(serverNotes));
+                                    console.log('📋 Server notes object:', serverNotes);
                                     console.log('🔍 Looking for note on date:', dateString);
                                     console.log('✅ Note found on server:', serverNotes[dateString] ? 'YES' : 'NO');
+                                    if (serverNotes[dateString]) {
+                                        console.log('📝 Note content:', serverNotes[dateString]);
+                                    }
                                     
                                     if (serverNotes[dateString]) {
                                         // Note is confirmed on server - update state
