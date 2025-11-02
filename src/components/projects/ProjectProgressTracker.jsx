@@ -561,8 +561,9 @@ const ProjectProgressTracker = ({ onBack }) => {
         const headerRow2 = ['', ''];
         
         // Add month headers (3 columns per month: Compliance, Data, Comments)
+        const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
         months.forEach(month => {
-            const monthYear = `${month.slice(0, 3)} '${String(selectedYear).slice(-2)}`;
+            const monthYear = `${String(month || '').slice(0, 3)} '${String(safeYear).slice(-2)}`;
             headerRow1.push(monthYear, '', '');
             headerRow2.push('Compliance', 'Data', 'Comments');
         });
@@ -582,8 +583,9 @@ const ProjectProgressTracker = ({ onBack }) => {
             ];
             
             // Add monthly progress data
+            const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
             months.forEach(month => {
-                const monthKey = `${month}-${selectedYear}`;
+                const monthKey = `${String(month || '')}-${safeYear}`;
                 const monthProgress = project.monthlyProgress?.[monthKey] || {};
                 
                 // Compliance
@@ -698,10 +700,11 @@ const ProjectProgressTracker = ({ onBack }) => {
         ws['!merges'] = merges;
         
         // Add worksheet to workbook
-        XLSX.utils.book_append_sheet(wb, ws, `Progress ${selectedYear}`);
+        const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+        XLSX.utils.book_append_sheet(wb, ws, `Progress ${safeYear}`);
         
         // Generate filename
-        const filename = `Project_Progress_Tracker_${selectedYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const filename = `Project_Progress_Tracker_${safeYear}_${new Date().toISOString().split('T')[0]}.xlsx`;
         
         // Write file
         XLSX.writeFile(wb, filename);
