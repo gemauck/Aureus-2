@@ -1402,10 +1402,50 @@ const ProjectProgressTracker = ({ onBack }) => {
                 </div>
             </div>
 
-            {/* Modal */}
-            {showProgressModal && <ProgressModal />}
-        </div>
-    );
+                {/* Modal */}
+                {showProgressModal && <ProgressModal />}
+            </div>
+        );
+    } catch (renderError) {
+        console.error('❌ Fatal error in ProjectProgressTracker render:', renderError);
+        console.error('❌ Error details:', {
+            message: renderError.message,
+            stack: renderError.stack,
+            name: renderError.name
+        });
+        
+        // Return a safe fallback UI
+        return (
+            <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                    <button 
+                        onClick={onBack} 
+                        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        <i className="fas fa-arrow-left"></i>
+                    </button>
+                    <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start">
+                        <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3"></i>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-red-800 mb-1">Render Error</h3>
+                            <p className="text-xs text-red-700 mb-2">
+                                An error occurred while rendering the Progress Tracker: {String(renderError.message || 'Unknown error')}
+                            </p>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="mt-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs font-medium"
+                            >
+                                Reload Page
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 };
 
 // Make available globally with error handling
