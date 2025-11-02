@@ -1321,15 +1321,13 @@ const Manufacturing = () => {
                           >
                             <i className="fas fa-edit"></i>
                           </button>
-                          {user?.role === 'Admin' && (
-                            <button
-                              onClick={() => handleDeleteProductionOrder(order.id)}
-                              className="text-red-600 hover:text-red-800 text-sm font-medium"
-                              title="Delete Order (Admin Only)"
-                            >
-                              <i className="fas fa-trash"></i>
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleDeleteProductionOrder(order.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Delete Order"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
                         </div>
                       </td>
                     </tr>
