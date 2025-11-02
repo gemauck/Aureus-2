@@ -262,7 +262,7 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
                     )}
 
                     {/* Action Buttons */}
-                    <div className="flex justify-end gap-2 pt-3 border-t border-gray-200">
+                    <div className="flex justify-end gap-2 pt-3 pb-1 sm:pb-0 border-t border-gray-200">
                         <button
                             type="button"
                             onClick={onClose}

@@ -64,14 +64,39 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       const onlineStatus = navigator.onLine;
       if (onlineStatus && window.DatabaseAPI?.getJobCards) {
         try {
+          console.log('📡 JobCards: Fetching from API...');
           const response = await window.DatabaseAPI.getJobCards();
+          console.log('📡 JobCards: API response:', response);
           const jobCardsData = response?.data?.jobCards || response?.data || [];
-          if (Array.isArray(jobCardsData) && jobCardsData.length > 0) {
+          console.log('📡 JobCards: Parsed job cards:', jobCardsData.length);
+          if (Array.isArray(jobCardsData)) {
+            // Always set the job cards array (even if empty) so the UI shows the empty state
             setJobCards(jobCardsData);
             localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
+            if (jobCardsData.length > 0) {
+              console.log('✅ JobCards: Loaded', jobCardsData.length, 'job cards from API');
+            } else {
+              console.log('ℹ️ JobCards: API returned empty array (no job cards yet)');
+            }
+          } else {
+            console.warn('⚠️ JobCards: API response is not an array:', typeof jobCardsData);
+            // Set empty array if response is invalid
+            setJobCards([]);
           }
         } catch (error) {
-          console.warn('⚠️ Failed to sync job cards from API, using cached data:', error.message);
+          console.error('❌ JobCards: Failed to sync from API:', error);
+          console.error('❌ Error details:', error.message, error.stack);
+          // Still show cached data if available
+          if (cached.length > 0) {
+            console.log('📦 JobCards: Using cached data due to API error');
+          }
+        }
+      } else {
+        if (!onlineStatus) {
+          console.log('📴 JobCards: Offline, using cached data');
+        } else if (!window.DatabaseAPI?.getJobCards) {
+          console.error('❌ JobCards: getJobCards method not available on DatabaseAPI');
+          console.log('📋 Available DatabaseAPI methods:', Object.keys(window.DatabaseAPI || {}));
         }
       }
     } catch (error) {
@@ -1221,9 +1246,17 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       </div>
 
       {jobCards.length === 0 ? (
-        <div className="p-12 text-center text-gray-500">
+        <div className="p-12 text-center">
           <i className="fas fa-clipboard-list text-4xl mb-4 text-gray-300"></i>
-          <p>No job cards yet. Create your first job card to get started.</p>
+          <p className="text-gray-600 font-medium mb-2">No job cards yet</p>
+          <p className="text-sm text-gray-500 mb-4">Create your first job card to get started</p>
+          <button
+            onClick={openAddPage}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium inline-flex items-center gap-2"
+          >
+            <i className="fas fa-plus"></i>
+            Create Your First Job Card
+          </button>
         </div>
       ) : (
         <div className="p-4">
