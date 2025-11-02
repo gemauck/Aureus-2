@@ -2,8 +2,9 @@
 const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 
-const ProjectProgressTracker = ({ onBack }) => {
-    // DEBUG: Log component entry
+// Create a wrapper function that logs immediately when called
+const ProjectProgressTrackerRaw = ({ onBack }) => {
+    // DEBUG: Log component entry - this MUST appear if function is called
     console.log('🔍 ProjectProgressTracker: Component function called');
     
     // Safety check for required dependencies
@@ -1667,6 +1668,30 @@ const ProjectProgressTracker = ({ onBack }) => {
         return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
             React.createElement('p', { className: 'text-red-800' }, 'Error initializing progress tracker. Please refresh the page.'),
             React.createElement('p', { className: 'text-red-600 text-xs mt-1' }, String(outerError?.message || outerError || 'Unknown error'))
+        );
+    }
+};
+
+// Wrap in a safety function that catches errors before React calls the component
+const ProjectProgressTracker = (props) => {
+    console.log('🔍 ProjectProgressTracker WRAPPER: Called with props:', props);
+    try {
+        // Immediately validate props
+        if (!props || typeof props !== 'object') {
+            console.error('❌ ProjectProgressTracker: Invalid props:', props);
+            return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+                React.createElement('p', { className: 'text-red-800' }, 'Error: Invalid props passed to component')
+            );
+        }
+        
+        // Call the actual component
+        return ProjectProgressTrackerRaw(props);
+    } catch (error) {
+        console.error('❌ ProjectProgressTracker WRAPPER: Error caught:', error);
+        console.error('❌ Error stack:', error?.stack);
+        return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+            React.createElement('p', { className: 'text-red-800' }, 'Error in component wrapper'),
+            React.createElement('p', { className: 'text-red-600 text-xs mt-1' }, String(error?.message || error))
         );
     }
 };
