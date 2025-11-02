@@ -40,7 +40,7 @@ const Manufacturing = () => {
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
-  const [categories, setCategories] = useState(['components', 'packaging', 'accessories', 'finished_goods', 'work_in_progress']);
+  const [categories, setCategories] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -84,12 +84,19 @@ const Manufacturing = () => {
         const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
         setStockLocations(loadedLocations);
 
+        // Load only user-added categories (no default categories)
+        // Filter out default categories if they exist in localStorage
         const defaultCategories = ['components', 'packaging', 'accessories', 'finished_goods', 'work_in_progress'];
         const loadedCategories = JSON.parse(localStorage.getItem('inventory_categories') || '[]');
-        if (loadedCategories.length > 0) {
-          const allCategories = [...new Set([...defaultCategories, ...loadedCategories])];
-          setCategories(allCategories);
-          localStorage.setItem('inventory_categories', JSON.stringify(allCategories));
+        const userCategories = loadedCategories.filter(cat => !defaultCategories.includes(cat));
+        
+        if (userCategories.length > 0) {
+          setCategories(userCategories);
+          // Update localStorage to only contain user-added categories
+          localStorage.setItem('inventory_categories', JSON.stringify(userCategories));
+        } else if (loadedCategories.length > 0) {
+          // Clear localStorage if it only had default categories
+          localStorage.setItem('inventory_categories', JSON.stringify([]));
         }
 
         // STEP 2: Load from API in parallel (background sync)
@@ -612,6 +619,9 @@ const Manufacturing = () => {
   };
 
   const InventoryView = () => {
+    // Get unique categories from inventory items
+    const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
+    
     const filteredInventory = inventory.filter(item => {
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
@@ -643,11 +653,11 @@ const Manufacturing = () => {
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Categories</option>
-                <option value="components">Components</option>
-                <option value="packaging">Packaging</option>
-                <option value="accessories">Accessories</option>
-                <option value="finished_goods">Finished Goods</option>
-                <option value="work_in_progress">Work in Progress</option>
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat}>
+                    {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                  </option>
+                ))}
               </select>
               <div className="text-xs text-gray-500 whitespace-nowrap">
                 Showing {filteredInventory.length} of {inventory.length}
@@ -1559,6 +1569,12 @@ const Manufacturing = () => {
 
   const handleSaveItem = async () => {
     try {
+      // Validate required fields
+      if (!formData.category || formData.category.trim() === '') {
+        alert('Please select or add a category for this item.');
+        return;
+      }
+      
       // Don't include quantity in update (it's read-only)
       // Don't include SKU in create (auto-generated) or update (read-only)
       // Don't include location (removed)
@@ -1650,7 +1666,7 @@ const Manufacturing = () => {
       setCategories(updatedCategories);
       localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
       if (formData.category === categoryToDelete) {
-        setFormData({ ...formData, category: 'components' });
+        setFormData({ ...formData, category: updatedCategories.length > 0 ? updatedCategories[0] : '' });
       }
     }
   };
@@ -2479,15 +2495,23 @@ const Manufacturing = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
                   <div className="flex gap-2">
                     <select
-                      value={formData.category || 'components'}
+                      value={formData.category || ''}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
                     >
-                      {categories.map(cat => (
-                        <option key={cat} value={cat}>
-                          {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                        </option>
-                      ))}
+                      {categories.length === 0 ? (
+                        <option value="">No categories yet - Add one using the + button</option>
+                      ) : (
+                        <>
+                          <option value="">Select a category...</option>
+                          {categories.map(cat => (
+                            <option key={cat} value={cat}>
+                              {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                            </option>
+                          ))}
+                        </>
+                      )}
                     </select>
                     <button
                       type="button"
