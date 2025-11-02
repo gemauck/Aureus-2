@@ -198,8 +198,11 @@ const FeedbackWidget = () => {
         return date.toLocaleDateString();
     };
 
+    // Detect mobile
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    
     return (
-        <div className="fixed right-4 bottom-4 z-50">
+        <div className={`fixed ${isMobile ? 'left-4 right-4' : 'right-4'} bottom-4 z-50`}>
             {!open ? (
                 <button
                     onClick={() => setOpen(true)}
@@ -210,7 +213,7 @@ const FeedbackWidget = () => {
                     Feedback
                 </button>
             ) : (
-                <div className={`w-80 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col`}>
+                <div className={`${isMobile ? 'w-full max-w-[calc(100vw-2rem)]' : 'w-80'} ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col`}>
                     <div className={`px-3 py-2 border-b ${isDark ? 'border-gray-700 bg-gray-750' : 'border-gray-200 bg-gray-50'} flex items-center justify-between`}>
                         <div className={`text-xs font-semibold ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>Send Feedback</div>
                         <button className={`${isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-500 hover:text-gray-700'}`} onClick={() => setOpen(false)}>

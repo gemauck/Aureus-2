@@ -33,8 +33,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const workingMonths = getWorkingMonths();
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     
-    // State
-    const [projects, setProjects] = useState([]);
+    // State - always initialize with empty array to prevent undefined/null issues
+    const [projects, setProjects] = useState(() => []);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [loadError, setLoadError] = useState(null);
     
@@ -91,28 +91,61 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                     
                     // Filter to only MONTHLY type projects (Monthly Progress Checker requirement)
                     // Matches "MONTHLY", "Monthly", "Monthly Review", etc. (case-insensitive, starts with MONTHLY)
+                    // Handle all edge cases: null, undefined, non-string types
                     const monthlyProjects = normalizedProjects.filter(p => {
-                        const projectType = String(p.type || '').toUpperCase().trim();
-                        return projectType.startsWith('MONTHLY');
+                        if (!p || typeof p !== 'object') return false;
+                        
+                        // Safely extract and normalize type
+                        const rawType = p.type;
+                        if (rawType === null || rawType === undefined) return false;
+                        
+                        try {
+                            const projectType = String(rawType || '').toUpperCase().trim();
+                            return projectType.length > 0 && projectType.startsWith('MONTHLY');
+                        } catch (e) {
+                            // If type conversion fails, exclude the project
+                            console.warn('⚠️ ProjectProgressTracker: Could not parse project type:', rawType, e);
+                            return false;
+                        }
                     });
                     
                     console.log('✅ ProjectProgressTracker: Loaded', normalizedProjects.length, 'total projects from API');
                     console.log('📋 ProjectProgressTracker: Filtered to', monthlyProjects.length, 'MONTHLY type projects');
+                    
                     if (monthlyProjects.length > 0) {
                         console.log('📋 ProjectProgressTracker: First MONTHLY project sample:', monthlyProjects[0]);
                     } else if (normalizedProjects.length > 0) {
-                        console.warn('⚠️ ProjectProgressTracker: No MONTHLY projects found. Available types:', 
-                            [...new Set(normalizedProjects.map(p => p.type))]);
+                        // Show available types for debugging
+                        const availableTypes = normalizedProjects
+                            .map(p => {
+                                try {
+                                    return String(p.type || 'NO TYPE').trim();
+                                } catch {
+                                    return 'INVALID TYPE';
+                                }
+                            })
+                            .filter((type, index, arr) => arr.indexOf(type) === index); // unique
+                        
+                        console.warn('⚠️ ProjectProgressTracker: No MONTHLY projects found. Available types:', availableTypes);
+                    } else {
+                        console.log('ℹ️ ProjectProgressTracker: No projects loaded from API');
                     }
                     
-                    setProjects(monthlyProjects);
+                    // Always set an array (never null/undefined)
+                    setProjects(Array.isArray(monthlyProjects) ? monthlyProjects : []);
                 } else {
                     console.error('❌ ProjectProgressTracker: DatabaseAPI.getProjects not available');
                     setLoadError('Database API not available');
                 }
             } catch (err) {
                 console.error('❌ ProjectProgressTracker: Load error:', err);
+                console.error('❌ Error details:', {
+                    message: err?.message,
+                    stack: err?.stack,
+                    name: err?.name
+                });
                 setLoadError(String(err?.message || 'Failed to load projects'));
+                // Always ensure projects is an array, never null/undefined
                 setProjects([]);
             }
         };
@@ -121,24 +154,60 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     
     // Validate projects before render
     // Normalize and validate projects - handle both numeric and string IDs, client/clientName
-    const safeProjects = Array.isArray(projects) ? projects.filter(p => {
-        // More flexible validation: ID can be string or number, name must exist
-        return p && typeof p === 'object' && p.id !== undefined && p.id !== null && 
-               typeof p.name === 'string' && p.name.trim() !== '';
-    }).map(p => {
-        // Normalize client/clientName (like Projects.jsx does)
-        const client = p.clientName || p.client || '';
-        
-        return {
-            id: String(p.id || ''),
-            name: String(p.name || ''),
-            client: String(client),
-            manager: String(p.manager || p.assignedTo || '-'),
-            type: String(p.type || '-'),
-            status: String(p.status || 'Unknown'),
-            monthlyProgress: p.monthlyProgress && typeof p.monthlyProgress === 'object' ? p.monthlyProgress : {}
-        };
-    }) : [];
+    // Wrap in try-catch to ensure it never crashes, always returns an array
+    let safeProjects = [];
+    try {
+        if (Array.isArray(projects) && projects.length > 0) {
+            safeProjects = projects.filter(p => {
+                try {
+                    // More flexible validation: ID can be string or number, name must exist
+                    if (!p || typeof p !== 'object') return false;
+                    if (p.id === undefined || p.id === null) return false;
+                    if (typeof p.name !== 'string' || p.name.trim() === '') return false;
+                    return true;
+                } catch (e) {
+                    console.warn('⚠️ ProjectProgressTracker: Error validating project:', p, e);
+                    return false;
+                }
+            }).map(p => {
+                try {
+                    // Normalize client/clientName (like Projects.jsx does)
+                    const client = p.clientName || p.client || '';
+                    
+                    return {
+                        id: String(p.id || ''),
+                        name: String(p.name || ''),
+                        client: String(client),
+                        manager: String(p.manager || p.assignedTo || '-'),
+                        type: String(p.type || '-'),
+                        status: String(p.status || 'Unknown'),
+                        monthlyProgress: p.monthlyProgress && typeof p.monthlyProgress === 'object' ? p.monthlyProgress : {}
+                    };
+                } catch (e) {
+                    console.warn('⚠️ ProjectProgressTracker: Error mapping project:', p, e);
+                    // Return a minimal valid project object to prevent crashes
+                    return {
+                        id: String(p?.id || 'unknown'),
+                        name: String(p?.name || 'Invalid Project'),
+                        client: String(p?.clientName || p?.client || ''),
+                        manager: '-',
+                        type: String(p?.type || '-'),
+                        status: 'Unknown',
+                        monthlyProgress: {}
+                    };
+                }
+            });
+        }
+    } catch (e) {
+        console.error('❌ ProjectProgressTracker: Error in safeProjects calculation:', e);
+        safeProjects = []; // Always return an array
+    }
+    
+    // Final safety check - ensure safeProjects is always an array
+    if (!Array.isArray(safeProjects)) {
+        console.error('❌ ProjectProgressTracker: safeProjects is not an array, resetting');
+        safeProjects = [];
+    }
     
     // Status config
     const getStatusConfig = (status) => {
@@ -293,7 +362,25 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 ),
                 React.createElement('tbody', null,
                     safeProjects.length === 0 ? React.createElement('tr', null,
-                        React.createElement('td', { colSpan: months.length * 3 + 4, className: 'px-4 py-8 text-center text-gray-500' }, 'No projects found')
+                        React.createElement('td', { colSpan: months.length * 3 + 4, className: 'px-4 py-8 text-center text-gray-500' }, 
+                            loadError 
+                                ? React.createElement('div', { className: 'flex flex-col items-center gap-2' },
+                                    React.createElement('i', { className: 'fas fa-exclamation-triangle text-yellow-500 text-2xl' }),
+                                    React.createElement('span', { className: 'text-red-600 font-medium' }, 'Error loading projects'),
+                                    React.createElement('span', { className: 'text-xs text-gray-400' }, loadError)
+                                )
+                                : projects.length === 0
+                                    ? React.createElement('div', { className: 'flex flex-col items-center gap-2' },
+                                        React.createElement('i', { className: 'fas fa-filter text-gray-400 text-2xl' }),
+                                        React.createElement('span', null, 'No MONTHLY type projects found'),
+                                        React.createElement('span', { className: 'text-xs text-gray-400' }, 'Only projects with type starting with "MONTHLY" are shown')
+                                    )
+                                    : React.createElement('div', { className: 'flex flex-col items-center gap-2' },
+                                        React.createElement('i', { className: 'fas fa-info-circle text-gray-400 text-2xl' }),
+                                        React.createElement('span', null, 'No valid MONTHLY projects to display'),
+                                        React.createElement('span', { className: 'text-xs text-gray-400' }, 'Projects may be missing required fields')
+                                    )
+                        )
                     ) : safeProjects.map(project =>
                         React.createElement('tr', { key: String(project.id), className: 'border-b border-gray-100 hover:bg-gray-50' },
                             React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] sticky left-0 bg-white z-10 border-r' },

@@ -412,14 +412,18 @@ const storage = {
 
 // Make available globally with immediate assignment
 if (typeof window !== 'undefined') {
-    window.storage = storage;
+    // Merge with existing storage if it exists (preserves methods from authStorage.js if loaded first)
+    if (window.storage && typeof window.storage === 'object') {
+        // Merge all localStorage methods into existing storage object
+        Object.assign(window.storage, storage);
+    } else {
+        // No existing storage, use localStorage as base
+        window.storage = storage;
+    }
     // Create a global storage variable for components that use 'storage' directly
     if (typeof globalThis !== 'undefined') {
-        globalThis.storage = storage;
+        globalThis.storage = window.storage;
     }
-    
-    // Also create a global 'storage' variable for backward compatibility
-    window.storage = storage;
 }
 
 // Debug function to check if storage is loaded

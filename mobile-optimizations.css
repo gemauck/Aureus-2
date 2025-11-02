@@ -245,22 +245,41 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
   }
   
-  /* Fix for date/time inputs on iOS */
+  /* Fix for date/time inputs on iOS - prevent floating */
   input[type="date"],
   input[type="time"],
   input[type="datetime-local"] {
-    position: relative;
+    position: relative !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
   }
   
   input[type="date"]::-webkit-calendar-picker-indicator,
   input[type="time"]::-webkit-calendar-picker-indicator,
   input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-    position: absolute;
-    right: 18px;
-    width: 24px;
-    height: 24px;
-    opacity: 1;
-    cursor: pointer;
+    position: absolute !important;
+    right: 18px !important;
+    width: 24px !important;
+    height: 24px !important;
+    opacity: 1 !important;
+    cursor: pointer !important;
+    z-index: 1 !important;
+  }
+  
+  /* Ensure date inputs are contained within their parent */
+  div:has(input[type="date"]),
+  div:has(input[type="time"]),
+  div:has(input[type="datetime-local"]) {
+    position: relative !important;
+    width: 100% !important;
+  }
+  
+  /* Alternative selector for older browsers */
+  [class*="grid"] input[type="date"],
+  [class*="grid"] input[type="time"],
+  [class*="grid"] input[type="datetime-local"] {
+    grid-column: 1 / -1 !important;
   }
   
   /* Label improvements */
@@ -648,6 +667,41 @@
     .dark .sidebar-mobile.open nav button.active span,
     .dark .sidebar-mobile.open nav button:hover span {
       color: #ffffff !important;
+    }
+    
+    /* Ensure dashboard menu item is visible */
+    nav button[title="Dashboard"],
+    nav button:has(i.fa-th-large) {
+      display: flex !important;
+      visibility: visible !important;
+      opacity: 1 !important;
+    }
+    
+    /* Ensure all menu items including HR have consistent styling */
+    nav button {
+      min-height: 56px !important;
+      padding: 16px !important;
+      font-size: 16px !important;
+      display: flex !important;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
+      border: none !important;
+      background: transparent !important;
+    }
+    
+    /* Ensure HR button matches other menu items */
+    nav button:has(i.fa-id-card),
+    nav button[title="HR"] {
+      min-height: 56px !important;
+      padding: 16px !important;
+      font-size: 16px !important;
+      display: flex !important;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      text-align: left;
     }
   }
   

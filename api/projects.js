@@ -146,7 +146,10 @@ async function handler(req, res) {
         type: body.type || 'Project',
         assignedTo: body.assignedTo || '',
         notes: body.notes || '',
-        ownerId: req.user?.sub || null
+        ownerId: req.user?.sub || null,
+        // Automatically add monthly document collection process to all new projects
+        hasDocumentCollectionProcess: true,
+        documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(Array.isArray(body.documentSections) ? body.documentSections : [])
       }
 
       console.log('🔍 Creating project with data:', JSON.stringify(projectData, null, 2))

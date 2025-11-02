@@ -91,8 +91,45 @@ const AuthStorage = {
                 role: 'System'
             };
         }
+    },
+
+    // Remember last email used for login (if not provided by localStorage.js)
+    getLastLoginEmail: () => {
+        try {
+            return localStorage.getItem('abcotronics_last_login_email') || null;
+        } catch (e) {
+            console.error('Error loading last login email:', e);
+            return null;
+        }
+    },
+    
+    setLastLoginEmail: (email) => {
+        try {
+            if (email) {
+                localStorage.setItem('abcotronics_last_login_email', email);
+            } else {
+                // Clear if email is null/empty
+                localStorage.removeItem('abcotronics_last_login_email');
+            }
+        } catch (e) {
+            console.error('Error saving last login email:', e);
+        }
+    },
+    
+    clearLastLoginEmail: () => {
+        try {
+            localStorage.removeItem('abcotronics_last_login_email');
+        } catch (e) {
+            console.error('Error clearing last login email:', e);
+        }
     }
 };
 
-// Make available globally
-window.storage = AuthStorage;
+// Make available globally - merge with existing storage to preserve all methods
+if (window.storage && typeof window.storage === 'object') {
+    // Merge auth methods into existing storage object (preserves getLastLoginEmail, setLastLoginEmail, etc.)
+    Object.assign(window.storage, AuthStorage);
+} else {
+    // If no existing storage, use AuthStorage as base
+    window.storage = AuthStorage;
+}

@@ -722,17 +722,57 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         setShowDocumentModal(true);
     };
 
-    const handleAddDocumentCollectionProcess = () => {
+    const handleAddDocumentCollectionProcess = async () => {
         console.log('🔄 Adding Document Collection Process...');
         console.log('  - MonthlyDocumentCollectionTracker loaded:', typeof window.MonthlyDocumentCollectionTracker);
         console.log('  - Project ID:', project.id);
         console.log('  - Current hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         
-        setHasDocumentCollectionProcess(true);
-        setActiveSection('documentCollection');
-        setShowDocumentProcessDropdown(false);
-        
-        console.log('✅ Document Collection Process setup complete');
+        try {
+            // Update state first
+            setHasDocumentCollectionProcess(true);
+            setActiveSection('documentCollection');
+            setShowDocumentProcessDropdown(false);
+            
+            // Immediately save to database to ensure persistence
+            const updatePayload = {
+                hasDocumentCollectionProcess: true,
+                documentSections: JSON.stringify(project.documentSections || [])
+            };
+            
+            console.log('💾 Immediately saving document collection process to database...');
+            const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            console.log('✅ Database save successful:', apiResponse);
+            
+            // Also update localStorage for consistency
+            if (window.dataService && typeof window.dataService.getProjects === 'function') {
+                const savedProjects = await window.dataService.getProjects();
+                if (savedProjects) {
+                    const updatedProjects = savedProjects.map(p => 
+                        p.id === project.id ? { 
+                            ...p, 
+                            hasDocumentCollectionProcess: true,
+                            documentSections: p.documentSections || project.documentSections || []
+                        } : p
+                    );
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
+                        try {
+                            await window.dataService.setProjects(updatedProjects);
+                            console.log('✅ localStorage updated for consistency');
+                        } catch (saveError) {
+                            console.warn('Failed to save projects to dataService:', saveError);
+                        }
+                    }
+                }
+            }
+            
+            console.log('✅ Document Collection Process setup complete and persisted');
+        } catch (error) {
+            console.error('❌ Error saving document collection process:', error);
+            alert('Failed to save document collection process: ' + error.message);
+            // Revert state on error
+            setHasDocumentCollectionProcess(false);
+        }
     };
 
     const handleAddMonthlyDataProcess = () => {

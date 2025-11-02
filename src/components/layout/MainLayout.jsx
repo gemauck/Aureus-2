@@ -608,10 +608,90 @@ const MainLayout = () => {
                         >
                             <i className="fas fa-bars text-xl"></i>
                         </button>
+                        
+                        {/* Mobile: Action buttons on the left */}
+                        {isMobile && (
+                            <div className="flex items-center space-x-2 mr-3 flex-shrink-0">
+                                {/* Notification Center */}
+                                {window.NotificationCenter ? (
+                                    <window.NotificationCenter />
+                                ) : null}
+                                
+                                {/* Settings Button */}
+                                <button 
+                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                    title="Settings"
+                                    onClick={() => {
+                                        console.log('🔧 Settings button clicked');
+                                        console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
+                                        setShowSettingsPortal(true);
+                                    }}
+                                >
+                                    <i className="fas fa-cog text-sm"></i>
+                                </button>
+                                
+                                {/* Theme Selector Dropdown */}
+                                <div className="relative theme-selector">
+                                    <button 
+                                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                        title="Theme options"
+                                        onClick={() => setShowThemeMenu(!showThemeMenu)}
+                                    >
+                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                                    </button>
+                                    
+                                    {/* Theme Menu */}
+                                    {showThemeMenu && (
+                                        <div className={`absolute left-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 backdrop-blur-sm`}>
+                                            <div className="p-3">
+                                                <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-2`}>
+                                                    Theme Settings
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        toggleTheme();
+                                                        setShowThemeMenu(false);
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-xs`}></i>
+                                                    </div>
+                                                    <div>
+                                                        <div>Switch to {isDark ? 'Light' : 'Dark'} Mode</div>
+                                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            {isDark ? 'Enable light theme' : 'Enable dark theme'}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        toggleSystemPreference();
+                                                        setShowThemeMenu(false);
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                                >
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isFollowingSystem ? 'border-green-500 bg-green-500' : isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                        <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'} text-xs ${isFollowingSystem ? 'text-white' : ''}`}></i>
+                                                    </div>
+                                                    <div>
+                                                        <div>{isFollowingSystem ? 'Following System' : 'Follow System'}</div>
+                                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                            System: {systemPreference === 'dark' ? 'Dark' : 'Light'}
+                                                        </div>
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                        
                         {/* Abcotronics Logo - Show on mobile in header */}
                         {isMobile && (
-                            <div className="flex items-center mr-3 flex-shrink-0">
-                                <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} text-base sm:text-lg`} style={!isDark ? { color: '#0369a1' } : {}}>
+                            <div className="flex items-center flex-1 min-w-0">
+                                <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} text-base sm:text-lg truncate`} style={!isDark ? { color: '#0369a1' } : {}}>
                                     Abcotronics
                                 </h1>
                             </div>
@@ -629,86 +709,89 @@ const MainLayout = () => {
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
                     </div>
-                    <div className="flex items-center space-x-2 flex-shrink-0">
-                        {/* Notification Center */}
-                        {window.NotificationCenter ? (
-                            <window.NotificationCenter />
-                        ) : null}
-                        
-                        {/* Settings Button */}
-                        <button 
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
-                            title="Settings"
-                            onClick={() => {
-                                console.log('🔧 Settings button clicked');
-                                console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
-                                setShowSettingsPortal(true);
-                            }}
-                        >
-                            <i className="fas fa-cog text-sm"></i>
-                        </button>
-                        
-                        {/* Theme Selector Dropdown */}
-                        <div className="relative theme-selector">
+                    {/* Desktop: Action buttons on the right */}
+                    {!isMobile && (
+                        <div className="flex items-center space-x-2 flex-shrink-0">
+                            {/* Notification Center */}
+                            {window.NotificationCenter ? (
+                                <window.NotificationCenter />
+                            ) : null}
+                            
+                            {/* Settings Button */}
                             <button 
                                 className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
-                                title="Theme options"
-                                onClick={() => setShowThemeMenu(!showThemeMenu)}
+                                title="Settings"
+                                onClick={() => {
+                                    console.log('🔧 Settings button clicked');
+                                    console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
+                                    setShowSettingsPortal(true);
+                                }}
                             >
-                                <div className="flex items-center space-x-1 sm:space-x-2">
-                                    <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
-                                    <span className="text-xs font-medium hidden lg:block">
-                                        {isDark ? 'Light' : 'Dark'}
-                                    </span>
-                                </div>
+                                <i className="fas fa-cog text-sm"></i>
                             </button>
                             
-                            {/* Theme Menu */}
-                            {showThemeMenu && (
-                                <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 backdrop-blur-sm`}>
-                                    <div className="p-3">
-                                        <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-2`}>
-                                            Theme Settings
-                                        </div>
-                                        <button
-                                            onClick={() => {
-                                                toggleTheme();
-                                                setShowThemeMenu(false);
-                                            }}
-                                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
-                                        >
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isDark ? 'border-gray-400' : 'border-gray-300'}`}>
-                                                <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-xs`}></i>
-                                            </div>
-                                            <div>
-                                                <div>Switch to {isDark ? 'Light' : 'Dark'} Mode</div>
-                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    {isDark ? 'Enable light theme' : 'Enable dark theme'}
-                                                </div>
-                                            </div>
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                toggleSystemPreference();
-                                                setShowThemeMenu(false);
-                                            }}
-                                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
-                                        >
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isFollowingSystem ? 'border-green-500 bg-green-500' : isDark ? 'border-gray-400' : 'border-gray-300'}`}>
-                                                <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'} text-xs ${isFollowingSystem ? 'text-white' : ''}`}></i>
-                                            </div>
-                                            <div>
-                                                <div>{isFollowingSystem ? 'Following System' : 'Follow System'}</div>
-                                                <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                                    System: {systemPreference === 'dark' ? 'Dark' : 'Light'}
-                                                </div>
-                                            </div>
-                                        </button>
+                            {/* Theme Selector Dropdown */}
+                            <div className="relative theme-selector">
+                                <button 
+                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                    title="Theme options"
+                                    onClick={() => setShowThemeMenu(!showThemeMenu)}
+                                >
+                                    <div className="flex items-center space-x-1 sm:space-x-2">
+                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                                        <span className="text-xs font-medium hidden lg:block">
+                                            {isDark ? 'Light' : 'Dark'}
+                                        </span>
                                     </div>
-                                </div>
-                            )}
+                                </button>
+                                
+                                {/* Theme Menu */}
+                                {showThemeMenu && (
+                                    <div className={`absolute right-0 top-full mt-2 w-52 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl shadow-xl z-50 backdrop-blur-sm`}>
+                                        <div className="p-3">
+                                            <div className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-2 px-2`}>
+                                                Theme Settings
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    toggleTheme();
+                                                    setShowThemeMenu(false);
+                                                }}
+                                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                            >
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                    <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-xs`}></i>
+                                                </div>
+                                                <div>
+                                                    <div>Switch to {isDark ? 'Light' : 'Dark'} Mode</div>
+                                                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                        {isDark ? 'Enable light theme' : 'Enable dark theme'}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    toggleSystemPreference();
+                                                    setShowThemeMenu(false);
+                                                }}
+                                                className={`w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 mt-1 ${isDark ? 'hover:bg-gray-700 text-gray-200' : 'hover:bg-gray-50 text-gray-700'} flex items-center space-x-3`}
+                                            >
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isFollowingSystem ? 'border-green-500 bg-green-500' : isDark ? 'border-gray-400' : 'border-gray-300'}`}>
+                                                    <i className={`fas fa-${isFollowingSystem ? 'check' : 'circle'} text-xs ${isFollowingSystem ? 'text-white' : ''}`}></i>
+                                                </div>
+                                                <div>
+                                                    <div>{isFollowingSystem ? 'Following System' : 'Follow System'}</div>
+                                                    <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                        System: {systemPreference === 'dark' ? 'Dark' : 'Light'}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </header>
 
                 {/* Page Content */}
