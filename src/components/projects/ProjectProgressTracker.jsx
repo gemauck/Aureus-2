@@ -954,11 +954,28 @@ const ProjectProgressTracker = ({ onBack }) => {
             return <td className="px-2 py-1 text-xs border-l border-gray-100"></td>;
         }
 
+        // Ensure project and month are valid
+        if (!project || typeof month !== 'string') {
+            console.warn('❌ renderProgressCell: invalid project or month', { project, month, field });
+            return <td className="px-2 py-1 text-xs border-l border-gray-100"></td>;
+        }
+        
         const data = getProgressData(project, month, field);
         
         // Handle comments as array
         if (field === 'comments') {
-            const comments = data && Array.isArray(data) ? data : (data ? [data] : []);
+            // Ensure data is properly formatted
+            let comments = [];
+            if (data) {
+                if (Array.isArray(data)) {
+                    comments = data;
+                } else if (typeof data === 'object') {
+                    // If it's an object, try to extract comments from it
+                    comments = data.comments ? (Array.isArray(data.comments) ? data.comments : [data.comments]) : [data];
+                } else {
+                    comments = [data];
+                }
+            }
             const cellKey = `${project.id}-${month}`;
             const isPopupOpen = hoverCommentCell === cellKey;
             
@@ -1274,7 +1291,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                         }`}
                                     >
                                         <div className="flex flex-col items-center gap-0.5">
-                                            <span>{month.slice(0, 3)} '{String(selectedYear).slice(-2)}</span>
+                                            <span>{String(month || '').slice(0, 3)} '{String(selectedYear || '').slice(-2)}</span>
                                             {workingMonths.includes(idx) && selectedYear === currentYear && (
                                                 <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700">
                                                     <i className="fas fa-calendar-check mr-0.5"></i>
