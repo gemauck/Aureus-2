@@ -168,13 +168,13 @@ const JobCardFormPublic = () => {
           setUsers(cached);
         }
 
-        // Check if user is logged in
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
+        // Check if user is logged in (reuse token check from earlier in useEffect)
+        const userToken = window.storage?.getToken?.();
+        const userIsLoggedIn = !!userToken;
         
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
+        if (isOnline && (userIsLoggedIn || window.DatabaseAPI?.getUsers)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API via DatabaseAPI...', userIsLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getUsers();
             
             if (response?.data?.users || Array.isArray(response?.data)) {
@@ -233,14 +233,14 @@ const JobCardFormPublic = () => {
           setInventory(cachedInventory);
         }
 
-        // Check if user is logged in
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
+        // Check if user is logged in (reuse check)
+        const invToken = window.storage?.getToken?.();
+        const invIsLoggedIn = !!invToken;
         
         // Try to load from API if online - use DatabaseAPI if available
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getInventory)) {
+        if (isOnline && (invIsLoggedIn || window.DatabaseAPI?.getInventory)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API via DatabaseAPI...', invIsLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getInventory();
             
             if (response?.data?.inventory || Array.isArray(response?.data)) {
@@ -299,14 +299,14 @@ const JobCardFormPublic = () => {
           localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
         
-        // Check if user is logged in
-        const token = window.storage?.getToken?.();
-        const isLoggedIn = !!token;
+        // Check if user is logged in (reuse check)
+        const locToken = window.storage?.getToken?.();
+        const locIsLoggedIn = !!locToken;
         
         // Try to load locations from API if online - use DatabaseAPI if available
-        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getStockLocations)) {
+        if (isOnline && (locIsLoggedIn || window.DatabaseAPI?.getStockLocations)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API via DatabaseAPI...', locIsLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getStockLocations();
             
             if (response?.data?.locations || Array.isArray(response?.data)) {
