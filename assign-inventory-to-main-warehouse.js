@@ -1,7 +1,7 @@
 // Migration script: Assign existing inventory items to Main Warehouse (LOC001)
 // Run this after adding locationId column to InventoryItem table
 
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function assignInventoryToMainWarehouse() {

@@ -15,6 +15,23 @@ const AppContent = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
+    const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
+    
+    // Show public job card form - no auth required
+    if (isPublicJobCardPage) {
+        if (window.JobCardFormPublic) {
+            return <window.JobCardFormPublic />;
+        } else {
+            return (
+                <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading job card form...</p>
+                    </div>
+                </div>
+            );
+        }
+    }
     
     // Show invitation page immediately if token is present - bypass all auth checks
     if (isInvitationPage) {
@@ -112,6 +129,28 @@ const App = () => {
     const urlParams = new URLSearchParams(window.location.search);
     const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
     const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
+    
+    // If public job card page, render it directly without providers (no auth needed)
+    const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
+    if (isPublicJobCardPage) {
+        if (window.JobCardFormPublic) {
+            return (
+                <window.ThemeProvider>
+                    <window.JobCardFormPublic />
+                </window.ThemeProvider>
+            );
+        }
+        return (
+            <window.ThemeProvider>
+                <div className="min-h-screen flex items-center justify-center bg-gray-50">
+                    <div className="text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <p className="text-gray-600">Loading job card form...</p>
+                    </div>
+                </div>
+            </window.ThemeProvider>
+        );
+    }
     
     // If invitation page, render it directly without providers (no auth needed)
     if (isInvitationPage) {
