@@ -703,6 +703,35 @@ const DatabaseAPI = {
         return normalized;
     },
 
+    async createStockLocation(locationData) {
+        console.log('📡 Creating stock location in database...');
+        const response = await this.makeRequest('/manufacturing/locations', {
+            method: 'POST',
+            body: JSON.stringify(locationData)
+        });
+        console.log('✅ Stock location created in database');
+        return response;
+    },
+
+    async updateStockLocation(id, locationData) {
+        console.log(`📡 Updating stock location ${id} in database...`);
+        const response = await this.makeRequest(`/manufacturing/locations/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(locationData)
+        });
+        console.log('✅ Stock location updated in database');
+        return response;
+    },
+
+    async deleteStockLocation(id) {
+        console.log(`📡 Deleting stock location ${id} from database...`);
+        const response = await this.makeRequest(`/manufacturing/locations/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Stock location deleted from database');
+        return response;
+    },
+
     // MANUFACTURING OPERATIONS - BOMs
     async getBOMs() {
         console.log('📡 Fetching BOMs from database...');

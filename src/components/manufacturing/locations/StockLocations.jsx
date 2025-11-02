@@ -16,13 +16,41 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Load data
+  // Load data from database
   useEffect(() => {
-    const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+    const loadLocations = async () => {
+      try {
+        // Load from localStorage first for instant UI
+        const cachedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        if (cachedLocations.length > 0) {
+          setLocations(cachedLocations);
+        }
+
+        // Load from database
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.getStockLocations === 'function') {
+          const response = await window.DatabaseAPI.getStockLocations();
+          const dbLocations = response?.data?.locations || [];
+          if (dbLocations.length > 0) {
+            setLocations(dbLocations);
+            localStorage.setItem('stock_locations', JSON.stringify(dbLocations));
+          } else if (cachedLocations.length === 0) {
+            // Fallback to initial locations if no data
+            setLocations(getInitialLocations());
+          }
+        }
+      } catch (error) {
+        console.error('Error loading locations:', error);
+        // Fallback to localStorage
+        const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        setLocations(loadedLocations.length ? loadedLocations : getInitialLocations());
+      }
+    };
+
+    loadLocations();
+
+    // Load other data from localStorage (these are not in database yet)
     const loadedLocationInventory = JSON.parse(localStorage.getItem('location_inventory') || '[]');
     const loadedTransfers = JSON.parse(localStorage.getItem('stock_transfers') || '[]');
-    
-    setLocations(loadedLocations.length ? loadedLocations : getInitialLocations());
     setLocationInventory(loadedLocationInventory);
     setTransfers(loadedTransfers);
   }, []);
@@ -130,39 +158,94 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
     setShowModal(true);
   };
 
-  const handleSaveLocation = () => {
+  const handleSaveLocation = async () => {
     // Validate required fields
     if (!formData.code || !formData.name) {
       alert('Please fill in Location Code and Name');
       return;
     }
 
-    const newLocation = {
-      id: selectedLocation?.id || `LOC${String(locations.length + 1).padStart(3, '0')}`,
-      code: formData.code,
-      name: formData.name,
-      type: formData.type || 'warehouse',
-      status: formData.status || 'active',
-      address: formData.address || '',
-      contactPerson: formData.contactPerson || '',
-      contactPhone: formData.contactPhone || '',
-      vehicleReg: formData.vehicleReg || '',
-      driver: formData.driver || '',
-      createdDate: selectedLocation?.createdDate || new Date().toISOString().split('T')[0]
-    };
+    try {
+      const locationData = {
+        code: formData.code,
+        name: formData.name,
+        type: formData.type || 'warehouse',
+        status: formData.status || 'active',
+        address: formData.address || '',
+        contactPerson: formData.contactPerson || '',
+        contactPhone: formData.contactPhone || '',
+        meta: JSON.stringify({
+          vehicleReg: formData.vehicleReg || '',
+          driver: formData.driver || ''
+        })
+      };
 
-    if (selectedLocation) {
-      setLocations(locations.map(loc => loc.id === selectedLocation.id ? newLocation : loc));
-    } else {
-      setLocations([...locations, newLocation]);
+      if (selectedLocation) {
+        // Update existing location
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.updateStockLocation === 'function') {
+          const response = await window.DatabaseAPI.updateStockLocation(selectedLocation.id, locationData);
+          const updatedLocation = response?.data?.location;
+          if (updatedLocation) {
+            setLocations(locations.map(loc => loc.id === selectedLocation.id ? updatedLocation : loc));
+            localStorage.setItem('stock_locations', JSON.stringify(locations.map(loc => loc.id === selectedLocation.id ? updatedLocation : loc)));
+            alert('✅ Location updated successfully!');
+          }
+        } else {
+          // Fallback to localStorage
+          const newLocation = {
+            ...selectedLocation,
+            ...locationData,
+            vehicleReg: formData.vehicleReg || '',
+            driver: formData.driver || ''
+          };
+          setLocations(locations.map(loc => loc.id === selectedLocation.id ? newLocation : loc));
+        }
+      } else {
+        // Create new location
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.createStockLocation === 'function') {
+          const response = await window.DatabaseAPI.createStockLocation(locationData);
+          const newLocation = response?.data?.location;
+          if (newLocation) {
+            // Reload locations list from database to get the full updated list
+            const refreshResponse = await window.DatabaseAPI.getStockLocations();
+            const refreshedLocations = refreshResponse?.data?.locations || [];
+            setLocations(refreshedLocations);
+            localStorage.setItem('stock_locations', JSON.stringify(refreshedLocations));
+            
+            // Notify parent component to refresh location dropdown
+            if (window.dispatchEvent) {
+              window.dispatchEvent(new CustomEvent('stockLocationsUpdated', { 
+                detail: { locations: refreshedLocations } 
+              }));
+            }
+            
+            alert('✅ Location created successfully! Inventory items will be created for this location. The dropdown will refresh automatically.');
+          } else {
+            throw new Error('Failed to create location - no location returned from API');
+          }
+        } else {
+          // Fallback to localStorage
+          const newLocation = {
+            id: `LOC${String(locations.length + 1).padStart(3, '0')}`,
+            ...locationData,
+            vehicleReg: formData.vehicleReg || '',
+            driver: formData.driver || '',
+            createdDate: new Date().toISOString().split('T')[0]
+          };
+          setLocations([...locations, newLocation]);
+        }
+      }
+
+      setShowModal(false);
+      setSelectedLocation(null);
+      setFormData({});
+    } catch (error) {
+      console.error('Error saving location:', error);
+      alert('❌ Failed to save location: ' + (error.message || 'Unknown error'));
     }
-
-    setShowModal(false);
-    setSelectedLocation(null);
-    setFormData({});
   };
 
-  const handleDeleteLocation = (locationId) => {
+  const handleDeleteLocation = async (locationId) => {
     const locInventory = getLocationInventory(locationId);
     if (locInventory.length > 0) {
       alert('Cannot delete location with inventory. Please transfer stock first.');
@@ -170,7 +253,17 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
     }
 
     if (confirm('Are you sure you want to delete this location?')) {
-      setLocations(locations.filter(loc => loc.id !== locationId));
+      try {
+        if (window.DatabaseAPI && typeof window.DatabaseAPI.deleteStockLocation === 'function') {
+          await window.DatabaseAPI.deleteStockLocation(locationId);
+        }
+        setLocations(locations.filter(loc => loc.id !== locationId));
+        localStorage.setItem('stock_locations', JSON.stringify(locations.filter(loc => loc.id !== locationId)));
+        alert('✅ Location deleted successfully!');
+      } catch (error) {
+        console.error('Error deleting location:', error);
+        alert('❌ Failed to delete location: ' + (error.message || 'Unknown error'));
+      }
     }
   };
 

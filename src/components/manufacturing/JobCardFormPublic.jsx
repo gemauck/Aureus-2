@@ -79,20 +79,14 @@ const JobCardFormPublic = () => {
           setIsLoading(false); // Set loading false if we have cached data
         }
 
-        // Try to sync from API if online (might require auth, but try anyway)
-        if (isOnline) {
+        // Try to sync from API if online - use DatabaseAPI if available (handles auth automatically)
+        if (isOnline && window.DatabaseAPI?.getClients) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch clients from API...');
-            const response = await fetch('/api/clients', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            console.log('🌐 JobCardFormPublic: Attempting to fetch clients from API via DatabaseAPI...');
+            const response = await window.DatabaseAPI.getClients();
             
-            if (response.ok) {
-              const data = await response.json();
-              const allClients = data?.data?.clients || data?.data || [];
+            if (response?.data?.clients || Array.isArray(response?.data)) {
+              const allClients = response.data.clients || response.data || [];
               const active = Array.isArray(allClients) ? allClients.filter(c => {
                 const status = (c.status || '').toLowerCase();
                 const type = (c.type || 'client').toLowerCase();
@@ -106,11 +100,39 @@ const JobCardFormPublic = () => {
                 localStorage.setItem('manufacturing_clients', JSON.stringify(active));
                 localStorage.setItem('clients', JSON.stringify(active)); // Also save to main key
               }
-            } else {
-              console.warn('⚠️ JobCardFormPublic: API returned status', response.status, '- using cached data');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load clients from API, using cache:', error.message);
+            // Try direct fetch as fallback (will likely fail due to auth, but worth trying)
+            try {
+              const token = window.storage?.getToken?.();
+              if (token) {
+                const response = await fetch('/api/clients', {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                if (response.ok) {
+                  const data = await response.json();
+                  const allClients = data?.data?.clients || data?.data || [];
+                  const active = Array.isArray(allClients) ? allClients.filter(c => {
+                    const status = (c.status || '').toLowerCase();
+                    const type = (c.type || 'client').toLowerCase();
+                    return (status === 'active' || status === '' || !c.status) && 
+                           (type === 'client' || !c.type);
+                  }) : [];
+                  if (active.length > 0) {
+                    setClients(active);
+                    localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+                    localStorage.setItem('clients', JSON.stringify(active));
+                  }
+                }
+              }
+            } catch (fallbackError) {
+              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+            }
           }
         }
         
@@ -141,30 +163,46 @@ const JobCardFormPublic = () => {
           setUsers(cached);
         }
 
-        if (isOnline) {
+        if (isOnline && window.DatabaseAPI?.getUsers) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API...');
-            const response = await fetch('/api/users', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API via DatabaseAPI...');
+            const response = await window.DatabaseAPI.getUsers();
             
-            if (response.ok) {
-              const data = await response.json();
-              const usersData = data?.data?.users || data?.data || [];
+            if (response?.data?.users || Array.isArray(response?.data)) {
+              const usersData = response.data.users || response.data || [];
               if (Array.isArray(usersData) && usersData.length > 0) {
                 console.log('✅ JobCardFormPublic: Loaded users from API:', usersData.length);
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
                 localStorage.setItem('users', JSON.stringify(usersData)); // Also save to main key
               }
-            } else {
-              console.warn('⚠️ JobCardFormPublic: Users API returned status', response.status, '- using cached data');
             }
           } catch (error) {
             console.warn('⚠️ JobCardFormPublic: Failed to load users from API, using cache:', error.message);
+            // Try direct fetch as fallback
+            try {
+              const token = window.storage?.getToken?.();
+              if (token) {
+                const response = await fetch('/api/users', {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                if (response.ok) {
+                  const data = await response.json();
+                  const usersData = data?.data?.users || data?.data || [];
+                  if (Array.isArray(usersData) && usersData.length > 0) {
+                    setUsers(usersData);
+                    localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+                    localStorage.setItem('users', JSON.stringify(usersData));
+                  }
+                }
+              }
+            } catch (fallbackError) {
+              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+            }
           }
         }
       } catch (error) {
@@ -186,30 +224,45 @@ const JobCardFormPublic = () => {
           setInventory(cachedInventory);
         }
 
-        // Try to load from API if online
-        if (isOnline) {
+        // Try to load from API if online - use DatabaseAPI if available
+        if (isOnline && window.DatabaseAPI?.getInventory) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API...');
-            const invResponse = await fetch('/api/manufacturing/inventory', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API via DatabaseAPI...');
+            const response = await window.DatabaseAPI.getInventory();
             
-            if (invResponse.ok) {
-              const invData = await invResponse.json();
-              const inventoryItems = invData?.data?.inventory || invData?.data || [];
+            if (response?.data?.inventory || Array.isArray(response?.data)) {
+              const inventoryItems = response.data.inventory || response.data || [];
               if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
                 console.log('✅ JobCardFormPublic: Loaded inventory from API:', inventoryItems.length);
                 setInventory(inventoryItems);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
               }
-            } else {
-              console.warn('⚠️ JobCardFormPublic: Inventory API returned status', invResponse.status, '- using cached data');
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load inventory from API:', error.message);
+            console.warn('⚠️ JobCardFormPublic: Failed to load inventory from API, using cache:', error.message);
+            // Try direct fetch as fallback
+            try {
+              const token = window.storage?.getToken?.();
+              if (token) {
+                const invResponse = await fetch('/api/manufacturing/inventory', {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                if (invResponse.ok) {
+                  const invData = await invResponse.json();
+                  const inventoryItems = invData?.data?.inventory || invData?.data || [];
+                  if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
+                    setInventory(inventoryItems);
+                    localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
+                  }
+                }
+              }
+            } catch (fallbackError) {
+              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+            }
           }
         }
         
@@ -233,30 +286,45 @@ const JobCardFormPublic = () => {
           localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
         
-        // Try to load locations from API if online
-        if (isOnline) {
+        // Try to load locations from API if online - use DatabaseAPI if available
+        if (isOnline && window.DatabaseAPI?.getStockLocations) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API...');
-            const locResponse = await fetch('/api/manufacturing/locations', {
-              method: 'GET',
-              headers: {
-                'Content-Type': 'application/json'
-              }
-            });
+            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API via DatabaseAPI...');
+            const response = await window.DatabaseAPI.getStockLocations();
             
-            if (locResponse.ok) {
-              const locData = await locResponse.json();
-              const locations = locData?.data?.locations || locData?.data || [];
+            if (response?.data?.locations || Array.isArray(response?.data)) {
+              const locations = response.data.locations || response.data || [];
               if (Array.isArray(locations) && locations.length > 0) {
                 console.log('✅ JobCardFormPublic: Loaded locations from API:', locations.length);
                 setStockLocations(locations);
                 localStorage.setItem('stock_locations', JSON.stringify(locations));
               }
-            } else {
-              console.warn('⚠️ JobCardFormPublic: Locations API returned status', locResponse.status, '- using cached data');
             }
           } catch (error) {
-            console.warn('⚠️ JobCardFormPublic: Failed to load locations from API:', error.message);
+            console.warn('⚠️ JobCardFormPublic: Failed to load locations from API, using cache:', error.message);
+            // Try direct fetch as fallback
+            try {
+              const token = window.storage?.getToken?.();
+              if (token) {
+                const locResponse = await fetch('/api/manufacturing/locations', {
+                  method: 'GET',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                if (locResponse.ok) {
+                  const locData = await locResponse.json();
+                  const locations = locData?.data?.locations || locData?.data || [];
+                  if (Array.isArray(locations) && locations.length > 0) {
+                    setStockLocations(locations);
+                    localStorage.setItem('stock_locations', JSON.stringify(locations));
+                  }
+                }
+              }
+            } catch (fallbackError) {
+              console.warn('⚠️ JobCardFormPublic: Fallback fetch also failed:', fallbackError.message);
+            }
           }
         }
       } catch (error) {

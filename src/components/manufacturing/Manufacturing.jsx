@@ -112,7 +112,7 @@ const Manufacturing = () => {
         // Create parallel API calls
         const apiCalls = [];
 
-        // Stock Locations
+        // Stock Locations - Load on every data refresh
         if (typeof window.DatabaseAPI.getStockLocations === 'function') {
           apiCalls.push(
             window.DatabaseAPI.getStockLocations()
@@ -132,6 +132,11 @@ const Manufacturing = () => {
               })
               .catch(error => {
                 console.error('Error loading stock locations:', error);
+                // Don't fail completely - use localStorage fallback
+                const cached = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+                if (cached.length > 0) {
+                  setStockLocations(cached);
+                }
                 return { type: 'locations', error };
               })
           );
@@ -664,6 +669,41 @@ const Manufacturing = () => {
       loadInventoryForLocation();
     }
   }, [selectedLocationId, activeTab]);
+
+  // Reload stock locations when switching to inventory tab
+  useEffect(() => {
+    if (activeTab === 'inventory' && window.DatabaseAPI?.getStockLocations) {
+      const loadLocations = async () => {
+        try {
+          const locResponse = await window.DatabaseAPI.getStockLocations();
+          const locData = locResponse?.data?.locations || [];
+          setStockLocations(locData);
+          localStorage.setItem('stock_locations', JSON.stringify(locData));
+          console.log('✅ Stock locations refreshed for inventory tab:', locData.length);
+        } catch (error) {
+          console.error('Error loading stock locations:', error);
+        }
+      };
+      loadLocations();
+    }
+  }, [activeTab]);
+
+  // Listen for location updates from StockLocations component
+  useEffect(() => {
+    const handleLocationUpdate = (event) => {
+      const updatedLocations = event.detail?.locations || [];
+      if (updatedLocations.length > 0) {
+        setStockLocations(updatedLocations);
+        localStorage.setItem('stock_locations', JSON.stringify(updatedLocations));
+        console.log('✅ Stock locations updated via event:', updatedLocations.length);
+      }
+    };
+
+    window.addEventListener('stockLocationsUpdated', handleLocationUpdate);
+    return () => {
+      window.removeEventListener('stockLocationsUpdated', handleLocationUpdate);
+    };
+  }, []);
 
   const InventoryView = () => {
     // Get unique categories from inventory items
