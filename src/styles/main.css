@@ -64,12 +64,6 @@ body {
     /* Mobile horizontal scrollable navigation tabs */
     .overflow-x-auto {
         -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-    }
-    
-    .overflow-x-auto::-webkit-scrollbar {
-        display: none;
     }
     
     /* Ensure tab buttons maintain readable width on mobile */
@@ -77,6 +71,11 @@ body {
         min-width: max-content;
         flex-shrink: 0;
         white-space: nowrap;
+    }
+    
+    /* Special handling for .overflow-x-auto with .scrollbar-hide - show scrollbar on mobile */
+    .overflow-x-auto.scrollbar-hide {
+        -webkit-overflow-scrolling: touch;
     }
     
     /* Mobile table to card conversion */

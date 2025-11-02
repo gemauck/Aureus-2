@@ -4705,7 +4705,7 @@ const Manufacturing = () => {
 
       {/* Navigation Tabs */}
       <div className="bg-white rounded-lg border border-gray-200">
-        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide">
+        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
           {[
             { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
