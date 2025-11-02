@@ -1236,7 +1236,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                         <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-2"></i>
                         <div className="flex-1">
                             <h3 className="text-sm font-semibold text-red-800 mb-1">Error Loading Projects</h3>
-                            <p className="text-xs text-red-700">{loadError}</p>
+                            <p className="text-xs text-red-700">{String(loadError || 'Unknown error')}</p>
                             <button
                                 onClick={loadProjects}
                                 className="mt-2 px-2 py-1 bg-red-600 text-white rounded text-[10px] font-medium hover:bg-red-700 transition-colors"
