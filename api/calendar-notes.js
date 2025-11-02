@@ -118,14 +118,24 @@ async function handler(req, res) {
 
     // Create or Update note for specific date (POST/PUT /api/calendar-notes)
     if ((req.method === 'POST' || req.method === 'PUT') && pathSegments.length === 1 && pathSegments[0] === 'calendar-notes') {
+      console.log('📝 Calendar notes POST/PUT request received:', {
+        method: req.method,
+        url: req.url,
+        hasBody: !!req.body,
+        bodyType: typeof req.body,
+        bodyKeys: req.body ? Object.keys(req.body) : [],
+        rawBody: req.body
+      })
+      
       const body = await parseJsonBody(req)
       
-      console.log('📝 Calendar notes POST request:', {
+      console.log('📝 Calendar notes POST request parsed:', {
         method: req.method,
         body: body,
         hasDate: !!body.date,
         dateValue: body.date,
-        noteLength: body.note?.length || 0
+        noteLength: body.note?.length || 0,
+        bodyKeys: Object.keys(body)
       })
       
       if (!body.date) {
