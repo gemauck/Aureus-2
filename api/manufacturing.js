@@ -1,4 +1,5 @@
 import { authRequired } from './_lib/authRequired.js'
+import { optionalAuth } from './_lib/optionalAuth.js'
 import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
 import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
@@ -2793,5 +2794,19 @@ async function handler(req, res) {
   return badRequest(res, 'Invalid manufacturing endpoint')
 }
 
-export default authRequired(handler)
+// Allow public GET access for inventory and locations (for job card form), but require auth for modifications
+const protectedHandler = (req, res) => {
+  // For GET requests to inventory or locations, use optional auth (allows public access)
+  const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
+  const pathSegments = urlPath.split('/').filter(Boolean)
+  const resourceType = pathSegments[1] // inventory, locations, etc.
+  
+  if (req.method === 'GET' && (resourceType === 'inventory' || resourceType === 'locations')) {
+    return optionalAuth(handler)(req, res)
+  }
+  // For other methods and resources, require authentication
+  return authRequired(handler)(req, res)
+}
+
+export default protectedHandler
 
