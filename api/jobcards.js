@@ -21,8 +21,22 @@ async function handler(req, res) {
   // Helper to format dates
   const formatDate = (date) => {
     if (!date) return null
-    if (date instanceof Date) return date.toISOString().split('T')[0]
-    return new Date(date).toISOString().split('T')[0]
+    if (date instanceof Date) return date.toISOString()
+    return new Date(date).toISOString()
+  }
+  
+  // Helper to format dates for datetime-local inputs (YYYY-MM-DDTHH:mm)
+  const formatDateTimeLocal = (date) => {
+    if (!date) return null
+    const d = date instanceof Date ? date : new Date(date)
+    if (isNaN(d.getTime())) return null
+    // Format as YYYY-MM-DDTHH:mm for datetime-local input
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const hours = String(d.getHours()).padStart(2, '0')
+    const minutes = String(d.getMinutes()).padStart(2, '0')
+    return `${year}-${month}-${day}T${hours}:${minutes}`
   }
 
   // JOB CARDS
@@ -41,6 +55,9 @@ async function handler(req, res) {
           ...jobCard,
           otherTechnicians: parseJson(jobCard.otherTechnicians),
           photos: parseJson(jobCard.photos),
+          stockUsed: parseJson(jobCard.stockUsed || '[]'),
+          materialsBought: parseJson(jobCard.materialsBought || '[]'),
+          // Return full ISO strings for datetime fields (component needs them for datetime-local inputs)
           timeOfDeparture: formatDate(jobCard.timeOfDeparture),
           timeOfArrival: formatDate(jobCard.timeOfArrival),
           submittedAt: formatDate(jobCard.submittedAt),
@@ -72,6 +89,9 @@ async function handler(req, res) {
             ...jobCard,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
+            stockUsed: parseJson(jobCard.stockUsed || '[]'),
+            materialsBought: parseJson(jobCard.materialsBought || '[]'),
+            // Return full ISO strings for datetime fields
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),
@@ -113,11 +133,22 @@ async function handler(req, res) {
         const photos = Array.isArray(body.photos) 
           ? JSON.stringify(body.photos) 
           : body.photos || '[]'
+        const stockUsed = Array.isArray(body.stockUsed) 
+          ? JSON.stringify(body.stockUsed) 
+          : body.stockUsed || '[]'
+        const materialsBought = Array.isArray(body.materialsBought) 
+          ? JSON.stringify(body.materialsBought) 
+          : body.materialsBought || '[]'
         
         // Calculate travel kilometers
         const kmBefore = parseFloat(body.kmReadingBefore) || 0
         const kmAfter = parseFloat(body.kmReadingAfter) || 0
         const travelKilometers = Math.max(0, kmAfter - kmBefore)
+        
+        // Calculate total materials cost
+        const totalMaterialsCost = Array.isArray(body.materialsBought) 
+          ? body.materialsBought.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
+          : parseFloat(body.totalMaterialsCost) || 0
         
         const jobCard = await prisma.jobCard.create({
           data: {
@@ -137,6 +168,10 @@ async function handler(req, res) {
             travelKilometers,
             reasonForVisit: body.reasonForVisit || '',
             diagnosis: body.diagnosis || '',
+            actionsTaken: body.actionsTaken || '',
+            stockUsed,
+            materialsBought,
+            totalMaterialsCost,
             otherComments: body.otherComments || '',
             photos,
             status: body.status || 'draft',
@@ -152,6 +187,9 @@ async function handler(req, res) {
             ...jobCard,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
+            stockUsed: parseJson(jobCard.stockUsed || '[]'),
+            materialsBought: parseJson(jobCard.materialsBought || '[]'),
+            // Return full ISO strings for datetime fields
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),
@@ -196,6 +234,20 @@ async function handler(req, res) {
         if (body.kmReadingAfter !== undefined) updateData.kmReadingAfter = parseFloat(body.kmReadingAfter) || 0
         if (body.reasonForVisit !== undefined) updateData.reasonForVisit = body.reasonForVisit
         if (body.diagnosis !== undefined) updateData.diagnosis = body.diagnosis
+        if (body.actionsTaken !== undefined) updateData.actionsTaken = body.actionsTaken
+        if (body.stockUsed !== undefined) {
+          updateData.stockUsed = Array.isArray(body.stockUsed) 
+            ? JSON.stringify(body.stockUsed) 
+            : body.stockUsed
+        }
+        if (body.materialsBought !== undefined) {
+          updateData.materialsBought = Array.isArray(body.materialsBought) 
+            ? JSON.stringify(body.materialsBought) 
+            : body.materialsBought
+        }
+        if (body.totalMaterialsCost !== undefined) {
+          updateData.totalMaterialsCost = parseFloat(body.totalMaterialsCost) || 0
+        }
         if (body.otherComments !== undefined) updateData.otherComments = body.otherComments
         if (body.photos !== undefined) {
           updateData.photos = Array.isArray(body.photos) 
@@ -213,6 +265,12 @@ async function handler(req, res) {
           updateData.travelKilometers = Math.max(0, kmAfter - kmBefore)
         }
         
+        // Recalculate total materials cost if materials changed
+        if (body.materialsBought !== undefined) {
+          const materials = Array.isArray(body.materialsBought) ? body.materialsBought : parseJson(body.materialsBought || '[]')
+          updateData.totalMaterialsCost = materials.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0)
+        }
+        
         const jobCard = await prisma.jobCard.update({
           where: { id },
           data: updateData
@@ -224,6 +282,9 @@ async function handler(req, res) {
             ...jobCard,
             otherTechnicians: parseJson(jobCard.otherTechnicians),
             photos: parseJson(jobCard.photos),
+            stockUsed: parseJson(jobCard.stockUsed || '[]'),
+            materialsBought: parseJson(jobCard.materialsBought || '[]'),
+            // Return full ISO strings for datetime fields
             timeOfDeparture: formatDate(jobCard.timeOfDeparture),
             timeOfArrival: formatDate(jobCard.timeOfArrival),
             submittedAt: formatDate(jobCard.submittedAt),

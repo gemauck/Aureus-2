@@ -127,11 +127,13 @@ const ProjectProgressTracker = ({ onBack }) => {
                 console.log('✅ ProjectProgressTracker: Loaded', apiProjects.length, 'projects from database');
                 
                 // Parse monthlyProgress if it's stored as JSON string
-                const projectsWithProgress = apiProjects.map(project => {
+                const projectsWithProgress = (apiProjects || []).map(project => {
+                    if (!project) return null;
+                    
                     let monthlyProgress = project.monthlyProgress || {};
                     
                     // If monthlyProgress is a string, parse it
-                    if (typeof monthlyProgress === 'string') {
+                    if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
                         try {
                             monthlyProgress = JSON.parse(monthlyProgress);
                         } catch (e) {
@@ -144,13 +146,17 @@ const ProjectProgressTracker = ({ onBack }) => {
                         ...project,
                         monthlyProgress: monthlyProgress || {}
                     };
-                });
+                }).filter(Boolean); // Remove any null entries
                 
                 setProjects(projectsWithProgress);
                 
                 // Also update localStorage for consistency
                 if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                    await window.dataService.setProjects(projectsWithProgress);
+                    try {
+                        await window.dataService.setProjects(projectsWithProgress);
+                    } catch (e) {
+                        console.warn('Failed to update localStorage:', e);
+                    }
                 }
                 return;
             }
@@ -160,7 +166,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                 ? await window.dataService.getProjects() || [] 
                 : [];
             // Initialize progress tracking structure for each project if not exists
-            const projectsWithProgress = savedProjects.map(project => ({
+            const projectsWithProgress = (savedProjects || []).map(project => ({
                 ...project,
                 monthlyProgress: project.monthlyProgress || {}
             }));
@@ -168,6 +174,11 @@ const ProjectProgressTracker = ({ onBack }) => {
             console.log('⚠️ ProjectProgressTracker: Loaded', projectsWithProgress.length, 'projects from localStorage (fallback)');
         } catch (error) {
             console.error('❌ Error loading projects:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                response: error.response
+            });
             setProjects([]);
         }
     };
@@ -180,56 +191,77 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const handleSaveProgress = async (progressData) => {
-        const updatedProjects = projects.map(p => {
-            if (p.id === selectedProject.id) {
-                const monthKey = `${selectedMonth}-${selectedYear}`;
-                return {
-                    ...p,
-                    monthlyProgress: {
-                        ...p.monthlyProgress,
-                        [monthKey]: {
-                            ...p.monthlyProgress[monthKey],
-                            [selectedField]: progressData
-                        }
-                    }
-                };
-            }
-            return p;
-        });
+        if (!selectedProject || !selectedMonth || !selectedField) {
+            console.error('❌ Cannot save progress: missing required data');
+            return;
+        }
 
-        setProjects(updatedProjects);
-        
-        // Save to database first
         try {
-            const updatedProject = updatedProjects.find(p => p.id === selectedProject.id);
-            if (updatedProject && window.DatabaseAPI?.updateProject) {
-                console.log('💾 ProjectProgressTracker: Saving progress to database');
-                const updatePayload = {
-                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
-                };
-                await window.DatabaseAPI.updateProject(selectedProject.id, updatePayload);
-                console.log('✅ ProjectProgressTracker: Progress saved to database');
-            }
-        } catch (error) {
-            console.error('❌ Error saving progress to database:', error);
-            // Continue anyway - at least save to localStorage
-        }
-        
-        // Also update localStorage for consistency
-        if (storage && typeof storage.setProjects === 'function') {
+            const updatedProjects = projects.map(p => {
+                if (p && p.id === selectedProject.id) {
+                    const monthKey = `${selectedMonth}-${selectedYear}`;
+                    const currentProgress = p.monthlyProgress || {};
+                    const monthProgress = currentProgress[monthKey] || {};
+                    
+                    return {
+                        ...p,
+                        monthlyProgress: {
+                            ...currentProgress,
+                            [monthKey]: {
+                                ...monthProgress,
+                                [selectedField]: progressData
+                            }
+                        }
+                    };
+                }
+                return p;
+            });
+
+            setProjects(updatedProjects);
+            
+            // Save to database first
             try {
-                storage.setProjects(updatedProjects);
+                const updatedProject = updatedProjects.find(p => p && p.id === selectedProject.id);
+                if (updatedProject && window.DatabaseAPI?.updateProject) {
+                    console.log('💾 ProjectProgressTracker: Saving progress to database');
+                    const monthlyProgressToSave = updatedProject.monthlyProgress || {};
+                    const updatePayload = {
+                        monthlyProgress: typeof monthlyProgressToSave === 'string' 
+                            ? monthlyProgressToSave 
+                            : JSON.stringify(monthlyProgressToSave)
+                    };
+                    await window.DatabaseAPI.updateProject(selectedProject.id, updatePayload);
+                    console.log('✅ ProjectProgressTracker: Progress saved to database');
+                }
             } catch (error) {
-                console.warn('Failed to update localStorage:', error);
+                console.error('❌ Error saving progress to database:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response
+                });
+                // Continue anyway - at least save to localStorage
             }
-        } else {
-            console.warn('Storage not available or setProjects method not found');
+            
+            // Also update localStorage for consistency
+            if (storage && typeof storage.setProjects === 'function') {
+                try {
+                    storage.setProjects(updatedProjects);
+                } catch (error) {
+                    console.warn('Failed to update localStorage:', error);
+                }
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
+            
+            setShowProgressModal(false);
+            setSelectedProject(null);
+            setSelectedMonth(null);
+            setSelectedField(null);
+        } catch (error) {
+            console.error('❌ Error in handleSaveProgress:', error);
+            alert('Failed to save progress. Please try again.');
         }
-        
-        setShowProgressModal(false);
-        setSelectedProject(null);
-        setSelectedMonth(null);
-        setSelectedField(null);
     };
 
     const getProgressData = (project, month, field) => {
@@ -238,123 +270,162 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const handleDeleteProgress = async (project, month, field) => {
+        if (!project || !month || !field) {
+            console.error('❌ Cannot delete progress: missing required data');
+            return;
+        }
+
         if (!confirm(`Delete this entry for ${month}?`)) return;
 
-        const updatedProjects = projects.map(p => {
-            if (p.id === project.id) {
-                const monthKey = `${month}-${selectedYear}`;
-                const updatedMonthProgress = { ...p.monthlyProgress[monthKey] };
-                delete updatedMonthProgress[field];
-                
-                return {
-                    ...p,
-                    monthlyProgress: {
-                        ...p.monthlyProgress,
-                        [monthKey]: updatedMonthProgress
-                    }
-                };
-            }
-            return p;
-        });
-
-        setProjects(updatedProjects);
-        
-        // Save to database first
         try {
-            const updatedProject = updatedProjects.find(p => p.id === project.id);
-            if (updatedProject && window.DatabaseAPI?.updateProject) {
-                console.log('💾 ProjectProgressTracker: Saving progress deletion to database');
-                const updatePayload = {
-                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
-                };
-                await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                console.log('✅ ProjectProgressTracker: Progress deletion saved to database');
+            const updatedProjects = projects.map(p => {
+                if (p && p.id === project.id) {
+                    const monthKey = `${month}-${selectedYear}`;
+                    const currentProgress = p.monthlyProgress || {};
+                    const monthProgress = currentProgress[monthKey] || {};
+                    const updatedMonthProgress = { ...monthProgress };
+                    delete updatedMonthProgress[field];
+                    
+                    return {
+                        ...p,
+                        monthlyProgress: {
+                            ...currentProgress,
+                            [monthKey]: updatedMonthProgress
+                        }
+                    };
+                }
+                return p;
+            });
+
+            setProjects(updatedProjects);
+            
+            // Save to database first
+            try {
+                const updatedProject = updatedProjects.find(p => p && p.id === project.id);
+                if (updatedProject && window.DatabaseAPI?.updateProject) {
+                    console.log('💾 ProjectProgressTracker: Saving progress deletion to database');
+                    const monthlyProgressToSave = updatedProject.monthlyProgress || {};
+                    const updatePayload = {
+                        monthlyProgress: typeof monthlyProgressToSave === 'string' 
+                            ? monthlyProgressToSave 
+                            : JSON.stringify(monthlyProgressToSave)
+                    };
+                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    console.log('✅ ProjectProgressTracker: Progress deletion saved to database');
+                }
+            } catch (error) {
+                console.error('❌ Error saving progress deletion to database:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response
+                });
+            }
+            
+            // Also update localStorage for consistency
+            if (storage && typeof storage.setProjects === 'function') {
+                try {
+                    storage.setProjects(updatedProjects);
+                } catch (error) {
+                    console.warn('Failed to update localStorage:', error);
+                }
+            } else {
+                console.warn('Storage not available or setProjects method not found');
             }
         } catch (error) {
-            console.error('❌ Error saving progress deletion to database:', error);
-        }
-        
-        // Also update localStorage for consistency
-        if (storage && typeof storage.setProjects === 'function') {
-            try {
-                storage.setProjects(updatedProjects);
-            } catch (error) {
-                console.warn('Failed to update localStorage:', error);
-            }
-        } else {
-            console.warn('Storage not available or setProjects method not found');
+            console.error('❌ Error in handleDeleteProgress:', error);
+            alert('Failed to delete progress. Please try again.');
         }
     };
 
     const handleQuickComment = async (project, month) => {
         if (!quickComment.trim()) return;
+        if (!project || !month) {
+            console.error('❌ Cannot add comment: missing required data');
+            return;
+        }
 
-        // Get current user info
-        const currentUser = window.storage?.getUserInfo() || { name: 'User', email: 'user', id: 'user', role: 'User' };
-
-        const monthKey = `${month}-${selectedYear}`;
-        const existingData = project.monthlyProgress?.[monthKey]?.comments;
-        const existingComments = existingData && Array.isArray(existingData) ? existingData : (existingData ? [existingData] : []);
-        
-        const updatedComments = [
-            ...existingComments,
-            {
-                id: Date.now(),
-                text: quickComment,
-                date: new Date().toISOString(),
-                timestamp: new Date().toISOString(),
-                author: currentUser.name,
-                authorEmail: currentUser.email,
-                authorId: currentUser.id,
-                authorRole: currentUser.role
-            }
-        ];
-
-        const updatedProjects = projects.map(p => {
-            if (p.id === project.id) {
-                return {
-                    ...p,
-                    monthlyProgress: {
-                        ...p.monthlyProgress,
-                        [monthKey]: {
-                            ...p.monthlyProgress[monthKey],
-                            comments: updatedComments
-                        }
-                    }
-                };
-            }
-            return p;
-        });
-
-        setProjects(updatedProjects);
-        
-        // Save to database first
         try {
-            const updatedProject = updatedProjects.find(p => p.id === project.id);
-            if (updatedProject && window.DatabaseAPI?.updateProject) {
-                console.log('💾 ProjectProgressTracker: Saving quick comment to database');
-                const updatePayload = {
-                    monthlyProgress: JSON.stringify(updatedProject.monthlyProgress)
-                };
-                await window.DatabaseAPI.updateProject(project.id, updatePayload);
-                console.log('✅ ProjectProgressTracker: Quick comment saved to database');
-            }
-        } catch (error) {
-            console.error('❌ Error saving quick comment to database:', error);
-        }
-        
-        // Also update localStorage for consistency
-        if (storage && typeof storage.setProjects === 'function') {
+            // Get current user info
+            const currentUser = window.storage?.getUserInfo() || { name: 'User', email: 'user', id: 'user', role: 'User' };
+
+            const monthKey = `${month}-${selectedYear}`;
+            const currentProgress = project.monthlyProgress || {};
+            const monthProgress = currentProgress[monthKey] || {};
+            const existingData = monthProgress.comments;
+            const existingComments = existingData && Array.isArray(existingData) ? existingData : (existingData ? [existingData] : []);
+            
+            const updatedComments = [
+                ...existingComments,
+                {
+                    id: Date.now(),
+                    text: quickComment,
+                    date: new Date().toISOString(),
+                    timestamp: new Date().toISOString(),
+                    author: currentUser.name,
+                    authorEmail: currentUser.email,
+                    authorId: currentUser.id,
+                    authorRole: currentUser.role
+                }
+            ];
+
+            const updatedProjects = projects.map(p => {
+                if (p && p.id === project.id) {
+                    return {
+                        ...p,
+                        monthlyProgress: {
+                            ...currentProgress,
+                            [monthKey]: {
+                                ...monthProgress,
+                                comments: updatedComments
+                            }
+                        }
+                    };
+                }
+                return p;
+            });
+
+            setProjects(updatedProjects);
+            
+            // Save to database first
             try {
-                storage.setProjects(updatedProjects);
+                const updatedProject = updatedProjects.find(p => p && p.id === project.id);
+                if (updatedProject && window.DatabaseAPI?.updateProject) {
+                    console.log('💾 ProjectProgressTracker: Saving quick comment to database');
+                    const monthlyProgressToSave = updatedProject.monthlyProgress || {};
+                    const updatePayload = {
+                        monthlyProgress: typeof monthlyProgressToSave === 'string' 
+                            ? monthlyProgressToSave 
+                            : JSON.stringify(monthlyProgressToSave)
+                    };
+                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    console.log('✅ ProjectProgressTracker: Quick comment saved to database');
+                }
             } catch (error) {
-                console.warn('Failed to update localStorage:', error);
+                console.error('❌ Error saving quick comment to database:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    response: error.response
+                });
             }
-        } else {
-            console.warn('Storage not available or setProjects method not found');
+            
+            // Also update localStorage for consistency
+            if (storage && typeof storage.setProjects === 'function') {
+                try {
+                    storage.setProjects(updatedProjects);
+                } catch (error) {
+                    console.warn('Failed to update localStorage:', error);
+                }
+            } else {
+                console.warn('Storage not available or setProjects method not found');
+            }
+            
+            setQuickComment('');
+        } catch (error) {
+            console.error('❌ Error in handleQuickComment:', error);
+            alert('Failed to add comment. Please try again.');
         }
-        
-        setQuickComment('');
     };
 
     const handleMoveProject = async (fromIndex, toIndex) => {
@@ -843,6 +914,11 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const renderProgressCell = (project, month, field) => {
+        if (!project || !month || !field) {
+            console.warn('❌ renderProgressCell: missing required parameters');
+            return <td className="px-2 py-1 text-xs border-l border-gray-100"></td>;
+        }
+
         const data = getProgressData(project, month, field);
         
         // Handle comments as array
@@ -1192,7 +1268,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                projects.map((project, index) => (
+                                projects.filter(p => p && p.id).map((project, index) => (
                                     <tr 
                                         key={project.id} 
                                         draggable="true"

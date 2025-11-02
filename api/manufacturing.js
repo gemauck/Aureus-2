@@ -420,14 +420,10 @@ async function handler(req, res) {
           const partLower = (partNumber || '').toLowerCase()
           
           if (partLower.includes('completed unit') || partLower.includes('finished')) {
-            return 'finished_good'
+            return 'final_product'
           }
           
-          if (partLower.includes('housing') || partLower.includes('card rev')) {
-            return 'work_in_progress'
-          }
-          
-          return 'raw_material'
+          return 'component'
         }
 
         // Process items in batch
@@ -639,6 +635,8 @@ async function handler(req, res) {
         if (body.thumbnail !== undefined) updateData.thumbnail = body.thumbnail
         if (body.category !== undefined) updateData.category = body.category
         if (body.type !== undefined) updateData.type = body.type
+        if (body.inProductionQuantity !== undefined) updateData.inProductionQuantity = parseFloat(body.inProductionQuantity) || 0
+        if (body.completedQuantity !== undefined) updateData.completedQuantity = parseFloat(body.completedQuantity) || 0
         // Quantity cannot be edited (only through stock movements)
         // if (body.quantity !== undefined) updateData.quantity = parseFloat(body.quantity)
         if (body.unit !== undefined) updateData.unit = body.unit

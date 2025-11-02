@@ -5,7 +5,7 @@
 // - Clients selectable from clients list
 // - Sites selectable per client
 
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useRef } = React;
 const { useAuth } = window;
 
 const JobCards = ({ clients: clientsProp, users: usersProp }) => {
@@ -47,7 +47,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
 
-  // Load job cards with offline support
+  // Load job cards with offline support - defined as a stable function reference
+  const loadJobCardsRef = useRef(null);
+  
   const loadJobCards = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -59,7 +61,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       }
 
       // Then try to sync from API if online
-      if (isOnline && window.DatabaseAPI?.getJobCards) {
+      const onlineStatus = navigator.onLine;
+      if (onlineStatus && window.DatabaseAPI?.getJobCards) {
         try {
           const response = await window.DatabaseAPI.getJobCards();
           const jobCardsData = response?.data?.jobCards || response?.data || [];
@@ -76,7 +79,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [isOnline]);
+  }, []); // Remove isOnline dependency to avoid initialization issues
+
+  // Store the function in a ref for stable access
+  loadJobCardsRef.current = loadJobCards;
 
   // Monitor online/offline status and auto-sync when coming back online
   useEffect(() => {
@@ -85,18 +91,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       console.log('🌐 Connection restored - syncing job cards...');
       
       // Auto-sync job cards when coming back online
-      try {
-        // First reload from API to get latest
-        if (window.DatabaseAPI?.getJobCards) {
-          const response = await window.DatabaseAPI.getJobCards();
-          const jobCardsData = response?.data?.jobCards || response?.data || [];
-          if (Array.isArray(jobCardsData)) {
-            setJobCards(jobCardsData);
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
-          }
-        }
-      } catch (error) {
-        console.warn('Failed to sync when coming back online:', error);
+      if (loadJobCardsRef.current) {
+        loadJobCardsRef.current();
       }
     };
     
@@ -112,7 +108,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []); // Remove loadJobCards dependency to avoid circular reference
+  }, []); // Empty deps - use ref to access latest function
 
   // Load users if not provided - with offline support
   useEffect(() => {
@@ -244,8 +240,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
   // Initial load of job cards
   useEffect(() => {
-    loadJobCards();
-  }, [loadJobCards]);
+    loadJobCardsRef.current?.();
+  }, []);
 
   // Auto-populate agent name from current user
   useEffect(() => {

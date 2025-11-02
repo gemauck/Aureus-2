@@ -394,9 +394,11 @@ model InventoryItem {
   name                String
   thumbnail           String    @default("")
   category            String    @default("components") // components, packaging, accessories, finished_goods, work_in_progress
-  type                String    @default("raw_material") // raw_material, finished_good, wip
+  type                String    @default("component") // component, final_product
   quantity            Float     @default(0)
   allocatedQuantity   Float     @default(0) // Quantity reserved/allocated to production orders
+  inProductionQuantity Float    @default(0) // For final_product type: units currently in production
+  completedQuantity   Float     @default(0) // For final_product type: units completed and ready
   unit                String    @default("pcs")
   reorderPoint        Float     @default(0)
   reorderQty          Float     @default(0)
@@ -687,6 +689,10 @@ model JobCard {
   travelKilometers Float     @default(0) // Calculated distance
   reasonForVisit   String    @default("") // Why requested to come out
   diagnosis        String    @default("") // Notes and comments about diagnosis
+  actionsTaken     String    @default("") // Actions taken to resolve the issue
+  stockUsed        String    @default("[]") // JSON array of stock items used
+  materialsBought  String    @default("[]") // JSON array of materials purchased
+  totalMaterialsCost Float   @default(0) // Total cost of materials bought
   otherComments    String    @default("") // Additional comments
   photos           String    @default("[]") // JSON array of photo URLs
   status           String    @default("draft") // draft, submitted, completed

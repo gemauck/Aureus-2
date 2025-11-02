@@ -758,7 +758,9 @@ const Manufacturing = () => {
                         </div>
                         <div>
                           <span className="text-gray-500">Type:</span>
-                          <span className="ml-1 text-gray-900 capitalize">{item.type.replace('_', ' ')}</span>
+                          <span className="ml-1 text-gray-900 capitalize">
+                            {item.type === 'final_product' ? 'Final Product' : item.type === 'component' ? 'Component' : item.type.replace('_', ' ')}
+                          </span>
                         </div>
                         {item.location && (
                           <div>
@@ -769,20 +771,45 @@ const Manufacturing = () => {
                       </div>
                       
                       {/* Stock Info */}
-                      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200">
-                        <div className="text-center">
-                          <div className={`text-lg font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
-                          <div className="text-xs text-gray-500">Total {item.unit}</div>
+                      {item.type === 'final_product' ? (
+                        <div className="mt-3 pt-3 border-t border-gray-200 space-y-2">
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center">
+                              <div className={`text-lg font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
+                              <div className="text-xs text-gray-500">Total {item.unit}</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-orange-600">{item.inProductionQuantity || 0}</div>
+                              <div className="text-xs text-gray-500">In-Production</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-bold text-green-600">{item.completedQuantity || 0}</div>
+                              <div className="text-xs text-gray-500">Completed</div>
+                            </div>
+                          </div>
+                          {item.allocatedQuantity > 0 && (
+                            <div className="text-center pt-2 border-t border-gray-200">
+                              <div className="text-sm font-bold text-yellow-700">{item.allocatedQuantity || 0}</div>
+                              <div className="text-xs text-gray-500">Allocated</div>
+                            </div>
+                          )}
                         </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-yellow-700">{item.allocatedQuantity || 0}</div>
-                          <div className="text-xs text-gray-500">Allocated</div>
+                      ) : (
+                        <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200">
+                          <div className="text-center">
+                            <div className={`text-lg font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
+                            <div className="text-xs text-gray-500">Total {item.unit}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-lg font-bold text-yellow-700">{item.allocatedQuantity || 0}</div>
+                            <div className="text-xs text-gray-500">Allocated</div>
+                          </div>
+                          <div className="text-center">
+                            <div className={`text-lg font-bold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>{availableQty}</div>
+                            <div className="text-xs text-gray-500">Available</div>
+                          </div>
                         </div>
-                        <div className="text-center">
-                          <div className={`text-lg font-bold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>{availableQty}</div>
-                          <div className="text-xs text-gray-500">Available</div>
-                        </div>
-                      </div>
+                      )}
                       
                       {/* Cost Info */}
                       {(item.unitCost > 0 || item.totalValue > 0) && (
@@ -940,10 +967,26 @@ const Manufacturing = () => {
                         : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category.replace('_', ' ')}</td>
-                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.type.replace('_', ' ')}</td>
+                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">
+                      {item.type === 'final_product' ? 'Final Product' : item.type === 'component' ? 'Component' : item.type.replace('_', ' ')}
+                    </td>
                     <td className="px-3 py-2 text-right">
-                      <div className={`text-sm font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
-                      <div className="text-xs text-gray-500">{item.unit}</div>
+                      {item.type === 'final_product' ? (
+                        <div className="space-y-1">
+                          <div className="text-sm font-semibold text-gray-900">Total: {item.quantity || 0}</div>
+                          <div className="text-xs">
+                            <span className="text-orange-600">In-Prod: {(item.inProductionQuantity || 0)}</span>
+                            {' • '}
+                            <span className="text-green-600">Completed: {(item.completedQuantity || 0)}</span>
+                          </div>
+                          <div className="text-xs text-gray-500">{item.unit}</div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={`text-sm font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
+                          <div className="text-xs text-gray-500">{item.unit}</div>
+                        </>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="text-sm font-medium text-yellow-700">{(item.allocatedQuantity || 0)}</div>
@@ -1398,8 +1441,10 @@ const Manufacturing = () => {
       name: '',
       thumbnail: '',
       category: 'components',
-      type: 'raw_material',
+      type: 'component',
       quantity: 0,
+      inProductionQuantity: 0,
+      completedQuantity: 0,
       unit: 'pcs',
       reorderPoint: 0,
       reorderQty: 0,
@@ -1537,6 +1582,13 @@ const Manufacturing = () => {
       if (formData.legacyPartNumber !== undefined) {
         itemData.legacyPartNumber = formData.legacyPartNumber || '';
       }
+      // Include production tracking fields for Final Products
+      if (formData.inProductionQuantity !== undefined) {
+        itemData.inProductionQuantity = parseFloat(formData.inProductionQuantity) || 0;
+      }
+      if (formData.completedQuantity !== undefined) {
+        itemData.completedQuantity = parseFloat(formData.completedQuantity) || 0;
+      }
 
       if (selectedItem?.id) {
         // Update existing - don't send quantity or SKU
@@ -1551,6 +1603,8 @@ const Manufacturing = () => {
         const createData = {
           ...itemData,
           quantity: parseFloat(formData.quantity) || 0,
+          inProductionQuantity: parseFloat(formData.inProductionQuantity) || 0,
+          completedQuantity: parseFloat(formData.completedQuantity) || 0,
           lastRestocked: new Date().toISOString().split('T')[0]
         };
         const response = await safeCallAPI('createInventoryItem', createData);
@@ -2496,13 +2550,12 @@ const Manufacturing = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
                   <select
-                    value={formData.type || 'raw_material'}
+                    value={formData.type || 'component'}
                     onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   >
-                    <option value="raw_material">Raw Material</option>
-                    <option value="finished_good">Finished Good</option>
-                    <option value="wip">Work in Progress</option>
+                    <option value="component">Component</option>
+                    <option value="final_product">Final Product</option>
                   </select>
                 </div>
 
@@ -2547,6 +2600,57 @@ const Manufacturing = () => {
                     <option value="set">Set</option>
                   </select>
                 </div>
+
+                {/* In-Production and Completed Quantities - Only for Final Products */}
+                {formData.type === 'final_product' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        In-Production Units {modalType === 'add_item' ? '*' : ''}
+                      </label>
+                      {modalType === 'edit_item' ? (
+                        <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700">
+                          {formData.inProductionQuantity || 0} {formData.unit || 'pcs'}
+                          <span className="ml-2 text-xs text-gray-500 italic">
+                            (Update via stock movements/production orders)
+                          </span>
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.inProductionQuantity || 0}
+                          onChange={(e) => setFormData({ ...formData, inProductionQuantity: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Units currently in production"
+                        />
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Completed Units {modalType === 'add_item' ? '*' : ''}
+                      </label>
+                      {modalType === 'edit_item' ? (
+                        <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700">
+                          {formData.completedQuantity || 0} {formData.unit || 'pcs'}
+                          <span className="ml-2 text-xs text-gray-500 italic">
+                            (Update via stock movements/production orders)
+                          </span>
+                        </div>
+                      ) : (
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.completedQuantity || 0}
+                          onChange={(e) => setFormData({ ...formData, completedQuantity: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Units completed and ready"
+                        />
+                      )}
+                    </div>
+                  </>
+                )}
 
                 {/* Reorder Point */}
                 <div>
@@ -2698,8 +2802,8 @@ const Manufacturing = () => {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-blue-900 mb-1">Select Finished Product Inventory Item *</p>
                     <p className="text-xs text-blue-700">
-                      Every BOM must be linked to a finished product inventory item. If you haven't created the finished product yet, 
-                      go to the Inventory tab and create it first (set type to "finished_good").
+                      Every BOM must be linked to a final product inventory item. If you haven't created the final product yet, 
+                      go to the Inventory tab and create it first (set type to "Final Product").
                     </p>
                     {/* Debug info */}
                     {process.env.NODE_ENV === 'development' && (
@@ -2759,18 +2863,18 @@ const Manufacturing = () => {
                           items: inventory.map(i => ({ id: i.id, sku: i.sku, name: i.name, type: i.type, category: i.category }))
                         });
                         
-                        // More flexible filtering - show finished goods first, then all items as fallback
-                        const finishedGoods = inventory.filter(item => {
-                          const typeMatch = item.type === 'finished_good' || item.type === 'finished_goods';
-                          const categoryMatch = item.category === 'finished_goods' || item.category === 'finished_good';
+                        // More flexible filtering - show final products first, then all items as fallback
+                        const finalProducts = inventory.filter(item => {
+                          const typeMatch = item.type === 'final_product';
+                          const categoryMatch = item.category === 'finished_goods';
                           return typeMatch || categoryMatch;
                         });
                         
-                        // If no finished goods found, show ALL inventory items (user can link any item)
-                        const itemsToShow = finishedGoods.length > 0 ? finishedGoods : inventory;
+                        // If no final products found, show ALL inventory items (user can link any item)
+                        const itemsToShow = finalProducts.length > 0 ? finalProducts : inventory;
                         
-                        if (finishedGoods.length === 0 && inventory.length > 0) {
-                          console.warn('⚠️ No items with type="finished_good" or category="finished_goods" found. Showing all items as fallback.');
+                        if (finalProducts.length === 0 && inventory.length > 0) {
+                          console.warn('⚠️ No items with type="final_product" found. Showing all items as fallback.');
                         }
                         
                         if (itemsToShow.length === 0) {
@@ -2780,30 +2884,29 @@ const Manufacturing = () => {
                         }
                         
                         return itemsToShow.map(item => {
-                          const isFinishedGood = finishedGoods.find(fg => fg.id === item.id);
+                          const isFinalProduct = finalProducts.find(fp => fp.id === item.id);
                           return (
                             <option key={item.id} value={item.id}>
                               {item.sku} - {item.name}
-                              {!isFinishedGood && finishedGoods.length > 0 
-                                ? ' (⚠️ Set type to "Finished Good" in Inventory)' 
-                                : finishedGoods.length === 0 
-                                  ? ' (✅ All items shown - update type in Inventory to "Finished Good")'
+                              {!isFinalProduct && finalProducts.length > 0 
+                                ? ' (⚠️ Set type to "Final Product" in Inventory)' 
+                                : finalProducts.length === 0 
+                                  ? ' (✅ All items shown - update type in Inventory to "Final Product")'
                                   : ''}
                             </option>
                           );
                         });
                       })()}
                     </select>
-                    {inventory.filter(item => item.type === 'finished_good' || item.category === 'finished_goods').length === 0 && inventory.length > 0 && (
+                    {inventory.filter(item => item.type === 'final_product').length === 0 && inventory.length > 0 && (
                       <div className="mt-2 text-xs text-yellow-600 flex items-start gap-1">
                         <i className="fas fa-exclamation-triangle mt-0.5"></i>
                         <div>
-                          <p className="font-medium">No finished goods found</p>
-                          <p className="mt-1">Showing all items as fallback. To mark an item as finished product:</p>
+                          <p className="font-medium">No final products found</p>
+                          <p className="mt-1">Showing all items as fallback. To mark an item as final product:</p>
                           <p className="mt-1">1. Go to Inventory tab</p>
                           <p className="ml-4">2. Edit the item</p>
-                          <p className="ml-4">3. Set Type to "Finished Good"</p>
-                          <p className="ml-4">4. Set Category to "Finished Goods"</p>
+                          <p className="ml-4">3. Set Type to "Final Product"</p>
                         </div>
                       </div>
                     )}
@@ -2999,7 +3102,7 @@ const Manufacturing = () => {
                             className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           >
                             <option value="">Select or type...</option>
-                            {inventory.filter(item => item.type === 'raw_material').map(item => (
+                            {inventory.filter(item => item.type === 'component').map(item => (
                               <option key={item.sku} value={item.sku}>{item.sku} - {item.name}</option>
                             ))}
                           </select>

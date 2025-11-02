@@ -94,6 +94,13 @@ async function handler(req, res) {
         documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
       }
       
+      // Handle monthlyProgress separately if provided
+      if (body.monthlyProgress !== undefined && body.monthlyProgress !== null) {
+        updateData.monthlyProgress = typeof body.monthlyProgress === 'string' 
+          ? body.monthlyProgress 
+          : JSON.stringify(body.monthlyProgress)
+      }
+      
       // Remove undefined values
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {

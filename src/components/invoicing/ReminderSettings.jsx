@@ -37,8 +37,8 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2">
-            <div className="bg-white rounded-lg w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+            <div className="bg-white rounded-lg w-full max-w-xs sm:max-w-md md:max-w-3xl max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                     <h2 className="text-base font-semibold text-gray-900">Payment Reminder Settings</h2>
                     <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded transition-colors">
@@ -81,7 +81,7 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
                                                 Before Due Date
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                                             <label className="flex items-center">
                                                 <input
                                                     type="checkbox"
@@ -131,7 +131,7 @@ export const ReminderSettings = ({ settings, onSave, onClose }) => {
                                                 After Due Date (Overdue)
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
                                             <label className="flex items-center">
                                                 <input
                                                     type="checkbox"
