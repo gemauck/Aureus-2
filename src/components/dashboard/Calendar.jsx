@@ -7,6 +7,7 @@ const Calendar = () => {
     const [showNotesModal, setShowNotesModal] = useState(false);
     const [notes, setNotes] = useState({}); // { '2024-01-15': 'note text' }
     const { isDark } = window.useTheme();
+    const [isSaving, setIsSaving] = useState(false); // Prevent refresh during save
     
     // Load notes (load ALL notes, not just current month) - localStorage first for instant display, then sync from server
     useEffect(() => {
@@ -95,13 +96,23 @@ const Calendar = () => {
         };
         
         // Periodic refresh when page is visible (every 30 seconds)
+        // But skip refresh if we're currently saving
         let refreshInterval = null;
         const startPeriodicRefresh = () => {
             if (refreshInterval) clearInterval(refreshInterval);
             refreshInterval = setInterval(() => {
-                if (!document.hidden) {
+                // Skip refresh if saving is in progress (check via closure)
+                const checkSaving = () => {
+                    // We'll use a ref-like pattern or check localStorage flag
+                    const savingFlag = sessionStorage.getItem('calendar_is_saving');
+                    return savingFlag === 'true';
+                };
+                
+                if (!document.hidden && !checkSaving()) {
                     console.log('📝 Periodic refresh - syncing calendar notes from server');
                     loadNotes(true);
+                } else if (checkSaving()) {
+                    console.log('⏸️ Skipping periodic refresh - save in progress');
                 }
             }, 30000); // Refresh every 30 seconds when visible
         };
@@ -120,6 +131,9 @@ const Calendar = () => {
     
     // Save notes to server if authenticated, always cache in localStorage
     const saveNotes = async (dateString, noteText) => {
+        setIsSaving(true);
+        sessionStorage.setItem('calendar_is_saving', 'true');
+        
         try {
             const user = window.storage?.getUser?.();
             // Use user.id (from JWT sub) - this should match req.user.sub in API
@@ -145,6 +159,8 @@ const Calendar = () => {
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.warn('⚠️ No authentication token - note saved locally only');
+                setIsSaving(false);
+                sessionStorage.removeItem('calendar_is_saving');
                 return;
             }
             
@@ -152,6 +168,8 @@ const Calendar = () => {
                 // Validate dateString format before sending
                 if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
                     console.error('❌ Invalid date format:', dateString);
+                    setIsSaving(false);
+                    sessionStorage.removeItem('calendar_is_saving');
                     return;
                 }
                 
@@ -179,9 +197,12 @@ const Calendar = () => {
                     
                     // Verify the save was successful
                     if (data.saved !== false) {
-                        // After successful save, refresh from server to get latest state
-                        // This ensures we have the exact server state (including any server-side processing)
-                        setTimeout(async () => {
+                        // Wait longer before refresh to ensure server has fully processed
+                        // Also retry if note isn't found immediately
+                        let retryCount = 0;
+                        const maxRetries = 3;
+                        
+                        const verifyAndRefresh = async () => {
                             try {
                                 const refreshRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
                                     headers: { 
@@ -192,29 +213,67 @@ const Calendar = () => {
                                     credentials: 'include',
                                     cache: 'no-store'
                                 });
+                                
                                 if (refreshRes.ok) {
                                     const refreshData = await refreshRes.json();
                                     const serverNotes = refreshData?.notes || {};
-                                    setNotes(serverNotes);
-                                    localStorage.setItem(notesKey, JSON.stringify(serverNotes));
-                                    console.log('✅ Calendar notes refreshed after save - verified saved:', dateString, serverNotes[dateString] ? 'YES' : 'NO');
                                     
-                                    // Show success message to user
-                                    if (window.showNotification) {
-                                        window.showNotification('Calendar note saved successfully', 'success');
+                                    console.log('📋 Server notes keys:', Object.keys(serverNotes));
+                                    console.log('🔍 Looking for note on date:', dateString);
+                                    console.log('✅ Note found on server:', serverNotes[dateString] ? 'YES' : 'NO');
+                                    
+                                    if (serverNotes[dateString]) {
+                                        // Note is confirmed on server - update state
+                                        setNotes(serverNotes);
+                                        localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                                        console.log('✅ Calendar notes refreshed after save - verified saved:', dateString, 'YES');
+                                        
+                                        setIsSaving(false);
+                                        sessionStorage.removeItem('calendar_is_saving');
+                                        
+                                        // Show success message to user
+                                        if (window.showNotification) {
+                                            window.showNotification('Calendar note saved successfully', 'success');
+                                        }
+                                    } else if (retryCount < maxRetries) {
+                                        // Note not found yet, retry after delay
+                                        retryCount++;
+                                        console.log(`⏳ Note not found yet, retrying (${retryCount}/${maxRetries})...`);
+                                        setTimeout(verifyAndRefresh, 1000 * retryCount); // Exponential backoff
+                                    } else {
+                                        // Max retries reached, but still update with what server has
+                                        console.warn('⚠️ Note not found after max retries, but updating with server data anyway');
+                                        setNotes(serverNotes);
+                                        localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                                        setIsSaving(false);
+                                        sessionStorage.removeItem('calendar_is_saving');
                                     }
                                 } else {
                                     console.error('❌ Failed to refresh after save:', refreshRes.status);
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
                                 }
                             } catch (refreshError) {
                                 console.error('Error refreshing after save:', refreshError);
+                                if (retryCount < maxRetries) {
+                                    retryCount++;
+                                    setTimeout(verifyAndRefresh, 1000 * retryCount);
+                                } else {
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
+                                }
                             }
-                        }, 500); // Small delay to ensure server has processed
+                        };
+                        
+                        // Start verification after initial delay
+                        setTimeout(verifyAndRefresh, 1500); // Longer delay to ensure server processing
                     } else {
                         console.error('❌ Server returned saved=false:', data);
                         alert('Failed to save calendar note. Please try again.');
                         setNotes(previousNotes);
                         localStorage.setItem(notesKey, JSON.stringify(previousNotes));
+                        setIsSaving(false);
+                        sessionStorage.removeItem('calendar_is_saving');
                     }
                 } else {
                     const errorText = await res.text();
@@ -236,6 +295,8 @@ const Calendar = () => {
                     setNotes(previousNotes);
                     localStorage.setItem(notesKey, JSON.stringify(previousNotes));
                     console.warn('⚠️ Reverted note due to server error');
+                    setIsSaving(false);
+                    sessionStorage.removeItem('calendar_is_saving');
                 }
             } catch (error) {
                 console.error('❌ Error saving note to server:', error);
@@ -268,13 +329,18 @@ const Calendar = () => {
                             localStorage.setItem(notesKey, JSON.stringify(serverNotes));
                             console.log('✅ Calendar notes synced after network error');
                         }
-                    } catch (verifyError) {
-                        console.error('Error verifying save:', verifyError);
-                    }
-                }, 1000);
+                        } catch (verifyError) {
+                            console.error('Error verifying save:', verifyError);
+                        } finally {
+                            setIsSaving(false);
+                            sessionStorage.removeItem('calendar_is_saving');
+                        }
+                    }, 1000);
             }
         } catch (error) {
             console.error('Error saving notes:', error);
+            setIsSaving(false);
+            sessionStorage.removeItem('calendar_is_saving');
         }
     };
     
