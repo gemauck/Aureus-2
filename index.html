@@ -475,6 +475,15 @@
     <!-- Public Job Card Form - Accessible without login -->
     <script defer src="./dist/src/components/manufacturing/JobCardFormPublic.js"></script>
     
+    <!-- HR - Load early since it's a main menu item (not lazy) -->
+    <script defer src="./dist/src/components/hr/EmployeeManagement.js"></script>
+    <script defer src="./dist/src/components/hr/LeaveManagement.js"></script>
+    <script defer src="./dist/src/components/hr/LeaveBalance.js"></script>
+    <script defer src="./dist/src/components/hr/Attendance.js"></script>
+    <script defer src="./dist/src/components/hr/QuickBooksPayrollSync.js"></script>
+    <script defer src="./dist/src/components/hr/Payroll.js"></script>
+    <script defer src="./dist/src/components/hr/HR.js"></script>
+    
     <!-- Clients - Load early since it's a main menu item and critical (not lazy) -->
     <script defer src="./dist/src/components/clients/ClientDetailModal.js"></script>
     <script defer src="./dist/src/components/clients/LeadDetailModal.js"></script>

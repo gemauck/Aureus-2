@@ -5,7 +5,7 @@
 const { useState, useEffect, useRef } = React;
 const GoogleCalendarSync = window.GoogleCalendarSync;
 
-const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
     
@@ -1552,14 +1552,22 @@ const ClientDetailModal = ({ client, onSave, onClose, onDelete, allProjects, onN
 
 
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         console.log('💾 Saving form data:', { notes: formData.notes });
         hasUserEditedForm.current = false; // Reset after save
-        onSave({
+        const clientData = {
             ...formData,
             lastContact: new Date().toISOString().split('T')[0]
-        }); // Main form save - will exit edit mode
+        };
+        
+        // Use onUpdate if provided (for updates that should close the modal)
+        // Otherwise use onSave (for auto-saves that stay in edit mode)
+        if (onUpdate && client) {
+            await onUpdate(clientData);
+        } else {
+            await onSave(clientData);
+        }
     };
 
     // Get projects that belong to this client (match by clientId or clientName)

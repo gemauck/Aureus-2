@@ -1,7 +1,7 @@
 // Get React hooks from window
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
+const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     
     // Update tab when initialTab prop changes
@@ -1009,7 +1009,7 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         setSelectedProjectIds(newSelectedIds);
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         
         // Validate required fields
@@ -1027,11 +1027,19 @@ const LeadDetailModal = ({ lead, onSave, onClose, onDelete, onConvertToClient, a
         console.log('💾 Submitting lead form:', formData);
         
         try {
-            onSave({
+            const leadData = {
                 ...formData,
                 projectIds: selectedProjectIds,
                 lastContact: new Date().toISOString().split('T')[0]
-            });
+            };
+            
+            // Use onUpdate if provided (for updates that should close the modal)
+            // Otherwise use onSave (for auto-saves that stay in edit mode)
+            if (onUpdate && lead) {
+                await onUpdate(leadData);
+            } else {
+                await onSave(leadData);
+            }
         } catch (error) {
             console.error('❌ Error in handleSubmit:', error);
             alert('Error saving lead: ' + (error.message || 'Unknown error'));

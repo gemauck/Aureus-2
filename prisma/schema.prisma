@@ -107,6 +107,7 @@ model Client {
   invoices      Invoice[]
   opportunities Opportunity[]
   tags          ClientTag[]
+  newsArticles  ClientNews[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
@@ -389,32 +390,32 @@ model TeamTask {
 
 // Manufacturing Models
 model InventoryItem {
-  id                  String    @id @default(cuid())
-  sku                 String
-  name                String
-  thumbnail           String    @default("")
-  category            String    @default("components") // components, packaging, accessories, finished_goods, work_in_progress
-  type                String    @default("component") // component, final_product
-  quantity            Float     @default(0)
-  allocatedQuantity   Float     @default(0) // Quantity reserved/allocated to production orders
-  inProductionQuantity Float    @default(0) // For final_product type: units currently in production
-  completedQuantity   Float     @default(0) // For final_product type: units completed and ready
-  unit                String    @default("pcs")
-  reorderPoint        Float     @default(0)
-  reorderQty          Float     @default(0)
-  location            String    @default("")
-  locationId          String?   // Link to StockLocation - each location has its own inventory
-  stockLocation       StockLocation? @relation(fields: [locationId], references: [id])
-  unitCost            Float     @default(0)
-  totalValue          Float     @default(0)
-  supplier            String    @default("")
-  supplierPartNumbers String    @default("[]") // JSON array of {supplier: string, partNumber: string}
-  legacyPartNumber    String    @default("")
-  status              String    @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
-  lastRestocked       DateTime?
-  ownerId             String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  id                   String         @id @default(cuid())
+  sku                  String
+  name                 String
+  thumbnail            String         @default("")
+  category             String         @default("components") // components, packaging, accessories, finished_goods, work_in_progress
+  type                 String         @default("component") // component, final_product
+  quantity             Float          @default(0)
+  allocatedQuantity    Float          @default(0) // Quantity reserved/allocated to production orders
+  inProductionQuantity Float          @default(0) // For final_product type: units currently in production
+  completedQuantity    Float          @default(0) // For final_product type: units completed and ready
+  unit                 String         @default("pcs")
+  reorderPoint         Float          @default(0)
+  reorderQty           Float          @default(0)
+  location             String         @default("")
+  locationId           String? // Link to StockLocation - each location has its own inventory
+  stockLocation        StockLocation? @relation(fields: [locationId], references: [id])
+  unitCost             Float          @default(0)
+  totalValue           Float          @default(0)
+  supplier             String         @default("")
+  supplierPartNumbers  String         @default("[]") // JSON array of {supplier: string, partNumber: string}
+  legacyPartNumber     String         @default("")
+  status               String         @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
+  lastRestocked        DateTime?
+  ownerId              String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 
   // Relation: BOMs that produce this finished product
   boms BOM[] @relation("BOMFinishedProduct")
@@ -520,7 +521,7 @@ model StockLocation {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  inventory LocationInventory[]
+  inventory      LocationInventory[]
   inventoryItems InventoryItem[] // Inventory items specific to this location
 
   @@index([type])
@@ -676,38 +677,58 @@ model PasswordHistory {
 
 // Field Agent Job Cards
 model JobCard {
-  id               String    @id @default(cuid())
-  jobCardNumber    String    @unique // Auto-generated: JC0001, JC0002, etc.
-  agentName        String    @default("") // Name of agent filling out the form
-  otherTechnicians String    @default("[]") // JSON array of technician names
-  clientId         String? // Reference to client
-  clientName       String    @default("") // Client name
-  siteId           String    @default("") // Site/location ID
-  siteName         String    @default("") // Site name
-  location         String    @default("") // Specific location details
-  timeOfDeparture  DateTime? // When agent left
-  timeOfArrival    DateTime? // When agent arrived
-  vehicleUsed      String    @default("") // Vehicle information
-  kmReadingBefore  Float     @default(0) // Odometer reading before
-  kmReadingAfter   Float     @default(0) // Odometer reading after
-  travelKilometers Float     @default(0) // Calculated distance
-  reasonForVisit   String    @default("") // Why requested to come out
-  diagnosis        String    @default("") // Notes and comments about diagnosis
-  actionsTaken     String    @default("") // Actions taken to resolve the issue
-  stockUsed        String    @default("[]") // JSON array of stock items used
-  materialsBought  String    @default("[]") // JSON array of materials purchased
-  totalMaterialsCost Float   @default(0) // Total cost of materials bought
-  otherComments    String    @default("") // Additional comments
-  photos           String    @default("[]") // JSON array of photo URLs
-  status           String    @default("draft") // draft, submitted, completed
-  submittedAt      DateTime?
-  completedAt      DateTime?
-  ownerId          String? // User who created the job card
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  jobCardNumber      String    @unique // Auto-generated: JC0001, JC0002, etc.
+  agentName          String    @default("") // Name of agent filling out the form
+  otherTechnicians   String    @default("[]") // JSON array of technician names
+  clientId           String? // Reference to client
+  clientName         String    @default("") // Client name
+  siteId             String    @default("") // Site/location ID
+  siteName           String    @default("") // Site name
+  location           String    @default("") // Specific location details
+  timeOfDeparture    DateTime? // When agent left
+  timeOfArrival      DateTime? // When agent arrived
+  vehicleUsed        String    @default("") // Vehicle information
+  kmReadingBefore    Float     @default(0) // Odometer reading before
+  kmReadingAfter     Float     @default(0) // Odometer reading after
+  travelKilometers   Float     @default(0) // Calculated distance
+  reasonForVisit     String    @default("") // Why requested to come out
+  diagnosis          String    @default("") // Notes and comments about diagnosis
+  actionsTaken       String    @default("") // Actions taken to resolve the issue
+  stockUsed          String    @default("[]") // JSON array of stock items used
+  materialsBought    String    @default("[]") // JSON array of materials purchased
+  totalMaterialsCost Float     @default(0) // Total cost of materials bought
+  otherComments      String    @default("") // Additional comments
+  photos             String    @default("[]") // JSON array of photo URLs
+  status             String    @default("draft") // draft, submitted, completed
+  submittedAt        DateTime?
+  completedAt        DateTime?
+  ownerId            String? // User who created the job card
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   @@index([clientId])
   @@index([ownerId])
   @@index([status])
+  @@index([createdAt])
+}
+
+// Client News Articles - Daily news search results
+model ClientNews {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @default("")
+  url         String   @default("")
+  source      String   @default("Unknown")
+  publishedAt DateTime @default(now())
+  isNew       Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([publishedAt])
+  @@index([isNew])
   @@index([createdAt])
 }

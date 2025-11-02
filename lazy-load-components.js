@@ -21,6 +21,7 @@
         './src/components/clients/BulkOperations.jsx',
         './src/components/clients/Pipeline.jsx',
         './src/components/clients/PipelineIntegration.js',
+        './src/components/clients/ClientNewsFeed.jsx',
         
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail, then Projects
         './src/components/projects/CustomFieldModal.jsx',
@@ -93,14 +94,14 @@
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         
-        // HR
-        './src/components/hr/EmployeeManagement.jsx',
-        './src/components/hr/LeaveManagement.jsx',
-        './src/components/hr/LeaveBalance.jsx',
-        './src/components/hr/Attendance.jsx',
-        './src/components/hr/QuickBooksPayrollSync.jsx',
-        './src/components/hr/Payroll.jsx',
-        './src/components/hr/HR.jsx',
+        // HR - MOVED to index.html for early loading (main menu item)
+        // './src/components/hr/EmployeeManagement.jsx',
+        // './src/components/hr/LeaveManagement.jsx',
+        // './src/components/hr/LeaveBalance.jsx',
+        // './src/components/hr/Attendance.jsx',
+        // './src/components/hr/QuickBooksPayrollSync.jsx',
+        // './src/components/hr/Payroll.jsx',
+        // './src/components/hr/HR.jsx',
         
         // Account & Settings
         './src/components/account/Account.jsx',

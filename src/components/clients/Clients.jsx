@@ -1034,6 +1034,21 @@ const Clients = React.memo(() => {
             setCurrentTab('overview');
         }
     };
+
+    const handleUpdateLead = async (leadFormData, stayInEditMode = false) => {
+        console.log('🔄 handleUpdateLead called');
+        await handleSaveLead(leadFormData, stayInEditMode);
+        
+        // After saving, close the form and return to leads view
+        if (!stayInEditMode) {
+            // Refresh leads from database to ensure we have latest persisted data
+            console.log('🔄 Refreshing leads after update...');
+            await loadLeads(true); // Force refresh to get latest data
+            setViewMode('leads');
+            setSelectedLead(null);
+            setCurrentLeadTab('overview');
+        }
+    };
     
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         console.log('=== SAVE CLIENT DEBUG ===');
@@ -1264,7 +1279,7 @@ const Clients = React.memo(() => {
         }
     };
     
-    const handleSaveLead = async (leadFormData) => {
+    const handleSaveLead = async (leadFormData, stayInEditMode = false) => {
         console.log('=== SAVE LEAD DEBUG ===');
         console.log('Received lead data:', leadFormData);
         console.log('Lead status from form:', leadFormData.status);
@@ -1508,16 +1523,19 @@ const Clients = React.memo(() => {
                 }
                 
                 // For new leads, redirect to main leads view to show the newly added lead
-                setViewMode('leads');
-                setSelectedLead(null);
-                setCurrentLeadTab('overview');
-                
-                // Force a refresh to ensure API data is loaded (if authenticated)
-                if (token) {
-                    setTimeout(() => {
-                        console.log('🔄 Refreshing leads after creation...');
-                        loadLeads(true); // Force refresh to bypass API throttling
-                    }, 100);
+                // Only if not staying in edit mode
+                if (!stayInEditMode) {
+                    setViewMode('leads');
+                    setSelectedLead(null);
+                    setCurrentLeadTab('overview');
+                    
+                    // Force a refresh to ensure API data is loaded (if authenticated)
+                    if (token) {
+                        setTimeout(() => {
+                            console.log('🔄 Refreshing leads after creation...');
+                            loadLeads(true); // Force refresh to bypass API throttling
+                        }, 100);
+                    }
                 }
             }
         } catch (error) {
@@ -2346,7 +2364,7 @@ const Clients = React.memo(() => {
                 </table>
             </div>
             {/* Pagination Controls */}
-            {totalClientsPages > 1 && (
+            {sortedClients.length > 0 && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {clientsStartIndex + 1} to {Math.min(clientsEndIndex, sortedClients.length)} of {sortedClients.length} clients
@@ -2355,19 +2373,21 @@ const Clients = React.memo(() => {
                         <button
                             onClick={() => setClientsPage(clientsPage - 1)}
                             disabled={clientsPage === 1}
-                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
+                            <i className="fas fa-chevron-left mr-1"></i>
                             Previous
                         </button>
-                        <span className={`px-3 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <span className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                             Page {clientsPage} of {totalClientsPages}
                         </span>
                         <button
                             onClick={() => setClientsPage(clientsPage + 1)}
                             disabled={clientsPage === totalClientsPages}
-                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             Next
+                            <i className="fas fa-chevron-right ml-1"></i>
                         </button>
                     </div>
                 </div>
@@ -2496,7 +2516,7 @@ const Clients = React.memo(() => {
                 </table>
             </div>
             {/* Pagination Controls */}
-            {totalLeadsPages > 1 && (
+            {sortedLeads.length > 0 && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, sortedLeads.length)} of {sortedLeads.length} leads
@@ -2505,19 +2525,21 @@ const Clients = React.memo(() => {
                         <button
                             onClick={() => setLeadsPage(leadsPage - 1)}
                             disabled={leadsPage === 1}
-                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
+                            <i className="fas fa-chevron-left mr-1"></i>
                             Previous
                         </button>
-                        <span className={`px-3 py-1 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                        <span className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
                             Page {leadsPage} of {totalLeadsPages}
                         </span>
                         <button
                             onClick={() => setLeadsPage(leadsPage + 1)}
                             disabled={leadsPage === totalLeadsPages}
-                            className={`px-3 py-1 rounded ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} disabled:opacity-50 disabled:cursor-not-allowed`}
                         >
                             Next
+                            <i className="fas fa-chevron-right ml-1"></i>
                         </button>
                     </div>
                 </div>
@@ -2627,6 +2649,7 @@ const Clients = React.memo(() => {
                         key={selectedLead?.id || 'new-lead'}
                         lead={selectedLead}
                         onSave={handleSaveLead}
+                        onUpdate={handleUpdateLead}
                         onClose={async () => {
                             // Refresh leads from database to ensure we have latest persisted data
                             console.log('🔄 Refreshing leads after closing modal...');
@@ -2824,6 +2847,19 @@ const Clients = React.memo(() => {
                     <i className="fas fa-stream mr-2"></i>
                     Pipeline
                 </button>
+                <button
+                    onClick={() => setViewMode('news-feed')}
+                    className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        viewMode === 'news-feed' 
+                            ? 'bg-blue-600 text-white shadow-sm' 
+                            : isDark 
+                                ? 'text-gray-300 hover:text-gray-100 hover:bg-gray-700' 
+                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                >
+                    <i className="fas fa-newspaper mr-2"></i>
+                    News Feed
+                </button>
             </div>
 
             {/* Modern Search and Filters */}
@@ -2941,6 +2977,7 @@ const Clients = React.memo(() => {
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
             {viewMode === 'pipeline' && <PipelineView />}
+            {viewMode === 'news-feed' && (window.ClientNewsFeed ? <window.ClientNewsFeed /> : <div className="text-center py-12 text-gray-500">Loading News Feed...</div>)}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}
         </div>
