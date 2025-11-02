@@ -42,7 +42,13 @@ async function handler(req, res) {
     // CREATE
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
-      if (!body.name) return badRequest(res, 'name required')
+      console.log('📥 POST /manufacturing/locations - Request body:', JSON.stringify(body, null, 2));
+      
+      if (!body.name) {
+        console.error('❌ POST /manufacturing/locations - Missing name in body');
+        return badRequest(res, 'name required')
+      }
+      
       try {
         // auto code
         let code = body.code
@@ -51,6 +57,20 @@ async function handler(req, res) {
           const next = last && last.code?.startsWith('LOC') ? parseInt(last.code.replace('LOC','')) + 1 : 1
           code = `LOC${String(next).padStart(3,'0')}`
         }
+        
+        // Parse meta if it's already a string, otherwise stringify it
+        let metaValue = body.meta || {};
+        if (typeof metaValue === 'string') {
+          try {
+            metaValue = JSON.parse(metaValue);
+          } catch (e) {
+            console.warn('⚠️ Could not parse meta as JSON, using as-is:', e.message);
+            metaValue = {};
+          }
+        }
+        
+        console.log('📝 Creating location with:', { code, name: body.name, type: body.type, meta: metaValue });
+        
         const location = await prisma.stockLocation.create({
           data: {
             code,
@@ -60,9 +80,11 @@ async function handler(req, res) {
             address: body.address || '',
             contactPerson: body.contactPerson || '',
             contactPhone: body.contactPhone || '',
-            meta: JSON.stringify(body.meta || {})
+            meta: JSON.stringify(metaValue)
           }
         })
+        
+        console.log('✅ Location created successfully:', location.id, location.code);
         
         // Create inventory items for the new location based on main warehouse inventory
         try {

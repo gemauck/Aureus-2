@@ -174,11 +174,13 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
         address: formData.address || '',
         contactPerson: formData.contactPerson || '',
         contactPhone: formData.contactPhone || '',
-        meta: JSON.stringify({
+        meta: {
           vehicleReg: formData.vehicleReg || '',
           driver: formData.driver || ''
-        })
+        }
       };
+
+      console.log('📦 Creating location with data:', locationData);
 
       if (selectedLocation) {
         // Update existing location
@@ -203,12 +205,18 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
       } else {
         // Create new location
         if (window.DatabaseAPI && typeof window.DatabaseAPI.createStockLocation === 'function') {
+          console.log('📡 Calling createStockLocation API...');
           const response = await window.DatabaseAPI.createStockLocation(locationData);
+          console.log('📡 API Response:', response);
           const newLocation = response?.data?.location;
+          
           if (newLocation) {
+            console.log('✅ Location created:', newLocation);
             // Reload locations list from database to get the full updated list
             const refreshResponse = await window.DatabaseAPI.getStockLocations();
             const refreshedLocations = refreshResponse?.data?.locations || [];
+            console.log('✅ Refreshed locations:', refreshedLocations.length);
+            
             setLocations(refreshedLocations);
             localStorage.setItem('stock_locations', JSON.stringify(refreshedLocations));
             
@@ -221,7 +229,8 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
             
             alert('✅ Location created successfully! Inventory items will be created for this location. The dropdown will refresh automatically.');
           } else {
-            throw new Error('Failed to create location - no location returned from API');
+            console.error('❌ No location returned from API. Full response:', response);
+            throw new Error('Failed to create location - no location returned from API. Check console for details.');
           }
         } else {
           // Fallback to localStorage
@@ -240,8 +249,14 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
       setSelectedLocation(null);
       setFormData({});
     } catch (error) {
-      console.error('Error saving location:', error);
-      alert('❌ Failed to save location: ' + (error.message || 'Unknown error'));
+      console.error('❌ Error saving location:', error);
+      console.error('❌ Error stack:', error.stack);
+      console.error('❌ Error details:', {
+        message: error.message,
+        response: error.response,
+        data: error.data
+      });
+      alert('❌ Failed to save location: ' + (error.message || 'Unknown error') + '\n\nCheck browser console (F12) for details.');
     }
   };
 

@@ -60,6 +60,10 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
+        // Check if user is logged in (has token)
+        const token = window.storage?.getToken?.();
+        const isLoggedIn = !!token;
+        
         // Try multiple localStorage keys that might have client data
         const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
         const cached2 = JSON.parse(localStorage.getItem('clients') || '[]');
@@ -72,7 +76,7 @@ const JobCardFormPublic = () => {
                  (type === 'client' || !c.type);
         }) : [];
         
-        console.log('📋 JobCardFormPublic: Loaded clients from cache:', activeClients.length);
+        console.log('📋 JobCardFormPublic: Loaded clients from cache:', activeClients.length, isLoggedIn ? '(logged in - will refresh)' : '(not logged in - using cache)');
         
         if (activeClients.length > 0) {
           setClients(activeClients);
@@ -80,9 +84,10 @@ const JobCardFormPublic = () => {
         }
 
         // Try to sync from API if online - use DatabaseAPI if available (handles auth automatically)
-        if (isOnline && window.DatabaseAPI?.getClients) {
+        // Priority: If logged in, always try to refresh from API
+        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getClients)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch clients from API via DatabaseAPI...');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch clients from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getClients();
             
             if (response?.data?.clients || Array.isArray(response?.data)) {
@@ -163,9 +168,13 @@ const JobCardFormPublic = () => {
           setUsers(cached);
         }
 
-        if (isOnline && window.DatabaseAPI?.getUsers) {
+        // Check if user is logged in
+        const token = window.storage?.getToken?.();
+        const isLoggedIn = !!token;
+        
+        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getUsers)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API via DatabaseAPI...');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getUsers();
             
             if (response?.data?.users || Array.isArray(response?.data)) {
@@ -224,10 +233,14 @@ const JobCardFormPublic = () => {
           setInventory(cachedInventory);
         }
 
+        // Check if user is logged in
+        const token = window.storage?.getToken?.();
+        const isLoggedIn = !!token;
+        
         // Try to load from API if online - use DatabaseAPI if available
-        if (isOnline && window.DatabaseAPI?.getInventory) {
+        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getInventory)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API via DatabaseAPI...');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getInventory();
             
             if (response?.data?.inventory || Array.isArray(response?.data)) {
@@ -286,10 +299,14 @@ const JobCardFormPublic = () => {
           localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
         
+        // Check if user is logged in
+        const token = window.storage?.getToken?.();
+        const isLoggedIn = !!token;
+        
         // Try to load locations from API if online - use DatabaseAPI if available
-        if (isOnline && window.DatabaseAPI?.getStockLocations) {
+        if (isOnline && (isLoggedIn || window.DatabaseAPI?.getStockLocations)) {
           try {
-            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API via DatabaseAPI...');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API via DatabaseAPI...', isLoggedIn ? '(user logged in)' : '');
             const response = await window.DatabaseAPI.getStockLocations();
             
             if (response?.data?.locations || Array.isArray(response?.data)) {
@@ -546,10 +563,53 @@ const JobCardFormPublic = () => {
       const updatedJobCards = [...existingJobCards, jobCardData];
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
 
-      // Try to sync with API if online (fire and forget - no auth blocking)
+      // Try to sync with API if online
       if (isOnline && window.DatabaseAPI?.createJobCard) {
         try {
           await window.DatabaseAPI.createJobCard(jobCardData);
+          console.log('✅ Job card synced to API');
+          
+          // Update client's lastContact date and activity log
+          if (formData.clientId && window.DatabaseAPI?.updateClient) {
+            try {
+              const client = clients.find(c => c.id === formData.clientId);
+              if (client) {
+                // Update lastContact to now
+                const activityLog = Array.isArray(client.activityLog) ? client.activityLog : [];
+                const newActivityEntry = {
+                  id: Date.now(),
+                  type: 'Job Card Created',
+                  description: `Job card created for ${client.name}${formData.siteName ? ` at ${formData.siteName}` : ''}${formData.location ? ` - ${formData.location}` : ''}`,
+                  timestamp: new Date().toISOString(),
+                  user: formData.agentName || 'Technician'
+                };
+                
+                const updatedClient = {
+                  ...client,
+                  lastContact: new Date().toISOString(),
+                  activityLog: [...activityLog, newActivityEntry]
+                };
+                
+                // Update client via API
+                await window.DatabaseAPI.updateClient(formData.clientId, {
+                  lastContact: updatedClient.lastContact,
+                  activityLog: updatedClient.activityLog
+                });
+                
+                // Update local cache
+                const updatedClients = clients.map(c => 
+                  c.id === formData.clientId ? updatedClient : c
+                );
+                setClients(updatedClients);
+                localStorage.setItem('manufacturing_clients', JSON.stringify(updatedClients));
+                localStorage.setItem('clients', JSON.stringify(updatedClients));
+                
+                console.log('✅ Client contact updated');
+              }
+            } catch (clientError) {
+              console.warn('⚠️ Failed to update client contact, but job card saved:', clientError.message);
+            }
+          }
         } catch (error) {
           console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
         }
