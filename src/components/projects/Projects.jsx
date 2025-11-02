@@ -784,8 +784,14 @@ const Projects = () => {
         const ProjectProgressTracker = window.ProjectProgressTracker;
         
         // Validate component before rendering
-        if (!ProjectProgressTracker || typeof ProjectProgressTracker !== 'function') {
-            console.error('❌ ProjectProgressTracker is not a valid function:', typeof ProjectProgressTracker, ProjectProgressTracker);
+        // Handle both function components and React.memo wrapped components
+        const isValidComponent = ProjectProgressTracker && (
+            typeof ProjectProgressTracker === 'function' ||
+            (typeof ProjectProgressTracker === 'object' && ProjectProgressTracker.$$typeof)
+        );
+        
+        if (!isValidComponent) {
+            console.error('❌ ProjectProgressTracker is not a valid component:', typeof ProjectProgressTracker, ProjectProgressTracker);
             return (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
