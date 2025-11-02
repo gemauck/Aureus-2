@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 const ListModal = window.ListModal;
 const ProjectModal = window.ProjectModal;
@@ -48,6 +48,9 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     
     // Track if document collection process exists
     const [hasDocumentCollectionProcess, setHasDocumentCollectionProcess] = useState(project.hasDocumentCollectionProcess || false);
+    
+    // Ref to prevent duplicate saves when manually adding document collection process
+    const skipNextSaveRef = useRef(false);
     
     // Document process dropdown
     const [showDocumentProcessDropdown, setShowDocumentProcessDropdown] = useState(false);
@@ -111,6 +114,13 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     
     // Save back to project whenever they change
     useEffect(() => {
+        // Skip save if this was triggered by manual document collection process addition
+        if (skipNextSaveRef.current) {
+            console.log('⏭️ Skipping save - manual document collection process save in progress');
+            skipNextSaveRef.current = false;
+            return;
+        }
+        
         const saveProjectData = async () => {
             try {
                 console.log('💾 ProjectDetail: Saving project data changes...');
@@ -169,7 +179,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         // Only save if we have actual changes (not on initial render)
         const timeoutId = setTimeout(() => {
             saveProjectData();
-        }, 1000); // Debounce saves by 1 second to avoid excessive API calls
+        }, 1500); // Increased debounce to 1.5 seconds to avoid excessive API calls
         
         return () => clearTimeout(timeoutId);
     }, [tasks, taskLists, customFieldDefinitions, documents, hasDocumentCollectionProcess]); // Removed project.id from dependencies
@@ -729,6 +739,9 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         console.log('  - Current hasDocumentCollectionProcess:', hasDocumentCollectionProcess);
         
         try {
+            // Set flag to skip the useEffect save to prevent duplicates
+            skipNextSaveRef.current = true;
+            
             // Update state first
             setHasDocumentCollectionProcess(true);
             setActiveSection('documentCollection');
@@ -767,11 +780,17 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
             }
             
             console.log('✅ Document Collection Process setup complete and persisted');
+            
+            // Reset flag after a short delay to allow any pending useEffect to complete
+            setTimeout(() => {
+                skipNextSaveRef.current = false;
+            }, 2000);
         } catch (error) {
             console.error('❌ Error saving document collection process:', error);
             alert('Failed to save document collection process: ' + error.message);
             // Revert state on error
             setHasDocumentCollectionProcess(false);
+            skipNextSaveRef.current = false;
         }
     };
 

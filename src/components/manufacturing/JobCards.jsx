@@ -71,11 +71,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           const jobCardsData = response?.data?.jobCards || response?.data || [];
           console.log('📡 JobCards: Parsed job cards:', jobCardsData.length);
           if (Array.isArray(jobCardsData)) {
+            // Mark all API-loaded cards as synced to prevent duplicate creation
+            const syncedCards = jobCardsData.map(jc => ({ ...jc, synced: true }));
             // Always set the job cards array (even if empty) so the UI shows the empty state
-            setJobCards(jobCardsData);
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
+            setJobCards(syncedCards);
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
             if (jobCardsData.length > 0) {
-              console.log('✅ JobCards: Loaded', jobCardsData.length, 'job cards from API');
+              console.log('✅ JobCards: Loaded', jobCardsData.length, 'job cards from API (marked as synced)');
             } else {
               console.log('ℹ️ JobCards: API returned empty array (no job cards yet)');
             }
@@ -149,10 +151,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         }
       }
       
-      // Reload from API after syncing to get fresh data with job card numbers
-      if (loadJobCardsRef.current) {
-        await loadJobCardsRef.current();
-      }
+      // Update state with synced data
+      setJobCards(cached);
     } catch (error) {
       console.error('❌ Error syncing pending job cards:', error);
     }

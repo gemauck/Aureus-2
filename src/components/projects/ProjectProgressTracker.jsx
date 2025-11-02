@@ -223,25 +223,52 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         return configs[String(status || '')] || configs['not-started'];
     };
     
-    // Get progress data safely
+    // Get progress data safely - with full error handling
     const getProgressData = (project, month, field) => {
-        if (!project || !month || !field) return null;
-        const safeYear = Number(selectedYear) || currentYear;
-        const key = String(month || '') + '-' + String(safeYear);
-        const progress = project.monthlyProgress;
-        if (!progress || typeof progress !== 'object') return null;
-        const monthData = progress[key];
-        if (!monthData || typeof monthData !== 'object') return null;
-        const fieldData = monthData[field];
-        if (fieldData && typeof fieldData === 'object' && !Array.isArray(fieldData) && !(fieldData instanceof Date)) {
+        try {
+            if (!project || !month || !field) return null;
+            const safeYear = Number(selectedYear) || currentYear;
+            if (isNaN(safeYear)) return null; // Safety check for year
+            
+            const key = String(month || '') + '-' + String(safeYear);
+            if (!key || key.length < 5) return null; // Invalid key format
+            
+            const progress = project.monthlyProgress;
+            if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return null;
+            
+            const monthData = progress[key];
+            if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) return null;
+            
+            const fieldData = monthData[field];
+            if (fieldData && typeof fieldData === 'object' && !Array.isArray(fieldData) && !(fieldData instanceof Date)) {
+                return null;
+            }
+            return fieldData || null;
+        } catch (e) {
+            console.warn('⚠️ ProjectProgressTracker: Error in getProgressData:', e);
             return null;
         }
-        return fieldData || null;
     };
     
-    // Render progress cell
+    // Render progress cell - with full error handling
     const renderProgressCell = (project, month, field) => {
-        const data = getProgressData(project, month, field);
+        // Validate inputs
+        if (!project || !project.id || !month || !field) {
+            console.warn('⚠️ ProjectProgressTracker: Invalid renderProgressCell params:', { project: !!project, month, field });
+            return React.createElement('td', {
+                key: (project?.id || 'unknown') + '-' + String(month) + '-' + String(field),
+                className: 'px-2 py-1 text-xs border-l border-gray-100'
+            }, React.createElement('span', { className: 'text-gray-400 text-[10px]' }, '-'));
+        }
+        
+        let data;
+        try {
+            data = getProgressData(project, month, field);
+        } catch (e) {
+            console.warn('⚠️ ProjectProgressTracker: Error getting progress data:', e);
+            data = null;
+        }
+        
         const safeMonth = String(month || '');
         const monthIdx = months.indexOf(safeMonth);
         const isWorking = Array.isArray(workingMonths) && workingMonths.includes(monthIdx) && selectedYear === currentYear;
@@ -381,12 +408,18 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         React.createElement('span', { className: 'text-xs text-gray-400' }, 'Projects may be missing required fields')
                                     )
                         )
-                    ) : safeProjects.map(project =>
-                        React.createElement('tr', { key: String(project.id), className: 'border-b border-gray-100 hover:bg-gray-50' },
+                    ) : (Array.isArray(safeProjects) && safeProjects.length > 0 ? safeProjects.map(project => {
+                        // Double-check project is valid before rendering
+                        if (!project || !project.id) {
+                            console.warn('⚠️ ProjectProgressTracker: Invalid project in map:', project);
+                            return null;
+                        }
+                        
+                        return React.createElement('tr', { key: String(project.id), className: 'border-b border-gray-100 hover:bg-gray-50' },
                             React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] sticky left-0 bg-white z-10 border-r' },
                                 React.createElement('div', { className: 'flex flex-col' },
-                                    React.createElement('span', { className: 'font-medium text-gray-900' }, String(project.name)),
-                                    React.createElement('span', { className: 'text-gray-500 text-[9px]' }, String(project.client))
+                                    React.createElement('span', { className: 'font-medium text-gray-900' }, String(project.name || 'Unnamed Project')),
+                                    React.createElement('span', { className: 'text-gray-500 text-[9px]' }, String(project.client || 'No Client'))
                                 )
                             ),
                             Array.isArray(months) && months.map(month => {
@@ -397,14 +430,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     renderProgressCell(project, safeMonth, 'comments')
                                 );
                             }),
-                            React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] text-gray-600 border-l' }, String(project.manager)),
-                            React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] text-gray-600' }, String(project.type)),
+                            React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] text-gray-600 border-l' }, String(project.manager || '-')),
+                            React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px] text-gray-600' }, String(project.type || '-')),
                             React.createElement('td', { className: 'px-2.5 py-1.5 text-[10px]' },
                                 React.createElement('span', {
                                     className: 'px-1.5 py-0.5 text-[9px] rounded font-medium bg-gray-100 text-gray-700'
-                                }, String(project.status))
+                                }, String(project.status || 'Unknown'))
                             )
-                        )
+                        );
+                    }).filter(item => item !== null) : []
                     )
                 )
             )

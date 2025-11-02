@@ -480,7 +480,11 @@ const MainLayout = () => {
                 height: '100vh', 
                 left: 0, 
                 top: 0,
-                zIndex: isMobile && sidebarOpen ? 40 : 'auto'
+                zIndex: isMobile && sidebarOpen ? 40 : 'auto',
+                ...(isMobile && sidebarOpen ? { 
+                    maxWidth: 'calc(100vw - 64px)',
+                    width: 'calc(100vw - 64px)'
+                } : {})
             }}
             >
                 {/* Logo - Always show "Abcotronics" text ONLY in sidebar */}
@@ -590,7 +594,7 @@ const MainLayout = () => {
             <div className={`flex-1 overflow-auto ${isMobile && sidebarOpen ? 'ml-0' : ''}`}>
                 {/* Header - Fixed on mobile, static on desktop */}
                 <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
-                    <div className="flex items-center flex-1 min-w-0">
+                    <div className="flex items-center flex-1 min-w-0 overflow-hidden">
                         {/* Hamburger Menu Button - Show on mobile, toggle sidebar */}
                         <button 
                             onClick={() => {
@@ -600,18 +604,18 @@ const MainLayout = () => {
                                 setSidebarOpen(newState);
                                 setMobileMenuOpen(newState);
                             }}
-                            className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-2 sm:mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50 flex-shrink-0`}
+                            className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-1 sm:mr-2 p-1.5 sm:p-2 rounded transition-colors touch-target min-w-[40px] min-h-[40px] sm:min-w-[44px] sm:min-h-[44px] hamburger-menu-btn z-50 flex-shrink-0`}
                             aria-label="Toggle sidebar"
                             style={{ 
                                 display: isMobile ? 'flex' : 'none'
                             }}
                         >
-                            <i className="fas fa-bars text-xl"></i>
+                            <i className="fas fa-bars text-lg sm:text-xl"></i>
                         </button>
                         
                         {/* Mobile: Action buttons on the left */}
                         {isMobile && (
-                            <div className="flex items-center space-x-2 mr-3 flex-shrink-0">
+                            <div className="flex items-center space-x-1 sm:space-x-2 mr-1 sm:mr-3 flex-shrink-0">
                                 {/* Notification Center */}
                                 {window.NotificationCenter ? (
                                     <window.NotificationCenter />
@@ -619,7 +623,7 @@ const MainLayout = () => {
                                 
                                 {/* Settings Button */}
                                 <button 
-                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1.5 sm:p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] md:min-w-[44px] md:min-h-[44px] flex items-center justify-center`}
                                     title="Settings"
                                     onClick={() => {
                                         console.log('🔧 Settings button clicked');
@@ -627,17 +631,17 @@ const MainLayout = () => {
                                         setShowSettingsPortal(true);
                                     }}
                                 >
-                                    <i className="fas fa-cog text-sm"></i>
+                                    <i className="fas fa-cog text-xs sm:text-sm"></i>
                                 </button>
                                 
                                 {/* Theme Selector Dropdown */}
                                 <div className="relative theme-selector">
                                     <button 
-                                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1.5 sm:p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] md:min-w-[44px] md:min-h-[44px] flex items-center justify-center`}
                                         title="Theme options"
                                         onClick={() => setShowThemeMenu(!showThemeMenu)}
                                     >
-                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
+                                        <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-xs sm:text-sm`}></i>
                                     </button>
                                     
                                     {/* Theme Menu */}
@@ -690,8 +694,8 @@ const MainLayout = () => {
                         
                         {/* Abcotronics Logo - Show on mobile in header */}
                         {isMobile && (
-                            <div className="flex items-center flex-1 min-w-0">
-                                <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} text-base sm:text-lg truncate`} style={!isDark ? { color: '#0369a1' } : {}}>
+                            <div className="flex items-center flex-1 min-w-0 overflow-hidden">
+                                <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} text-sm sm:text-base truncate`} style={!isDark ? { color: '#0369a1' } : {}}>
                                     Abcotronics
                                 </h1>
                             </div>
@@ -795,8 +799,10 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content */}
-                <main className="p-4 lg:p-2 sm:p-4 overflow-x-auto">
-                    {renderPage}
+                <main className="p-2 sm:p-3 md:p-4 lg:p-2 overflow-x-hidden">
+                    <div className="w-full max-w-full overflow-x-hidden">
+                        {renderPage}
+                    </div>
                 </main>
                 {/* Global Feedback Widget */}
                 {window.FeedbackWidget ? <window.FeedbackWidget /> : null}

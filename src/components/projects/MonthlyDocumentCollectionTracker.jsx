@@ -96,6 +96,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
+    
+    // Ref to track if this is the initial mount (prevent save on initial load)
+    const isInitialMount = useRef(true);
 
     // Generate year options (current year ± 5 years)
     const yearOptions = [];
@@ -169,6 +172,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     }, [project?.documentSections, project?.id]);
 
     useEffect(() => {
+        // Skip save on initial mount to prevent duplicate saves when component first loads
+        if (isInitialMount.current) {
+            console.log('⏭️ MonthlyDocumentCollectionTracker: Skipping save on initial mount');
+            isInitialMount.current = false;
+            return;
+        }
+        
         // Save sections to project whenever they change
         const saveProjectData = async () => {
             try {
@@ -214,10 +224,10 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
         };
         
-        // Debounce saves
+        // Debounce saves - increased to 1.5 seconds to avoid conflicts
         const timeoutId = setTimeout(() => {
             saveProjectData();
-        }, 1000);
+        }, 1500);
         
         return () => clearTimeout(timeoutId);
     }, [sections, project.id]);
