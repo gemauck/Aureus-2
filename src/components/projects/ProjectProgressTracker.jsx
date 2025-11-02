@@ -1251,15 +1251,24 @@ const ProjectProgressTracker = ({ onBack }) => {
                     {/* Status Legend with Color Progression */}
                     <div className="flex items-center gap-3">
                         <span className="text-[10px] font-medium text-gray-600">Status Progression:</span>
-                        {statusOptions.map((option, idx) => (
-                            <div key={option.value} className="flex items-center gap-1">
-                                <div className={`w-3 h-3 rounded ${option.cellColor} border border-gray-400`}></div>
-                                <span className="text-[10px] text-gray-600">{option.label}</span>
-                                {idx < statusOptions.length - 1 && (
-                                    <i className="fas fa-arrow-right text-[8px] text-gray-400 ml-1"></i>
-                                )}
-                            </div>
-                        ))}
+                        {Array.isArray(statusOptions) && statusOptions.map((option, idx) => {
+                            // Ensure option is valid object with required properties
+                            if (!option || typeof option !== 'object') return null;
+                            const safeOption = {
+                                value: String(option.value || ''),
+                                label: String(option.label || ''),
+                                cellColor: String(option.cellColor || '')
+                            };
+                            return (
+                                <div key={safeOption.value} className="flex items-center gap-1">
+                                    <div className={`w-3 h-3 rounded ${safeOption.cellColor} border border-gray-400`}></div>
+                                    <span className="text-[10px] text-gray-600">{safeOption.label}</span>
+                                    {idx < statusOptions.length - 1 && (
+                                        <i className="fas fa-arrow-right text-[8px] text-gray-400 ml-1"></i>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -1330,31 +1339,35 @@ const ProjectProgressTracker = ({ onBack }) => {
                             </tr>
                             <tr className="bg-gray-50 border-t border-gray-200">
                                 <th className="px-2.5 py-1 sticky left-0 bg-gray-50 z-10 border-r border-gray-200"></th>
-                                {months.map((month, idx) => (
-                                    <React.Fragment key={`${month}-headers`}>
-                                        <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
-                                            workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50'
-                                                : 'bg-gray-50'
-                                        }`}>
-                                            Compliance
-                                        </th>
-                                        <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
-                                            workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50'
-                                                : 'bg-gray-50'
-                                        }`}>
-                                            Data
-                                        </th>
-                                        <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
-                                            workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50'
-                                                : 'bg-gray-50'
-                                        }`}>
-                                            Comments
-                                        </th>
-                                    </React.Fragment>
-                                ))}
+                                {Array.isArray(months) && months.map((month, idx) => {
+                                    const safeMonth = String(month || '');
+                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && selectedYear === currentYear;
+                                    return (
+                                        <React.Fragment key={`${safeMonth}-headers`}>
+                                            <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
+                                                isWorkingMonth
+                                                    ? 'bg-primary-50'
+                                                    : 'bg-gray-50'
+                                            }`}>
+                                                Compliance
+                                            </th>
+                                            <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
+                                                isWorkingMonth
+                                                    ? 'bg-primary-50'
+                                                    : 'bg-gray-50'
+                                            }`}>
+                                                Data
+                                            </th>
+                                            <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
+                                                isWorkingMonth
+                                                    ? 'bg-primary-50'
+                                                    : 'bg-gray-50'
+                                            }`}>
+                                                Comments
+                                            </th>
+                                        </React.Fragment>
+                                    );
+                                })}
                                 <th className="px-2.5 py-1 border-l border-gray-200"></th>
                                 <th className="px-2.5 py-1"></th>
                                 <th className="px-2.5 py-1"></th>
