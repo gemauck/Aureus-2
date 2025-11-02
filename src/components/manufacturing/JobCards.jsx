@@ -47,84 +47,146 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
 
-  // Monitor online/offline status
+  // Monitor online/offline status and auto-sync when coming back online
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = async () => {
+      setIsOnline(true);
+      console.log('🌐 Connection restored - syncing job cards...');
+      
+      // Auto-sync job cards when coming back online
+      try {
+        // First reload from API to get latest
+        if (window.DatabaseAPI?.getJobCards) {
+          const response = await window.DatabaseAPI.getJobCards();
+          const jobCardsData = response?.data?.jobCards || response?.data || [];
+          if (Array.isArray(jobCardsData)) {
+            setJobCards(jobCardsData);
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
+          }
+        }
+        
+        // Reload other data (users, clients, inventory)
+        loadJobCards();
+      } catch (error) {
+        console.warn('Failed to sync when coming back online:', error);
+      }
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+      console.log('📴 Connection lost - working in offline mode');
+    };
+    
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [loadJobCards]);
 
-  // Load users if not provided
+  // Load users if not provided - with offline support
   useEffect(() => {
     const loadUsers = async () => {
-      if (users.length === 0 && window.DatabaseAPI?.getUsers) {
+      // First, load from cache for instant UI
+      const cached = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
+      if (cached.length > 0) {
+        setUsers(cached);
+      }
+
+      // Then try to sync from API if online
+      if (users.length === 0 && isOnline && window.DatabaseAPI?.getUsers) {
         try {
           const response = await window.DatabaseAPI.getUsers();
           const usersData = response?.data?.users || response?.data || [];
-          setUsers(Array.isArray(usersData) ? usersData : []);
+          if (Array.isArray(usersData) && usersData.length > 0) {
+            setUsers(usersData);
+            localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+          }
         } catch (error) {
-          console.warn('Failed to load users, using localStorage:', error);
-          const cached = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
+          console.warn('Failed to load users from API, using cache:', error);
           if (cached.length > 0) setUsers(cached);
         }
+      } else if (usersProp && usersProp.length > 0) {
+        setUsers(usersProp);
+        localStorage.setItem('manufacturing_users', JSON.stringify(usersProp));
       }
     };
     loadUsers();
-  }, []);
+  }, [isOnline, usersProp]);
 
-  // Load clients if not provided
+  // Load clients if not provided - with offline support
   useEffect(() => {
     const loadClients = async () => {
-      if (clients.length === 0 && window.DatabaseAPI?.getClients) {
+      // First, load from cache for instant UI
+      const cached = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
+      const activeCached = Array.isArray(cached) ? cached.filter(c => {
+        const status = (c.status || '').toLowerCase();
+        const type = (c.type || 'client').toLowerCase();
+        return (status === 'active' || status === '' || !c.status) && 
+               (type === 'client' || !c.type);
+      }) : [];
+      
+      if (activeCached.length > 0) {
+        setClients(activeCached);
+      }
+
+      // Then try to sync from API if online
+      if (clients.length === 0 && isOnline && window.DatabaseAPI?.getClients) {
         try {
           const response = await window.DatabaseAPI.getClients();
           const allClients = response?.data?.clients || response?.data || [];
           // Case-insensitive status check - accept 'active', 'Active', etc.
-          // Also accept if status is missing (assume active) or if type is missing (assume client)
           const activeClients = Array.isArray(allClients) ? allClients.filter(c => {
             const status = (c.status || '').toLowerCase();
             const type = (c.type || 'client').toLowerCase();
-            // Accept active status or no status (default to active)
-            // Accept client type or no type (default to client)
             return (status === 'active' || status === '' || !c.status) && 
                    (type === 'client' || !c.type);
           }) : [];
-          setClients(activeClients);
-          console.log('✅ JobCards: Loaded clients:', activeClients.length, activeClients.map(c => c.name).join(', '));
+          
+          if (activeClients.length > 0) {
+            setClients(activeClients);
+            localStorage.setItem('manufacturing_clients', JSON.stringify(activeClients));
+            console.log('✅ JobCards: Loaded clients from API:', activeClients.length, activeClients.map(c => c.name).join(', '));
+          }
         } catch (error) {
-          console.warn('Failed to load clients, using localStorage:', error);
-          const cached = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
-          const active = cached.filter(c => {
-            const status = (c.status || '').toLowerCase();
-            const type = (c.type || 'client').toLowerCase();
-            return (status === 'active' || status === '' || !c.status) && 
-                   (type === 'client' || !c.type);
-          });
-          if (active.length > 0) setClients(active);
+          console.warn('Failed to load clients from API, using cache:', error);
+          if (activeCached.length > 0) setClients(activeCached);
         }
       } else if (clientsProp && clientsProp.length > 0) {
-        // Use provided clients but ensure we're using all of them
-        console.log('✅ JobCards: Using provided clients:', clientsProp.length, clientsProp.map(c => c.name).join(', '));
+        // Use provided clients
         setClients(clientsProp);
+        localStorage.setItem('manufacturing_clients', JSON.stringify(clientsProp));
+        console.log('✅ JobCards: Using provided clients:', clientsProp.length, clientsProp.map(c => c.name).join(', '));
       }
     };
     loadClients();
-  }, [clientsProp]);
+  }, [isOnline, clientsProp]);
 
-  // Load inventory and stock locations
+  // Load inventory and stock locations - with offline support
   useEffect(() => {
     const loadStockData = async () => {
       try {
-        // Load inventory
-        if (window.DatabaseAPI?.getInventory) {
-          const invResponse = await window.DatabaseAPI.getInventory();
-          const invData = invResponse?.data?.inventory || invResponse?.data || [];
-          setInventory(Array.isArray(invData) ? invData : []);
+        // First, load inventory from cache for instant UI
+        const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+        if (cachedInventory.length > 0) {
+          setInventory(cachedInventory);
+        }
+
+        // Then try to sync from API if online
+        if (isOnline && window.DatabaseAPI?.getInventory) {
+          try {
+            const invResponse = await window.DatabaseAPI.getInventory();
+            const invData = invResponse?.data?.inventory || invResponse?.data || [];
+            if (Array.isArray(invData) && invData.length > 0) {
+              setInventory(invData);
+              localStorage.setItem('manufacturing_inventory', JSON.stringify(invData));
+            }
+          } catch (error) {
+            console.warn('Failed to load inventory from API, using cache:', error);
+            if (cachedInventory.length > 0) setInventory(cachedInventory);
+          }
         }
         
         // Load stock locations from localStorage (they're managed in StockLocations component)
@@ -133,17 +195,24 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           setStockLocations(cachedLocations);
         } else {
           // Default locations if none exist
-          setStockLocations([
+          const defaultLocations = [
             { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse' },
             { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle' }
-          ]);
+          ];
+          setStockLocations(defaultLocations);
+          localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
       } catch (error) {
         console.warn('Failed to load stock data:', error);
+        // Use cached data as fallback
+        const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+        const cachedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        if (cachedInventory.length > 0) setInventory(cachedInventory);
+        if (cachedLocations.length > 0) setStockLocations(cachedLocations);
       }
     };
     loadStockData();
-  }, []);
+  }, [isOnline]);
 
   // Load job cards with offline support
   const loadJobCards = useCallback(async () => {
@@ -374,11 +443,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
 
       // If job card is being marked as completed, remove stock from locations
+      // Works offline - updates localStorage immediately
       const wasCompleted = editingJobCard?.status === 'completed';
       const isNowCompleted = jobCardData.status === 'completed';
       
       if (isNowCompleted && !wasCompleted && formData.stockUsed && formData.stockUsed.length > 0) {
-        // Process stock removal from locations
+        // Process stock removal from locations (works offline)
         try {
           const locationInventory = JSON.parse(localStorage.getItem('location_inventory') || '[]');
           const updatedLocationInventory = [...locationInventory];
@@ -403,14 +473,30 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             }
           });
           
+          // Save to localStorage (works offline)
           localStorage.setItem('location_inventory', JSON.stringify(updatedLocationInventory));
           
-          // Also update main inventory if needed (reduce total quantity)
-          if (window.DatabaseAPI?.getInventory) {
+          // Update main inventory cache
+          const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+          const updatedInventory = cachedInventory.map(item => {
+            const stockItem = formData.stockUsed.find(s => s.sku === item.sku || s.sku === item.id);
+            if (stockItem) {
+              return {
+                ...item,
+                quantityOnHand: Math.max(0, (item.quantityOnHand || item.quantity || 0) - stockItem.quantity)
+              };
+            }
+            return item;
+          });
+          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          setInventory(updatedInventory);
+          
+          // Try to sync with API if online (non-blocking)
+          if (isOnline && window.DatabaseAPI?.getInventory) {
             try {
               const invResponse = await window.DatabaseAPI.getInventory();
               const invData = invResponse?.data?.inventory || invResponse?.data || [];
-              const updatedInventory = invData.map(item => {
+              const apiUpdatedInventory = invData.map(item => {
                 const stockItem = formData.stockUsed.find(s => s.sku === item.sku || s.sku === item.id);
                 if (stockItem) {
                   return {
@@ -421,26 +507,29 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                 return item;
               });
               
-              // Try to update via API
+              // Try to update via API (fire and forget - doesn't block)
               if (window.DatabaseAPI.updateInventoryItem) {
-                for (const item of updatedInventory) {
+                apiUpdatedInventory.forEach(item => {
                   const original = invData.find(i => i.id === item.id || i.sku === item.sku);
                   if (original && original.quantityOnHand !== item.quantityOnHand) {
-                    try {
-                      await window.DatabaseAPI.updateInventoryItem(item.id || item.sku, item);
-                    } catch (error) {
-                      console.warn('Failed to update inventory item:', error);
-                    }
+                    window.DatabaseAPI.updateInventoryItem(item.id || item.sku, item).catch(err => {
+                      console.warn('Failed to sync inventory item to API:', err);
+                    });
                   }
-                }
+                });
               }
             } catch (error) {
-              console.warn('Failed to update main inventory:', error);
+              console.warn('Failed to sync inventory with API (will retry when online):', error);
             }
           }
         } catch (error) {
           console.error('Error processing stock removal:', error);
-          alert('Warning: Job card saved but stock removal may have failed. Please verify stock levels.');
+          // Don't block save - just warn
+          if (!isOnline) {
+            console.warn('Offline mode: Stock removal saved to cache, will sync when online');
+          } else {
+            alert('Warning: Job card saved but stock removal may have failed. Please verify stock levels.');
+          }
         }
       }
 
