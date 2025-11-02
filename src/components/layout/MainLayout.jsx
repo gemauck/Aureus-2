@@ -24,30 +24,37 @@ const MainLayout = () => {
     const [isMobile, setIsMobile] = useState(false);
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
     
-    // Track mobile state and window width - use 1024px as breakpoint for hamburger menu behavior
+    // Initialize mobile state on mount only and set initial sidebar state
     React.useEffect(() => {
-        const checkMobile = () => {
-            const width = window.innerWidth;
-            setWindowWidth(width);
-            const mobile = width < 1024;
-            setIsMobile(mobile);
-            
-            // In mobile mode, automatically collapse sidebar and show hamburger
-            if (mobile) {
-                setSidebarOpen(false);
-                setMobileMenuOpen(false);
-            } else {
-                // On desktop, keep sidebar open by default but allow manual collapse
-                // Only auto-open if it hasn't been manually toggled yet
-                if (sidebarOpen === false && !localStorage.getItem('sidebarManuallyCollapsed')) {
-                    setSidebarOpen(true);
-                }
+        const width = window.innerWidth;
+        const mobile = width < 1024;
+        setIsMobile(mobile);
+        setWindowWidth(width);
+        
+        // Set initial sidebar state based on screen size
+        if (mobile) {
+            setSidebarOpen(false);
+        } else {
+            // Desktop: respect user preference
+            const manuallyCollapsed = localStorage.getItem('sidebarManuallyCollapsed') === 'true';
+            if (!manuallyCollapsed) {
+                setSidebarOpen(true);
             }
+        }
+    }, []); // Only run once on mount
+    
+    // Handle resize events separately to avoid conflicts
+    React.useEffect(() => {
+        const handleResize = () => {
+            const width = window.innerWidth;
+            const mobile = width < 1024;
+            setWindowWidth(width);
+            setIsMobile(mobile);
         };
-        checkMobile();
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
+        
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []); // No dependencies - just attach listener once
     
     // Auto-expand sidebar text when mobile menu opens
     React.useEffect(() => {
@@ -55,6 +62,7 @@ const MainLayout = () => {
             setSidebarOpen(true);
         }
     }, [mobileMenuOpen, isMobile]);
+    
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
     const [showSettingsPortal, setShowSettingsPortal] = useState(false);
@@ -107,29 +115,6 @@ const MainLayout = () => {
         window.triggerPasswordChangeModal = () => setShowPasswordChangeModal(true);
         window.closePasswordChangeModal = () => setShowPasswordChangeModal(false);
     }, []);
-
-    // Handle sidebar state on resize - allow manual collapse in both modes
-    React.useEffect(() => {
-        const handleResize = () => {
-            const width = window.innerWidth;
-            const mobile = width < 1024;
-            
-            if (mobile) {
-                // Mobile: always collapsed by default, show hamburger
-                setSidebarOpen(false);
-            } else {
-                // Desktop: respect user preference, default to open
-                const manuallyCollapsed = localStorage.getItem('sidebarManuallyCollapsed') === 'true';
-                if (!manuallyCollapsed && !sidebarOpen) {
-                    setSidebarOpen(true);
-                }
-            }
-        };
-        
-        handleResize(); // Set initial state
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, [sidebarOpen]);
 
     // Close mobile menu when page changes
     React.useEffect(() => {
