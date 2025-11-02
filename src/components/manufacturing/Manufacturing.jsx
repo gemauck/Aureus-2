@@ -2524,26 +2524,6 @@ const Manufacturing = () => {
                       </button>
                     </div>
                   )}
-                  {categories.length > 1 && (
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {categories.filter(cat => cat !== formData.category).map(cat => (
-                        <span
-                          key={cat}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-gray-100 rounded border border-gray-300"
-                        >
-                          {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteCategory(cat)}
-                            className="text-red-600 hover:text-red-800"
-                            title="Delete category"
-                          >
-                            <i className="fas fa-times text-xs"></i>
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 {/* Type */}
