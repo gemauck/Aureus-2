@@ -45,39 +45,100 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     useEffect(() => {
         const load = async () => {
             try {
+                console.log('📋 ProjectProgressTracker: Loading projects from database...');
                 if (window.DatabaseAPI && window.DatabaseAPI.getProjects) {
                     const response = await window.DatabaseAPI.getProjects();
+                    console.log('📋 ProjectProgressTracker: Raw response:', response);
+                    console.log('📋 ProjectProgressTracker: Response structure:', {
+                        hasData: !!response?.data,
+                        hasProjects: !!response?.data?.projects,
+                        isProjectsArray: Array.isArray(response?.data?.projects),
+                        projectsLength: response?.data?.projects?.length || 0,
+                        dataKeys: response?.data ? Object.keys(response.data) : [],
+                        responseKeys: Object.keys(response || {}),
+                        responseType: typeof response,
+                        dataType: typeof response?.data
+                    });
+                    
                     let projs = [];
+                    
+                    // Try all possible response formats (matching Projects.jsx logic)
                     if (response?.data?.projects && Array.isArray(response.data.projects)) {
                         projs = response.data.projects;
+                        console.log('✅ ProjectProgressTracker: Using response.data.projects, count:', projs.length);
+                    } else if (response?.data?.data?.projects && Array.isArray(response.data.data.projects)) {
+                        projs = response.data.data.projects;
+                        console.log('✅ ProjectProgressTracker: Using response.data.data.projects, count:', projs.length);
+                    } else if (response?.projects && Array.isArray(response.projects)) {
+                        projs = response.projects;
+                        console.log('✅ ProjectProgressTracker: Using response.projects, count:', projs.length);
                     } else if (Array.isArray(response?.data)) {
                         projs = response.data;
+                        console.log('✅ ProjectProgressTracker: Using response.data as array, count:', projs.length);
                     } else if (Array.isArray(response)) {
                         projs = response;
+                        console.log('✅ ProjectProgressTracker: Using response as array, count:', projs.length);
+                    } else {
+                        console.warn('⚠️ ProjectProgressTracker: No projects found in standard locations');
+                        projs = [];
                     }
-                    setProjects(Array.isArray(projs) ? projs : []);
+                    
+                    // Normalize projects: map clientName to client for frontend compatibility
+                    const normalizedProjects = (Array.isArray(projs) ? projs : []).map(p => ({
+                        ...p,
+                        client: p.clientName || p.client || ''
+                    }));
+                    
+                    // Filter to only MONTHLY type projects (Monthly Progress Checker requirement)
+                    // Matches "MONTHLY", "Monthly", "Monthly Review", etc. (case-insensitive, starts with MONTHLY)
+                    const monthlyProjects = normalizedProjects.filter(p => {
+                        const projectType = String(p.type || '').toUpperCase().trim();
+                        return projectType.startsWith('MONTHLY');
+                    });
+                    
+                    console.log('✅ ProjectProgressTracker: Loaded', normalizedProjects.length, 'total projects from API');
+                    console.log('📋 ProjectProgressTracker: Filtered to', monthlyProjects.length, 'MONTHLY type projects');
+                    if (monthlyProjects.length > 0) {
+                        console.log('📋 ProjectProgressTracker: First MONTHLY project sample:', monthlyProjects[0]);
+                    } else if (normalizedProjects.length > 0) {
+                        console.warn('⚠️ ProjectProgressTracker: No MONTHLY projects found. Available types:', 
+                            [...new Set(normalizedProjects.map(p => p.type))]);
+                    }
+                    
+                    setProjects(monthlyProjects);
+                } else {
+                    console.error('❌ ProjectProgressTracker: DatabaseAPI.getProjects not available');
+                    setLoadError('Database API not available');
                 }
             } catch (err) {
-                console.error('Load error:', err);
-                setLoadError(String(err?.message || 'Failed to load'));
+                console.error('❌ ProjectProgressTracker: Load error:', err);
+                setLoadError(String(err?.message || 'Failed to load projects'));
+                setProjects([]);
             }
         };
         load();
     }, []);
     
     // Validate projects before render
+    // Normalize and validate projects - handle both numeric and string IDs, client/clientName
     const safeProjects = Array.isArray(projects) ? projects.filter(p => {
-        return p && typeof p === 'object' && typeof p.id === 'string' && 
-               typeof p.name === 'string' && typeof p.client === 'string';
-    }).map(p => ({
-        id: String(p.id || ''),
-        name: String(p.name || ''),
-        client: String(p.client || ''),
-        manager: String(p.manager || '-'),
-        type: String(p.type || '-'),
-        status: String(p.status || 'Unknown'),
-        monthlyProgress: p.monthlyProgress && typeof p.monthlyProgress === 'object' ? p.monthlyProgress : {}
-    })) : [];
+        // More flexible validation: ID can be string or number, name must exist
+        return p && typeof p === 'object' && p.id !== undefined && p.id !== null && 
+               typeof p.name === 'string' && p.name.trim() !== '';
+    }).map(p => {
+        // Normalize client/clientName (like Projects.jsx does)
+        const client = p.clientName || p.client || '';
+        
+        return {
+            id: String(p.id || ''),
+            name: String(p.name || ''),
+            client: String(client),
+            manager: String(p.manager || p.assignedTo || '-'),
+            type: String(p.type || '-'),
+            status: String(p.status || 'Unknown'),
+            monthlyProgress: p.monthlyProgress && typeof p.monthlyProgress === 'object' ? p.monthlyProgress : {}
+        };
+    }) : [];
     
     // Status config
     const getStatusConfig = (status) => {

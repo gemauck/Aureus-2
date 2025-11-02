@@ -49,6 +49,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
   // Load job cards with offline support - defined as a stable function reference
   const loadJobCardsRef = useRef(null);
+  const syncPendingJobCardsRef = useRef(null);
   
   const loadJobCards = useCallback(async () => {
     setIsLoading(true);
@@ -157,18 +158,18 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     }
   }, []);
 
+  // Store sync function in ref for stable access
+  syncPendingJobCardsRef.current = syncPendingJobCards;
+
   // Monitor online/offline status and auto-sync when coming back online
   useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true);
       console.log('🌐 Connection restored - syncing job cards...');
       
-      // Sync pending job cards first
-      await syncPendingJobCards();
-      
-      // Then reload from API to ensure we have latest data
-      if (loadJobCardsRef.current) {
-        loadJobCardsRef.current();
+      // Sync pending job cards first (this will reload data itself)
+      if (syncPendingJobCardsRef.current) {
+        await syncPendingJobCardsRef.current();
       }
     };
     
@@ -184,7 +185,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncPendingJobCards]); // Include syncPendingJobCards in deps
+  }, []); // Empty deps - use refs instead to avoid re-creating listeners
 
   // Load users if not provided - with offline support
   useEffect(() => {
@@ -314,19 +315,19 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     loadStockData();
   }, [isOnline]);
 
-  // Initial load of job cards
+  // Initial load of job cards - run only once on mount
   useEffect(() => {
     const initLoad = async () => {
       await loadJobCardsRef.current?.();
       
       // After initial load, check if there are any unsynced cards and try to sync
-      if (navigator.onLine && syncPendingJobCards) {
+      if (navigator.onLine && syncPendingJobCardsRef.current) {
         console.log('🔍 Checking for unsynced job cards on mount...');
-        await syncPendingJobCards();
+        await syncPendingJobCardsRef.current();
       }
     };
     initLoad();
-  }, [syncPendingJobCards]);
+  }, []); // Empty dependency array - only run on mount
 
   // Auto-populate agent name from current user
   useEffect(() => {

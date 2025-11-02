@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calendar Save Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f9f9f9;
+            border-radius: 4px;
+            border-left: 4px solid #4CAF50;
+        }
+        .test-section.error {
+            border-left-color: #f44336;
+        }
+        .test-section.warning {
+            border-left-color: #ff9800;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .log {
+            background: #000;
+            color: #0f0;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+        }
+        .log-entry {
+            margin: 5px 0;
+        }
+        .log-entry.error {
+            color: #f44;
+        }
+        .log-entry.success {
+            color: #4f4;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .status.success {
+            background: #4CAF50;
+            color: white;
+        }
+        .status.error {
+            background: #f44336;
+            color: white;
+        }
+        .status.pending {
+            background: #ff9800;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>📅 Calendar Notes Save Test</h1>
+        
+        <div class="test-section">
+            <h2>Test Configuration</h2>
+            <label>
+                API Endpoint:
+                <input type="text" id="apiBase" value="/api" readonly>
+            </label>
+            <label>
+                Test Date (YYYY-MM-DD):
+                <input type="date" id="testDate" required>
+            </label>
+            <label>
+                Test Note:
+                <textarea id="testNote" rows="3" placeholder="Enter a test note...">Test note created at <%= new Date().toISOString() %></textarea>
+            </label>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Actions</h2>
+            <button onclick="testSave()">💾 Test Save</button>
+            <button onclick="testLoad()">📖 Test Load</button>
+            <button onclick="testDelete()">🗑️ Test Delete</button>
+            <button onclick="testAll()">🔄 Run All Tests</button>
+            <button onclick="clearLog()">🧹 Clear Log</button>
+        </div>
+
+        <div class="test-section">
+            <h2>Test Results</h2>
+            <div id="results"></div>
+        </div>
+
+        <div class="test-section">
+            <h2>Console Log</h2>
+            <div class="log" id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // Set today's date as default
+        document.getElementById('testDate').valueAsDate = new Date();
+
+        const log = [];
+        
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const entry = { timestamp, message, type };
+            log.push(entry);
+            updateLogDisplay();
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        function updateLogDisplay() {
+            const logDiv = document.getElementById('log');
+            logDiv.innerHTML = log.map(entry => 
+                `<div class="log-entry ${entry.type}">[${entry.timestamp}] ${entry.message}</div>`
+            ).join('');
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function clearLog() {
+            log.length = 0;
+            updateLogDisplay();
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function getToken() {
+            // Try to get token from localStorage (adjust key based on your app)
+            const token = localStorage.getItem('abcotronics_token');
+            if (!token) {
+                throw new Error('No authentication token found. Please log in first.');
+            }
+            return token;
+        }
+
+        async function makeRequest(endpoint, method = 'GET', body = null) {
+            try {
+                const token = await getToken();
+                const options = {
+                    method,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    credentials: 'include'
+                };
+                
+                if (body) {
+                    options.body = JSON.stringify(body);
+                }
+
+                addLog(`Making ${method} request to ${endpoint}`, 'info');
+                const response = await fetch(endpoint, options);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    addLog(`✅ ${method} ${endpoint} - Success`, 'success');
+                    return { success: true, data, status: response.status };
+                } else {
+                    addLog(`❌ ${method} ${endpoint} - Error: ${data.message || response.statusText}`, 'error');
+                    return { success: false, error: data, status: response.status };
+                }
+            } catch (error) {
+                addLog(`❌ Network error: ${error.message}`, 'error');
+                return { success: false, error: error.message };
+            }
+        }
+
+        async function testSave() {
+            const date = document.getElementById('testDate').value;
+            const note = document.getElementById('testNote').value;
+
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            addLog('🧪 Starting Save Test...', 'info');
+            const result = await makeRequest('/api/calendar-notes', 'POST', { date, note });
+
+            updateResults('Save Test', result);
+            
+            if (result.success) {
+                addLog(`✅ Note saved successfully! ID: ${result.data.id}`, 'success');
+            } else {
+                addLog(`❌ Save failed: ${result.error?.message || 'Unknown error'}`, 'error');
+            }
+        }
+
+        async function testLoad() {
+            const date = document.getElementById('testDate').value;
+
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            addLog('🧪 Starting Load Test...', 'info');
+            
+            // Test loading all notes
+            const allResult = await makeRequest(`/api/calendar-notes?t=${Date.now()}`);
+            
+            if (allResult.success) {
+                const notes = allResult.data.notes || {};
+                const noteForDate = notes[date] || '';
+                
+                addLog(`📖 Loaded notes. Found ${Object.keys(notes).length} total notes.`, 'info');
+                if (noteForDate) {
+                    addLog(`✅ Found note for ${date}: "${noteForDate.substring(0, 50)}..."`, 'success');
+                    document.getElementById('testNote').value = noteForDate;
+                } else {
+                    addLog(`⚠️ No note found for ${date}`, 'warning');
+                }
+                updateResults('Load Test', { success: true, data: { notes, dateNote: noteForDate } });
+            } else {
+                addLog(`❌ Load failed: ${allResult.error?.message || 'Unknown error'}`, 'error');
+                updateResults('Load Test', allResult);
+            }
+        }
+
+        async function testDelete() {
+            const date = document.getElementById('testDate').value;
+
+            if (!date) {
+                alert('Please select a date');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete the note for ${date}?`)) {
+                return;
+            }
+
+            addLog('🧪 Starting Delete Test...', 'info');
+            const result = await makeRequest(`/api/calendar-notes/${date}`, 'DELETE');
+
+            updateResults('Delete Test', result);
+            
+            if (result.success) {
+                addLog(`✅ Note deleted successfully!`, 'success');
+                document.getElementById('testNote').value = '';
+            } else {
+                addLog(`❌ Delete failed: ${result.error?.message || 'Unknown error'}`, 'error');
+            }
+        }
+
+        async function testAll() {
+            clearLog();
+            addLog('🧪 Running All Tests...', 'info');
+            
+            // Test 1: Save
+            await testSave();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Test 2: Load
+            await testLoad();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Test 3: Save again (update)
+            addLog('🧪 Testing update (save again)...', 'info');
+            document.getElementById('testNote').value = 'Updated note: ' + new Date().toISOString();
+            await testSave();
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Test 4: Load again to verify update
+            await testLoad();
+            
+            addLog('✅ All tests completed!', 'success');
+        }
+
+        function updateResults(testName, result) {
+            const resultsDiv = document.getElementById('results');
+            const status = result.success ? 'success' : 'error';
+            const statusText = result.success ? 'PASS' : 'FAIL';
+            
+            const existing = document.getElementById(`result-${testName}`);
+            if (existing) {
+                existing.remove();
+            }
+            
+            const div = document.createElement('div');
+            div.id = `result-${testName}`;
+            div.className = `test-section ${status}`;
+            div.innerHTML = `
+                <h3>${testName} <span class="status ${status}">${statusText}</span></h3>
+                <pre>${JSON.stringify(result, null, 2)}</pre>
+            `;
+            
+            resultsDiv.appendChild(div);
+        }
+    </script>
+</body>
+</html>
+

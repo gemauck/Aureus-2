@@ -1288,13 +1288,13 @@ const Manufacturing = () => {
             <button
               onClick={() => { 
                 const nextWO = getNextWorkOrderNumber();
+                const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
                 setFormData({ 
                   workOrderNumber: nextWO,
                   startDate: null,
                   priority: 'normal',
                   status: 'requested',
-                  clientId: 'stock',
-                  allocationType: 'stock'
+                  stockLocationId: mainWarehouse?.id || null
                 });
                 setModalType('add_production'); 
                 setShowModal(true); 
@@ -1317,13 +1317,13 @@ const Manufacturing = () => {
               <button
                 onClick={() => { 
                   const nextWO = getNextWorkOrderNumber();
+                  const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
                   setFormData({ 
                     workOrderNumber: nextWO,
                     startDate: null,
                     priority: 'normal',
                     status: 'requested',
-                    clientId: 'stock',
-                    allocationType: 'stock'
+                    stockLocationId: mainWarehouse?.id || null
                   });
                   setModalType('add_production'); 
                   setShowModal(true); 
@@ -1404,6 +1404,11 @@ const Manufacturing = () => {
                     <button
                       onClick={() => {
                         setSelectedItem(order);
+                        const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                        setFormData({ 
+                          ...order,
+                          stockLocationId: order.stockLocationId || mainWarehouse?.id || null
+                        });
                         setModalType('edit_production');
                         setShowModal(true);
                       }}
@@ -1451,13 +1456,13 @@ const Manufacturing = () => {
                         <button
                           onClick={() => { 
                             const nextWO = getNextWorkOrderNumber();
+                            const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
                             setFormData({ 
                               workOrderNumber: nextWO,
                               startDate: null,
                               priority: 'normal',
                               status: 'requested',
-                              clientId: 'stock',
-                              allocationType: 'stock'
+                              stockLocationId: mainWarehouse?.id || null
                             });
                             setModalType('add_production'); 
                             setShowModal(true); 
@@ -1510,8 +1515,12 @@ const Manufacturing = () => {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => { 
-                              setSelectedItem(order); 
-                              setFormData({ ...order }); 
+                              setSelectedItem(order);
+                              const mainWarehouse = stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN');
+                              setFormData({ 
+                                ...order,
+                                stockLocationId: order.stockLocationId || mainWarehouse?.id || null
+                              }); 
                               setModalType('edit_production'); 
                               setShowModal(true); 
                             }}
@@ -2233,7 +2242,12 @@ const Manufacturing = () => {
         return;
       }
 
-      // Validate required fields (startDate is now optional)
+      // Validate required fields
+      // Validate stock location is selected
+      if (!formData.stockLocationId) {
+        alert('Please select a stock location');
+        return;
+      }
 
       const totalCost = selectedBom.totalCost * quantity;
       // Ensure production order number is set
@@ -2242,7 +2256,7 @@ const Manufacturing = () => {
       }
       const workOrderNumber = formData.workOrderNumber || getNextWorkOrderNumber();
       
-      // Determine client allocation
+      // Determine client allocation (backward compatibility)
       const allocationType = formData.clientId && formData.clientId !== 'stock' ? 'client' : 'stock';
       const clientId = allocationType === 'client' ? formData.clientId : null;
       
@@ -2258,6 +2272,7 @@ const Manufacturing = () => {
         totalCost: totalCost,
         notes: formData.notes || '',
         workOrderNumber: workOrderNumber,
+        stockLocationId: formData.stockLocationId,
         clientId: clientId,
         allocationType: allocationType,
         createdBy: user?.name || 'System'
@@ -2308,6 +2323,7 @@ const Manufacturing = () => {
         assignedTo: formData.assignedTo !== undefined ? formData.assignedTo : selectedItem.assignedTo,
         notes: formData.notes !== undefined ? formData.notes : selectedItem.notes,
         workOrderNumber: formData.workOrderNumber || selectedItem.workOrderNumber,
+        stockLocationId: formData.stockLocationId !== undefined ? formData.stockLocationId : (selectedItem.stockLocationId || stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN')?.id),
         clientId: formData.clientId !== undefined ? formData.clientId : selectedItem.clientId,
         allocationType: formData.allocationType !== undefined ? formData.allocationType : selectedItem.allocationType,
         completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
@@ -3601,19 +3617,24 @@ const Manufacturing = () => {
                     </select>
                   </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Allocate To</label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Location *</label>
                     <select
-                      value={formData.clientId || 'stock'}
-                      onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                      value={formData.stockLocationId || (stockLocations.find(loc => loc.name === 'Main Warehouse' || loc.code === 'LOC001' || loc.code === 'WH-MAIN')?.id || '')}
+                      onChange={(e) => setFormData({ ...formData, stockLocationId: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       disabled={false}
                     >
-                      <option value="stock">Allocate to Stock</option>
-                      {clients.map(client => (
-                        <option key={client.id} value={client.id}>{client.name}</option>
+                      <option value="">Select a stock location...</option>
+                      {stockLocations.filter(loc => loc.status === 'active').map(location => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} ({location.code})
+                        </option>
                       ))}
                     </select>
+                    {stockLocations.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">No stock locations available. Please create one in the Stock Locations tab.</p>
+                    )}
                   </div>
 
                   {modalType === 'edit_production' && (

@@ -1058,6 +1058,9 @@ const DatabaseAPI = {
             body: JSON.stringify(jobCardData)
         });
         console.log('✅ Job card created in database');
+        // Clear cache for job cards list to ensure fresh data
+        this._responseCache.delete('GET:/jobcards');
+        console.log('🗑️ Cleared job cards cache after create');
         return response;
     },
 
@@ -1068,6 +1071,10 @@ const DatabaseAPI = {
             body: JSON.stringify(jobCardData)
         });
         console.log('✅ Job card updated in database');
+        // Clear cache for both list and individual job card
+        this._responseCache.delete('GET:/jobcards');
+        this._responseCache.delete(`GET:/jobcards/${id}`);
+        console.log('🗑️ Cleared job cards cache after update');
         return response;
     },
 
@@ -1077,6 +1084,10 @@ const DatabaseAPI = {
             method: 'DELETE'
         });
         console.log('✅ Job card deleted from database');
+        // Clear cache for job cards list and individual job card to ensure fresh data
+        this._responseCache.delete('GET:/jobcards');
+        this._responseCache.delete(`GET:/jobcards/${id}`);
+        console.log('🗑️ Cleared job cards cache after delete');
         return response;
     },
 
