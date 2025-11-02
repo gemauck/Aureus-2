@@ -114,6 +114,12 @@ const DatabaseAPI = {
         const baseDelay = 1000; // Start with 1 second
         
         let token = window.storage?.getToken?.();
+        
+        if (token) {
+            console.log('🔑 Token found, length:', token.length);
+        } else {
+            console.log('⚠️ No token found, attempting refresh...');
+        }
 
         // If no token, attempt a silent refresh using the refresh cookie
         if (!token) {
@@ -125,11 +131,17 @@ const DatabaseAPI = {
                     const refreshData = text ? JSON.parse(text) : {};
                     const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                     if (newToken && window.storage?.setToken) {
+                        console.log('✅ Token obtained from refresh');
                         window.storage.setToken(newToken);
                         token = newToken;
+                    } else {
+                        console.error('❌ Refresh response OK but no token in response');
                     }
+                } else {
+                    console.error('❌ Refresh failed with status:', refreshRes.status);
                 }
-            } catch (_) {
+            } catch (refreshError) {
+                console.error('❌ Refresh error:', refreshError);
                 // ignore refresh errors here; downstream logic will handle redirect
             }
         }
@@ -149,24 +161,43 @@ const DatabaseAPI = {
 
         const url = `${this.API_BASE}/api${endpoint}`;
         const buildConfigWithToken = (authToken) => {
-            const config = {
-                method: options.method || 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${authToken}`,
-                    ...options.headers
-                },
-                credentials: 'include',
-                ...options
+            // Extract headers from options to prevent them from overriding Authorization
+            const { headers: customHeaders, ...restOptions } = options;
+            
+            // Merge headers properly - ensure Authorization is always included and not overridden
+            const mergedHeaders = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`,
+                ...(customHeaders || {})
             };
+            
+            // Explicitly set Authorization again to ensure it's never overridden
+            mergedHeaders['Authorization'] = `Bearer ${authToken}`;
+            
+            const config = {
+                method: restOptions.method || 'GET',
+                headers: mergedHeaders,
+                credentials: 'include',
+                ...restOptions
+            };
+            
+            // Final safeguard: ensure Authorization header is never overridden by restOptions
+            if (config.headers) {
+                config.headers['Authorization'] = `Bearer ${authToken}`;
+            }
             
             // Log POST requests for debugging
             if (config.method === 'POST' || config.method === 'PATCH' || config.method === 'PUT') {
+                const authHeader = config.headers['Authorization'];
                 console.log(`📤 ${config.method} request to ${endpoint}:`, {
                     url,
                     hasBody: !!config.body,
                     bodyLength: config.body?.length || 0,
-                    bodyPreview: config.body ? config.body.substring(0, 200) : 'no body'
+                    bodyPreview: config.body ? config.body.substring(0, 200) : 'no body',
+                    hasAuthHeader: !!authHeader,
+                    authHeaderPreview: authHeader ? 
+                        (authHeader.startsWith('Bearer ') ? authHeader.substring(0, 37) + '...' : 'Invalid format') : 'missing',
+                    tokenLength: authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.length - 7 : 0) : 0
                 });
             }
             
@@ -186,22 +217,36 @@ const DatabaseAPI = {
                 let response = await execute(token);
 
                 if (!response.ok && response.status === 401) {
-                    // Attempt refresh once
+                    // Attempt refresh once before giving up
+                    console.log('🔄 Got 401, attempting token refresh...');
                     try {
                         const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
-                        const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                        const refreshRes = await fetch(refreshUrl, { 
+                            method: 'POST', 
+                            credentials: 'include', 
+                            headers: { 'Content-Type': 'application/json' } 
+                        });
+                        
                         if (refreshRes.ok) {
                             const text = await refreshRes.text();
                             const refreshData = text ? JSON.parse(text) : {};
                             const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
                             if (newToken && window.storage?.setToken) {
+                                console.log('✅ Token refreshed successfully');
                                 window.storage.setToken(newToken);
                                 token = newToken;
+                                // Retry the original request with the new token
                                 response = await execute(newToken);
+                                console.log('✅ Retried request after refresh, status:', response.status);
+                            } else {
+                                console.error('❌ Token refresh failed: No token in response');
                             }
+                        } else {
+                            console.error('❌ Token refresh failed with status:', refreshRes.status);
                         }
-                    } catch (_) {
-                        // ignore refresh network errors; will handle below
+                    } catch (refreshError) {
+                        console.error('❌ Token refresh error:', refreshError);
+                        // Continue to throw the original 401 error
                     }
                 }
 

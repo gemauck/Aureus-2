@@ -90,6 +90,25 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     // Initialize documents for Document Collection workflow
     const [documents, setDocuments] = useState(project.documents || []);
     
+    // Users state for project members and DocumentCollectionModal
+    const [users, setUsers] = useState([]);
+    
+    // Load users on component mount
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                if (window.dataService && typeof window.dataService.getUsers === 'function') {
+                    const userData = await window.dataService.getUsers() || [];
+                    setUsers(userData);
+                }
+            } catch (error) {
+                console.warn('Error loading users:', error);
+                setUsers([]);
+            }
+        };
+        loadUsers();
+    }, []);
+    
     // Save back to project whenever they change
     useEffect(() => {
         const saveProjectData = async () => {
@@ -172,24 +191,7 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         const totalTasks = tasks.length;
         const completedTasks = tasks.filter(t => t.status === 'Done').length;
         const completionPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-        const [users, setUsers] = useState([]);
         const activeUsers = users.filter(u => u.status === 'Active');
-
-        // Load users on component mount
-        useEffect(() => {
-            const loadUsers = async () => {
-                try {
-                    if (window.dataService && typeof window.dataService.getUsers === 'function') {
-                        const userData = await window.dataService.getUsers() || [];
-                        setUsers(userData);
-                    }
-                } catch (error) {
-                    console.warn('Error loading users:', error);
-                    setUsers([]);
-                }
-            };
-            loadUsers();
-        }, []);
 
         // Calculate days until due
         const today = new Date();

@@ -2487,6 +2487,7 @@ async function handler(req, res) {
           movement: {
             ...result.movement,
             id: result.movement.id,
+            movementId: result.movement.movementId,
             date: formatDate(result.movement.date),
             createdAt: formatDate(result.movement.createdAt),
             updatedAt: formatDate(result.movement.updatedAt)

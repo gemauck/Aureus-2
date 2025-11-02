@@ -142,6 +142,32 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
     };
 
+    // Sync sections from project prop when it changes (e.g., after refresh or reload)
+    // This ensures that when the project data is reloaded from the database, the sections state is updated
+    useEffect(() => {
+        if (project && project.documentSections !== undefined) {
+            const parsed = parseSections(project.documentSections);
+            
+            // Use functional update to access current sections state and avoid stale closures
+            setSections(currentSections => {
+                // Only update if the parsed data is different from current sections
+                // This prevents infinite loops and unnecessary updates
+                const currentSectionsStr = JSON.stringify(currentSections);
+                const parsedSectionsStr = JSON.stringify(parsed);
+                
+                if (currentSectionsStr !== parsedSectionsStr) {
+                    console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
+                    console.log('  - Previous sections:', currentSections.length);
+                    console.log('  - New sections:', parsed.length);
+                    return parsed;
+                }
+                
+                // Return current state if no change (prevents unnecessary re-renders)
+                return currentSections;
+            });
+        }
+    }, [project?.documentSections, project?.id]);
+
     useEffect(() => {
         // Save sections to project whenever they change
         const saveProjectData = async () => {

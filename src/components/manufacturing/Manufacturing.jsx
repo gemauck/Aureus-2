@@ -1385,12 +1385,6 @@ const Manufacturing = () => {
                         <span className="ml-2 text-green-600">{order.completedDate}</span>
                       </div>
                     )}
-                    {order.assignedTo && (
-                      <div>
-                        <span className="text-gray-500">Assigned To:</span>
-                        <span className="ml-2 text-gray-900">{order.assignedTo}</span>
-                      </div>
-                    )}
                     {order.totalCost > 0 && (
                       <div>
                         <span className="text-gray-500">Total Cost:</span>
@@ -1442,7 +1436,6 @@ const Manufacturing = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Priority</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Progress</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Dates</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Assigned To</th>
                   <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total Cost</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                 </tr>
@@ -1512,7 +1505,6 @@ const Manufacturing = () => {
                         <div className="text-xs text-gray-500">Target: {order.targetDate}</div>
                         {order.completedDate && <div className="text-xs text-green-600">Done: {order.completedDate}</div>}
                       </td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{order.assignedTo}</td>
                       <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(order.totalCost)}</td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-2">
@@ -2242,10 +2234,6 @@ const Manufacturing = () => {
       }
 
       // Validate required fields (startDate is now optional)
-      if (!formData.assignedTo) {
-        alert('Please fill in all required fields (Assigned To)');
-        return;
-      }
 
       const totalCost = selectedBom.totalCost * quantity;
       // Ensure production order number is set
@@ -3599,18 +3587,6 @@ const Manufacturing = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Assigned To *</label>
-                    <input
-                      type="text"
-                      value={formData.assignedTo || ''}
-                      onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="e.g., Production Team A"
-                      disabled={false}
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
                       value={formData.status || 'requested'}
@@ -4643,7 +4619,7 @@ const Manufacturing = () => {
                 ) : (
                   movements.map(movement => (
                     <tr key={movement.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.id}</td>
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.movementId || movement.id}</td>
                       <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
                       <td className="px-3 py-2">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>

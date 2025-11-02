@@ -109,13 +109,64 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   // Store the function in a ref for stable access
   loadJobCardsRef.current = loadJobCards;
 
+  // Function to sync pending job cards to API
+  const syncPendingJobCards = useCallback(async () => {
+    try {
+      let cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      const unsyncedCards = cached.filter(jc => !jc.synced && jc.id);
+      
+      if (unsyncedCards.length === 0) {
+        console.log('📋 No pending job cards to sync');
+        return;
+      }
+      
+      console.log(`📤 Syncing ${unsyncedCards.length} pending job card(s)...`);
+      
+      for (const card of unsyncedCards) {
+        try {
+          // Check if this was an edit or a new card
+          const isEdit = card._wasEdit === true;
+          
+          if (isEdit && window.DatabaseAPI?.updateJobCard) {
+            // This was an edit of an existing card
+            console.log(`📤 Syncing update for job card: ${card.id}`);
+            await window.DatabaseAPI.updateJobCard(card.id, card);
+            console.log(`✅ Synced update for job card: ${card.id}`);
+          } else if (window.DatabaseAPI?.createJobCard) {
+            // This is a new card
+            console.log(`📤 Syncing new job card: ${card.id}`);
+            await window.DatabaseAPI.createJobCard(card);
+            console.log(`✅ Synced new job card: ${card.id}`);
+          }
+          
+          // Mark as synced
+          cached = cached.map(jc => jc.id === card.id ? { ...jc, synced: true } : jc);
+          localStorage.setItem('manufacturing_jobcards', JSON.stringify(cached));
+        } catch (error) {
+          console.error(`❌ Failed to sync job card ${card.id}:`, error);
+          // Keep as unsynced for next attempt
+        }
+      }
+      
+      // Reload from API after syncing to get fresh data with job card numbers
+      if (loadJobCardsRef.current) {
+        await loadJobCardsRef.current();
+      }
+    } catch (error) {
+      console.error('❌ Error syncing pending job cards:', error);
+    }
+  }, []);
+
   // Monitor online/offline status and auto-sync when coming back online
   useEffect(() => {
     const handleOnline = async () => {
       setIsOnline(true);
       console.log('🌐 Connection restored - syncing job cards...');
       
-      // Auto-sync job cards when coming back online
+      // Sync pending job cards first
+      await syncPendingJobCards();
+      
+      // Then reload from API to ensure we have latest data
       if (loadJobCardsRef.current) {
         loadJobCardsRef.current();
       }
@@ -133,7 +184,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []); // Empty deps - use ref to access latest function
+  }, [syncPendingJobCards]); // Include syncPendingJobCards in deps
 
   // Load users if not provided - with offline support
   useEffect(() => {
@@ -265,8 +316,17 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
   // Initial load of job cards
   useEffect(() => {
-    loadJobCardsRef.current?.();
-  }, []);
+    const initLoad = async () => {
+      await loadJobCardsRef.current?.();
+      
+      // After initial load, check if there are any unsynced cards and try to sync
+      if (navigator.onLine && syncPendingJobCards) {
+        console.log('🔍 Checking for unsynced job cards on mount...');
+        await syncPendingJobCards();
+      }
+    };
+    initLoad();
+  }, [syncPendingJobCards]);
 
   // Auto-populate agent name from current user
   useEffect(() => {
@@ -490,6 +550,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               fromLocation: stockItem.locationId, // Location ID where stock was taken from
               toLocation: '', // Empty as this is consumption, not a transfer
               reference: jobCardReference,
+              performedBy: formData.agentName || user?.name || 'System',
               notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
               date: new Date().toISOString()
             };
@@ -634,10 +695,20 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
       // Save to localStorage first (offline support)
       let updatedJobCards;
+      const isNewCard = !editingJobCard;
+      const wasSynced = editingJobCard?.synced !== false;
+      
+      // Mark new cards as unsynced, and track if it's an edit
+      const cardDataWithSyncFlag = { 
+        ...jobCardData, 
+        synced: false,
+        _wasEdit: !!editingJobCard  // Internal flag to track if this was an edit
+      };
+      
       if (editingJobCard) {
-        updatedJobCards = jobCards.map(jc => jc.id === editingJobCard.id ? jobCardData : jc);
+        updatedJobCards = jobCards.map(jc => jc.id === editingJobCard.id ? cardDataWithSyncFlag : jc);
       } else {
-        updatedJobCards = [...jobCards, jobCardData];
+        updatedJobCards = [...jobCards, cardDataWithSyncFlag];
       }
       setJobCards(updatedJobCards);
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
@@ -647,8 +718,16 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         try {
           if (editingJobCard && window.DatabaseAPI.updateJobCard) {
             await window.DatabaseAPI.updateJobCard(editingJobCard.id, jobCardData);
+            console.log('✅ Job card updated on server');
+            
+            // Mark as synced
+            const syncedCards = updatedJobCards.map(jc => jc.id === editingJobCard.id ? { ...jc, synced: true } : jc);
+            setJobCards(syncedCards);
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
           } else if (window.DatabaseAPI.createJobCard) {
             await window.DatabaseAPI.createJobCard(jobCardData);
+            console.log('✅ Job card created on server');
+            
             // Reload from API to get the generated job card number
             const response = await window.DatabaseAPI.getJobCards();
             const freshData = response?.data?.jobCards || [];
@@ -659,8 +738,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           }
         } catch (error) {
           console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
-          // Data is already saved in localStorage, so it will sync when back online
+          // Card is already marked as unsynced, will be synced when back online
         }
+      } else {
+        console.log('📴 Offline mode: Job card saved locally, will sync when online');
       }
 
       alert(editingJobCard ? 'Job card updated successfully!' : 'Job card created successfully!');
@@ -677,24 +758,52 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     if (!confirm('Are you sure you want to delete this job card?')) return;
 
     try {
-      // Remove from localStorage first
+      // First, try to delete from API if online
+      if (isOnline && window.DatabaseAPI?.deleteJobCard) {
+        try {
+          console.log('🗑️ Deleting job card from database:', id);
+          await window.DatabaseAPI.deleteJobCard(id);
+          console.log('✅ Job card deleted from database successfully');
+        } catch (error) {
+          console.error('❌ Failed to delete from API:', error);
+          const errorMessage = error.message || 'Unknown error';
+          alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
+          return; // Don't proceed with local deletion if API fails
+        }
+      } else if (isOnline && !window.DatabaseAPI?.deleteJobCard) {
+        console.warn('⚠️ DatabaseAPI.deleteJobCard not available');
+        alert('Delete functionality is not available. Please refresh the page and try again.');
+        return;
+      } else {
+        console.log('📴 Offline mode: Deleting job card locally only');
+      }
+
+      // Only remove from local state/localStorage after successful API deletion (or if offline)
       const updatedJobCards = jobCards.filter(jc => jc.id !== id);
       setJobCards(updatedJobCards);
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+      console.log('✅ Job card removed from local state');
 
-      // Try to delete from API if online
-      if (isOnline && window.DatabaseAPI?.deleteJobCard) {
-        try {
-          await window.DatabaseAPI.deleteJobCard(id);
-        } catch (error) {
-          console.warn('⚠️ Failed to delete from API, removed from local storage:', error.message);
-        }
+      // Reload job cards from server to ensure sync (only if online)
+      if (isOnline && loadJobCardsRef.current) {
+        console.log('🔄 Reloading job cards after deletion to ensure sync...');
+        await loadJobCardsRef.current();
       }
 
       alert('Job card deleted successfully!');
     } catch (error) {
-      console.error('Error deleting job card:', error);
-      alert(`Failed to delete job card: ${error.message}`);
+      console.error('❌ Error deleting job card:', error);
+      alert(`Failed to delete job card: ${error.message || 'Unknown error'}`);
+      
+      // Try to reload to restore sync
+      if (loadJobCardsRef.current) {
+        console.log('🔄 Reloading job cards after deletion error to restore sync...');
+        try {
+          await loadJobCardsRef.current();
+        } catch (reloadError) {
+          console.error('❌ Failed to reload job cards:', reloadError);
+        }
+      }
     }
   };
 
