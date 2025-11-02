@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Migration Runner</title>
+    <meta charset="utf-8">
+    <style>
+        body { font-family: system-ui; padding: 40px; max-width: 800px; margin: 0 auto; }
+        .code { background: #1e1e1e; color: #d4d4d4; padding: 20px; border-radius: 8px; font-family: 'Courier New', monospace; white-space: pre-wrap; overflow-x: auto; }
+        button { background: #007acc; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 6px; cursor: pointer; margin: 20px 0; }
+        button:hover { background: #005a9e; }
+        .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 6px; margin: 20px 0; }
+        .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 6px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Multi-Location Inventory Migration</h1>
+    <p><strong>This page will automatically run the migration when you open your app.</strong></p>
+    
+    <div id="status"></div>
+    
+    <h2>Option 1: Auto-Run (Recommended)</h2>
+    <p>Click this button to automatically run the migration:</p>
+    <button onclick="runMigration()">▶️ Run Migration Now</button>
+    
+    <h2>Option 2: Manual Copy</h2>
+    <p>Copy this code and paste it in your app's browser console (F12):</p>
+    <div class="code" id="codeBlock"></div>
+    <button onclick="copyCode()">📋 Copy Code</button>
+    
+    <script>
+        const migrationCode = `(async()=>{const t=window.storage?.getToken?.()||localStorage.getItem('abcotronics_token');if(!t||t==='null'||t==='undefined'){alert('❌ Not logged in!\\n\\nPlease open your app in another tab, log in, then come back here.');return;}console.log('🔧 Starting migration...');try{const r=await fetch('/api/run-location-migration',{method:'POST',headers:{'Content-Type':'application/json','Authorization':\`Bearer \${t}\`}});const d=await r.json();if(r.ok){console.log('✅✅✅ MIGRATION COMPLETE!');console.log('📊 Steps:',d.results?.steps);d.results?.steps.forEach(s=>console.log(\`✅ Step \${s.step}: \${s.action} - \${s.status}\`));alert('✅ Migration complete!\\n\\nRestart your server to see changes.');}else{throw new Error(d.error||d.message||'Migration failed');}}catch(e){console.error('❌ Error:',e);alert('❌ Failed: '+e.message);}})();`;
+        
+        document.getElementById('codeBlock').textContent = migrationCode;
+        
+        function copyCode() {
+            navigator.clipboard.writeText(migrationCode).then(() => {
+                alert('✅ Code copied! Now:\n1. Open your app\n2. Press F12 → Console\n3. Paste and press Enter');
+            });
+        }
+        
+        async function runMigration() {
+            const status = document.getElementById('status');
+            status.innerHTML = '<p>⏳ Attempting to run migration...</p>';
+            
+            // Try to get token from parent window or opener
+            let token = null;
+            
+            // If opened from app, try to access parent
+            try {
+                if (window.opener) {
+                    token = window.opener.localStorage?.getItem('abcotronics_token') || 
+                            (window.opener.storage && window.opener.storage.getToken && window.opener.storage.getToken());
+                }
+            } catch(e) {
+                // Cross-origin - can't access
+            }
+            
+            if (!token) {
+                status.innerHTML = '<div class="error"><strong>❌ Cannot access app token</strong><br><br>Please:<br>1. Open your app in another tab<br>2. Log in<br>3. Come back to this page and click the button again<br><br>Or use Option 2 to copy the code and run it in your app\'s console.</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/run-location-migration', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    let stepsHtml = '';
+                    if (data.results?.steps) {
+                        stepsHtml = '<ul>';
+                        data.results.steps.forEach(s => {
+                            const icon = s.status === 'success' ? '✅' : '⚠️';
+                            stepsHtml += `<li>${icon} Step ${s.step}: ${s.action} - ${s.status}</li>`;
+                        });
+                        stepsHtml += '</ul>';
+                    }
+                    
+                    status.innerHTML = `<div class="success"><strong>✅✅✅ MIGRATION COMPLETE! ✅✅✅</strong><br><br>${stepsHtml}<br><strong>Next steps:</strong><br>1. Restart your server<br>2. Go to Manufacturing → Inventory Tab<br>3. Use the location selector dropdown</div>`;
+                } else {
+                    throw new Error(data.error || data.message || 'Migration failed');
+                }
+            } catch (error) {
+                status.innerHTML = `<div class="error"><strong>❌ Migration Failed</strong><br><br>${error.message}<br><br>Please use Option 2 to run the code directly in your app's console.</div>`;
+            }
+        }
+        
+        // Auto-detect if we can access the app
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                try {
+                    const token = localStorage.getItem('abcotronics_token') || 
+                                  (window.storage && window.storage.getToken && window.storage.getToken());
+                    if (token && token !== 'null' && token !== 'undefined') {
+                        document.getElementById('status').innerHTML = '<div class="success">✅ Detected login token. You can use Option 1 to run automatically!</div>';
+                    }
+                } catch(e) {
+                    // Can't access
+                }
+            }, 500);
+        });
+    </script>
+</body>
+</html>
+

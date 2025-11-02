@@ -37,6 +37,7 @@ const Pipeline = () => {
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -551,6 +552,137 @@ const Pipeline = () => {
         setIsDragging(false);
     };
 
+    // Mobile touch drag handlers
+    const handleTouchStart = (e, item, type) => {
+        if (e.touches.length !== 1) return; // Only handle single touch
+        
+        const touch = e.touches[0];
+        const cardElement = e.currentTarget;
+        const cardRect = cardElement.getBoundingClientRect();
+        
+        setTouchDragState({
+            item,
+            type,
+            startY: touch.clientY,
+            currentY: touch.clientY,
+            startX: touch.clientX,
+            currentX: touch.clientX,
+            cardRect,
+            initialStage: item.stage
+        });
+        setDraggedItem(item);
+        setDraggedType(type);
+        setIsDragging(true);
+        
+        // Prevent scrolling while dragging
+        e.preventDefault();
+    };
+
+    const handleTouchMove = (e) => {
+        if (!touchDragState || e.touches.length !== 1) return;
+        
+        const touch = e.touches[0];
+        const deltaY = touch.clientY - touchDragState.startY;
+        const deltaX = touch.clientX - touchDragState.startX;
+        
+        // Find which stage column we're over
+        const stageElements = document.querySelectorAll('[data-pipeline-stage]');
+        let targetStage = null;
+        
+        stageElements.forEach(stageEl => {
+            const rect = stageEl.getBoundingClientRect();
+            if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
+                touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
+                targetStage = stageEl.getAttribute('data-pipeline-stage');
+            }
+        });
+        
+        setTouchDragState({
+            ...touchDragState,
+            currentY: touch.clientY,
+            currentX: touch.clientX,
+            targetStage
+        });
+        
+        e.preventDefault();
+    };
+
+    const handleTouchEnd = async (e) => {
+        if (!touchDragState) return;
+        
+        const { item, type, targetStage, initialStage } = touchDragState;
+        
+        // If we found a target stage and it's different, perform the drop
+        if (targetStage && targetStage !== initialStage) {
+            // Create a synthetic drop event
+            const syntheticEvent = {
+                preventDefault: () => {},
+                currentTarget: e.currentTarget
+            };
+            
+            // Use the existing handleDrop logic
+            const token = storage.getToken();
+            
+            if (type === 'lead') {
+                const updatedLeads = leads.map(lead => 
+                    lead.id === item.id ? { ...lead, stage: targetStage } : lead
+                );
+                setLeads(updatedLeads);
+                
+                if (token && window.DatabaseAPI) {
+                    try {
+                        await window.DatabaseAPI.updateLead(item.id, { stage: targetStage });
+                        console.log('✅ Pipeline: Lead stage updated via touch drag');
+                    } catch (error) {
+                        console.warn('⚠️ Pipeline: Failed to update lead stage in API:', error);
+                    }
+                }
+            } else if (type === 'opportunity') {
+                const updatedClients = clients.map(client => {
+                    if (client.id === item.clientId) {
+                        const updatedOpportunities = client.opportunities.map(opp =>
+                            opp.id === item.id ? { ...opp, stage: targetStage } : opp
+                        );
+                        return { ...client, opportunities: updatedOpportunities };
+                    }
+                    return client;
+                });
+                setClients(updatedClients);
+                storage.setClients(updatedClients);
+                
+                if (token && window.api?.updateOpportunity) {
+                    try {
+                        await window.api.updateOpportunity(item.id, { stage: targetStage });
+                        console.log('✅ Pipeline: Opportunity stage updated via touch drag:', targetStage);
+                    } catch (error) {
+                        console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
+                    }
+                } else if (token && window.DatabaseAPI) {
+                    try {
+                        const clientToUpdate = updatedClients.find(c => c.id === item.clientId);
+                        if (clientToUpdate) {
+                            await window.DatabaseAPI.updateClient(item.clientId, { 
+                                opportunities: clientToUpdate.opportunities 
+                            });
+                            console.log('✅ Pipeline: Client opportunities updated via touch drag');
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ Pipeline: Failed to update client opportunities in API:', error);
+                    }
+                }
+            }
+        }
+        
+        // Reset state
+        setTouchDragState(null);
+        setDraggedItem(null);
+        setDraggedType(null);
+        setIsDragging(false);
+        
+        // Prevent click event from firing
+        e.preventDefault();
+    };
+
     // Get deal age in days
     const getDealAge = (createdDate) => {
         const created = new Date(createdDate);
@@ -578,52 +710,63 @@ const Pipeline = () => {
                 draggable
                 onDragStart={() => handleDragStart(item, item.type)}
                 onDragEnd={handleDragEnd}
-                onClick={() => {
+                onTouchStart={(e) => handleTouchStart(e, item, item.type)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onClick={(e) => {
+                    // Prevent click if we just completed a drag
+                    if (touchDragState) return;
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-md p-1 border border-gray-200 shadow-sm cursor-move flex flex-col h-[75px] min-h-[75px] max-h-[75px] ${!isDragging ? 'hover:shadow-md transition' : ''} ${
+                className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
+                style={{
+                    height: '75px',
+                    minHeight: '75px',
+                    maxHeight: '75px',
+                    padding: '4px',
+                    boxSizing: 'border-box'
+                }}
             >
-                {/* Header with Badge */}
-                <div className="flex items-center justify-between gap-0.5 mb-0.5 min-h-[16px]">
-                    <div className="font-medium text-[10px] text-gray-900 line-clamp-1 flex-1 leading-tight">
+                {/* Header with Badge - Fixed height */}
+                <div className="flex items-center justify-between gap-0.5 mb-0.5" style={{ height: '16px', minHeight: '16px', maxHeight: '16px' }}>
+                    <div className="font-medium text-[10px] text-gray-900 line-clamp-1 flex-1 leading-tight truncate">
                         {item.name}
                     </div>
-                    <span className={`px-1 py-0.5 text-[8px] rounded font-medium shrink-0 leading-none ${
+                    <span className={`px-1 py-0.5 text-[8px] rounded font-medium shrink-0 leading-none whitespace-nowrap ${
                         item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
                     }`}>
                         {item.type === 'lead' ? 'LEAD' : 'OPP'}
                     </span>
                 </div>
 
-                {/* Value */}
-                <div className="flex items-center mb-0.5 min-h-[14px]">
+                {/* Value - Fixed height */}
+                <div className="flex items-center mb-0.5" style={{ height: '14px', minHeight: '14px', maxHeight: '14px' }}>
                     <span className="text-[10px] font-bold text-gray-900 leading-tight">
                         R {item.value.toLocaleString('en-ZA')}
                     </span>
                 </div>
 
-                {/* Age Badge and Industry */}
-                <div className="flex items-center justify-between text-[8px] mb-0.5 min-h-[12px]">
+                {/* Age Badge and Industry - Fixed height */}
+                <div className="flex items-center justify-between mb-0.5" style={{ height: '12px', minHeight: '12px', maxHeight: '12px' }}>
                     <span className={`px-0.5 py-0.5 rounded font-medium leading-none ${getAgeBadgeColor(age)}`}>
                         {age}d
                     </span>
-                    {item.industry && (
-                        <span className="text-gray-500 text-[7px] truncate leading-none">{item.industry}</span>
-                    )}
-                    {!item.industry && <span></span>}
+                    <span className="text-gray-500 text-[7px] truncate leading-none flex-1 text-right ml-1">
+                        {item.industry || '\u00A0'}
+                    </span>
                 </div>
 
-                {/* Expected Close Date or Spacer */}
-                <div className="mt-auto flex-1 flex items-end min-h-[12px]">
+                {/* Expected Close Date or Spacer - Fixed height to fill remaining space */}
+                <div className="flex items-end" style={{ height: '25px', minHeight: '25px', maxHeight: '25px', marginTop: 'auto' }}>
                     {item.expectedCloseDate ? (
                         <div className="text-[8px] text-gray-600 leading-none">
                             <i className="fas fa-calendar-alt mr-0.5 text-[7px]"></i>
                             {new Date(item.expectedCloseDate).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                         </div>
-                    ) : null}
+                    ) : <div></div>}
                 </div>
             </div>
         );
@@ -640,11 +783,13 @@ const Pipeline = () => {
                 return (
                     <div 
                         key={stage.id} 
+                        data-pipeline-stage={stage.name}
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
-                            isDraggedOver ? 'ring-2 ring-primary-500 bg-primary-50' : ''
+                            isDraggedOver || (touchDragState && touchDragState.targetStage === stage.name) ? 'ring-2 ring-primary-500 bg-primary-50' : ''
                         }`}
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, stage.name)}
+                        onTouchMove={handleTouchMove}
                     >
                         {/* Stage Header */}
                         <div className="mb-2 px-1">
