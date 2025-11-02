@@ -54,6 +54,8 @@ model User {
   twoFactor       TwoFactor?
   securityEvents  SecurityEvent[]
   passwordHistory PasswordHistory[]
+  notifications   Notification[]    @relation("NotificationRecipient")
+  notificationSettings NotificationSetting?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 }
@@ -732,4 +734,44 @@ model ClientNews {
   @@index([publishedAt])
   @@index([isNew])
   @@index([createdAt])
+}
+
+// Notification System
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   // Recipient user ID
+  user      User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // mention, comment, task_assigned, invoice_due, etc.
+  title     String
+  message   String
+  link      String   @default("") // Optional link to relevant resource
+  read      Boolean  @default(false)
+  metadata  String   @default("{}") // JSON metadata for additional context
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model NotificationSetting {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailMentions             Boolean  @default(true)
+  emailComments             Boolean  @default(false)
+  emailTasks                Boolean  @default(false)
+  emailInvoices             Boolean  @default(true)
+  emailSystem               Boolean  @default(true)
+  inAppMentions             Boolean  @default(true)
+  inAppComments             Boolean  @default(true)
+  inAppTasks                Boolean  @default(true)
+  inAppInvoices             Boolean  @default(true)
+  inAppSystem               Boolean  @default(true)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([userId])
 }

@@ -643,6 +643,42 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         }
         
         console.log('💬 Creating comment with user:', currentUser.name, currentUser.email);
+        
+        // Process @mentions if MentionHelper is available
+        if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
+            try {
+                // Fetch all users for mention matching
+                const token = window.storage?.getToken?.();
+                if (token) {
+                    const usersResponse = await fetch('/api/users', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (usersResponse.ok) {
+                        const usersData = await usersResponse.json();
+                        const allUsers = usersData.data?.users || usersData.users || [];
+                        
+                        // Get section and document names for context
+                        const section = sections.find(s => s.id === sectionId);
+                        const document = section?.documents.find(d => d.id === documentId);
+                        const contextTitle = `${document?.name || 'Document'} in ${section?.name || 'Section'}`;
+                        const contextLink = `#/projects/${project.id}`;
+                        
+                        // Process mentions
+                        await window.MentionHelper.processMentions(
+                            commentText,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers
+                        );
+                        console.log('✅ @Mention notifications processed');
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error processing @mentions:', error);
+                // Don't fail the comment if mention processing fails
+            }
+        }
 
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {

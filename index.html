@@ -459,6 +459,11 @@
     <script defer src="./dist/src/components/common/LoadingState.js"></script>
     <script defer src="./dist/src/components/common/QuickFallback.js"></script>
     
+    <!-- Notification System Components - Load early for global access -->
+    <script defer src="./src/utils/mentionHelper.js"></script>
+    <script defer src="./dist/src/components/common/CommentInputWithMentions.js"></script>
+    <script defer src="./dist/src/components/common/NotificationCenter.js"></script>
+    
     <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
     <script>
         // Toggle between old and new architecture
@@ -509,6 +514,7 @@
     
     <!-- Settings Portal - Load early since it's accessed from main navigation -->
     <script defer src="./dist/src/components/settings/SettingsPortal.js"></script>
+    <script defer src="./dist/src/components/settings/NotificationSettings.js"></script>
     
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>

@@ -3,14 +3,12 @@ const { useState } = React;
 
 // Inline Comments Popup Component
 const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, position }) => {
-    const [newComment, setNewComment] = useState('');
     const comments = task.comments || [];
     const recentComments = comments.slice(-3).reverse(); // Show last 3 comments
 
-    const handleAdd = () => {
-        if (newComment.trim()) {
-            onAddComment(task.id, newComment, isSubtask, parentId);
-            setNewComment('');
+    const handleAdd = (commentText) => {
+        if (commentText && commentText.trim()) {
+            onAddComment(task.id, commentText, isSubtask, parentId);
         }
     };
 
@@ -88,28 +86,28 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
 
                 {/* Add Comment */}
                 <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 rounded-b-lg">
-                    <textarea
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                handleAdd();
-                            }
-                        }}
-                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
-                        rows="2"
-                        placeholder="Add a comment... (Enter to send)"
-                    ></textarea>
+                    {window.CommentInputWithMentions ? (
+                        <window.CommentInputWithMentions
+                            onSubmit={handleAdd}
+                            placeholder="Add a comment... (@mention users, Enter to send)"
+                            rows={2}
+                            taskTitle={task.title || 'Task'}
+                            taskLink={`/projects?task=${task.id}`}
+                        />
+                    ) : (
+                        <textarea
+                            className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                            rows="2"
+                            placeholder="Add a comment... (Loading mention support...)"
+                            disabled
+                        ></textarea>
+                    )}
                     <div className="flex justify-end mt-1.5">
-                        <button
-                            onClick={handleAdd}
-                            disabled={!newComment.trim()}
-                            className="px-2.5 py-1 bg-primary-600 text-white text-[10px] rounded hover:bg-primary-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <i className="fas fa-paper-plane mr-1"></i>
-                            Send
-                        </button>
+                        {window.CommentInputWithMentions && (
+                            <small className="text-[9px] text-gray-500 mr-2">
+                                Tip: @mention users to notify them
+                            </small>
+                        )}
                     </div>
                 </div>
             </div>

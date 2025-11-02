@@ -397,6 +397,10 @@ const Settings = () => {
             case 'general':
                 return renderGeneralSettings();
             case 'notifications':
+                // Use new NotificationSettings component if available
+                if (window.NotificationSettings) {
+                    return <window.NotificationSettings />;
+                }
                 return renderNotificationsSettings();
             case 'security':
                 return renderSecuritySettings();
