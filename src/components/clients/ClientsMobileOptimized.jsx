@@ -290,7 +290,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized header
     const MobileHeader = ({ title, onBack, showFilters = false }) => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-0 z-40`}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 sticky top-14 z-30`}>
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     {onBack && (
@@ -336,7 +336,7 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized search and filters
     const MobileSearchFilters = () => (
-        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} border-b px-4 py-3 space-y-3`}>
+        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} border-b px-4 py-3 space-y-3 sticky top-[calc(56px+49px)] z-20`}>
             <div className="relative">
                 <input
                     type="text"
@@ -440,13 +440,13 @@ const ClientsMobileOptimized = () => {
 
     // Mobile-optimized tabs
     const MobileTabs = () => (
-        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4`}>
+        <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 sticky top-14 z-40`}>
             <div className="flex space-x-0">
                 <button
                     onClick={() => setViewMode('clients')}
                     className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
                         viewMode === 'clients'
-                            ? 'border-primary-600 text-primary-600'
+                            ? 'border-primary-600 dark:border-primary-400 text-primary-600 dark:text-primary-400'
                             : isDark 
                                 ? 'border-transparent text-gray-400 hover:text-gray-200'
                                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -459,7 +459,7 @@ const ClientsMobileOptimized = () => {
                     onClick={() => setViewMode('leads')}
                     className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${
                         viewMode === 'leads'
-                            ? 'border-primary-600 text-primary-600'
+                            ? 'border-primary-600 dark:border-primary-400 text-primary-600 dark:text-primary-400'
                             : isDark 
                                 ? 'border-transparent text-gray-400 hover:text-gray-200'
                                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -561,7 +561,7 @@ const ClientsMobileOptimized = () => {
         return (
             <div className="flex-1 overflow-y-auto">
                 <MobileSearchFilters />
-                <div className="px-4 py-3">
+                <div className="px-4 py-3 pb-6">
                     {isLoading ? (
                         <div className="flex items-center justify-center py-8">
                             <i className="fas fa-spinner fa-spin text-2xl text-primary-600"></i>
@@ -641,9 +641,11 @@ const ClientsMobileOptimized = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900">
+        <div className="flex flex-col h-full bg-gray-50 dark:bg-gray-900 relative">
             <MobileTabs />
-            <MainContent />
+            <div className="flex-1 overflow-hidden">
+                <MainContent />
+            </div>
         </div>
     );
 };
