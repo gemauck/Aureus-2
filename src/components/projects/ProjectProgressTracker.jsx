@@ -1169,6 +1169,25 @@ const ProjectProgressTracker = ({ onBack }) => {
         })
         : [];
     
+    // Validate all constants before render
+    if (!Array.isArray(months)) {
+        console.error('❌ ProjectProgressTracker: months is not an array:', months);
+        return (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800">Error: Invalid months configuration</p>
+            </div>
+        );
+    }
+    
+    if (!Array.isArray(statusOptions)) {
+        console.error('❌ ProjectProgressTracker: statusOptions is not an array:', statusOptions);
+        return (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-800">Error: Invalid statusOptions configuration</p>
+            </div>
+        );
+    }
+    
     // Wrap entire render in try-catch to catch any rendering errors
     try {
         return (
