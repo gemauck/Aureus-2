@@ -781,10 +781,10 @@ const ProjectProgressTracker = ({ onBack }) => {
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <div>
                             <h2 className="text-base font-semibold text-gray-900">
-                                {getFieldTitle()} - {selectedMonth} {selectedYear}
+                                {getFieldTitle()} - {String(selectedMonth || '')} {String(selectedYear || '')}
                             </h2>
                             <p className="text-[10px] text-gray-500 mt-0.5">
-                                {selectedProject?.name} • {selectedProject?.client}
+                                {String(selectedProject?.name || '')} • {String(selectedProject?.client || '')}
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
@@ -1136,10 +1136,12 @@ const ProjectProgressTracker = ({ onBack }) => {
         );
     };
 
-    return (
-        <div className="space-y-3">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+    // Wrap entire render in try-catch to catch any rendering errors
+    try {
+        return (
+            <div className="space-y-3">
+                {/* Header */}
+                <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <button 
                         onClick={onBack} 
