@@ -1168,6 +1168,7 @@ async function handler(req, res) {
         }
         
         const updateData = {}
+        let stockWarnings = []
         
         if (body.bomId !== undefined) updateData.bomId = body.bomId
         if (body.productSku !== undefined) updateData.productSku = body.productSku
@@ -1366,7 +1367,6 @@ async function handler(req, res) {
           }
           
           const components = parseJson(bom.components, [])
-          const stockWarnings = []
           
           for (const component of components.filter(c => c.sku && c.quantity)) {
             const requiredQty = parseFloat(component.quantity) * existingOrder.quantity
