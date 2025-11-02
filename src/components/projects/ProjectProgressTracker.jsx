@@ -1153,6 +1153,21 @@ const ProjectProgressTracker = ({ onBack }) => {
         );
     };
 
+    // Ensure projects array is safe before rendering
+    const safeProjects = Array.isArray(projects) 
+        ? projects.filter(p => {
+            if (!p || typeof p !== 'object') return false;
+            if (!p.id || typeof p.id !== 'string') return false;
+            // Ensure all properties that will be rendered are not objects
+            if (p.name && typeof p.name === 'object') return false;
+            if (p.client && typeof p.client === 'object') return false;
+            if (p.manager && typeof p.manager === 'object') return false;
+            if (p.type && typeof p.type === 'object') return false;
+            if (p.status && typeof p.status === 'object') return false;
+            return true;
+        })
+        : [];
+    
     // Wrap entire render in try-catch to catch any rendering errors
     try {
         return (
@@ -1345,7 +1360,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-100">
-                            {projects.length === 0 ? (
+                            {safeProjects.length === 0 ? (
                                 <tr>
                                     <td colSpan={39} className="px-6 py-6 text-center text-gray-400">
                                         <i className="fas fa-folder-open text-2xl mb-1.5 opacity-50"></i>
@@ -1354,20 +1369,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                projects
-                                    .filter(p => {
-                                        // Ensure project is valid object with required properties
-                                        if (!p || typeof p !== 'object') return false;
-                                        if (!p.id || typeof p.id !== 'string') return false;
-                                        // Ensure name and client are primitives, not objects
-                                        if (p.name && typeof p.name === 'object') return false;
-                                        if (p.client && typeof p.client === 'object') return false;
-                                        if (p.manager && typeof p.manager === 'object') return false;
-                                        if (p.type && typeof p.type === 'object') return false;
-                                        if (p.status && typeof p.status === 'object') return false;
-                                        return true;
-                                    })
-                                    .map((project, index) => {
+                                safeProjects.map((project, index) => {
                                         // Double-check and sanitize project data before rendering
                                         const safeProject = {
                                             ...project,
