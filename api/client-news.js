@@ -18,19 +18,58 @@ async function handler(req, res) {
     // GET /api/client-news - Get all news articles
     if (req.method === 'GET') {
       try {
-        const newsArticles = await prisma.clientNews.findMany({
+        // First, get all news articles with client info
+        const allNewsArticles = await prisma.clientNews.findMany({
           include: {
             client: {
               select: {
                 id: true,
                 name: true,
-                type: true
+                type: true,
+                rssSubscribed: true
               }
             }
           },
           orderBy: { publishedAt: 'desc' },
           take: 100 // Limit to recent articles
         })
+
+        // Filter to only include articles from subscribed clients
+        // A client is subscribed if rssSubscribed is true or null (default to subscribed)
+        // Explicitly exclude articles where rssSubscribed is false
+        const newsArticles = allNewsArticles.filter(article => {
+          // If client relationship is missing, exclude the article (data integrity issue)
+          if (!article.client) {
+            console.log(`⚠️ Article ${article.id} has no client relationship - excluding`)
+            return false
+          }
+
+          // Get the subscription status
+          const rssSubscribed = article.client.rssSubscribed
+          
+          // Client is subscribed if rssSubscribed is true or null (default to subscribed)
+          // Only exclude if explicitly false
+          const isSubscribed = rssSubscribed !== false
+
+          if (!isSubscribed) {
+            console.log(`🚫 FILTERED OUT: Article "${article.title}" for unsubscribed client "${article.client.name}" (rssSubscribed: ${rssSubscribed})`)
+          }
+          
+          return isSubscribed
+        })
+
+        console.log(`📰 NEWS FILTER: Total articles: ${allNewsArticles.length}, After filtering (subscribed only): ${newsArticles.length}`)
+        
+        // Log which clients are unsubscribed
+        const unsubscribedClients = new Set()
+        allNewsArticles.forEach(article => {
+          if (article.client && article.client.rssSubscribed === false) {
+            unsubscribedClients.add(`${article.client.name} (${article.client.id})`)
+          }
+        })
+        if (unsubscribedClients.size > 0) {
+          console.log(`🚫 Unsubscribed clients found:`, Array.from(unsubscribedClients))
+        }
 
         // Format the response
         const formattedArticles = newsArticles.map(article => ({

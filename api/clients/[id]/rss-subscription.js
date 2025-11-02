@@ -45,6 +45,14 @@ async function handler(req, res) {
           return badRequest(res, 'subscribed must be a boolean')
         }
 
+        // Get current subscription status before update
+        const currentClient = await prisma.client.findUnique({
+          where: { id: clientId },
+          select: { id: true, name: true, rssSubscribed: true }
+        })
+
+        console.log(`🔄 Updating RSS subscription for ${currentClient?.name}: ${currentClient?.rssSubscribed} -> ${subscribed}`)
+
         // Update client's RSS subscription status
         const updated = await prisma.client.update({
           where: { id: clientId },
@@ -58,7 +66,9 @@ async function handler(req, res) {
           }
         })
 
-        console.log(`✅ RSS subscription updated for ${updated.name}: ${subscribed}`)
+        // Verify the update was successful
+        console.log(`✅ RSS subscription updated for ${updated.name}: ${updated.rssSubscribed} (was: ${currentClient?.rssSubscribed})`)
+        
         return ok(res, { 
           client: updated,
           message: subscribed ? 'Subscribed to news feed' : 'Unsubscribed from news feed'

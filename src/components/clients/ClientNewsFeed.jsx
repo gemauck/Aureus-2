@@ -187,10 +187,16 @@ const ClientNewsFeed = () => {
                 return;
             }
             
-            const response = await fetch('/api/client-news', {
+            // Add cache-busting timestamp to ensure fresh data
+            const timestamp = Date.now();
+            const response = await fetch(`/api/client-news?_t=${timestamp}`, {
+                method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
                 },
                 credentials: 'include'
             });
@@ -199,12 +205,28 @@ const ClientNewsFeed = () => {
             
             if (response.ok) {
                 const data = await response.json();
-                console.log('📰 API Response data:', data);
+                console.log('📰 API Response data structure:', {
+                    hasData: !!data.data,
+                    hasNewsArticles: !!data.data?.newsArticles,
+                    newsArticlesCount: data.data?.newsArticles?.length || 0,
+                    directNewsArticlesCount: data.newsArticles?.length || 0
+                });
                 
                 // API returns { data: { newsArticles: [...] } }
                 let articles = data?.data?.newsArticles || data?.newsArticles || [];
-                console.log('📰 Parsed articles count:', articles.length);
-                console.log('📰 First article sample:', articles[0]);
+                console.log(`📰 Parsed articles count: ${articles.length}`);
+                
+                // Log client IDs and subscription status for debugging
+                if (articles.length > 0) {
+                    const clientIds = [...new Set(articles.map(a => a.clientId))];
+                    console.log(`📰 Articles from ${clientIds.length} unique clients:`, clientIds.slice(0, 10));
+                    console.log('📰 First article sample:', {
+                        id: articles[0].id,
+                        title: articles[0].title?.substring(0, 50),
+                        clientId: articles[0].clientId,
+                        clientName: articles[0].clientName
+                    });
+                }
                 
                 // Filter by client if selected
                 if (selectedClient !== 'all') {
@@ -559,25 +581,49 @@ const ClientNewsFeed = () => {
                                                     if (confirm(`Unsubscribe from news feed for ${article.clientName}? You won't receive new articles for this ${article.clientType === 'lead' ? 'lead' : 'client'} anymore.`)) {
                                                         try {
                                                             const token = window.storage?.getToken?.();
+                                                            console.log(`🔔 Unsubscribing from ${article.clientName} news feed...`);
+                                                            
                                                             const response = await fetch(`/api/clients/${article.clientId}/rss-subscription`, {
                                                                 method: 'POST',
                                                                 headers: {
                                                                     'Authorization': `Bearer ${token}`,
-                                                                    'Content-Type': 'application/json'
+                                                                    'Content-Type': 'application/json',
+                                                                    'Cache-Control': 'no-cache'
                                                                 },
                                                                 credentials: 'include',
                                                                 body: JSON.stringify({ subscribed: false })
                                                             });
                                                             
                                                             if (response.ok) {
-                                                                // Remove articles for this client from the feed
+                                                                const result = await response.json();
+                                                                console.log('✅ Unsubscribe response:', result);
+                                                                console.log(`✅ Client ${result.client?.name} now has rssSubscribed: ${result.client?.rssSubscribed}`);
+                                                                
+                                                                // Verify the unsubscribe worked
+                                                                if (result.client?.rssSubscribed === false) {
+                                                                    console.log('✅ Unsubscribe confirmed - rssSubscribed is now false');
+                                                                } else {
+                                                                    console.warn('⚠️ WARNING: Unsubscribe may not have worked - rssSubscribed is:', result.client?.rssSubscribed);
+                                                                }
+                                                                
+                                                                // Clear any cached articles for this client
                                                                 setNewsArticles(prev => prev.filter(a => a.clientId !== article.clientId));
-                                                                alert(`Unsubscribed from ${article.clientName} news feed`);
+                                                                
+                                                                // Force reload news articles with cache busting
+                                                                setIsLoading(true);
+                                                                // Small delay to ensure database update is committed
+                                                                await new Promise(resolve => setTimeout(resolve, 500));
+                                                                await loadNewsArticles();
+                                                                setIsLoading(false);
+                                                                
+                                                                alert(`Unsubscribed from ${article.clientName} news feed. Articles will no longer appear after refresh.`);
                                                             } else {
+                                                                const errorText = await response.text();
+                                                                console.error('❌ Unsubscribe failed:', response.status, errorText);
                                                                 alert('Failed to unsubscribe. Please try again.');
                                                             }
                                                         } catch (error) {
-                                                            console.error('Error unsubscribing:', error);
+                                                            console.error('❌ Error unsubscribing:', error);
                                                             alert('Error unsubscribing. Please try again.');
                                                         }
                                                     }
