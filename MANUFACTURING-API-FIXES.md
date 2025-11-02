@@ -3,7 +3,7 @@
 ## Issues Fixed
 
 ### 1. Production Order Update Error (HTTP 500)
-**Error**: `Failed to update production order` when updating work orders  
+**Error**: `Failed to update production order` when updating production orders  
 **Root Cause**: The API was trying to update the production order status AFTER running transaction-based stock operations, which caused conflicts and errors.
 
 **Solution Applied**:
@@ -93,8 +93,8 @@ CREATE INDEX "BOM_inventoryItemId_idx" ON "BOM"("inventoryItemId");
 ## Testing
 
 ### Test Production Order Updates
-1. Navigate to Manufacturing → Work Orders
-2. Create a new work order (or edit existing)
+1. Navigate to Manufacturing → Production Orders
+2. Create a new production order (or edit existing)
 3. Try changing status to:
    - `in_production` (should deduct stock)
    - `completed` (should add finished goods)

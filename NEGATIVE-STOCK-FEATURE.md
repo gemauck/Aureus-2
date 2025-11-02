@@ -48,7 +48,7 @@ Manufacturing now allows negative stock with warnings when there isn't enough in
 
 ### After
 - **Warning**: Order updates successfully with negative stock
-- **Message**: "⚠️ Work order updated successfully! Some items are now in negative stock: Raisens: Available 28, Required 100 (Shortfall: 72)"
+- **Message**: "⚠️ Production order updated successfully! Some items are now in negative stock: Raisens: Available 28, Required 100 (Shortfall: 72)"
 - **Visual**: Inventory displays -72 in red
 - **Result**: Production can proceed, user aware of shortage
 

@@ -45,7 +45,7 @@ The migration will be applied automatically when:
 1. **First API Call**: Migration auto-applies (for SQLite)
 2. **Existing BOMs**: Continue working (inventoryItemId = NULL)
 3. **New BOMs**: Require inventoryItemId selection (UI enforced)
-4. **Work Orders**: Complete orders add finished goods automatically
+4. **Production Orders**: Complete orders add finished goods automatically
 
 ## ✅ Server Status
 

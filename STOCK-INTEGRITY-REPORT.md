@@ -19,7 +19,7 @@
 - ✅ Transaction rollback on error prevents orphaned data
 
 ### 2. Stock Allocation Logic
-- ✅ Allocation occurs when creating work order with `status=requested`
+- ✅ Allocation occurs when creating production order with `status=requested`
 - ✅ No allocation on other statuses
 - ✅ Available stock checked before allocation (`quantity - allocatedQuantity`)
 
@@ -55,7 +55,7 @@
 
 ## ⚠️ Manual Verification Required
 
-1. **UI Inventory Refresh**: Verify that inventory table updates immediately after work order status changes
+1. **UI Inventory Refresh**: Verify that inventory table updates immediately after production order status changes
 
 ## 🔍 Server Status
 
@@ -68,22 +68,22 @@
 
 To fully verify the system:
 
-### Test Case 1: Create Work Order with Sufficient Stock
-1. ✅ Create a new work order with status "Requested"
+### Test Case 1: Create Production Order with Sufficient Stock
+1. ✅ Create a new production order with status "Requested"
 2. ✅ Select a BOM with components that have sufficient stock
 3. ✅ Verify: Stock should be allocated (check `allocatedQuantity` increases)
 4. ✅ Verify: Available quantity decreases
 5. ✅ Verify: Total quantity remains unchanged
 
-### Test Case 2: Create Work Order with Insufficient Stock
-1. ✅ Create a new work order with status "Requested"
+### Test Case 2: Create Production Order with Insufficient Stock
+1. ✅ Create a new production order with status "Requested"
 2. ✅ Select a BOM with components that have insufficient stock
 3. ✅ Verify: Error message shows which component and how much is needed
 4. ✅ Verify: No allocation occurs
 5. ✅ Verify: Order is not created
 
 ### Test Case 3: Change Status to In Production
-1. ✅ Edit an existing work order with status "Requested"
+1. ✅ Edit an existing production order with status "Requested"
 2. ✅ Change status to "In Production"
 3. ✅ Verify: Stock is deducted from both `quantity` and `allocatedQuantity`
 4. ✅ Verify: Stock movement record is created
@@ -91,13 +91,13 @@ To fully verify the system:
 6. ✅ Verify: Order status updates to "in_production"
 
 ### Test Case 4: Legacy Order Support
-1. ✅ Edit a work order created before allocation tracking
+1. ✅ Edit a production order created before allocation tracking
 2. ✅ Change status from "Requested" to "In Production"
 3. ✅ Verify: Stock deducts from total quantity even if `allocatedQuantity = 0`
 4. ✅ Verify: No errors occur
 
 ### Test Case 5: Transaction Rollback
-1. ✅ Create work order that will fail during creation
+1. ✅ Create production order that will fail during creation
 2. ✅ Verify: If order creation fails, allocations are rolled back
 3. ✅ Verify: Inventory returns to original state
 

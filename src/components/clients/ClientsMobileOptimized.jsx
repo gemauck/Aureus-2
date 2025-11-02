@@ -49,6 +49,31 @@ const ClientsMobileOptimized = () => {
         }
     };
 
+    // Load leads from API and localStorage
+    const loadLeads = async () => {
+        try {
+            // Try localStorage first
+            const savedLeads = window.storage?.getLeads?.();
+            if (savedLeads && savedLeads.length > 0) {
+                setLeads(savedLeads);
+            }
+
+            // Then load from API
+            const token = window.storage?.getToken?.();
+            if (token && window.api?.getLeads) {
+                const apiLeads = await window.api.getLeads();
+                if (apiLeads?.data?.leads || apiLeads?.leads) {
+                    const leadsData = apiLeads.data?.leads || apiLeads.leads;
+                    if (leadsData.length > 0) {
+                        setLeads(leadsData);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error loading leads:', error);
+        }
+    };
+
     // Save functions
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         console.log('=== MOBILE SAVE CLIENT DEBUG ===');
@@ -260,6 +285,7 @@ const ClientsMobileOptimized = () => {
     // Load data on mount
     useEffect(() => {
         loadClients();
+        loadLeads();
     }, []);
 
     // Mobile-optimized header

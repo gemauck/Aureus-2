@@ -3,7 +3,7 @@
 ## 🎉 What's Complete
 
 1. ✅ **Database Schema** - Added `inventoryItemId` field to BOM model
-2. ✅ **API Updates** - BOM creation requires inventory item, work orders add finished goods to stock
+2. ✅ **API Updates** - BOM creation requires inventory item, production orders add finished goods to stock
 3. ✅ **UI Updates** - BOM form requires selecting finished product inventory item
 4. ✅ **Migration Files** - Created in `prisma/migrations/`
 5. ✅ **Auto-Migration** - Will apply automatically when manufacturing API is accessed
@@ -22,7 +22,7 @@
 
 3. **New BOMs**: Must select finished product inventory item (UI enforced)
 
-4. **Work Order Completion**: Automatically adds finished goods to inventory with cost = sum of parts
+4. **Production Order Completion**: Automatically adds finished goods to inventory with cost = sum of parts
 
 ### Manual Steps (If Needed)
 
@@ -55,7 +55,7 @@ Once your server runs:
 
 - [ ] **Existing BOMs Load**: Go to Manufacturing → BOMs tab (should see all existing BOMs)
 - [ ] **Create New BOM**: Should require selecting inventory item first
-- [ ] **Work Order Completion**: Change status to "completed" → finished goods should appear in inventory
+- [ ] **Production Order Completion**: Change status to "completed" → finished goods should appear in inventory
 - [ ] **Cost Calculation**: Finished goods should have unitCost = sum of BOM parts
 
 ## 🔍 How to Verify Everything Works
@@ -87,8 +87,8 @@ WHERE table_name = 'BOM' AND column_name = 'inventoryItemId';
 4. After selecting, Product SKU and Name auto-fill
 5. Add components and save
 
-### 4. Test Work Order Completion
-1. Create a work order from a BOM
+### 4. Test Production Order Completion
+1. Create a production order from a BOM
 2. Set status to **"completed"**
 3. Check **Inventory** tab
 4. Finished product should appear with quantity and cost = sum of parts
@@ -118,7 +118,7 @@ The migration will:
 
 ### Files Changed
 - `prisma/schema.prisma` - Added inventoryItemId field
-- `api/manufacturing.js` - BOM validation + work order completion logic
+- `api/manufacturing.js` - BOM validation + production order completion logic
 - `src/components/manufacturing/Manufacturing.jsx` - UI with inventory selector
 - `api/_lib/ensureBOMMigration.js` - Auto-migration code
 
@@ -131,7 +131,7 @@ The migration will:
 ### Features Implemented
 1. ✅ Every BOM must have corresponding Inventory Item
 2. ✅ BOM creation requires selecting inventory item first
-3. ✅ Work order completion adds finished goods to stock
+3. ✅ Production order completion adds finished goods to stock
 4. ✅ Finished goods carry cost = sum of parts
 
 **Everything is ready - just start your server!** 🚀

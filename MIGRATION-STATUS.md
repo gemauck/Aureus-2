@@ -53,7 +53,7 @@ npx prisma migrate deploy
 
 1. **If migration not applied yet**: Existing BOMs continue working (inventoryItemId will be NULL)
 2. **After migration applied**: Everything works the same + new BOMs require inventoryItemId
-3. **Work order completion**: Will work with fallback logic if inventoryItemId missing
+3. **Production order completion**: Will work with fallback logic if inventoryItemId missing
 
 ## 🎯 Summary
 

@@ -234,9 +234,18 @@ const MainLayout = () => {
         };
     }, [clientsComponentReady]);
     
+    // Select Clients component based on mobile detection
     const Clients = React.useMemo(() => {
+        // On mobile, use optimized mobile component if available
+        if (isMobile && window.ClientsMobileOptimized) {
+            return window.ClientsMobileOptimized;
+        }
+        if (isMobile && window.ClientsMobile) {
+            return window.ClientsMobile;
+        }
+        // Desktop: use full-featured clients component
         return window.Clients || window.ClientsSimple || (() => <div className="text-center py-12 text-gray-500">Clients loading...</div>);
-    }, [clientsComponentReady]); // Re-compute when component becomes ready
+    }, [clientsComponentReady, isMobile]); // Re-compute when component becomes ready or mobile state changes
     
     const Pipeline = React.useMemo(() => {
         return window.Pipeline;

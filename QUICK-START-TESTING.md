@@ -43,10 +43,10 @@ npm start
 4. Add components (raw materials)
 5. Save
 
-### Step 6: Test Work Order Completion
+### Step 6: Test Production Order Completion
 
-1. Go to **Work Orders** tab
-2. Create new work order using your BOM
+1. Go to **Production Orders** tab
+2. Create new production order using your BOM
 3. Set status to **"completed"**
 4. Check **Inventory** tab
 5. Your finished product should now show:
@@ -56,7 +56,7 @@ npm start
 ## ✅ Success Indicators
 
 - ✅ BOM creation requires inventory item selection
-- ✅ Work order completion adds finished goods automatically
+- ✅ Production order completion adds finished goods automatically
 - ✅ Finished goods appear in inventory with correct cost
 - ✅ No errors in server logs
 

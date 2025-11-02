@@ -12,7 +12,7 @@ All code changes have been implemented and are **backward compatible**. Your ser
 
 2. **API** (`api/manufacturing.js`)
    - BOM creation requires `inventoryItemId` (new BOMs only)
-   - Work order completion automatically adds finished goods to inventory
+   - Production order completion automatically adds finished goods to inventory
    - **Backward compatible**: Old BOMs work via SKU fallback
 
 3. **UI** (`src/components/manufacturing/Manufacturing.jsx`)
@@ -57,14 +57,14 @@ psql $DATABASE_URL -f add-bom-inventory-item-migration.sql
 ### After Migration
 - ✅ Existing BOMs: Continue working (can be viewed/edited)
 - ✅ New BOMs: Must select inventory item (UI enforces this)
-- ✅ Work Orders: Completed orders add finished goods to inventory automatically
+- ✅ Production Orders: Completed orders add finished goods to inventory automatically
 - ✅ Cost Tracking: Finished goods carry cost = sum of parts
 
 ## 🧪 Testing After Migration
 
 1. **Check existing BOMs still load**: Go to Manufacturing → BOMs tab
 2. **Create new BOM**: Should require inventory item selection
-3. **Complete work order**: Should add finished goods to inventory
+3. **Complete production order**: Should add finished goods to inventory
 4. **Check inventory**: Finished goods should appear with correct cost
 
 ## 📝 Migration SQL (for reference)

@@ -1192,7 +1192,7 @@ async function handler(req, res) {
         
         // Handle status change to 'completed' - add finished goods to inventory with cost = sum of parts
         if (newStatus === 'completed' && oldStatus !== 'completed') {
-          console.log(`✅ Triggering finished goods addition for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          console.log(`✅ Triggering finished goods addition for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
             return badRequest(res, 'Order has no BOM - cannot complete production')
@@ -1297,7 +1297,7 @@ async function handler(req, res) {
         // Handle status change from 'requested' to 'in_production' - deduct stock
         // WRAPPED IN TRANSACTION to ensure atomicity (deduction + movement + status update)
         if (newStatus === 'in_production' && oldStatus === 'requested') {
-          console.log(`✅ Triggering stock deduction for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          console.log(`✅ Triggering stock deduction for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           // IDEMPOTENCY CHECK: Verify status hasn't changed (prevent double deduction)
           if (existingOrder.status !== 'requested') {
@@ -1439,7 +1439,7 @@ async function handler(req, res) {
                     })
                   }
                   
-                  console.log(`📉 Deducted ${requiredQty} of ${component.sku} for work order ${id}`)
+                  console.log(`📉 Deducted ${requiredQty} of ${component.sku} for production order ${id}`)
                   
                 // Create stock movement record
                 await tx.stockMovement.create({
@@ -1470,7 +1470,7 @@ async function handler(req, res) {
               data: { status: 'in_production' }
             })
             
-            console.log(`✅ Stock deduction completed for work order ${id}`)
+            console.log(`✅ Stock deduction completed for production order ${id}`)
           }, {
             timeout: 30000 // 30 second timeout for transaction
           })
@@ -1480,7 +1480,7 @@ async function handler(req, res) {
         // Also handle cancellation of 'requested' orders (return allocated stock)
         if ((newStatus === 'requested' && oldStatus === 'in_production') || 
             newStatus === 'cancelled') {
-          console.log(`↩️ Triggering stock return for work order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          console.log(`↩️ Triggering stock return for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           if (!existingOrder.bomId) {
             console.log(`⚠️ Order ${id} has no BOM - skipping stock return`)
@@ -1609,7 +1609,7 @@ async function handler(req, res) {
                       })
                     }
                     
-                    console.log(`↩️ Returned ${returnQty} of ${component.sku} for work order ${id}`)
+                    console.log(`↩️ Returned ${returnQty} of ${component.sku} for production order ${id}`)
                     
                     // Create stock movement record for return
                     const movementType = newStatus === 'cancelled' ? 'adjustment' : 'return'
@@ -1642,7 +1642,7 @@ async function handler(req, res) {
                 data: { status: newStatus }
               })
               
-              console.log(`✅ Stock return completed for work order ${id}`)
+              console.log(`✅ Stock return completed for production order ${id}`)
             }, {
               timeout: 30000
             })
@@ -1713,7 +1713,7 @@ async function handler(req, res) {
         
         // Return stock before deleting (wrapped in transaction)
         if (orderToDelete.bomId && (orderToDelete.status === 'requested' || orderToDelete.status === 'in_production')) {
-          console.log(`🗑️ Deleting work order ${id} with stock return (status: ${orderToDelete.status})`)
+          console.log(`🗑️ Deleting production order ${id} with stock return (status: ${orderToDelete.status})`)
           
           await prisma.$transaction(async (tx) => {
             const bom = await tx.bOM.findUnique({ where: { id: orderToDelete.bomId } })
@@ -1795,7 +1795,7 @@ async function handler(req, res) {
                         toLocation: '',
                         reference: orderToDelete.workOrderNumber || id,
                         performedBy: req.user?.name || 'System',
-                        notes: `Stock return - Work order deleted (${orderToDelete.workOrderNumber || id})`
+                        notes: `Stock return - Production order deleted (${orderToDelete.workOrderNumber || id})`
                       }
                     })
                   }
@@ -1804,7 +1804,7 @@ async function handler(req, res) {
                 }
               }
               
-              console.log(`✅ Stock returned for deleted work order ${id}`)
+              console.log(`✅ Stock returned for deleted production order ${id}`)
             }
             
             // Delete the order
