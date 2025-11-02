@@ -1617,12 +1617,6 @@ const Clients = React.memo(() => {
             let aValue = a[sortField];
             let bValue = b[sortField];
             
-            // Handle nested fields like contact name
-            if (sortField === 'contact') {
-                aValue = a.contacts?.[0]?.name || '';
-                bValue = b.contacts?.[0]?.name || '';
-            }
-            
             // Handle date fields
             if (sortField === 'lastContact') {
                 aValue = new Date(aValue || 0);
@@ -2219,17 +2213,6 @@ const Clients = React.memo(() => {
                             </th>
                             <th 
                                 className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
-                                onClick={() => handleSort('contact')}
-                            >
-                                <div className="flex items-center">
-                                    Contact
-                                    {sortField === 'contact' && (
-                                        <i className={`fas fa-sort-${sortDirection === 'asc' ? 'up' : 'down'} ml-1 text-xs`}></i>
-                                    )}
-                                </div>
-                            </th>
-                            <th 
-                                className={`px-6 py-3 text-left text-xs font-medium ${isDark ? 'text-gray-300' : 'text-gray-500'} uppercase tracking-wider cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
                                 onClick={() => handleSort('industry')}
                             >
                                 <div className="flex items-center">
@@ -2261,7 +2244,7 @@ const Clients = React.memo(() => {
                     <tbody className={`${isDark ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'} divide-y`}>
                         {paginatedClients.length === 0 ? (
                             <tr>
-                                    <td colSpan="6" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    <td colSpan="5" className={`px-6 py-8 text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                         <i className={`fas fa-inbox text-3xl ${isDark ? 'text-gray-600' : 'text-gray-300'} mb-2`}></i>
                                     <p>No clients found</p>
                                 </td>
@@ -2287,10 +2270,6 @@ const Clients = React.memo(() => {
                                             )}
                                             <div className={`text-sm font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>{client.name}</div>
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.contacts?.[0]?.name || 'No contact'}</div>
-                                        <div className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{client.contacts?.[0]?.email || ''}</div>
                                     </td>
                                     <td className={`px-6 py-4 whitespace-nowrap text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>{client.industry}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">
