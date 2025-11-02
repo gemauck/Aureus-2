@@ -693,6 +693,9 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const getStatusConfig = (status) => {
+        if (!status || typeof status !== 'string') {
+            return statusOptions[0];
+        }
         return statusOptions.find(opt => opt.value === status) || statusOptions[0];
     };
 
@@ -1068,19 +1071,19 @@ const ProjectProgressTracker = ({ onBack }) => {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={() => handleAddProgress(project, month, field)}
-                                    className={`px-1.5 py-0.5 text-[10px] rounded font-medium transition-opacity hover:opacity-80 flex-shrink-0 ${statusConfig.color}`}
+                                    className={`px-1.5 py-0.5 text-[10px] rounded font-medium transition-opacity hover:opacity-80 flex-shrink-0 ${statusConfig ? statusConfig.color : ''}`}
                                 >
-                                    {statusConfig.label}
+                                    {statusConfig && statusConfig.label ? String(statusConfig.label) : 'Unknown'}
                                 </button>
                                 
                                 {/* Link if exists */}
-                                {data.link && (
+                                {data.link && typeof data.link === 'string' && (
                                     <a
-                                        href={data.link}
+                                        href={String(data.link)}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="text-primary-600 hover:text-primary-700 text-[10px] flex-shrink-0"
-                                        title={data.link}
+                                        title={String(data.link)}
                                     >
                                         <i className="fas fa-link mr-1"></i>
                                         View
@@ -1091,7 +1094,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                             {/* Text */}
                             {data.text && (
                                 <div className="text-gray-700 whitespace-pre-wrap break-words text-[10px] leading-tight">
-                                    {data.text}
+                                    {typeof data.text === 'string' ? data.text : typeof data.text === 'object' ? JSON.stringify(data.text) : String(data.text || '')}
                                 </div>
                             )}
                         </div>
