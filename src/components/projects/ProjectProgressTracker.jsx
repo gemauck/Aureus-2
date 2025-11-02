@@ -1354,36 +1354,61 @@ const ProjectProgressTracker = ({ onBack }) => {
                                     </td>
                                 </tr>
                             ) : (
-                                projects.filter(p => p && p.id).map((project, index) => (
-                                    <tr 
-                                        key={project.id} 
-                                        draggable="true"
-                                        onDragStart={(e) => handleDragStart(e, project, index)}
-                                        onDragEnd={handleDragEnd}
-                                        onDragOver={handleDragOver}
-                                        onDragEnter={(e) => handleDragEnter(e, index)}
-                                        onDragLeave={handleDragLeave}
-                                        onDrop={(e) => handleDrop(e, index)}
-                                        className={`transition-colors cursor-grab active:cursor-grabbing ${
-                                            dragOverIndex === index 
-                                                ? 'border-t-2 border-primary-500 bg-primary-50' 
-                                                : 'hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {/* Project Info */}
-                                        <td className={`px-2.5 py-1.5 sticky left-0 z-10 border-r border-gray-200 transition-colors ${
-                                            dragOverIndex === index ? 'bg-primary-50' : 'bg-white'
-                                        }`}>
-                                            <div className="min-w-[180px] flex items-center gap-1.5">
-                                                <div className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing" title="Drag to reorder">
-                                                    <i className="fas fa-grip-vertical text-xs"></i>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <div className="font-medium text-gray-900 text-xs">{String(project.name || '')}</div>
-                                                    <div className="text-[10px] text-gray-500">{String(project.client || '')}</div>
-                                                </div>
-                                            </div>
-                                        </td>
+                                projects
+                                    .filter(p => {
+                                        // Ensure project is valid object with required properties
+                                        if (!p || typeof p !== 'object') return false;
+                                        if (!p.id || typeof p.id !== 'string') return false;
+                                        // Ensure name and client are primitives, not objects
+                                        if (p.name && typeof p.name === 'object') return false;
+                                        if (p.client && typeof p.client === 'object') return false;
+                                        if (p.manager && typeof p.manager === 'object') return false;
+                                        if (p.type && typeof p.type === 'object') return false;
+                                        if (p.status && typeof p.status === 'object') return false;
+                                        return true;
+                                    })
+                                    .map((project, index) => {
+                                        // Double-check and sanitize project data before rendering
+                                        const safeProject = {
+                                            ...project,
+                                            name: project.name && typeof project.name !== 'object' ? String(project.name || '') : '',
+                                            client: project.client && typeof project.client !== 'object' ? String(project.client || '') : '',
+                                            manager: project.manager && typeof project.manager !== 'object' ? String(project.manager || '-') : '-',
+                                            type: project.type && typeof project.type !== 'object' ? String(project.type || '-') : '-',
+                                            status: project.status && typeof project.status !== 'object' ? String(project.status || 'Unknown') : 'Unknown',
+                                            id: String(project.id || '')
+                                        };
+                                        
+                                        return (
+                                            <tr 
+                                                key={safeProject.id} 
+                                                draggable="true"
+                                                onDragStart={(e) => handleDragStart(e, safeProject, index)}
+                                                onDragEnd={handleDragEnd}
+                                                onDragOver={handleDragOver}
+                                                onDragEnter={(e) => handleDragEnter(e, index)}
+                                                onDragLeave={handleDragLeave}
+                                                onDrop={(e) => handleDrop(e, index)}
+                                                className={`transition-colors cursor-grab active:cursor-grabbing ${
+                                                    dragOverIndex === index 
+                                                        ? 'border-t-2 border-primary-500 bg-primary-50' 
+                                                        : 'hover:bg-gray-50'
+                                                }`}
+                                            >
+                                                {/* Project Info */}
+                                                <td className={`px-2.5 py-1.5 sticky left-0 z-10 border-r border-gray-200 transition-colors ${
+                                                    dragOverIndex === index ? 'bg-primary-50' : 'bg-white'
+                                                }`}>
+                                                    <div className="min-w-[180px] flex items-center gap-1.5">
+                                                        <div className="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing" title="Drag to reorder">
+                                                            <i className="fas fa-grip-vertical text-xs"></i>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <div className="font-medium text-gray-900 text-xs">{safeProject.name}</div>
+                                                            <div className="text-[10px] text-gray-500">{safeProject.client}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
                                                 {/* Monthly Progress Cells */}
                                                 {months.map(month => {
                                                     // Ensure month is a string
