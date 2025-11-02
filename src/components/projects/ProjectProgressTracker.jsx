@@ -1304,28 +1304,34 @@ const ProjectProgressTracker = ({ onBack }) => {
                                     Project
                                 </th>
                                 {/* Month Columns */}
-                                {months.map((month, idx) => (
-                                    <th 
-                                        key={month} 
-                                        ref={el => monthRefs.current[month] = el}
-                                        colSpan="3"
-                                        className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 ${
-                                            workingMonths.includes(idx) && selectedYear === currentYear
-                                                ? 'bg-primary-50 text-primary-700'
-                                                : 'text-gray-600'
-                                        }`}
-                                    >
-                                        <div className="flex flex-col items-center gap-0.5">
-                                            <span>{String(month || '').slice(0, 3)} '{String(selectedYear || '').slice(-2)}</span>
-                                            {workingMonths.includes(idx) && selectedYear === currentYear && (
-                                                <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700">
-                                                    <i className="fas fa-calendar-check mr-0.5"></i>
-                                                    Working
-                                                </span>
-                                            )}
-                                        </div>
-                                    </th>
-                                ))}
+                                {Array.isArray(months) && months.map((month, idx) => {
+                                    const safeMonth = String(month || '');
+                                    const safeMonthAbbr = safeMonth.slice(0, 3);
+                                    const safeYear = String(selectedYear || '').slice(-2);
+                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && selectedYear === currentYear;
+                                    return (
+                                        <th 
+                                            key={safeMonth} 
+                                            ref={el => { if (el) monthRefs.current[safeMonth] = el; }}
+                                            colSpan="3"
+                                            className={`px-1.5 py-1.5 text-center text-[10px] font-semibold uppercase tracking-wide border-l border-gray-200 ${
+                                                isWorkingMonth
+                                                    ? 'bg-primary-50 text-primary-700'
+                                                    : 'text-gray-600'
+                                            }`}
+                                        >
+                                            <div className="flex flex-col items-center gap-0.5">
+                                                <span>{safeMonthAbbr} '{safeYear}</span>
+                                                {isWorkingMonth && (
+                                                    <span className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-semibold bg-primary-100 text-primary-700">
+                                                        <i className="fas fa-calendar-check mr-0.5"></i>
+                                                        Working
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </th>
+                                    );
+                                })}
                                 {/* Metadata Columns */}
                                 <th className="px-2.5 py-1.5 text-left text-[10px] font-semibold text-gray-700 uppercase tracking-wide border-l border-gray-200">
                                     PM
