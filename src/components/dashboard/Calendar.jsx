@@ -250,7 +250,7 @@ const Calendar = () => {
                 </div>
                 
                 {/* Day names header */}
-                <div className="grid grid-cols-7 gap-0.5 mb-1">
+                <div className="grid grid-cols-7 mb-1" style={{ gap: '2px' }}>
                     {dayNames.map(day => (
                         <div
                             key={day}
@@ -261,8 +261,8 @@ const Calendar = () => {
                     ))}
                 </div>
                 
-                {/* Calendar grid - compact */}
-                <div className="grid grid-cols-7 gap-0.5">
+                {/* Calendar grid - compact with fixed gap to prevent line gathering */}
+                <div className="grid grid-cols-7" style={{ gap: '2px' }}>
                     {days.map((day, index) => {
                         if (day === null) {
                             return <div key={`empty-${index}`} className="aspect-square"></div>;
@@ -280,15 +280,21 @@ const Calendar = () => {
                                     aspect-square rounded transition-all text-xs
                                     ${dayIsToday 
                                         ? isDark 
-                                            ? 'bg-blue-600 text-white border border-blue-400' 
-                                            : 'bg-blue-500 text-white border border-blue-300'
+                                            ? 'bg-blue-600 text-white' 
+                                            : 'bg-blue-500 text-white'
                                         : isDark
-                                            ? 'text-gray-200 hover:bg-gray-700 border border-gray-600'
-                                            : 'text-gray-900 hover:bg-gray-100 border border-gray-200'
+                                            ? 'text-gray-200 hover:bg-gray-700 bg-gray-800'
+                                            : 'text-gray-900 hover:bg-gray-100 bg-white'
                                     }
                                     ${dayHasNotes ? 'font-bold' : 'font-normal'}
                                     flex flex-col items-center justify-center relative
+                                    ${isDark ? 'border border-gray-700' : 'border border-gray-200'}
+                                    box-border
                                 `}
+                                style={{ 
+                                    borderWidth: '1px',
+                                    margin: 0
+                                }}
                             >
                                 <span className="text-xs">{day}</span>
                                 {dayHasNotes && (
