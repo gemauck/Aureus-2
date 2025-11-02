@@ -148,18 +148,34 @@ const DatabaseAPI = {
         }
 
         const url = `${this.API_BASE}/api${endpoint}`;
-        const buildConfigWithToken = (authToken) => ({
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`,
-                ...options.headers
-            },
-            credentials: 'include',
-            ...options
-        });
+        const buildConfigWithToken = (authToken) => {
+            const config = {
+                method: options.method || 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                    ...options.headers
+                },
+                credentials: 'include',
+                ...options
+            };
+            
+            // Log POST requests for debugging
+            if (config.method === 'POST' || config.method === 'PATCH' || config.method === 'PUT') {
+                console.log(`📤 ${config.method} request to ${endpoint}:`, {
+                    url,
+                    hasBody: !!config.body,
+                    bodyLength: config.body?.length || 0,
+                    bodyPreview: config.body ? config.body.substring(0, 200) : 'no body'
+                });
+            }
+            
+            return config;
+        };
 
         const execute = async (authToken) => {
-            const response = await fetch(url, buildConfigWithToken(authToken));
+            const config = buildConfigWithToken(authToken);
+            const response = await fetch(url, config);
             return response;
         };
 
@@ -705,12 +721,28 @@ const DatabaseAPI = {
 
     async createStockLocation(locationData) {
         console.log('📡 Creating stock location in database...');
-        const response = await this.makeRequest('/manufacturing/locations', {
-            method: 'POST',
-            body: JSON.stringify(locationData)
-        });
-        console.log('✅ Stock location created in database');
-        return response;
+        console.log('📡 Location data being sent:', locationData);
+        
+        try {
+            const response = await this.makeRequest('/manufacturing/locations', {
+                method: 'POST',
+                body: JSON.stringify(locationData),
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            console.log('✅ Stock location created in database');
+            console.log('✅ API Response:', response);
+            return response;
+        } catch (error) {
+            console.error('❌ Error in createStockLocation:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+            throw error;
+        }
     },
 
     async updateStockLocation(id, locationData) {

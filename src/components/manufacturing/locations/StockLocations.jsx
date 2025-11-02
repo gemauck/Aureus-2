@@ -136,6 +136,7 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
   };
 
   const handleAddLocation = () => {
+    console.log('🔵 handleAddLocation called');
     setFormData({
       code: '',
       name: '',
@@ -149,6 +150,7 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
     });
     setModalType('add_location');
     setShowModal(true);
+    console.log('✅ Modal opened for adding location');
   };
 
   const handleEditLocation = (location) => {
@@ -159,11 +161,18 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
   };
 
   const handleSaveLocation = async () => {
+    console.log('🔵 handleSaveLocation called');
+    console.log('🔵 formData:', formData);
+    console.log('🔵 selectedLocation:', selectedLocation);
+    
     // Validate required fields
     if (!formData.code || !formData.name) {
+      console.warn('⚠️ Validation failed - missing code or name');
       alert('Please fill in Location Code and Name');
       return;
     }
+    
+    console.log('✅ Validation passed, proceeding with save...');
 
     try {
       const locationData = {
@@ -791,8 +800,25 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
                   Cancel
                 </button>
                 <button
-                  onClick={handleSaveLocation}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  onClick={(e) => {
+                    console.log('🔴 SAVE BUTTON CLICKED!', {
+                      formData,
+                      hasCode: !!formData.code,
+                      hasName: !!formData.name,
+                      disabled: !formData.code || !formData.name,
+                      modalType
+                    });
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!formData.code || !formData.name) {
+                      console.warn('⚠️ Button clicked but form validation failed');
+                      alert('Please fill in Location Code and Name');
+                      return;
+                    }
+                    console.log('✅ Validation passed, calling handleSaveLocation...');
+                    handleSaveLocation();
+                  }}
+                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={!formData.code || !formData.name}
                 >
                   {modalType === 'add_location' ? 'Add Location' : 'Update Location'}

@@ -709,6 +709,55 @@ const JobCardFormPublic = () => {
             </select>
           </div>
 
+          {/* Other Technicians */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Other Technicians
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2 mb-2">
+              <select
+                value={technicianInput}
+                onChange={(e) => setTechnicianInput(e.target.value)}
+                className="flex-1 px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                style={{ fontSize: '16px' }} // Prevent zoom on iOS
+              >
+                <option value="">Select technician to add</option>
+                {availableTechnicians
+                  .filter(tech => !formData.otherTechnicians.includes(tech.name || tech.email))
+                  .map(tech => (
+                    <option key={tech.id} value={tech.name || tech.email}>
+                      {tech.name || tech.email}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleAddTechnician}
+                disabled={!technicianInput}
+                className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium touch-manipulation"
+              >
+                <i className="fas fa-plus mr-1"></i>Add
+              </button>
+            </div>
+            {formData.otherTechnicians.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {formData.otherTechnicians.map((technician, idx) => (
+                  <span key={idx} className="flex items-center gap-1 px-3 py-1.5 bg-blue-100 text-blue-700 rounded text-sm">
+                    {technician}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTechnician(technician)}
+                      className="hover:text-blue-900 ml-1"
+                      title="Remove"
+                    >
+                      <i className="fas fa-times text-xs"></i>
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Client - REQUIRED */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1089,6 +1138,77 @@ const JobCardFormPublic = () => {
               placeholder="Additional comments or observations"
               style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
+          </div>
+
+          {/* Photo Upload */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Photos
+            </label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 sm:p-6 text-center">
+              <input
+                type="file"
+                id="photoUpload"
+                onChange={handlePhotoUpload}
+                className="hidden"
+                accept="image/*"
+                multiple
+              />
+              <label
+                htmlFor="photoUpload"
+                className="cursor-pointer block"
+              >
+                <i className="fas fa-camera text-3xl sm:text-4xl text-gray-400 mb-2"></i>
+                <p className="text-sm sm:text-base text-gray-600">
+                  Click to upload photos or drag and drop
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Images (Max 10MB each)
+                </p>
+              </label>
+            </div>
+            {selectedPhotos.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {selectedPhotos.map((photo, idx) => (
+                  <div key={idx} className="relative group">
+                    <img
+                      src={typeof photo === 'string' ? photo : photo.url}
+                      alt={`Photo ${idx + 1}`}
+                      className="w-full h-24 sm:h-32 object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(idx)}
+                      className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center opacity-0 group-hover:opacity-100 transition touch-manipulation"
+                      title="Remove photo"
+                    >
+                      <i className="fas fa-times text-xs"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Status */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              name="status"
+              value={formData.status}
+              onChange={handleChange}
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
+            >
+              <option value="draft">Draft</option>
+              <option value="submitted">Submitted</option>
+              <option value="completed">Completed</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-2">
+              Draft: Work in progress. Submitted: Ready for review. Completed: Work finished.
+            </p>
           </div>
 
           {/* Submit Button */}
