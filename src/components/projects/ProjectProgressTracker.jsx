@@ -980,10 +980,14 @@ const ProjectProgressTracker = ({ onBack }) => {
             const cellKey = `${project.id}-${month}`;
             const isPopupOpen = hoverCommentCell === cellKey;
             
+            // Ensure workingMonths is an array and month index is valid
+            const monthIndex = Array.isArray(months) ? months.indexOf(month) : -1;
+            const isWorkingMonth = Array.isArray(workingMonths) && monthIndex >= 0 && workingMonths.includes(monthIndex) && selectedYear === currentYear;
+            
             return (
                 <td 
                 className={`px-2 py-1 text-xs border-l border-gray-100 ${
-                workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
+                isWorkingMonth
                 ? 'bg-primary-50 bg-opacity-30'
                 : ''
                 }`}
@@ -1098,13 +1102,17 @@ const ProjectProgressTracker = ({ onBack }) => {
         // Handle compliance and data as before
         const statusConfig = data ? getStatusConfig(data.status) : null;
 
+        // Ensure workingMonths is an array and month index is valid
+        const monthIndex = Array.isArray(months) ? months.indexOf(month) : -1;
+        const isWorkingMonth = Array.isArray(workingMonths) && monthIndex >= 0 && workingMonths.includes(monthIndex) && selectedYear === currentYear;
+        
         return (
             <td 
             className={`px-2 py-1 text-xs border-l border-gray-100 ${
-            workingMonths.includes(months.indexOf(month)) && selectedYear === currentYear
+            isWorkingMonth
             ? 'bg-primary-50 bg-opacity-30'
             : ''
-            } ${statusConfig ? statusConfig.cellColor : ''}`}
+            } ${statusConfig ? String(statusConfig.cellColor || '') : ''}`}
             >
                 <div className="min-w-[140px] max-w-[200px]">
                     {data ? (
@@ -1211,16 +1219,24 @@ const ProjectProgressTracker = ({ onBack }) => {
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] font-medium text-gray-600">Year:</label>
                     <select
-                        value={selectedYear}
-                        onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                        value={String(selectedYear || currentYear)}
+                        onChange={(e) => {
+                            const newYear = parseInt(e.target.value);
+                            if (!isNaN(newYear)) {
+                                setSelectedYear(newYear);
+                            }
+                        }}
                         className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white text-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
-                        {yearOptions.map(year => (
-                            <option key={year} value={year}>
-                                {year}
-                                {year === currentYear && ' (Current)'}
-                            </option>
-                        ))}
+                        {Array.isArray(yearOptions) && yearOptions.map(year => {
+                            const safeYear = typeof year === 'number' ? year : parseInt(String(year || currentYear));
+                            const isCurrent = safeYear === currentYear;
+                            return (
+                                <option key={safeYear} value={safeYear}>
+                                    {String(safeYear)}{isCurrent ? ' (Current)' : ''}
+                                </option>
+                            );
+                        })}
                     </select>
                     {selectedYear === currentYear && (
                         <button
