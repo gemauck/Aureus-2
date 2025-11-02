@@ -1,6 +1,5 @@
 // Users management API endpoint - Direct route
 import { authRequired } from './_lib/authRequired.js'
-import { optionalAuth } from './_lib/optionalAuth.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
@@ -9,19 +8,20 @@ import { withLogging } from './_lib/logger.js'
 async function handler(req, res) {
     if (req.method === 'GET') {
         try {
-            // For public job card form access, allow without auth but require admin if authenticated
-            if (req.user) {
-                // Only admins can access user list when authenticated
-                const userRole = req.user?.role?.toLowerCase();
-                if (userRole !== 'admin') {
-                    console.log('⚠️ Users endpoint: Non-admin access attempt by:', req.user.sub)
-                    return unauthorized(res, 'Admin access required to view users')
-                }
-                console.log('✅ Users endpoint: Admin access granted, fetching users...')
-            } else {
-                // Public access allowed for job card form (no auth required)
-                console.log('ℹ️ Users endpoint: Public access (no auth) - fetching users for job card form...')
+            // Check if user is authenticated (req.user is set by authRequired)
+            if (!req.user) {
+                console.error('❌ Users endpoint: req.user is missing')
+                return unauthorized(res, 'Authentication required')
             }
+            
+            // Only admins can access user list
+            const userRole = req.user?.role?.toLowerCase();
+            if (userRole !== 'admin') {
+                console.log('⚠️ Users endpoint: Non-admin access attempt by:', req.user.sub)
+                return unauthorized(res, 'Admin access required to view users')
+            }
+
+            console.log('✅ Users endpoint: Admin access granted, fetching users...')
 
             // Get all users with HR fields
             let users = []
@@ -275,14 +275,4 @@ async function handler(req, res) {
     return badRequest(res, 'Invalid method')
 }
 
-// Allow public GET access (for job card form), but require auth for POST/PUT/DELETE
-const protectedHandler = (req, res) => {
-  // For GET requests, use optional auth (allows public access)
-  if (req.method === 'GET') {
-    return withHttp(withLogging(optionalAuth(handler)))(req, res)
-  }
-  // For other methods, require authentication
-  return withHttp(withLogging(authRequired(handler)))(req, res)
-}
-
-export default protectedHandler
+export default withHttp(withLogging(authRequired(handler)))

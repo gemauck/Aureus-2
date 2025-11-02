@@ -1,5 +1,4 @@
 import { authRequired } from './_lib/authRequired.js'
-import { optionalAuth } from './_lib/optionalAuth.js'
 import { prisma } from './_lib/prisma.js'
 import { badRequest, created, ok, serverError, notFound } from './_lib/response.js'
 import { parseJsonBody } from './_lib/body.js'
@@ -331,14 +330,4 @@ async function handler(req, res) {
   }
 }
 
-// Allow public GET access (for job card form), but require auth for POST/PUT/DELETE
-const protectedHandler = (req, res) => {
-  // For GET requests, use optional auth (allows public access)
-  if (req.method === 'GET') {
-    return withHttp(withLogging(optionalAuth(handler)))(req, res)
-  }
-  // For other methods, require authentication
-  return withHttp(withLogging(authRequired(handler)))(req, res)
-}
-
-export default protectedHandler
+export default withHttp(withLogging(authRequired(handler)))
