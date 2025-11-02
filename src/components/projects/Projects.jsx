@@ -37,6 +37,7 @@ const Projects = () => {
     const [loadError, setLoadError] = useState(null);
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
+    const [waitingForTracker, setWaitingForTracker] = useState(false);
     
     // Ensure storage is available
     useEffect(() => {
@@ -718,6 +719,29 @@ const Projects = () => {
         console.log('🔍 Projects: showProgressTracker is true, checking component availability...');
         console.log('🔍 window.ProjectProgressTracker:', window.ProjectProgressTracker);
         console.log('🔍 typeof window.ProjectProgressTracker:', typeof window.ProjectProgressTracker);
+        
+        // Try to wait for component to load
+        useEffect(() => {
+            if (showProgressTracker && !window.ProjectProgressTracker && !waitingForTracker) {
+                console.warn('⚠️ Projects: ProjectProgressTracker not available yet, waiting...');
+                setWaitingForTracker(true);
+                let attempts = 0;
+                const maxAttempts = 20; // 2 seconds max
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.ProjectProgressTracker || attempts >= maxAttempts) {
+                        clearInterval(checkInterval);
+                        setWaitingForTracker(false);
+                        if (window.ProjectProgressTracker) {
+                            console.log('✅ ProjectProgressTracker became available');
+                        } else {
+                            console.error('❌ ProjectProgressTracker still not available after waiting');
+                        }
+                    }
+                }, 100);
+                return () => clearInterval(checkInterval);
+            }
+        }, [showProgressTracker, waitingForTracker]);
         
         // Ensure ProjectProgressTracker is available before rendering
         if (!window.ProjectProgressTracker) {
