@@ -5,8 +5,25 @@ const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
 const SectionCommentWidget = window.SectionCommentWidget;
 
+// Safe useAuth wrapper - always returns a consistent hook result
+const useAuthSafe = () => {
+    if (window.useAuth && typeof window.useAuth === 'function') {
+        return window.useAuth();
+    }
+    // Return a default object if useAuth is not available yet
+    return {
+        user: null,
+        logout: () => {
+            console.warn('⚠️ Projects: useAuth not available, cannot logout');
+            window.location.hash = '#/login';
+        },
+        loading: false,
+        refreshUser: async () => null
+    };
+};
+
 const Projects = () => {
-    const { logout } = window.useAuth();
+    const { logout } = useAuthSafe();
     const [projects, setProjects] = useState([]); // Projects are database-only
     const [showModal, setShowModal] = useState(false);
     const [selectedProject, setSelectedProject] = useState(null);
