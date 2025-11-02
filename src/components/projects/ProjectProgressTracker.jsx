@@ -305,9 +305,33 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const getProgressData = (project, month, field) => {
-        const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
-        const monthKey = `${String(month || '')}-${safeYear}`;
-        return project.monthlyProgress?.[monthKey]?.[field] || null;
+        try {
+            // Validate inputs
+            if (!project || !month || !field) return null;
+            if (typeof month !== 'string') return null;
+            
+            const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+            const monthKey = `${String(month || '')}-${safeYear}`;
+            
+            // Safely access nested data
+            const monthlyProgress = project.monthlyProgress;
+            if (!monthlyProgress || typeof monthlyProgress !== 'object') return null;
+            
+            const monthData = monthlyProgress[monthKey];
+            if (!monthData || typeof monthData !== 'object') return null;
+            
+            const fieldData = monthData[field];
+            // Return null if fieldData is an object (shouldn't happen, but be safe)
+            if (fieldData && typeof fieldData === 'object' && !Array.isArray(fieldData) && !(fieldData instanceof Date)) {
+                console.warn('⚠️ getProgressData: fieldData is an object, returning null', { field, month, fieldData });
+                return null;
+            }
+            
+            return fieldData || null;
+        } catch (error) {
+            console.error('❌ getProgressData error:', error);
+            return null;
+        }
     };
 
     const handleDeleteProgress = async (project, month, field) => {
