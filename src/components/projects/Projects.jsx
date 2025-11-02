@@ -715,8 +715,13 @@ const Projects = () => {
     }).sort((a, b) => a.client.localeCompare(b.client));
 
     if (showProgressTracker) {
+        console.log('🔍 Projects: showProgressTracker is true, checking component availability...');
+        console.log('🔍 window.ProjectProgressTracker:', window.ProjectProgressTracker);
+        console.log('🔍 typeof window.ProjectProgressTracker:', typeof window.ProjectProgressTracker);
+        
         // Ensure ProjectProgressTracker is available before rendering
         if (!window.ProjectProgressTracker) {
+            console.warn('⚠️ Projects: ProjectProgressTracker not available yet');
             return (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -785,10 +790,16 @@ const Projects = () => {
         
         // Validate component before rendering
         // Handle both function components and React.memo wrapped components
+        console.log('🔍 Validating ProjectProgressTracker component...');
+        console.log('🔍 ProjectProgressTracker type:', typeof ProjectProgressTracker);
+        console.log('🔍 ProjectProgressTracker value:', ProjectProgressTracker);
+        
         const isValidComponent = ProjectProgressTracker && (
             typeof ProjectProgressTracker === 'function' ||
             (typeof ProjectProgressTracker === 'object' && ProjectProgressTracker.$$typeof)
         );
+        
+        console.log('🔍 isValidComponent:', isValidComponent);
         
         if (!isValidComponent) {
             console.error('❌ ProjectProgressTracker is not a valid component:', typeof ProjectProgressTracker, ProjectProgressTracker);
@@ -825,18 +836,49 @@ const Projects = () => {
         }
         
         try {
-            // Use React.createElement to ensure proper component rendering
-            const trackerElement = React.createElement(ProjectProgressTracker, {
-                onBack: () => setShowProgressTracker(false)
-            });
+            console.log('🔍 Creating ProjectProgressTracker element...');
+            console.log('🔍 React available:', !!React);
+            console.log('🔍 React.createElement available:', typeof React.createElement);
             
-            return React.createElement(
-                ErrorBoundary,
-                null,
-                trackerElement
-            );
+            // Create the props object
+            const trackerProps = {
+                onBack: () => {
+                    console.log('🔍 ProjectProgressTracker onBack called');
+                    setShowProgressTracker(false);
+                }
+            };
+            
+            console.log('🔍 Tracker props:', trackerProps);
+            
+            // Use React.createElement to ensure proper component rendering
+            let trackerElement;
+            try {
+                trackerElement = React.createElement(ProjectProgressTracker, trackerProps);
+                console.log('✅ ProjectProgressTracker element created:', trackerElement);
+            } catch (createError) {
+                console.error('❌ Error creating ProjectProgressTracker element:', createError);
+                throw createError;
+            }
+            
+            // Wrap in ErrorBoundary
+            let wrappedElement;
+            try {
+                wrappedElement = React.createElement(
+                    ErrorBoundary,
+                    null,
+                    trackerElement
+                );
+                console.log('✅ Wrapped in ErrorBoundary:', wrappedElement);
+            } catch (wrapError) {
+                console.error('❌ Error wrapping in ErrorBoundary:', wrapError);
+                // If ErrorBoundary fails, just return the tracker element directly
+                return trackerElement;
+            }
+            
+            return wrappedElement;
         } catch (renderError) {
             console.error('❌ Error rendering ProjectProgressTracker:', renderError);
+            console.error('❌ Error stack:', renderError.stack);
             return (
                 <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -1123,7 +1165,15 @@ const Projects = () => {
                 </div>
                 <div className="flex gap-2">
                     <button 
-                        onClick={() => setShowProgressTracker(true)}
+                        onClick={() => {
+                            console.log('🔍 Progress Tracker button clicked');
+                            console.log('🔍 window.ProjectProgressTracker before setShowProgressTracker:', window.ProjectProgressTracker);
+                            setShowProgressTracker(true);
+                            // Also log after state update
+                            setTimeout(() => {
+                                console.log('🔍 window.ProjectProgressTracker after setShowProgressTracker:', window.ProjectProgressTracker);
+                            }, 100);
+                        }}
                         className="px-3 py-1.5 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors flex items-center text-sm font-medium"
                     >
                         <i className="fas fa-chart-line mr-1.5 text-xs"></i>
