@@ -45,6 +45,7 @@ const Manufacturing = () => {
   const [showCategoryInput, setShowCategoryInput] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [clients, setClients] = useState([]);
+  const [users, setUsers] = useState([]);
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -145,7 +146,7 @@ const Manufacturing = () => {
           );
         }
 
-        // Work Orders
+        // Production Orders
         if (typeof window.DatabaseAPI.getProductionOrders === 'function') {
           apiCalls.push(
             window.DatabaseAPI.getProductionOrders()
@@ -218,7 +219,7 @@ const Manufacturing = () => {
           }
         }
 
-        // Clients (for work order allocation)
+        // Clients (for production order allocation)
         if (typeof window.DatabaseAPI.getClients === 'function') {
           apiCalls.push(
             window.DatabaseAPI.getClients()
@@ -232,6 +233,23 @@ const Manufacturing = () => {
               .catch(error => {
                 console.error('Error loading clients:', error);
                 return { type: 'clients', error };
+              })
+          );
+        }
+
+        // Users (for job cards - technicians)
+        if (typeof window.DatabaseAPI.getUsers === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI.getUsers()
+              .then(usersResponse => {
+                const usersData = usersResponse?.data?.users || usersResponse?.data || [];
+                setUsers(Array.isArray(usersData) ? usersData : []);
+                console.log('✅ Manufacturing: Users loaded:', Array.isArray(usersData) ? usersData.length : 0);
+                return { type: 'users', data: usersData };
+              })
+              .catch(error => {
+                console.error('Error loading users:', error);
+                return { type: 'users', error };
               })
           );
         }
@@ -295,7 +313,7 @@ const Manufacturing = () => {
         );
       }
 
-      // Work Orders
+      // Production Orders
       if (window.DatabaseAPI?.getProductionOrders) {
         apiCalls.push(
           window.DatabaseAPI.getProductionOrders()
@@ -459,7 +477,7 @@ const Manufacturing = () => {
           <div className="bg-white p-3 rounded-lg border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-gray-500">Active Work Orders</p>
+                <p className="text-xs text-gray-500">Active Production Orders</p>
                 <p className="text-lg font-semibold text-gray-900 mt-1">{prodStats.activeOrders}</p>
                 <p className="text-xs text-gray-500 mt-1">{prodStats.pendingUnits} units pending</p>
               </div>
@@ -520,12 +538,12 @@ const Manufacturing = () => {
             </div>
           </div>
 
-          {/* Active Work Orders */}
+          {/* Active Production Orders */}
           <div className="bg-white rounded-lg border border-gray-200">
             <div className="p-3 border-b border-gray-200">
               <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
                 <i className="fas fa-industry text-blue-600"></i>
-                Active Work Orders
+                Active Production Orders
               </h3>
             </div>
             <div className="p-3">
@@ -753,7 +771,7 @@ const Manufacturing = () => {
                       {/* Stock Info */}
                       <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-gray-200">
                         <div className="text-center">
-                          <div className="text-lg font-bold text-gray-900">{item.quantity || 0}</div>
+                          <div className={`text-lg font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
                           <div className="text-xs text-gray-500">Total {item.unit}</div>
                         </div>
                         <div className="text-center">
@@ -761,7 +779,7 @@ const Manufacturing = () => {
                           <div className="text-xs text-gray-500">Allocated</div>
                         </div>
                         <div className="text-center">
-                          <div className="text-lg font-bold text-green-700">{availableQty}</div>
+                          <div className={`text-lg font-bold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>{availableQty}</div>
                           <div className="text-xs text-gray-500">Available</div>
                         </div>
                       </div>
@@ -855,8 +873,10 @@ const Manufacturing = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {filteredInventory.map(item => (
-                  <tr key={item.id} className="hover:bg-gray-50">
+                {filteredInventory.map(item => {
+                  const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+                  return (
+                    <tr key={item.id} className="hover:bg-gray-50">
                     <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.sku}</td>
                     <td className="px-3 py-2">
                       {item.thumbnail ? (
@@ -922,7 +942,7 @@ const Manufacturing = () => {
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category.replace('_', ' ')}</td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.type.replace('_', ' ')}</td>
                     <td className="px-3 py-2 text-right">
-                      <div className="text-sm font-semibold text-gray-900">{item.quantity || 0}</div>
+                      <div className={`text-sm font-semibold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>{item.quantity || 0}</div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -930,8 +950,8 @@ const Manufacturing = () => {
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <div className="text-sm font-semibold text-green-700">
-                        {(item.quantity || 0) - (item.allocatedQuantity || 0)}
+                      <div className={`text-sm font-semibold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                        {availableQty}
                       </div>
                       <div className="text-xs text-gray-500">{item.unit}</div>
                     </td>
@@ -975,7 +995,8 @@ const Manufacturing = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1106,7 +1127,7 @@ const Manufacturing = () => {
         {/* Controls */}
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-gray-900">Work Orders</h3>
+            <h3 className="text-sm font-semibold text-gray-900">Production Orders</h3>
             <button
               onClick={() => { 
                 const nextWO = getNextWorkOrderNumber();
@@ -1124,7 +1145,7 @@ const Manufacturing = () => {
               className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
               <i className="fas fa-plus text-xs"></i>
-              New Work Order
+              New Production Order
             </button>
           </div>
         </div>
@@ -1134,7 +1155,7 @@ const Manufacturing = () => {
           {productionOrders.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
               <i className="fas fa-industry text-4xl mb-4 text-gray-300"></i>
-              <p className="text-sm">No work orders found</p>
+              <p className="text-sm">No production orders found</p>
             </div>
           ) : (
             productionOrders.map(order => {
@@ -1296,7 +1317,7 @@ const Manufacturing = () => {
                               setShowModal(true); 
                             }}
                             className="text-green-600 hover:text-green-800 text-sm font-medium"
-                            title="Edit Work Order"
+                            title="Edit Production Order"
                           >
                             <i className="fas fa-edit"></i>
                           </button>
@@ -1368,7 +1389,7 @@ const Manufacturing = () => {
     return `PSKU${String(nextNumber).padStart(3, '0')}`;
   };
 
-  // Generate next Work Order number
+  // Generate next Production Order number
   const getNextWorkOrderNumber = () => {
     if (!productionOrders || productionOrders.length === 0) {
       return 'WO0001';
@@ -1388,7 +1409,23 @@ const Manufacturing = () => {
     return `WO${String(nextNumber).padStart(4, '0')}`;
   };
 
-  const openAddBomModal = () => {
+  const openAddBomModal = async () => {
+    // Refresh inventory to ensure we have latest data
+    try {
+      if (window.DatabaseAPI?.getInventory) {
+        const response = await window.DatabaseAPI.getInventory();
+        if (response?.data?.inventory) {
+          const updatedInventory = response.data.inventory.map(item => ({ ...item, id: item.id }));
+          setInventory(updatedInventory);
+          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          console.log('✅ Refreshed inventory for BOM creation:', updatedInventory.length, 'items');
+        }
+      }
+    } catch (error) {
+      console.warn('⚠️ Could not refresh inventory:', error.message);
+      // Continue anyway - use cached inventory
+    }
+    
     const nextPSKU = getNextPSKU();
     setFormData({
       inventoryItemId: '', // REQUIRED - must be selected
@@ -1617,15 +1654,15 @@ const Manufacturing = () => {
   };
 
   const handleDeleteProductionOrder = async (orderId) => {
-    if (confirm('Are you sure you want to delete this work order? This action cannot be undone.')) {
+    if (confirm('Are you sure you want to delete this production order? This action cannot be undone.')) {
       try {
         await safeCallAPI('deleteProductionOrder', orderId);
         const updatedOrders = productionOrders.filter(order => order.id !== orderId);
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
       } catch (error) {
-        console.error('Error deleting work order:', error);
-        alert('Failed to delete work order. Please try again.');
+        console.error('Error deleting production order:', error);
+        alert('Failed to delete production order. Please try again.');
       }
     }
   };
@@ -1957,7 +1994,7 @@ const Manufacturing = () => {
 
   const handleSaveProductionOrder = async () => {
     try {
-      console.log('🔍 Starting work order save...', { formData });
+      console.log('🔍 Starting production order save...', { formData });
       const selectedBom = boms.find(b => b.id === formData.bomId);
       if (!selectedBom) {
         alert('Please select a BOM/Product');
@@ -1978,7 +2015,7 @@ const Manufacturing = () => {
       }
 
       const totalCost = selectedBom.totalCost * quantity;
-      // Ensure work order number is set
+      // Ensure production order number is set
       if (!formData.workOrderNumber) {
         setFormData({ ...formData, workOrderNumber: getNextWorkOrderNumber() });
       }
@@ -2007,26 +2044,26 @@ const Manufacturing = () => {
         createdBy: user?.name || 'System'
       };
 
-      console.log('📤 Sending work order data:', orderData);
+      console.log('📤 Sending production order data:', orderData);
       const response = await safeCallAPI('createProductionOrder', orderData);
       console.log('📥 API Response:', response);
       
       if (response?.data?.order) {
-        console.log('✅ Work order created successfully:', response.data.order);
+        console.log('✅ Production order created successfully:', response.data.order);
         const updatedOrders = [...productionOrders, { ...response.data.order, id: response.data.order.id }];
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
-        alert('Work order created successfully!');
+        alert('Production order created successfully!');
       } else {
         console.warn('⚠️ No order in response:', response);
-        alert('Work order created but response data incomplete. Please refresh to verify.');
+        alert('Production order created but response data incomplete. Please refresh to verify.');
       }
 
       setShowModal(false);
       setFormData({});
     } catch (error) {
-      console.error('❌ Error saving work order:', error);
-      alert(`Failed to save work order: ${error.message}`);
+      console.error('❌ Error saving production order:', error);
+      alert(`Failed to save production order: ${error.message}`);
     }
   };
 
@@ -2053,7 +2090,7 @@ const Manufacturing = () => {
         completedDate: newStatus === 'completed' ? new Date().toISOString().split('T')[0] : (selectedItem.completedDate || null)
       };
 
-      console.log('📤 Updating work order:', {
+      console.log('📤 Updating production order:', {
         id: selectedItem.id,
         oldStatus: oldStatus,
         newStatus: newStatus,
@@ -2071,8 +2108,8 @@ const Manufacturing = () => {
         setProductionOrders(updatedOrders);
         localStorage.setItem('manufacturing_production_orders', JSON.stringify(updatedOrders));
         
-        // Always refresh inventory after work order update to show latest stock levels
-        console.log('🔄 Refreshing inventory after work order update...');
+        // Always refresh inventory after production order update to show latest stock levels
+        console.log('🔄 Refreshing inventory after production order update...');
         try {
           const inventoryResponse = await safeCallAPI('getInventory');
           if (inventoryResponse?.data?.inventory) {
@@ -2084,15 +2121,23 @@ const Manufacturing = () => {
           console.error('⚠️ Failed to refresh inventory:', invError);
         }
         
-        alert('Work order updated successfully!');
+        // Show warning if stock was insufficient
+        if (response?.data?.stockWarnings && response.data.stockWarnings.length > 0) {
+          const warnings = response.data.stockWarnings.map(w => 
+            `${w.name}: Available ${w.available}, Required ${w.required} (Shortfall: ${w.shortfall})`
+          ).join('\n');
+          alert(`⚠️ Production order updated successfully!\n\nSome items are now in negative stock:\n${warnings}`);
+        } else {
+          alert('Production order updated successfully!');
+        }
       }
 
       setShowModal(false);
       setSelectedItem(null);
       setFormData({});
     } catch (error) {
-      console.error('Error updating work order:', error);
-      alert('Failed to update work order. Please try again.');
+      console.error('Error updating production order:', error);
+      alert('Failed to update production order. Please try again.');
     }
   };
 
@@ -2605,38 +2650,115 @@ const Manufacturing = () => {
                       Every BOM must be linked to a finished product inventory item. If you haven't created the finished product yet, 
                       go to the Inventory tab and create it first (set type to "finished_good").
                     </p>
+                    {/* Debug info */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Debug: {inventory.length} inventory items loaded
+                      </p>
+                    )}
                   </div>
                 </div>
-                <select
-                  value={formData.inventoryItemId || ''}
-                  onChange={(e) => {
-                    const selectedItem = inventory.find(item => item.id === e.target.value);
-                    if (selectedItem) {
-                      setFormData({
-                        ...formData,
-                        inventoryItemId: selectedItem.id,
-                        productSku: selectedItem.sku,
-                        productName: selectedItem.name
-                      });
-                    } else {
-                      setFormData({ ...formData, inventoryItemId: '' });
-                    }
-                  }}
-                  className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  required
-                >
-                  <option value="">-- Select finished product inventory item --</option>
-                  {inventory.filter(item => item.type === 'finished_good' || item.category === 'finished_goods').map(item => (
-                    <option key={item.id} value={item.id}>
-                      {item.sku} - {item.name} {item.type !== 'finished_good' ? '(⚠️ Type: ' + item.type + ')' : ''}
-                    </option>
-                  ))}
-                </select>
-                {!formData.inventoryItemId && (
-                  <div className="mt-2 text-xs text-red-600 flex items-center gap-1">
-                    <i className="fas fa-exclamation-circle"></i>
-                    <span>You must select a finished product inventory item before creating the BOM</span>
+                {inventory.length === 0 ? (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800 mb-2">
+                      <i className="fas fa-exclamation-triangle mr-2"></i>
+                      No inventory items found. Please create inventory items first.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowModal(false);
+                        setActiveTab('inventory');
+                        setTimeout(() => openAddItemModal(), 100);
+                      }}
+                      className="text-sm text-yellow-900 underline hover:no-underline"
+                    >
+                      Go to Inventory tab to create items →
+                    </button>
                   </div>
+                ) : (
+                  <>
+                    <select
+                      value={formData.inventoryItemId || ''}
+                      onChange={(e) => {
+                        const selectedItem = inventory.find(item => item.id === e.target.value);
+                        if (selectedItem) {
+                          setFormData({
+                            ...formData,
+                            inventoryItemId: selectedItem.id,
+                            productSku: selectedItem.sku,
+                            productName: selectedItem.name
+                          });
+                        } else {
+                          setFormData({ ...formData, inventoryItemId: '' });
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      required
+                    >
+                      <option value="">-- Select finished product inventory item --</option>
+                      {(() => {
+                        // Debug: Log inventory state
+                        console.log('🔍 BOM Form - Inventory check:', {
+                          totalInventory: inventory.length,
+                          items: inventory.map(i => ({ id: i.id, sku: i.sku, name: i.name, type: i.type, category: i.category }))
+                        });
+                        
+                        // More flexible filtering - show finished goods first, then all items as fallback
+                        const finishedGoods = inventory.filter(item => {
+                          const typeMatch = item.type === 'finished_good' || item.type === 'finished_goods';
+                          const categoryMatch = item.category === 'finished_goods' || item.category === 'finished_good';
+                          return typeMatch || categoryMatch;
+                        });
+                        
+                        // If no finished goods found, show ALL inventory items (user can link any item)
+                        const itemsToShow = finishedGoods.length > 0 ? finishedGoods : inventory;
+                        
+                        if (finishedGoods.length === 0 && inventory.length > 0) {
+                          console.warn('⚠️ No items with type="finished_good" or category="finished_goods" found. Showing all items as fallback.');
+                        }
+                        
+                        if (itemsToShow.length === 0) {
+                          return (
+                            <option value="" disabled>No inventory items available</option>
+                          );
+                        }
+                        
+                        return itemsToShow.map(item => {
+                          const isFinishedGood = finishedGoods.find(fg => fg.id === item.id);
+                          return (
+                            <option key={item.id} value={item.id}>
+                              {item.sku} - {item.name}
+                              {!isFinishedGood && finishedGoods.length > 0 
+                                ? ' (⚠️ Set type to "Finished Good" in Inventory)' 
+                                : finishedGoods.length === 0 
+                                  ? ' (✅ All items shown - update type in Inventory to "Finished Good")'
+                                  : ''}
+                            </option>
+                          );
+                        });
+                      })()}
+                    </select>
+                    {inventory.filter(item => item.type === 'finished_good' || item.category === 'finished_goods').length === 0 && inventory.length > 0 && (
+                      <div className="mt-2 text-xs text-yellow-600 flex items-start gap-1">
+                        <i className="fas fa-exclamation-triangle mt-0.5"></i>
+                        <div>
+                          <p className="font-medium">No finished goods found</p>
+                          <p className="mt-1">Showing all items as fallback. To mark an item as finished product:</p>
+                          <p className="mt-1">1. Go to Inventory tab</p>
+                          <p className="ml-4">2. Edit the item</p>
+                          <p className="ml-4">3. Set Type to "Finished Good"</p>
+                          <p className="ml-4">4. Set Category to "Finished Goods"</p>
+                        </div>
+                      </div>
+                    )}
+                    {!formData.inventoryItemId && (
+                      <div className="mt-2 text-xs text-red-600 flex items-center gap-1">
+                        <i className="fas fa-exclamation-circle"></i>
+                        <span>You must select a finished product inventory item before creating the BOM</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -3064,7 +3186,7 @@ const Manufacturing = () => {
       const totalCost = selectedBom ? selectedBom.totalCost * (formData.quantity || 0) : 0;
       
       // Debug form state
-      console.log('🔍 Rendering work order modal:', {
+      console.log('🔍 Rendering production order modal:', {
         bomId: formData.bomId,
         quantity: formData.quantity,
         startDate: formData.startDate,
@@ -4304,6 +4426,7 @@ const Manufacturing = () => {
             { id: 'production', label: 'Work Orders', icon: 'fa-industry' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
+            { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
             { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
           ].map(tab => (
             <button
@@ -4330,6 +4453,12 @@ const Manufacturing = () => {
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'movements' && <MovementsView />}
         {activeTab === 'suppliers' && <SuppliersView />}
+        {activeTab === 'jobcards' && window.JobCards && (
+          <window.JobCards 
+            clients={clients}
+            users={users}
+          />
+        )}
         {activeTab === 'locations' && window.StockLocations && (
           <window.StockLocations 
             inventory={inventory}

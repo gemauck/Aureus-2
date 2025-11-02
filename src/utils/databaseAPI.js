@@ -900,6 +900,60 @@ const DatabaseAPI = {
         return response;
     },
 
+    // JOB CARDS OPERATIONS
+    async getJobCards() {
+        console.log('📡 Fetching job cards from database...');
+        const raw = await this.makeRequest('/jobcards');
+        const normalized = {
+            data: {
+                jobCards: Array.isArray(raw?.data?.jobCards)
+                    ? raw.data.jobCards
+                    : Array.isArray(raw?.jobCards)
+                        ? raw.jobCards
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Job cards fetched from database:', normalized.data.jobCards.length);
+        return normalized;
+    },
+
+    async getJobCard(id) {
+        console.log(`📡 Fetching job card ${id} from database...`);
+        const response = await this.makeRequest(`/jobcards/${id}`);
+        return response;
+    },
+
+    async createJobCard(jobCardData) {
+        console.log('📡 Creating job card in database...');
+        const response = await this.makeRequest('/jobcards', {
+            method: 'POST',
+            body: JSON.stringify(jobCardData)
+        });
+        console.log('✅ Job card created in database');
+        return response;
+    },
+
+    async updateJobCard(id, jobCardData) {
+        console.log(`📡 Updating job card ${id} in database...`);
+        const response = await this.makeRequest(`/jobcards/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(jobCardData)
+        });
+        console.log('✅ Job card updated in database');
+        return response;
+    },
+
+    async deleteJobCard(id) {
+        console.log(`📡 Deleting job card ${id} from database...`);
+        const response = await this.makeRequest(`/jobcards/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Job card deleted from database');
+        return response;
+    },
+
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');

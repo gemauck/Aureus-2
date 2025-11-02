@@ -1308,6 +1308,30 @@ async function handler(req, res) {
             return badRequest(res, 'Order has no BOM - cannot deduct stock')
           }
           
+          // Pre-check stock availability to provide warnings
+          const bom = await prisma.bOM.findUnique({ where: { id: existingOrder.bomId } })
+          if (!bom) {
+            return badRequest(res, 'BOM not found')
+          }
+          
+          const components = parseJson(bom.components, [])
+          const stockWarnings = []
+          
+          for (const component of components.filter(c => c.sku && c.quantity)) {
+            const requiredQty = parseFloat(component.quantity) * existingOrder.quantity
+            const inventoryItem = await prisma.inventoryItem.findFirst({ where: { sku: component.sku } })
+            
+            if (inventoryItem && inventoryItem.quantity < requiredQty) {
+              stockWarnings.push({
+                sku: component.sku,
+                name: component.name || component.sku,
+                available: inventoryItem.quantity,
+                required: requiredQty,
+                shortfall: requiredQty - inventoryItem.quantity
+              })
+            }
+          }
+          
           await prisma.$transaction(async (tx) => {
             // Re-fetch order within transaction for consistency
             const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
@@ -1315,14 +1339,13 @@ async function handler(req, res) {
               throw new Error(`Order ${id} not found or already processed (status: ${orderInTx?.status || 'unknown'})`)
             }
             
-            console.log(`📉 Looking up BOM: ${orderInTx.bomId}`)
-            const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
-            if (!bom) {
+            // Re-fetch BOM within transaction
+            const bomInTx = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+            if (!bomInTx) {
               throw new Error(`BOM not found: ${orderInTx.bomId}`)
             }
             
-            console.log(`📉 BOM found: Yes`)
-            const components = parseJson(bom.components, [])
+            const components = parseJson(bomInTx.components, [])
             console.log(`📉 BOM has ${components.length} components to process`)
             
             if (components.length === 0) {
@@ -1361,15 +1384,12 @@ async function handler(req, res) {
                   
                   console.log(`📉 Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                   
-                  // Verify sufficient stock (check total quantity, not just allocation)
-                  // This handles both:
-                  // 1. New orders with proper allocation (allocatedQty >= requiredQty)
-                  // 2. Old orders created before allocation tracking (allocatedQty = 0, but quantity >= requiredQty)
+                  // Check for insufficient stock and warn (but allow negative stock)
                   const allocatedQty = inventoryItem.allocatedQuantity || 0
                   const totalQty = inventoryItem.quantity || 0
                   
                   if (totalQty < requiredQty) {
-                    throw new Error(`Insufficient stock for ${component.name || component.sku}. Available: ${totalQty}, Required: ${requiredQty}`)
+                    console.log(`⚠️ WARNING: Insufficient stock for ${component.name || component.sku}. Available: ${totalQty}, Required: ${requiredQty}. Allowing negative stock.`)
                   }
                   
                   // Warn if allocation doesn't match (for orders created before allocation tracking)
@@ -1377,9 +1397,8 @@ async function handler(req, res) {
                     console.log(`⚠️ Allocation mismatch for ${component.sku}: allocated=${allocatedQty}, required=${requiredQty}. Proceeding with deduction from total stock.`)
                   }
                   
-                  // Use atomic update with optimistic locking (decrement operations)
-                  // Handle both cases: allocated stock or unallocated stock (for legacy orders)
-                  // For legacy orders (allocatedQty = 0), we can still deduct from total quantity
+                  // Always allow deduction (even if it results in negative stock)
+                  // Remove quantity check from where clause to allow negative stock
                   const updateData = {
                     quantity: { decrement: requiredQty }
                   }
@@ -1389,21 +1408,9 @@ async function handler(req, res) {
                     updateData.allocatedQuantity = { decrement: requiredQty }
                   }
                   
-                  // Build where clause: must have enough quantity, and either enough allocation OR no allocation (legacy)
-                  const whereClause = {
-                    id: inventoryItem.id,
-                    quantity: { gte: requiredQty }
-                  }
-                  
-                  // If there's allocation, require it to be sufficient. If no allocation (legacy), allow deduction
-                  if (allocatedQty > 0) {
-                    whereClause.allocatedQuantity = { gte: requiredQty }
-                  } else {
-                    whereClause.allocatedQuantity = 0
-                  }
-                  
+                  // Always update (no where clause restrictions to allow negative stock)
                   const result = await tx.inventoryItem.updateMany({
-                    where: whereClause,
+                    where: { id: inventoryItem.id },
                     data: updateData
                   })
                   
@@ -1413,19 +1420,20 @@ async function handler(req, res) {
                     throw new Error(`Cannot deduct ${requiredQty} of ${component.sku}. Current qty: ${current?.quantity || 0}, allocated: ${current?.allocatedQuantity || 0}`)
                   }
                   
-                  // Update status based on new available quantity
+                  // Update status based on new available quantity (allow negative stock)
                   const updated = await tx.inventoryItem.findFirst({ where: { sku: component.sku } })
                   if (updated) {
                     const newQty = updated.quantity
-                    const newAllocatedQty = updated.allocatedQuantity
+                    const newAllocatedQty = updated.allocatedQuantity || 0
                     const availableQty = newQty - newAllocatedQty
                     const reorderPoint = updated.reorderPoint || 0
-                    const status = availableQty > reorderPoint ? 'in_stock' : (availableQty > 0 ? 'low_stock' : 'out_of_stock')
+                    // Allow negative stock - show negative quantities
+                    const status = newQty > reorderPoint ? 'in_stock' : (newQty > 0 ? 'low_stock' : 'out_of_stock')
                     
                     await tx.inventoryItem.update({
                       where: { id: updated.id },
                       data: {
-                        totalValue: newQty * (updated.unitCost || 0),
+                        totalValue: Math.max(0, newQty * (updated.unitCost || 0)), // Don't allow negative total value
                         status: status
                       }
                     })
@@ -1665,7 +1673,9 @@ async function handler(req, res) {
         }
         
         console.log('✅ Updated production order:', id)
-        return ok(res, { 
+        
+        // Return order with warnings if there were stock issues
+        const responseData = {
           order: {
             ...order,
             startDate: formatDate(order.startDate),
@@ -1674,7 +1684,15 @@ async function handler(req, res) {
             createdAt: formatDate(order.createdAt),
             updatedAt: formatDate(order.updatedAt)
           }
-        })
+        }
+        
+        // Add stock warnings if they exist
+        if (stockWarnings && stockWarnings.length > 0) {
+          responseData.stockWarnings = stockWarnings
+          console.log('⚠️ Returning stock warnings:', stockWarnings)
+        }
+        
+        return ok(res, responseData)
       } catch (error) {
         console.error('❌ Failed to update production order:', error)
         if (error.code === 'P2025') {

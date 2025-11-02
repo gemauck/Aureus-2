@@ -61,6 +61,8 @@
         './src/components/users/Users.jsx',
         './src/components/users/UserManagement.jsx',
         
+        // Manufacturing
+        './src/components/manufacturing/JobCards.jsx',
         // Manufacturing - MOVED to index.html for early loading (main menu item)
         // './src/components/manufacturing/locations/StockLocations.jsx',
         // './src/components/manufacturing/StockTransactions.jsx',

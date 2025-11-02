@@ -538,11 +538,20 @@
         // Wait for Clients to load before checking (deferred check)
         setTimeout(() => {
             const clientsKeys = Object.keys(window).filter(k => k.startsWith('Clients'));
-            console.log('🔍 Available Clients components:', clientsKeys);
-            if (!window.Clients) {
-                console.warn('⚠️ window.Clients not yet loaded (will be available after lazy load)');
-            } else {
+            if (window.Clients) {
                 console.log('✅ Using window.Clients (Pipeline fixes enabled)');
+            } else {
+                // Only log debug info, not warning (components may still be loading)
+                const clientsScripts = Array.from(document.querySelectorAll('script[src*="Clients"]'));
+                const loading = clientsScripts.some(s => !s.complete);
+                if (loading) {
+                    // Still loading, check again later
+                    setTimeout(() => {
+                        if (window.Clients) {
+                            console.log('✅ window.Clients loaded after delay');
+                        }
+                    }, 2000);
+                }
             }
         }, 3000); // Check after lazy loading has started
         // Use the main Projects component (has latest fixes) with fallback
@@ -555,22 +564,42 @@
         // Ensure Manufacturing is available - check after lazy loading
         setTimeout(() => {
             if (!window.Manufacturing) {
-                console.warn('⚠️ window.Manufacturing not yet loaded after 3 seconds');
-                console.warn('⚠️ Checking lazy-load status...');
-                // Try to check if the script is still loading
+                // Check if scripts are still loading (not an error yet)
                 const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
-                console.warn('⚠️ Manufacturing scripts found:', scripts.length);
+                const stillLoading = scripts.some(s => !s.complete || s.readyState === 'loading');
+                if (stillLoading) {
+                    // Still loading, check again later
+                    setTimeout(() => {
+                        if (window.Manufacturing) {
+                            console.log('✅ Manufacturing component loaded after delay');
+                        } else {
+                            console.warn('⚠️ Manufacturing not loaded after 5 seconds - check for errors');
+                        }
+                    }, 2000);
+                } else {
+                    // Scripts finished but component not registered - might be an error
+                    console.warn('⚠️ Manufacturing scripts loaded but component not registered - check for JS errors');
+                }
             } else {
                 console.log('✅ Manufacturing component available:', typeof window.Manufacturing);
             }
         }, 3000); // Check after lazy loading has started
         
-        // Also check after a longer delay
+        // Only show error after a longer delay if still not loaded
         setTimeout(() => {
             if (!window.Manufacturing) {
-                console.error('❌ window.Manufacturing STILL not loaded after 10 seconds!');
-                console.error('❌ This suggests the Manufacturing.jsx file failed to load or has a syntax error.');
-                console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+                const scripts = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                const errorInScript = scripts.some(s => {
+                    try {
+                        return s.onerror !== null;
+                    } catch (e) {
+                        return false;
+                    }
+                });
+                if (errorInScript || scripts.length === 0) {
+                    console.error('❌ Manufacturing component failed to load after 10 seconds');
+                    console.error('❌ Check browser console for JavaScript errors in Manufacturing.jsx');
+                }
             }
         }, 10000);
         // Late bind Clients if it registers after this script
@@ -622,14 +651,9 @@
                 } catch (error) {
                     console.error('❌ Mount error:', error);
                 }
-            } else if (!window.__appMounted) {
-                console.warn('⚠️ App not mounted after 3s. Missing:', {
-                    React: !window.React,
-                    ReactDOM: !window.ReactDOM,
-                    App: !window.App,
-                    mounted: window.__appMounted
-                });
             }
+            // Note: fast-loader tries for 15 seconds, so don't warn here
+            // If fast-loader fails, it will show its own error message
         }, 3000);
     </script>
     
