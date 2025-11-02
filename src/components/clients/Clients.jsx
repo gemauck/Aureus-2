@@ -2365,7 +2365,7 @@ const Clients = React.memo(() => {
             </div>
             {/* Pagination Controls */}
             {sortedClients.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {clientsStartIndex + 1} to {Math.min(clientsEndIndex, sortedClients.length)} of {sortedClients.length} clients
                     </div>
@@ -2517,7 +2517,7 @@ const Clients = React.memo(() => {
             </div>
             {/* Pagination Controls */}
             {sortedLeads.length > 0 && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t px-6 py-4 flex items-center justify-between pr-32`}>
                     <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         Showing {leadsStartIndex + 1} to {Math.min(leadsEndIndex, sortedLeads.length)} of {sortedLeads.length} leads
                     </div>

@@ -399,7 +399,7 @@ const AuditTrail = () => {
 
                 {/* Pagination */}
                 {totalPages > 1 && (
-                    <div className="bg-gray-50 px-3 py-2 border-t border-gray-200 flex items-center justify-between">
+                    <div className="bg-gray-50 px-3 py-2 border-t border-gray-200 flex items-center justify-between pr-32">
                         <div className="text-xs text-gray-600">
                             Showing {indexOfFirstLog + 1} to {Math.min(indexOfLastLog, filteredLogs.length)} of {filteredLogs.length} logs
                         </div>
