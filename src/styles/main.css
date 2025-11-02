@@ -154,6 +154,25 @@ body {
     display: none;
 }
 
+/* Mobile-friendly horizontal scrolling - show scrollbar on mobile */
+@media (max-width: 1024px) {
+    .scrollbar-hide {
+        -ms-overflow-style: auto;
+        scrollbar-width: thin;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+        display: block;
+        height: 8px;
+    }
+    .scrollbar-hide::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 4px;
+    }
+    .scrollbar-hide::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05);
+    }
+}
+
 /* Mobile-friendly touch targets */
 @media (max-width: 640px) {
     button, input, select, textarea {
