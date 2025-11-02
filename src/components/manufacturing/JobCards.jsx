@@ -31,6 +31,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     kmReadingAfter: '',
     reasonForVisit: '',
     diagnosis: '',
+    actionsTaken: '',
+    stockUsed: [],
+    materialsBought: [],
     otherComments: '',
     photos: [],
     status: 'draft'
@@ -39,6 +42,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [selectedPhotos, setSelectedPhotos] = useState([]);
   const [availableSites, setAvailableSites] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [inventory, setInventory] = useState([]);
+  const [stockLocations, setStockLocations] = useState([]);
+  const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
+  const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
 
   // Monitor online/offline status
   useEffect(() => {
@@ -76,18 +83,66 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       if (clients.length === 0 && window.DatabaseAPI?.getClients) {
         try {
           const response = await window.DatabaseAPI.getClients();
-          const clients = response?.data?.clients || response?.data || [];
-          const activeClients = Array.isArray(clients) ? clients.filter(c => c.status === 'active' && c.type === 'client') : [];
+          const allClients = response?.data?.clients || response?.data || [];
+          // Case-insensitive status check - accept 'active', 'Active', etc.
+          // Also accept if status is missing (assume active) or if type is missing (assume client)
+          const activeClients = Array.isArray(allClients) ? allClients.filter(c => {
+            const status = (c.status || '').toLowerCase();
+            const type = (c.type || 'client').toLowerCase();
+            // Accept active status or no status (default to active)
+            // Accept client type or no type (default to client)
+            return (status === 'active' || status === '' || !c.status) && 
+                   (type === 'client' || !c.type);
+          }) : [];
           setClients(activeClients);
+          console.log('✅ JobCards: Loaded clients:', activeClients.length, activeClients.map(c => c.name).join(', '));
         } catch (error) {
           console.warn('Failed to load clients, using localStorage:', error);
           const cached = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
-          const active = cached.filter(c => c.status === 'active' && c.type === 'client');
+          const active = cached.filter(c => {
+            const status = (c.status || '').toLowerCase();
+            const type = (c.type || 'client').toLowerCase();
+            return (status === 'active' || status === '' || !c.status) && 
+                   (type === 'client' || !c.type);
+          });
           if (active.length > 0) setClients(active);
         }
+      } else if (clientsProp && clientsProp.length > 0) {
+        // Use provided clients but ensure we're using all of them
+        console.log('✅ JobCards: Using provided clients:', clientsProp.length, clientsProp.map(c => c.name).join(', '));
+        setClients(clientsProp);
       }
     };
     loadClients();
+  }, [clientsProp]);
+
+  // Load inventory and stock locations
+  useEffect(() => {
+    const loadStockData = async () => {
+      try {
+        // Load inventory
+        if (window.DatabaseAPI?.getInventory) {
+          const invResponse = await window.DatabaseAPI.getInventory();
+          const invData = invResponse?.data?.inventory || invResponse?.data || [];
+          setInventory(Array.isArray(invData) ? invData : []);
+        }
+        
+        // Load stock locations from localStorage (they're managed in StockLocations component)
+        const cachedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        if (cachedLocations.length > 0) {
+          setStockLocations(cachedLocations);
+        } else {
+          // Default locations if none exist
+          setStockLocations([
+            { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse' },
+            { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle' }
+          ]);
+        }
+      } catch (error) {
+        console.warn('Failed to load stock data:', error);
+      }
+    };
+    loadStockData();
   }, []);
 
   // Load job cards with offline support
@@ -175,6 +230,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         kmReadingAfter: editingJobCard.kmReadingAfter || '',
         reasonForVisit: editingJobCard.reasonForVisit || '',
         diagnosis: editingJobCard.diagnosis || '',
+        actionsTaken: editingJobCard.actionsTaken || '',
+        stockUsed: editingJobCard.stockUsed || [],
+        materialsBought: editingJobCard.materialsBought || [],
         otherComments: editingJobCard.otherComments || '',
         photos: editingJobCard.photos || [],
         status: editingJobCard.status || 'draft'
@@ -230,6 +288,74 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
   };
 
+  // Stock usage handlers
+  const handleAddStockItem = () => {
+    if (!newStockItem.sku || !newStockItem.locationId || newStockItem.quantity <= 0) {
+      alert('Please select a component, location, and enter quantity > 0');
+      return;
+    }
+    
+    const invItem = inventory.find(item => item.sku === newStockItem.sku || item.id === newStockItem.sku);
+    if (!invItem) {
+      alert('Selected item not found in inventory');
+      return;
+    }
+
+    const stockItem = {
+      id: Date.now().toString(),
+      sku: invItem.sku || invItem.id,
+      itemName: invItem.name || '',
+      quantity: parseFloat(newStockItem.quantity),
+      locationId: newStockItem.locationId,
+      locationName: stockLocations.find(loc => loc.id === newStockItem.locationId)?.name || '',
+      unitCost: invItem.unitCost || 0
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      stockUsed: [...prev.stockUsed, stockItem]
+    }));
+    
+    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+  };
+
+  const handleRemoveStockItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      stockUsed: prev.stockUsed.filter(item => item.id !== id)
+    }));
+  };
+
+  // Materials bought handlers
+  const handleAddMaterialItem = () => {
+    if (!newMaterialItem.itemName || newMaterialItem.cost <= 0) {
+      alert('Please enter item name and cost > 0');
+      return;
+    }
+
+    const materialItem = {
+      id: Date.now().toString(),
+      itemName: newMaterialItem.itemName,
+      description: newMaterialItem.description || '',
+      reason: newMaterialItem.reason || '',
+      cost: parseFloat(newMaterialItem.cost)
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      materialsBought: [...prev.materialsBought, materialItem]
+    }));
+    
+    setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+  };
+
+  const handleRemoveMaterialItem = (id) => {
+    setFormData(prev => ({
+      ...prev,
+      materialsBought: prev.materialsBought.filter(item => item.id !== id)
+    }));
+  };
+
   const handleSave = async () => {
     try {
       const jobCardData = {
@@ -243,6 +369,80 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
+
+      // Calculate total cost for materials bought
+      jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
+
+      // If job card is being marked as completed, remove stock from locations
+      const wasCompleted = editingJobCard?.status === 'completed';
+      const isNowCompleted = jobCardData.status === 'completed';
+      
+      if (isNowCompleted && !wasCompleted && formData.stockUsed && formData.stockUsed.length > 0) {
+        // Process stock removal from locations
+        try {
+          const locationInventory = JSON.parse(localStorage.getItem('location_inventory') || '[]');
+          const updatedLocationInventory = [...locationInventory];
+          
+          formData.stockUsed.forEach(stockItem => {
+            // Find existing inventory entry for this item at this location
+            const existingEntry = updatedLocationInventory.find(
+              entry => entry.locationId === stockItem.locationId && 
+                      (entry.sku === stockItem.sku || entry.itemId === stockItem.sku)
+            );
+            
+            if (existingEntry) {
+              // Reduce quantity
+              existingEntry.quantity = Math.max(0, (existingEntry.quantity || 0) - stockItem.quantity);
+              if (existingEntry.quantity === 0) {
+                // Remove entry if quantity reaches 0
+                const index = updatedLocationInventory.indexOf(existingEntry);
+                updatedLocationInventory.splice(index, 1);
+              }
+            } else {
+              console.warn(`Stock item ${stockItem.itemName} not found at location ${stockItem.locationName}`);
+            }
+          });
+          
+          localStorage.setItem('location_inventory', JSON.stringify(updatedLocationInventory));
+          
+          // Also update main inventory if needed (reduce total quantity)
+          if (window.DatabaseAPI?.getInventory) {
+            try {
+              const invResponse = await window.DatabaseAPI.getInventory();
+              const invData = invResponse?.data?.inventory || invResponse?.data || [];
+              const updatedInventory = invData.map(item => {
+                const stockItem = formData.stockUsed.find(s => s.sku === item.sku || s.sku === item.id);
+                if (stockItem) {
+                  return {
+                    ...item,
+                    quantityOnHand: Math.max(0, (item.quantityOnHand || item.quantity || 0) - stockItem.quantity)
+                  };
+                }
+                return item;
+              });
+              
+              // Try to update via API
+              if (window.DatabaseAPI.updateInventoryItem) {
+                for (const item of updatedInventory) {
+                  const original = invData.find(i => i.id === item.id || i.sku === item.sku);
+                  if (original && original.quantityOnHand !== item.quantityOnHand) {
+                    try {
+                      await window.DatabaseAPI.updateInventoryItem(item.id || item.sku, item);
+                    } catch (error) {
+                      console.warn('Failed to update inventory item:', error);
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.warn('Failed to update main inventory:', error);
+            }
+          }
+        } catch (error) {
+          console.error('Error processing stock removal:', error);
+          alert('Warning: Job card saved but stock removal may have failed. Please verify stock levels.');
+        }
+      }
 
       // Save to localStorage first (offline support)
       let updatedJobCards;
@@ -326,12 +526,17 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       kmReadingAfter: '',
       reasonForVisit: '',
       diagnosis: '',
+      actionsTaken: '',
+      stockUsed: [],
+      materialsBought: [],
       otherComments: '',
       photos: [],
       status: 'draft'
     });
     setSelectedPhotos([]);
     setTechnicianInput('');
+    setNewStockItem({ sku: '', quantity: 0, locationId: '' });
+    setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
   };
 
   const openAddPage = () => {
@@ -614,6 +819,188 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Notes and comments about diagnosis"
             />
+          </div>
+
+          {/* Actions Taken */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Actions Taken
+            </label>
+            <textarea
+              name="actionsTaken"
+              value={formData.actionsTaken}
+              onChange={handleChange}
+              rows={4}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Describe what actions were taken to resolve the issue"
+            />
+          </div>
+
+          {/* Stock Used Section */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
+            
+            {/* Add Stock Item Form */}
+            <div className="grid grid-cols-12 gap-2 mb-3">
+              <div className="col-span-4">
+                <select
+                  value={newStockItem.sku}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select component</option>
+                  {inventory.map(item => (
+                    <option key={item.id || item.sku} value={item.sku || item.id}>
+                      {item.name} ({item.sku || item.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-4">
+                <select
+                  value={newStockItem.locationId}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select location</option>
+                  {stockLocations.map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} ({loc.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newStockItem.quantity || ''}
+                  onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
+                  placeholder="Qty"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div className="col-span-2">
+                <button
+                  type="button"
+                  onClick={handleAddStockItem}
+                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                >
+                  <i className="fas fa-plus mr-1"></i>Add
+                </button>
+              </div>
+            </div>
+
+            {/* Stock Items List */}
+            {formData.stockUsed && formData.stockUsed.length > 0 && (
+              <div className="space-y-2">
+                {formData.stockUsed.map(item => (
+                  <div key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                      <p className="text-xs text-gray-600">
+                        {item.locationName} • Qty: {item.quantity} • SKU: {item.sku}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveStockItem(item.id)}
+                      className="ml-2 text-red-600 hover:text-red-800"
+                      title="Remove"
+                    >
+                      <i className="fas fa-times"></i>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Materials Bought Section */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Materials Bought (Not from Stock)</h3>
+            
+            {/* Add Material Item Form */}
+            <div className="space-y-2 mb-3">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={newMaterialItem.itemName}
+                  onChange={(e) => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
+                  placeholder="Item Name *"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newMaterialItem.cost || ''}
+                  onChange={(e) => setNewMaterialItem({ ...newMaterialItem, cost: parseFloat(e.target.value) || 0 })}
+                  placeholder="Cost (R) *"
+                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <input
+                type="text"
+                value={newMaterialItem.description}
+                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
+                placeholder="Description"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <input
+                type="text"
+                value={newMaterialItem.reason}
+                onChange={(e) => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
+                placeholder="Reason for purchase"
+                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                type="button"
+                onClick={handleAddMaterialItem}
+                className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+              >
+                <i className="fas fa-plus mr-1"></i>Add Material
+              </button>
+            </div>
+
+            {/* Materials List */}
+            {formData.materialsBought && formData.materialsBought.length > 0 && (
+              <div className="space-y-2">
+                {formData.materialsBought.map(item => (
+                  <div key={item.id} className="bg-white border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                        {item.description && (
+                          <p className="text-xs text-gray-600 mt-1">{item.description}</p>
+                        )}
+                        {item.reason && (
+                          <p className="text-xs text-gray-500 mt-1">Reason: {item.reason}</p>
+                        )}
+                        <p className="text-sm font-semibold text-gray-900 mt-2">R {item.cost.toFixed(2)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMaterialItem(item.id)}
+                        className="ml-2 text-red-600 hover:text-red-800"
+                        title="Remove"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="border-t border-gray-300 pt-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-900">Total Cost:</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      R {formData.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Other Comments */}

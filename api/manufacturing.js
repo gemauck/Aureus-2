@@ -1214,25 +1214,44 @@ async function handler(req, res) {
             // Backward compatibility: Try to find by productSku if inventoryItemId is missing
             let finishedProduct;
             if (bom.inventoryItemId) {
+              console.log(`🔍 Looking up finished product by inventoryItemId: ${bom.inventoryItemId}`)
               finishedProduct = await tx.inventoryItem.findUnique({
                 where: { id: bom.inventoryItemId }
               })
-            } else {
+              if (!finishedProduct) {
+                console.log(`⚠️ Inventory item ${bom.inventoryItemId} not found, falling back to SKU lookup`)
+              }
+            }
+            
+            if (!finishedProduct) {
               // Fallback: Find by SKU (for older BOMs without inventoryItemId)
+              console.log(`🔍 Looking up finished product by SKU: ${bom.productSku}`)
               finishedProduct = await tx.inventoryItem.findFirst({
                 where: { sku: bom.productSku, type: 'finished_good' }
               })
               if (!finishedProduct) {
                 // Also try by category
+                console.log(`🔍 Trying to find by category 'finished_goods': ${bom.productSku}`)
                 finishedProduct = await tx.inventoryItem.findFirst({
                   where: { sku: bom.productSku, category: 'finished_goods' }
+                })
+              }
+              // Last resort: try without type/category filter
+              if (!finishedProduct) {
+                console.log(`🔍 Trying to find by SKU only (any type/category): ${bom.productSku}`)
+                finishedProduct = await tx.inventoryItem.findFirst({
+                  where: { sku: bom.productSku }
                 })
               }
             }
             
             if (!finishedProduct) {
-              throw new Error(`Finished product inventory item not found for BOM ${bom.id}. Product SKU: ${bom.productSku}. Please update the BOM to link it to a finished product inventory item, or create the inventory item first.`)
+              const errorMsg = `Finished product inventory item not found for BOM ${bom.id}. Product SKU: ${bom.productSku || 'N/A'}. InventoryItemId: ${bom.inventoryItemId || 'N/A'}. Please update the BOM to link it to a finished product inventory item, or create the inventory item first.`
+              console.error(`❌ ${errorMsg}`)
+              throw new Error(errorMsg)
             }
+            
+            console.log(`✅ Found finished product: ${finishedProduct.name} (SKU: ${finishedProduct.sku}, ID: ${finishedProduct.id})`)
             
             // Use the finishedProduct we already found above
             
@@ -1242,7 +1261,10 @@ async function handler(req, res) {
             }
             
             // Calculate unit cost from BOM (material cost only, sum of parts)
-            const unitCost = bom.totalMaterialCost // Cost per unit = sum of all component costs
+            const unitCost = bom.totalMaterialCost || 0 // Cost per unit = sum of all component costs (default to 0 if not set)
+            if (!unitCost && bom.totalMaterialCost === null) {
+              console.log(`⚠️ BOM ${bom.id} has no totalMaterialCost set. Using 0 as default.`)
+            }
             
             // Calculate new quantity and value
             const newQuantity = (finishedProduct.quantity || 0) + quantityProduced
@@ -1695,10 +1717,22 @@ async function handler(req, res) {
         return ok(res, responseData)
       } catch (error) {
         console.error('❌ Failed to update production order:', error)
+        console.error('❌ Error stack:', error.stack)
+        console.error('❌ Error details:', {
+          message: error.message,
+          code: error.code,
+          name: error.name,
+          id: id,
+          method: req.method
+        })
+        
         if (error.code === 'P2025') {
           return notFound(res, 'Production order not found')
         }
-        return serverError(res, 'Failed to update production order', error.message)
+        
+        // Provide more detailed error messages
+        const errorMessage = error.message || 'Unknown error occurred'
+        return serverError(res, 'Failed to update production order', errorMessage)
       }
     }
 

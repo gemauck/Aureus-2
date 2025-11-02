@@ -121,32 +121,44 @@ const Teams = () => {
                 console.log('🔄 Teams: Loading data from data service');
                 
                 const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
-                    window.dataService?.getTeamDocuments?.() || [],
-                    window.dataService?.getTeamWorkflows?.() || [],
-                    window.dataService?.getTeamChecklists?.() || [],
-                    window.dataService?.getTeamNotices?.() || []
+                    window.dataService?.getTeamDocuments?.() || Promise.resolve([]),
+                    window.dataService?.getTeamWorkflows?.() || Promise.resolve([]),
+                    window.dataService?.getTeamChecklists?.() || Promise.resolve([]),
+                    window.dataService?.getTeamNotices?.() || Promise.resolve([])
                 ]);
+                
+                // Ensure all values are arrays, even if they returned null/undefined
+                const documents = Array.isArray(savedDocuments) ? savedDocuments : [];
+                const workflows = Array.isArray(savedWorkflows) ? savedWorkflows : [];
+                const checklists = Array.isArray(savedChecklists) ? savedChecklists : [];
+                const notices = Array.isArray(savedNotices) ? savedNotices : [];
                 
                 const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
 
                 console.log('✅ Teams: Data loaded successfully', {
-                    documents: savedDocuments.length,
-                    workflows: savedWorkflows.length,
-                    checklists: savedChecklists.length,
-                    notices: savedNotices.length,
+                    documents: documents.length,
+                    workflows: workflows.length,
+                    checklists: checklists.length,
+                    notices: notices.length,
                     executions: savedExecutions.length
                 });
 
-                setDocuments(savedDocuments);
-                setWorkflows(savedWorkflows);
-                setChecklists(savedChecklists);
-                setNotices(savedNotices);
-                setWorkflowExecutions(savedExecutions);
+                setDocuments(documents);
+                setWorkflows(workflows);
+                setChecklists(checklists);
+                setNotices(notices);
+                setWorkflowExecutions(Array.isArray(savedExecutions) ? savedExecutions : []);
                 
                 // Delay rendering significantly to prevent renderer crash
                 setTimeout(() => setIsReady(true), 500);
             } catch (error) {
                 console.error('❌ Teams: Error loading data:', error);
+                // Set empty arrays on error to prevent null reference errors
+                setDocuments([]);
+                setWorkflows([]);
+                setChecklists([]);
+                setNotices([]);
+                setWorkflowExecutions([]);
                 setIsReady(true); // Show error state
             }
         };

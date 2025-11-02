@@ -41,14 +41,10 @@ const Projects = () => {
     
     // Load projects from data service on mount
     useEffect(() => {
+        let isMounted = true;
+        
         const loadProjects = async () => {
-            // Skip if we already have projects (component staying mounted)
-            if (projects.length > 0) {
-                console.log(`⚡ Projects: Skipping load - already have ${projects.length} projects`);
-                setIsLoading(false);
-                return;
-            }
-            
+            // Use a ref or flag instead of checking projects directly to avoid dependency issues
             setIsLoading(true);
             setLoadError(null);
             
@@ -56,8 +52,10 @@ const Projects = () => {
                 const token = window.storage?.getToken?.();
                 if (!token) {
                     console.warn('⚠️ Projects: No authentication token found - logging out');
-                    setProjects([]);
-                    setIsLoading(false);
+                    if (isMounted) {
+                        setProjects([]);
+                        setIsLoading(false);
+                    }
                     await logout();
                     window.location.hash = '#/login';
                     return;
@@ -75,18 +73,22 @@ const Projects = () => {
                 if (!window.DatabaseAPI) {
                     console.error('❌ Projects: DatabaseAPI not available on window object after waiting');
                     console.error('🔍 Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('database') || k.toLowerCase().includes('api')));
-                    setProjects([]);
-                    setLoadError('Database API not available. Please refresh the page.');
-                    setIsLoading(false);
+                    if (isMounted) {
+                        setProjects([]);
+                        setLoadError('Database API not available. Please refresh the page.');
+                        setIsLoading(false);
+                    }
                     return;
                 }
                 
                 if (!window.DatabaseAPI.getProjects) {
                     console.error('❌ Projects: DatabaseAPI.getProjects method not available');
                     console.error('🔍 DatabaseAPI methods:', Object.keys(window.DatabaseAPI));
-                    setProjects([]);
-                    setLoadError('Projects API method not available. Please refresh the page.');
-                    setIsLoading(false);
+                    if (isMounted) {
+                        setProjects([]);
+                        setLoadError('Projects API method not available. Please refresh the page.');
+                        setIsLoading(false);
+                    }
                     return;
                 }
                 
@@ -174,24 +176,26 @@ const Projects = () => {
                 
                 console.log('📡 Normalized projects:', normalizedProjects?.length || 0);
                 
-                // Ensure we always set an array
-                setProjects(normalizedProjects);
-                setIsLoading(false);
-                
-                // Sync existing projects with clients (non-blocking, won't crash on failure)
-                syncProjectsWithClients(apiProjects).catch(err => {
-                    console.warn('⚠️ Projects: Client sync failed, but continuing anyway:', err.message);
-                });
-                
-                // Check if there's a project to open immediately after loading
-                const projectIdToOpen = sessionStorage.getItem('openProjectId');
-                if (projectIdToOpen) {
-                    const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
-                    if (project) {
-                        // Open the project immediately
-                        setViewingProject(project);
-                        // Clear the flag
-                        sessionStorage.removeItem('openProjectId');
+                // Ensure we always set an array (only if component is still mounted)
+                if (isMounted) {
+                    setProjects(normalizedProjects);
+                    setIsLoading(false);
+                    
+                    // Sync existing projects with clients (non-blocking, won't crash on failure)
+                    syncProjectsWithClients(apiProjects).catch(err => {
+                        console.warn('⚠️ Projects: Client sync failed, but continuing anyway:', err.message);
+                    });
+                    
+                    // Check if there's a project to open immediately after loading
+                    const projectIdToOpen = sessionStorage.getItem('openProjectId');
+                    if (projectIdToOpen) {
+                        const project = apiProjects.find(p => p.id === parseInt(projectIdToOpen));
+                        if (project) {
+                            // Open the project immediately
+                            setViewingProject(project);
+                            // Clear the flag
+                            sessionStorage.removeItem('openProjectId');
+                        }
                     }
                 }
             } catch (error) {
@@ -202,29 +206,36 @@ const Projects = () => {
                     response: error.response,
                     status: error.status
                 });
-                setProjects([]);
-                setIsLoading(false);
-                
-                // Set user-friendly error message with retry guidance
-                if (error.message.includes('401') || error.message.includes('Authentication')) {
-                    console.warn('⚠️ Authentication error - redirecting to login');
-                    setLoadError('Authentication expired. Redirecting to login...');
-                    setTimeout(() => {
-                        window.location.hash = '#/login';
-                    }, 1500);
-                } else if (error.message.includes('404')) {
-                    setLoadError('Projects API endpoint not found. Please contact support.');
-                } else if (error.message.includes('500') || error.message.includes('Server')) {
-                    setLoadError('Server error loading projects. Please try again later.');
-                } else if (error.message.includes('Network') || error.message.includes('Unable to connect') || error.message.includes('fetch')) {
-                    setLoadError('Network error: Unable to connect to server. The request was retried automatically. Please check your internet connection and refresh the page if the problem persists.');
-                } else {
-                    setLoadError(`Failed to load projects: ${error.message}. Please try refreshing the page.`);
+                if (isMounted) {
+                    setProjects([]);
+                    setIsLoading(false);
+                    
+                    // Set user-friendly error message with retry guidance
+                    if (error.message.includes('401') || error.message.includes('Authentication')) {
+                        console.warn('⚠️ Authentication error - redirecting to login');
+                        setLoadError('Authentication expired. Redirecting to login...');
+                        setTimeout(() => {
+                            window.location.hash = '#/login';
+                        }, 1500);
+                    } else if (error.message.includes('404')) {
+                        setLoadError('Projects API endpoint not found. Please contact support.');
+                    } else if (error.message.includes('500') || error.message.includes('Server')) {
+                        setLoadError('Server error loading projects. Please try again later.');
+                    } else if (error.message.includes('Network') || error.message.includes('Unable to connect') || error.message.includes('fetch')) {
+                        setLoadError('Network error: Unable to connect to server. The request was retried automatically. Please check your internet connection and refresh the page if the problem persists.');
+                    } else {
+                        setLoadError(`Failed to load projects: ${error.message}. Please try refreshing the page.`);
+                    }
                 }
             }
         };
 
         loadProjects();
+        
+        // Cleanup function to prevent state updates after unmount
+        return () => {
+            isMounted = false;
+        };
     }, []); // Only run once on initial mount
 
     // Helper function to sync existing projects with clients
@@ -845,7 +856,7 @@ const Projects = () => {
                 if (cancelled) return;
                 if (success) {
                     setWaitingForProjectDetail(false);
-                    setViewingProject({...viewingProject}); // Force re-render
+                    // Removed forced re-render - React will re-render automatically
                 } else {
                     // Fall back to polling
                     let checkCount = 0;
@@ -861,8 +872,7 @@ const Projects = () => {
                             setProjectDetailAvailable(true);
                             setWaitingForProjectDetail(false);
                             clearInterval(checkInterval);
-                            // Force re-render
-                            setViewingProject({...viewingProject});
+                            // Removed forced re-render - React will re-render automatically
                         } else if (checkCount >= maxChecks) {
                             setWaitingForProjectDetail(false);
                             clearInterval(checkInterval);
@@ -884,10 +894,7 @@ const Projects = () => {
             if (window.ProjectDetail && !projectDetailAvailable) {
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
-                if (viewingProject) {
-                    // Force re-render to show ProjectDetail
-                    setViewingProject({...viewingProject});
-                }
+                // Removed forced re-render - React will re-render automatically
             }
         };
         

@@ -5,8 +5,8 @@ import { ok, created, badRequest, notFound, serverError } from './_lib/response.
 async function handler(req, res) {
   const urlPath = req.url.replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
-  const resourceType = pathSegments[1] // jobcards
-  const id = pathSegments[2]
+  const resourceType = pathSegments[0] // jobcards (direct endpoint, not nested like /api/manufacturing/*)
+  const id = pathSegments[1]
 
   // Helper to parse JSON fields
   const parseJson = (str, defaultValue = []) => {
