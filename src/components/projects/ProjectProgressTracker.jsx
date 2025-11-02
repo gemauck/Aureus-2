@@ -3,14 +3,18 @@ const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 
 const ProjectProgressTracker = ({ onBack }) => {
+    // DEBUG: Log component entry
+    console.log('🔍 ProjectProgressTracker: Component function called');
+    
     // Safety check for required dependencies
     if (!onBack || typeof onBack !== 'function') {
         console.warn('⚠️ ProjectProgressTracker: onBack prop is missing or invalid');
     }
     
-    // Validate all constants immediately and ensure they're safe
-    const currentYear = typeof new Date().getFullYear() === 'number' ? new Date().getFullYear() : 2025;
-    const currentMonth = typeof new Date().getMonth() === 'number' ? new Date().getMonth() : 0; // 0-11
+    try {
+        // Validate all constants immediately and ensure they're safe
+        const currentYear = typeof new Date().getFullYear() === 'number' ? new Date().getFullYear() : 2025;
+        const currentMonth = typeof new Date().getMonth() === 'number' ? new Date().getMonth() : 0; // 0-11
     
     // Calculate working months (2 months in arrears from current month)
     // Example: If current month is October, working months are August and September
@@ -40,6 +44,8 @@ const ProjectProgressTracker = ({ onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [loadError, setLoadError] = useState(null); // Track loading errors
+    
+    console.log('🔍 ProjectProgressTracker: Hooks initialized successfully');
     
     const tableRef = useRef(null);
     const monthRefs = useRef({});
