@@ -215,34 +215,66 @@ const StockLocations = ({ inventory, onInventoryUpdate }) => {
         // Create new location
         if (window.DatabaseAPI && typeof window.DatabaseAPI.createStockLocation === 'function') {
           console.log('📡 Calling createStockLocation API...');
-          const response = await window.DatabaseAPI.createStockLocation(locationData);
-          console.log('📡 API Response:', response);
-          const newLocation = response?.data?.location;
+          console.log('📡 Location data:', locationData);
           
-          if (newLocation) {
-            console.log('✅ Location created:', newLocation);
-            // Reload locations list from database to get the full updated list
-            const refreshResponse = await window.DatabaseAPI.getStockLocations();
-            const refreshedLocations = refreshResponse?.data?.locations || [];
-            console.log('✅ Refreshed locations:', refreshedLocations.length);
+          try {
+            const response = await window.DatabaseAPI.createStockLocation(locationData);
+            console.log('📡 API Response:', response);
+            console.log('📡 Response structure:', {
+              hasData: !!response?.data,
+              hasLocation: !!response?.data?.location,
+              responseKeys: Object.keys(response || {}),
+              dataKeys: response?.data ? Object.keys(response.data) : []
+            });
             
-            setLocations(refreshedLocations);
-            localStorage.setItem('stock_locations', JSON.stringify(refreshedLocations));
+            // Try multiple possible response formats
+            const newLocation = response?.data?.location || response?.location || response?.data;
             
-            // Notify parent component to refresh location dropdown
-            if (window.dispatchEvent) {
-              window.dispatchEvent(new CustomEvent('stockLocationsUpdated', { 
-                detail: { locations: refreshedLocations } 
-              }));
+            if (newLocation && newLocation.id) {
+              console.log('✅ Location created:', newLocation);
+              
+              // Small delay to ensure database commit
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
+              // Reload locations list from database to get the full updated list
+              const refreshResponse = await window.DatabaseAPI.getStockLocations();
+              const refreshedLocations = refreshResponse?.data?.locations || [];
+              console.log('✅ Refreshed locations:', refreshedLocations.length);
+              
+              // Verify the new location is in the list
+              const locationExists = refreshedLocations.some(loc => 
+                loc.id === newLocation.id || 
+                loc.code === newLocation.code ||
+                (loc.code === locationData.code && loc.name === locationData.name)
+              );
+              
+              if (!locationExists) {
+                console.warn('⚠️ New location not found in refreshed list. Adding manually.');
+                refreshedLocations.push(newLocation);
+              }
+              
+              setLocations(refreshedLocations);
+              localStorage.setItem('stock_locations', JSON.stringify(refreshedLocations));
+              
+              // Notify parent component to refresh location dropdown
+              if (window.dispatchEvent) {
+                window.dispatchEvent(new CustomEvent('stockLocationsUpdated', { 
+                  detail: { locations: refreshedLocations } 
+                }));
+              }
+              
+              alert('✅ Location created successfully! Inventory items will be created for this location. The dropdown will refresh automatically.');
+            } else {
+              console.error('❌ No location returned from API. Full response:', JSON.stringify(response, null, 2));
+              throw new Error('Failed to create location - no location returned from API. Check console for details.');
             }
-            
-            alert('✅ Location created successfully! Inventory items will be created for this location. The dropdown will refresh automatically.');
-          } else {
-            console.error('❌ No location returned from API. Full response:', response);
-            throw new Error('Failed to create location - no location returned from API. Check console for details.');
+          } catch (apiError) {
+            console.error('❌ API Error creating location:', apiError);
+            throw apiError;
           }
         } else {
           // Fallback to localStorage
+          console.warn('⚠️ DatabaseAPI.createStockLocation not available, using localStorage fallback');
           const newLocation = {
             id: `LOC${String(locations.length + 1).padStart(3, '0')}`,
             ...locationData,

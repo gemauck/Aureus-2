@@ -1372,6 +1372,66 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     ></textarea>
                                 </div>
 
+                                {/* RSS News Feed Subscription */}
+                                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <i className="fas fa-rss text-blue-600 dark:text-blue-400"></i>
+                                                <label className="block text-sm font-medium text-gray-900 dark:text-gray-100">
+                                                    News Feed Subscription
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-600 dark:text-gray-400">
+                                                Receive daily news articles about this lead automatically
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    const token = window.storage?.getToken?.();
+                                                    const newSubscriptionStatus = !(formData.rssSubscribed !== false);
+                                                    
+                                                    const response = await fetch(`/api/clients/${formData.id}/rss-subscription`, {
+                                                        method: 'POST',
+                                                        headers: {
+                                                            'Authorization': `Bearer ${token}`,
+                                                            'Content-Type': 'application/json'
+                                                        },
+                                                        credentials: 'include',
+                                                        body: JSON.stringify({ subscribed: newSubscriptionStatus })
+                                                    });
+                                                    
+                                                    if (response.ok) {
+                                                        const updated = {...formData, rssSubscribed: newSubscriptionStatus};
+                                                        setFormData(updated);
+                                                        formDataRef.current = updated;
+                                                        alert(newSubscriptionStatus ? 'Subscribed to news feed' : 'Unsubscribed from news feed');
+                                                        // Auto-save
+                                                        if (lead) {
+                                                            onSave(updated, true);
+                                                        }
+                                                    } else {
+                                                        alert('Failed to update subscription. Please try again.');
+                                                    }
+                                                } catch (error) {
+                                                    console.error('Error updating subscription:', error);
+                                                    alert('Error updating subscription. Please try again.');
+                                                }
+                                            }}
+                                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                                                formData.rssSubscribed !== false
+                                                    ? 'bg-green-600 text-white hover:bg-green-700'
+                                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
+                                        >
+                                            <i className={`fas ${formData.rssSubscribed !== false ? 'fa-bell' : 'fa-bell-slash'}`}></i>
+                                            {formData.rssSubscribed !== false ? 'Subscribed' : 'Not Subscribed'}
+                                        </button>
+                                    </div>
+                                </div>
+
                                 {/* Tags Section */}
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-2">Tags</label>

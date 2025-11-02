@@ -10,21 +10,24 @@ const Calendar = () => {
     
     // Load notes (load ALL notes, not just current month) - localStorage first for instant display, then sync from server
     useEffect(() => {
-        const loadNotes = async () => {
+        const loadNotes = async (forceRefresh = false) => {
             try {
                 const user = window.storage?.getUser?.();
+                // Use user.id (from JWT sub) - this should match req.user.sub in API
                 const userId = user?.id || user?.email || 'default';
                 const notesKey = `user_notes_${userId}`;
 
-                // STEP 1: Load from localStorage first for instant display
-                const savedNotes = localStorage.getItem(notesKey);
-                if (savedNotes) {
-                    try {
-                        const parsedNotes = JSON.parse(savedNotes);
-                        setNotes(parsedNotes);
-                        console.log('📝 Loaded notes from localStorage:', Object.keys(parsedNotes).length);
-                    } catch (e) {
-                        console.error('Error parsing localStorage notes:', e);
+                // STEP 1: Load from localStorage first for instant display (unless forcing refresh)
+                if (!forceRefresh) {
+                    const savedNotes = localStorage.getItem(notesKey);
+                    if (savedNotes) {
+                        try {
+                            const parsedNotes = JSON.parse(savedNotes);
+                            setNotes(parsedNotes);
+                            console.log('📝 Loaded notes from localStorage:', Object.keys(parsedNotes).length);
+                        } catch (e) {
+                            console.error('Error parsing localStorage notes:', e);
+                        }
                     }
                 }
 
@@ -33,15 +36,20 @@ const Calendar = () => {
                 const token = window.storage?.getToken?.();
                 if (token) {
                     try {
-                        const res = await fetch('/api/calendar-notes', {
-                            headers: { Authorization: `Bearer ${token}` },
+                        // Add timestamp to prevent caching
+                        const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                            headers: { 
+                                Authorization: `Bearer ${token}`,
+                                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                'Pragma': 'no-cache'
+                            },
                             credentials: 'include',
                             cache: 'no-store' // Prevent browser caching
                         });
                         if (res.ok) {
                             const data = await res.json();
                             const serverNotes = data?.notes || {};
-                            console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
+                            console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length, 'dates');
                             
                             // SERVER DATA ALWAYS TAKES PRIORITY - replace entirely, not merge
                             // This ensures cross-device synchronization
@@ -51,32 +59,62 @@ const Calendar = () => {
                             // This ensures phone gets PC's data and vice versa
                             localStorage.setItem(notesKey, JSON.stringify(serverNotes));
                             console.log('✅ Calendar notes synchronized with server');
+                            return true;
                         } else {
-                            console.warn('Failed to load notes from server:', res.status);
+                            const errorText = await res.text();
+                            console.warn('Failed to load notes from server:', res.status, errorText);
+                            return false;
                         }
                     } catch (error) {
                         console.error('Error fetching notes from server:', error);
+                        return false;
                     }
                 }
+                return false;
             } catch (error) {
                 console.error('Error loading notes:', error);
+                return false;
             }
         };
+        
+        // Initial load
         loadNotes();
         
-        // Also refresh when page becomes visible again (user switches back to tab/window)
-        // This helps sync data when user opens calendar after notes were saved on another device
+        // Refresh when page becomes visible again (user switches back to tab/window)
         const handleVisibilityChange = () => {
             if (!document.hidden) {
                 console.log('📝 Page visible - refreshing calendar notes from server');
-                loadNotes();
+                loadNotes(true); // Force refresh from server
             }
         };
         
+        // Refresh when window regains focus (better for cross-device sync)
+        const handleFocus = () => {
+            console.log('📝 Window focused - refreshing calendar notes from server');
+            loadNotes(true); // Force refresh from server
+        };
+        
+        // Periodic refresh when page is visible (every 30 seconds)
+        let refreshInterval = null;
+        const startPeriodicRefresh = () => {
+            if (refreshInterval) clearInterval(refreshInterval);
+            refreshInterval = setInterval(() => {
+                if (!document.hidden) {
+                    console.log('📝 Periodic refresh - syncing calendar notes from server');
+                    loadNotes(true);
+                }
+            }, 30000); // Refresh every 30 seconds when visible
+        };
+        
+        startPeriodicRefresh();
+        
         document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('focus', handleFocus);
         
         return () => {
             document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('focus', handleFocus);
+            if (refreshInterval) clearInterval(refreshInterval);
         };
     }, []); // Only load once on mount, not when month changes
     
@@ -84,14 +122,18 @@ const Calendar = () => {
     const saveNotes = async (dateString, noteText) => {
         try {
             const user = window.storage?.getUser?.();
+            // Use user.id (from JWT sub) - this should match req.user.sub in API
             const userId = user?.id || user?.email || 'default';
             const notesKey = `user_notes_${userId}`;
+            
+            // Store previous state in case we need to revert
+            const previousNotes = { ...notes };
             const updatedNotes = { ...notes, [dateString]: noteText };
 
-            // Optimistic update
+            // Optimistic update - show immediately
             setNotes(updatedNotes);
             
-            // Save to localStorage immediately
+            // Save to localStorage immediately for instant feedback
             try {
                 localStorage.setItem(notesKey, JSON.stringify(updatedNotes));
                 console.log('✅ Saved note to localStorage:', dateString);
@@ -99,50 +141,85 @@ const Calendar = () => {
                 console.error('Error saving to localStorage:', e);
             }
 
-            // Save to server
+            // Save to server - this ensures cross-device sync
             const token = window.storage?.getToken?.();
-            if (token) {
-                try {
-                    // Validate dateString format before sending
-                    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-                        console.error('❌ Invalid date format:', dateString);
-                        return;
-                    }
-                    
-                    const requestBody = { 
-                        date: dateString, 
-                        note: noteText || '' 
-                    };
-                    
-                    console.log('📤 Sending calendar note to server:', requestBody);
-                    
-                    const res = await fetch('/api/calendar-notes', {
-                        method: 'POST',
-                        headers: { 
-                            'Content-Type': 'application/json', 
-                            Authorization: `Bearer ${token}` 
-                        },
-                        credentials: 'include',
-                        body: JSON.stringify(requestBody)
-                    });
-                    
-                    if (res.ok) {
-                        const data = await res.json();
-                        console.log('✅ Saved note to server:', dateString, data);
-                    } else {
-                        const errorText = await res.text();
-                        let errorData;
-                        try {
-                            errorData = JSON.parse(errorText);
-                        } catch (e) {
-                            errorData = { message: errorText };
-                        }
-                        console.error('❌ Failed to save note to server:', res.status, errorData);
-                        console.error('Request body was:', requestBody);
-                    }
-                } catch (error) {
-                    console.error('❌ Error saving note to server:', error);
+            if (!token) {
+                console.warn('⚠️ No authentication token - note saved locally only');
+                return;
+            }
+            
+            try {
+                // Validate dateString format before sending
+                if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                    console.error('❌ Invalid date format:', dateString);
+                    return;
                 }
+                
+                const requestBody = { 
+                    date: dateString, 
+                    note: noteText || '' 
+                };
+                
+                console.log('📤 Sending calendar note to server:', requestBody);
+                
+                const res = await fetch('/api/calendar-notes', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json', 
+                        Authorization: `Bearer ${token}`,
+                        'Cache-Control': 'no-cache'
+                    },
+                    credentials: 'include',
+                    body: JSON.stringify(requestBody)
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    console.log('✅ Saved note to server successfully:', dateString, data);
+                    
+                    // After successful save, refresh from server to get latest state
+                    // This ensures we have the exact server state (including any server-side processing)
+                    setTimeout(async () => {
+                        try {
+                            const refreshRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                                headers: { 
+                                    Authorization: `Bearer ${token}`,
+                                    'Cache-Control': 'no-cache, no-store, must-revalidate'
+                                },
+                                credentials: 'include',
+                                cache: 'no-store'
+                            });
+                            if (refreshRes.ok) {
+                                const refreshData = await refreshRes.json();
+                                const serverNotes = refreshData?.notes || {};
+                                setNotes(serverNotes);
+                                localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                                console.log('✅ Calendar notes refreshed after save');
+                            }
+                        } catch (refreshError) {
+                            console.error('Error refreshing after save:', refreshError);
+                        }
+                    }, 500); // Small delay to ensure server has processed
+                } else {
+                    const errorText = await res.text();
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(errorText);
+                    } catch (e) {
+                        errorData = { message: errorText };
+                    }
+                    console.error('❌ Failed to save note to server:', res.status, errorData);
+                    console.error('Request body was:', requestBody);
+                    
+                    // Revert optimistic update on error - restore previous state
+                    setNotes(previousNotes);
+                    localStorage.setItem(notesKey, JSON.stringify(previousNotes));
+                    console.warn('⚠️ Reverted note due to server error');
+                }
+            } catch (error) {
+                console.error('❌ Error saving note to server:', error);
+                // Don't revert on network errors - the note might have been saved
+                // The periodic refresh will sync the correct state
             }
         } catch (error) {
             console.error('Error saving notes:', error);

@@ -80,6 +80,12 @@ function toHandlerPath(urlPath) {
     candidates.push(dynamicFile)
   }
   
+  // Nested dynamic routes (e.g., /api/clients/123/rss-subscription -> api/clients/[id]/rss-subscription.js)
+  if (parts.length === 3) {
+    const nestedDynamicFile = path.join(apiDir, parts[0], '[id]', `${parts[2]}.js`)
+    candidates.push(nestedDynamicFile)
+  }
+  
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) {
       return candidate
@@ -413,6 +419,27 @@ app.all('/api/clients', async (req, res, next) => {
     if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
     return handler(req, res)
   } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for client RSS subscription endpoints (GET, POST /api/clients/[id]/rss-subscription)
+app.all('/api/clients/:id/rss-subscription', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'clients', '[id]', 'rss-subscription.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    // Attach client ID to req.params for nested route handlers
+    req.params = { ...req.params, id: req.params.id }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ RSS Subscription API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })

@@ -119,19 +119,30 @@ async function handler(req, res) {
     // POST /api/client-news/search - Trigger news search for all clients
     if (req.method === 'POST') {
       try {
-        // Get all active clients and leads
+        // Get all active clients and leads that are subscribed to RSS feeds
         const clients = await prisma.client.findMany({
           where: {
-            OR: [
-              { type: 'client', status: 'active' },
-              { type: 'lead', status: { in: ['Potential', 'Active'] } }
+            AND: [
+              {
+                OR: [
+                  { type: 'client', status: 'active' },
+                  { type: 'lead', status: { in: ['Potential', 'Active'] } }
+                ]
+              },
+              {
+                OR: [
+                  { rssSubscribed: true },
+                  { rssSubscribed: null } // Default to true for null values
+                ]
+              }
             ]
           },
           select: {
             id: true,
             name: true,
             website: true,
-            type: true
+            type: true,
+            rssSubscribed: true
           }
         })
 

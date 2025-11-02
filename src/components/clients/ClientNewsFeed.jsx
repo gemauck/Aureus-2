@@ -50,49 +50,92 @@ const ClientNewsFeed = () => {
     const loadActivities = async () => {
         setIsLoading(true);
         try {
+            console.log('📰 Loading activities from clients and leads...');
+            
             // Fetch activities from all clients' and leads' activityLogs
             const clientsResponse = await window.DatabaseAPI?.getClients();
             const leadsResponse = await window.DatabaseAPI?.getLeads?.();
             
+            console.log('📰 Clients response:', clientsResponse);
+            console.log('📰 Leads response:', leadsResponse);
+            
             const allActivities = [];
             
-            // Process clients
+            // Process clients - check multiple possible response structures
+            let clients = [];
             if (clientsResponse?.data?.clients) {
-                clientsResponse.data.clients.forEach(client => {
-                    const activityLog = Array.isArray(client.activityLog) 
-                        ? client.activityLog 
-                        : (typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : []);
-                    
-                    activityLog.forEach(activity => {
-                        allActivities.push({
-                            ...activity,
-                            clientId: client.id,
-                            clientName: client.name,
-                            clientType: client.type || 'client',
-                            timestamp: activity.timestamp || activity.createdAt || new Date().toISOString()
-                        });
-                    });
-                });
+                clients = clientsResponse.data.clients;
+            } else if (Array.isArray(clientsResponse?.data)) {
+                clients = clientsResponse.data;
+            } else if (Array.isArray(clientsResponse)) {
+                clients = clientsResponse;
             }
             
-            // Process leads
-            if (leadsResponse?.data?.leads) {
-                leadsResponse.data.leads.forEach(lead => {
-                    const activityLog = Array.isArray(lead.activityLog) 
-                        ? lead.activityLog 
-                        : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []);
-                    
-                    activityLog.forEach(activity => {
-                        allActivities.push({
-                            ...activity,
-                            clientId: lead.id,
-                            clientName: lead.name,
-                            clientType: 'lead',
-                            timestamp: activity.timestamp || activity.createdAt || new Date().toISOString()
-                        });
+            console.log('📰 Processing clients:', clients.length);
+            
+            clients.forEach(client => {
+                // Only process actual clients (type === 'client' or null/undefined)
+                if (client.type === 'lead') {
+                    return; // Skip leads in clients response
+                }
+                
+                const activityLog = Array.isArray(client.activityLog) 
+                    ? client.activityLog 
+                    : (typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : []);
+                
+                console.log(`📰 Client ${client.name}: ${activityLog.length} activities`);
+                
+                activityLog.forEach(activity => {
+                    allActivities.push({
+                        ...activity,
+                        clientId: client.id,
+                        clientName: client.name,
+                        clientType: 'client',
+                        timestamp: activity.timestamp || activity.createdAt || new Date().toISOString()
                     });
                 });
+            });
+            
+            // Process leads - check multiple possible response structures
+            let leads = [];
+            if (leadsResponse?.data?.leads) {
+                leads = leadsResponse.data.leads;
+            } else if (Array.isArray(leadsResponse?.data)) {
+                leads = leadsResponse.data;
+            } else if (Array.isArray(leadsResponse)) {
+                leads = leadsResponse;
             }
+            
+            console.log('📰 Processing leads:', leads.length);
+            
+            leads.forEach(lead => {
+                // Only process actual leads
+                if (lead.type === 'client') {
+                    return; // Skip clients in leads response
+                }
+                
+                const activityLog = Array.isArray(lead.activityLog) 
+                    ? lead.activityLog 
+                    : (typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : []);
+                
+                console.log(`📰 Lead ${lead.name}: ${activityLog.length} activities`);
+                
+                activityLog.forEach(activity => {
+                    allActivities.push({
+                        ...activity,
+                        clientId: lead.id,
+                        clientName: lead.name,
+                        clientType: 'lead',
+                        timestamp: activity.timestamp || activity.createdAt || new Date().toISOString()
+                    });
+                });
+            });
+            
+            console.log('📰 Total activities loaded:', allActivities.length);
+            console.log('📰 Activities breakdown:', {
+                clients: allActivities.filter(a => a.clientType === 'client').length,
+                leads: allActivities.filter(a => a.clientType === 'lead').length
+            });
 
                 // Filter by client if selected
                 let filtered = allActivities;
@@ -133,15 +176,35 @@ const ClientNewsFeed = () => {
 
     const loadNewsArticles = async () => {
         try {
+            console.log('📰 Loading news articles...');
+            
+            // Get token using the same method as other components
+            const token = window.storage?.getToken?.();
+            
+            if (!token) {
+                console.warn('📰 No authentication token available');
+                setNewsArticles([]);
+                return;
+            }
+            
             const response = await fetch('/api/client-news', {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
-                }
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
             });
+            
+            console.log('📰 API Response status:', response.status);
             
             if (response.ok) {
                 const data = await response.json();
-                let articles = data?.newsArticles || data?.data?.newsArticles || [];
+                console.log('📰 API Response data:', data);
+                
+                // API returns { data: { newsArticles: [...] } }
+                let articles = data?.data?.newsArticles || data?.newsArticles || [];
+                console.log('📰 Parsed articles count:', articles.length);
+                console.log('📰 First article sample:', articles[0]);
                 
                 // Filter by client if selected
                 if (selectedClient !== 'all') {
@@ -171,10 +234,16 @@ const ClientNewsFeed = () => {
                 // Sort by published date (newest first)
                 articles.sort((a, b) => new Date(b.publishedAt || b.createdAt) - new Date(a.publishedAt || a.createdAt));
                 
+                console.log('📰 Setting articles to state:', articles.length);
                 setNewsArticles(articles);
+            } else {
+                console.error('📰 API response not OK:', response.status, response.statusText);
+                const errorText = await response.text();
+                console.error('📰 Error response:', errorText);
             }
         } catch (error) {
-            console.error('Failed to load news articles:', error);
+            console.error('📰 Failed to load news articles:', error);
+            console.error('📰 Error details:', error.message, error.stack);
         }
     };
 
@@ -391,8 +460,21 @@ const ClientNewsFeed = () => {
                         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-8 text-center">
                             <i className="fas fa-newspaper text-3xl text-gray-300 mb-4"></i>
                             <p className="text-gray-600 dark:text-gray-400 mb-2">No news articles found</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-500">
-                                News articles are automatically fetched daily. Check back tomorrow for updates.
+                            <p className="text-xs text-gray-500 dark:text-gray-500 mb-4">
+                                {isLoading ? 'Loading articles...' : 'News articles are automatically fetched daily. Check back tomorrow for updates.'}
+                            </p>
+                            <button
+                                onClick={() => {
+                                    console.log('🔄 Manual refresh triggered');
+                                    loadNewsArticles();
+                                }}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                            >
+                                <i className="fas fa-sync-alt mr-2"></i>
+                                Refresh Articles
+                            </button>
+                            <p className="text-xs text-gray-400 mt-2">
+                                Check browser console (F12) for debug info
                             </p>
                         </div>
                     ) : (
@@ -411,14 +493,19 @@ const ClientNewsFeed = () => {
                                     )}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                            <span className="font-semibold text-gray-900 dark:text-gray-100">
-                                                {article.clientName || 'Unknown Client'}
-                                            </span>
-                                            {article.clientType === 'lead' && (
-                                                <span className="px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 text-xs rounded-full font-medium">
-                                                    Lead
+                                            <div className="flex items-center gap-2">
+                                                <i className={`fas ${article.clientType === 'lead' ? 'fa-star' : 'fa-building'} text-xs text-gray-400`}></i>
+                                                <span className="font-semibold text-gray-900 dark:text-gray-100">
+                                                    {article.clientName || 'Unknown Client'}
                                                 </span>
-                                            )}
+                                                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                                    article.clientType === 'lead' 
+                                                        ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200' 
+                                                        : 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
+                                                }`}>
+                                                    {article.clientType === 'lead' ? 'Lead' : 'Client'}
+                                                </span>
+                                            </div>
                                             {isNewArticle(article) && (
                                                 <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 text-xs rounded-full font-medium">
                                                     NEW
@@ -428,15 +515,28 @@ const ClientNewsFeed = () => {
                                                 {formatDate(article.publishedAt || article.createdAt)}
                                             </span>
                                         </div>
-                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                                        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 break-words overflow-hidden line-clamp-2">
                                             {article.title}
                                         </h3>
                                         {article.description && (
-                                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-3">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 line-clamp-3 break-words overflow-hidden">
                                                 {article.description}
                                             </p>
                                         )}
-                                        <div className="flex items-center gap-4 mt-3">
+                                        {article.url && (
+                                            <div className="mb-2">
+                                                <a
+                                                    href={article.url}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline break-all overflow-hidden line-clamp-1"
+                                                    title={article.url}
+                                                >
+                                                    {article.url}
+                                                </a>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-4 mt-3 flex-wrap">
                                             {article.source && (
                                                 <span className="text-xs text-gray-500 dark:text-gray-400">
                                                     <i className="fas fa-globe mr-1"></i>
@@ -454,6 +554,40 @@ const ClientNewsFeed = () => {
                                                     <i className="fas fa-external-link-alt text-xs"></i>
                                                 </a>
                                             )}
+                                            <button
+                                                onClick={async () => {
+                                                    if (confirm(`Unsubscribe from news feed for ${article.clientName}? You won't receive new articles for this ${article.clientType === 'lead' ? 'lead' : 'client'} anymore.`)) {
+                                                        try {
+                                                            const token = window.storage?.getToken?.();
+                                                            const response = await fetch(`/api/clients/${article.clientId}/rss-subscription`, {
+                                                                method: 'POST',
+                                                                headers: {
+                                                                    'Authorization': `Bearer ${token}`,
+                                                                    'Content-Type': 'application/json'
+                                                                },
+                                                                credentials: 'include',
+                                                                body: JSON.stringify({ subscribed: false })
+                                                            });
+                                                            
+                                                            if (response.ok) {
+                                                                // Remove articles for this client from the feed
+                                                                setNewsArticles(prev => prev.filter(a => a.clientId !== article.clientId));
+                                                                alert(`Unsubscribed from ${article.clientName} news feed`);
+                                                            } else {
+                                                                alert('Failed to unsubscribe. Please try again.');
+                                                            }
+                                                        } catch (error) {
+                                                            console.error('Error unsubscribing:', error);
+                                                            alert('Error unsubscribing. Please try again.');
+                                                        }
+                                                    }
+                                                }}
+                                                className="text-xs text-red-600 dark:text-red-400 hover:underline flex items-center gap-1"
+                                                title={`Unsubscribe from ${article.clientName} news feed`}
+                                            >
+                                                <i className="fas fa-bell-slash text-xs"></i>
+                                                Unsubscribe
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

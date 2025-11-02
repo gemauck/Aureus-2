@@ -101,6 +101,7 @@ model Client {
   proposals     String        @default("[]")
   services      String        @default("[]") // JSON array of service level tags
   thumbnail     String        @default("") // Image URL for client/lead thumbnail
+  rssSubscribed Boolean       @default(true) // RSS news feed subscription status
   ownerId       String?
   owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
   projects      Project[]

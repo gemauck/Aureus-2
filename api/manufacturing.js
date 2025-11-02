@@ -58,6 +58,15 @@ async function handler(req, res) {
           code = `LOC${String(next).padStart(3,'0')}`
         }
         
+        // Check for duplicate code
+        const existingLocation = await prisma.stockLocation.findUnique({
+          where: { code }
+        })
+        if (existingLocation) {
+          console.error(`❌ POST /manufacturing/locations - Duplicate code: ${code}`);
+          return badRequest(res, `Location with code ${code} already exists`)
+        }
+        
         // Parse meta if it's already a string, otherwise stringify it
         let metaValue = body.meta || {};
         if (typeof metaValue === 'string') {
@@ -84,7 +93,7 @@ async function handler(req, res) {
           }
         })
         
-        console.log('✅ Location created successfully:', location.id, location.code);
+        console.log('✅ Location created successfully:', JSON.stringify(location, null, 2));
         
         // Create inventory items for the new location based on main warehouse inventory
         try {
@@ -133,8 +142,19 @@ async function handler(req, res) {
           // Don't fail location creation if inventory creation fails
         }
         
-        return created(res, { location })
+        // Return the location in the expected format
+        const responseData = { location }
+        console.log('📤 POST /manufacturing/locations - Response data:', JSON.stringify(responseData, null, 2));
+        return created(res, responseData)
       } catch (e) {
+        console.error('❌ POST /manufacturing/locations - Error:', e);
+        console.error('❌ Error code:', e.code);
+        console.error('❌ Error message:', e.message);
+        console.error('❌ Error stack:', e.stack);
+        
+        if (e.code === 'P2002') {
+          return badRequest(res, `Location with this ${e.meta?.target?.[0] || 'field'} already exists`)
+        }
         return serverError(res, 'Failed to create location', e.message)
       }
     }

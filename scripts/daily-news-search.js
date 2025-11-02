@@ -9,9 +9,8 @@
  * - Manual: node scripts/daily-news-search.js
  */
 
-require('dotenv').config({ path: '.env.local' });
-
-const { PrismaClient } = require('@prisma/client');
+import 'dotenv/config';
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 // Parse XML/RSS feed
@@ -117,16 +116,27 @@ async function runDailyNewsSearch() {
   try {
     const clients = await prisma.client.findMany({
       where: {
-        OR: [
-          { type: 'client', status: 'active' },
-          { type: 'lead', status: { in: ['Potential', 'Active'] } }
+        AND: [
+          {
+            OR: [
+              { type: 'client', status: 'active' },
+              { type: 'lead', status: { in: ['Potential', 'Active'] } }
+            ]
+          },
+          {
+            OR: [
+              { rssSubscribed: true },
+              { rssSubscribed: null } // Default to true for null values
+            ]
+          }
         ]
       },
       select: {
         id: true,
         name: true,
         website: true,
-        type: true
+        type: true,
+        rssSubscribed: true
       }
     });
 
@@ -229,7 +239,8 @@ async function runDailyNewsSearch() {
   }
 }
 
-if (require.main === module) {
+// Run if called directly (ES module check)
+if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.includes('daily-news-search.js')) {
   runDailyNewsSearch()
     .then((result) => {
       console.log('✅ Script completed:', result);
@@ -239,6 +250,20 @@ if (require.main === module) {
       console.error('❌ Script failed:', error);
       process.exit(1);
     });
+} else {
+  // Always run if this is the main entry point
+  const isMain = process.argv[1] && process.argv[1].endsWith('daily-news-search.js');
+  if (isMain) {
+    runDailyNewsSearch()
+      .then((result) => {
+        console.log('✅ Script completed:', result);
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('❌ Script failed:', error);
+        process.exit(1);
+      });
+  }
 }
 
-module.exports = { runDailyNewsSearch, searchNewsForClient };
+export { runDailyNewsSearch, searchNewsForClient };
