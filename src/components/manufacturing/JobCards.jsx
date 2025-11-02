@@ -461,6 +461,67 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       // Calculate total cost for materials bought
       jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
 
+      // Create stock movements for any stock used (regardless of job card status)
+      if (formData.stockUsed && formData.stockUsed.length > 0) {
+        try {
+          const jobCardId = jobCardData.id;
+          const jobCardReference = `Job Card ${jobCardId}`;
+          
+          // Create a stock movement for each stock item used
+          for (const stockItem of formData.stockUsed) {
+            if (!stockItem.locationId || !stockItem.sku || stockItem.quantity <= 0) {
+              console.warn('Skipping invalid stock item:', stockItem);
+              continue;
+            }
+
+            const movementData = {
+              type: 'issue', // Stock being issued/taken from location
+              sku: stockItem.sku,
+              itemName: stockItem.itemName || '',
+              quantity: parseFloat(stockItem.quantity),
+              unitCost: stockItem.unitCost ? parseFloat(stockItem.unitCost) : undefined,
+              fromLocation: stockItem.locationId,
+              toLocation: '', // Empty as this is an issue, not a transfer
+              reference: jobCardReference,
+              notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
+              date: new Date().toISOString()
+            };
+
+            // Try to create stock movement via API if online
+            if (isOnline && window.DatabaseAPI?.createStockMovement) {
+              try {
+                await window.DatabaseAPI.createStockMovement(movementData);
+                console.log(`✅ Stock movement created for ${stockItem.itemName}`);
+              } catch (error) {
+                console.warn(`⚠️ Failed to create stock movement for ${stockItem.itemName}:`, error);
+                // Store in localStorage for offline sync
+                const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+                cachedMovements.push({
+                  ...movementData,
+                  id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  synced: false
+                });
+                localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+              }
+            } else {
+              // Offline mode - store in localStorage for later sync
+              const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+              cachedMovements.push({
+                ...movementData,
+                id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                synced: false
+              });
+              localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+              console.log(`📦 Stock movement queued for sync: ${stockItem.itemName}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error creating stock movements:', error);
+          // Don't block save - just warn
+          console.warn('Job card will be saved but stock movements may not have been recorded');
+        }
+      }
+
       // If job card is being marked as completed, remove stock from locations
       // Works offline - updates localStorage immediately
       const wasCompleted = editingJobCard?.status === 'completed';
@@ -779,13 +840,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Site *
+                Site
               </label>
               <select
                 name="siteId"
                 value={formData.siteId}
                 onChange={handleChange}
-                required
                 disabled={!formData.clientId || availableSites.length === 0}
                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
               >
@@ -901,13 +961,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           {/* Reason for Visit */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Reason for Call Out / Visit *
+              Reason for Call Out / Visit
             </label>
             <textarea
               name="reasonForVisit"
               value={formData.reasonForVisit}
               onChange={handleChange}
-              required
               rows={3}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               placeholder="Why was the agent requested to come out?"
