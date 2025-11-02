@@ -1100,7 +1100,9 @@ const ProjectProgressTracker = ({ onBack }) => {
         }
         
         // Handle compliance and data as before
-        const statusConfig = data ? getStatusConfig(data.status) : null;
+        // Ensure data.status is a string before passing to getStatusConfig
+        const dataStatus = data && data.status && typeof data.status === 'string' ? data.status : (data && typeof data.status !== 'object' ? String(data.status || '') : '');
+        const statusConfig = data && dataStatus ? getStatusConfig(dataStatus) : null;
 
         // Ensure workingMonths is an array and month index is valid
         const monthIndex = Array.isArray(months) ? months.indexOf(month) : -1;
