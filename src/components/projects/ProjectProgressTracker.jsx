@@ -3,6 +3,11 @@ const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 
 const ProjectProgressTracker = ({ onBack }) => {
+    // Safety check for required dependencies
+    if (!onBack || typeof onBack !== 'function') {
+        console.warn('⚠️ ProjectProgressTracker: onBack prop is missing or invalid');
+    }
+    
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth(); // 0-11
     
@@ -29,6 +34,7 @@ const ProjectProgressTracker = ({ onBack }) => {
     const [isExporting, setIsExporting] = useState(false);
     const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
+    const [loadError, setLoadError] = useState(null); // Track loading errors
     
     const tableRef = useRef(null);
     const monthRefs = useRef({});
@@ -106,72 +112,85 @@ const ProjectProgressTracker = ({ onBack }) => {
 
     const loadProjects = async () => {
         try {
+            setLoadError(null);
+            
             // Try to load from database API first
             const token = window.storage?.getToken?.();
             if (token && window.DatabaseAPI?.getProjects) {
                 console.log('🔄 ProjectProgressTracker: Loading projects from database');
-                const response = await window.DatabaseAPI.getProjects();
-                
-                // Handle different response structures
-                let apiProjects = [];
-                if (response?.data?.projects && Array.isArray(response.data.projects)) {
-                    apiProjects = response.data.projects;
-                } else if (response?.projects && Array.isArray(response.projects)) {
-                    apiProjects = response.projects;
-                } else if (Array.isArray(response?.data)) {
-                    apiProjects = response.data;
-                } else if (Array.isArray(response)) {
-                    apiProjects = response;
-                }
-                
-                console.log('✅ ProjectProgressTracker: Loaded', apiProjects.length, 'projects from database');
-                
-                // Parse monthlyProgress if it's stored as JSON string
-                const projectsWithProgress = (apiProjects || []).map(project => {
-                    if (!project) return null;
+                try {
+                    const response = await window.DatabaseAPI.getProjects();
                     
-                    let monthlyProgress = project.monthlyProgress || {};
+                    // Handle different response structures
+                    let apiProjects = [];
+                    if (response?.data?.projects && Array.isArray(response.data.projects)) {
+                        apiProjects = response.data.projects;
+                    } else if (response?.projects && Array.isArray(response.projects)) {
+                        apiProjects = response.projects;
+                    } else if (Array.isArray(response?.data)) {
+                        apiProjects = response.data;
+                    } else if (Array.isArray(response)) {
+                        apiProjects = response;
+                    }
                     
-                    // If monthlyProgress is a string, parse it
-                    if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
+                    console.log('✅ ProjectProgressTracker: Loaded', apiProjects.length, 'projects from database');
+                    
+                    // Parse monthlyProgress if it's stored as JSON string
+                    const projectsWithProgress = (apiProjects || []).map(project => {
+                        if (!project) return null;
+                        
+                        let monthlyProgress = project.monthlyProgress || {};
+                        
+                        // If monthlyProgress is a string, parse it
+                        if (typeof monthlyProgress === 'string' && monthlyProgress.trim()) {
+                            try {
+                                monthlyProgress = JSON.parse(monthlyProgress);
+                            } catch (e) {
+                                console.warn('Failed to parse monthlyProgress for project', project.id, e);
+                                monthlyProgress = {};
+                            }
+                        }
+                        
+                        return {
+                            ...project,
+                            monthlyProgress: monthlyProgress || {}
+                        };
+                    }).filter(Boolean); // Remove any null entries
+                    
+                    setProjects(projectsWithProgress);
+                    
+                    // Also update localStorage for consistency
+                    if (window.dataService && typeof window.dataService.setProjects === 'function') {
                         try {
-                            monthlyProgress = JSON.parse(monthlyProgress);
+                            await window.dataService.setProjects(projectsWithProgress);
                         } catch (e) {
-                            console.warn('Failed to parse monthlyProgress for project', project.id, e);
-                            monthlyProgress = {};
+                            console.warn('Failed to update localStorage:', e);
                         }
                     }
-                    
-                    return {
-                        ...project,
-                        monthlyProgress: monthlyProgress || {}
-                    };
-                }).filter(Boolean); // Remove any null entries
-                
-                setProjects(projectsWithProgress);
-                
-                // Also update localStorage for consistency
-                if (window.dataService && typeof window.dataService.setProjects === 'function') {
-                    try {
-                        await window.dataService.setProjects(projectsWithProgress);
-                    } catch (e) {
-                        console.warn('Failed to update localStorage:', e);
-                    }
+                    return;
+                } catch (dbError) {
+                    console.error('❌ DatabaseAPI.getProjects failed:', dbError);
+                    // Fall through to localStorage fallback
                 }
-                return;
             }
             
             // Fallback to localStorage/dataService
-            const savedProjects = (window.dataService && typeof window.dataService.getProjects === 'function') 
-                ? await window.dataService.getProjects() || [] 
-                : [];
-            // Initialize progress tracking structure for each project if not exists
-            const projectsWithProgress = (savedProjects || []).map(project => ({
-                ...project,
-                monthlyProgress: project.monthlyProgress || {}
-            }));
-            setProjects(projectsWithProgress);
-            console.log('⚠️ ProjectProgressTracker: Loaded', projectsWithProgress.length, 'projects from localStorage (fallback)');
+            try {
+                const savedProjects = (window.dataService && typeof window.dataService.getProjects === 'function') 
+                    ? await window.dataService.getProjects() || [] 
+                    : [];
+                // Initialize progress tracking structure for each project if not exists
+                const projectsWithProgress = (savedProjects || []).map(project => ({
+                    ...project,
+                    monthlyProgress: project.monthlyProgress || {}
+                }));
+                setProjects(projectsWithProgress);
+                console.log('⚠️ ProjectProgressTracker: Loaded', projectsWithProgress.length, 'projects from localStorage (fallback)');
+            } catch (storageError) {
+                console.error('❌ Failed to load from localStorage:', storageError);
+                setLoadError('Failed to load projects from both database and local storage');
+                setProjects([]);
+            }
         } catch (error) {
             console.error('❌ Error loading projects:', error);
             console.error('❌ Error details:', {
@@ -179,6 +198,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                 stack: error.stack,
                 response: error.response
             });
+            setLoadError(error.message || 'Unknown error occurred while loading projects');
             setProjects([]);
         }
     };
@@ -1182,6 +1202,26 @@ const ProjectProgressTracker = ({ onBack }) => {
                 </div>
             </div>
 
+            {/* Error Message */}
+            {loadError && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-3">
+                    <div className="flex items-start">
+                        <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-2"></i>
+                        <div className="flex-1">
+                            <h3 className="text-sm font-semibold text-red-800 mb-1">Error Loading Projects</h3>
+                            <p className="text-xs text-red-700">{loadError}</p>
+                            <button
+                                onClick={loadProjects}
+                                className="mt-2 px-2 py-1 bg-red-600 text-white rounded text-[10px] font-medium hover:bg-red-700 transition-colors"
+                            >
+                                <i className="fas fa-redo mr-1"></i>
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Progress Tracker Table */}
             <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto" ref={tableRef}>
@@ -1339,5 +1379,17 @@ const ProjectProgressTracker = ({ onBack }) => {
     );
 };
 
-// Make available globally
-window.ProjectProgressTracker = ProjectProgressTracker;
+// Make available globally with error handling
+try {
+    window.ProjectProgressTracker = ProjectProgressTracker;
+    console.log('✅ ProjectProgressTracker registered successfully');
+} catch (error) {
+    console.error('❌ Failed to register ProjectProgressTracker:', error);
+    // Create a fallback component
+    window.ProjectProgressTracker = () => {
+        return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+            React.createElement('h3', { className: 'text-red-800 font-semibold mb-2' }, 'Error: Component registration failed'),
+            React.createElement('p', { className: 'text-red-700 text-sm' }, 'Please refresh the page.')
+        );
+    };
+}
