@@ -10,23 +10,35 @@ Since the server is running, here's the simplest method:
 
 3. **Paste and run this code:**
    ```javascript
-   const token = window.storage?.getToken();
-   fetch('/api/run-location-migration', {
-     method: 'POST',
-     headers: {
-       'Content-Type': 'application/json',
-       'Authorization': `Bearer ${token}`
-     }
-   })
-   .then(r => r.json())
-   .then(data => {
-     console.log('✅ Migration Result:', data);
-     alert('Migration complete! Check console for details.\n\nRestart your server to see changes.');
-   })
-   .catch(err => {
-     console.error('❌ Error:', err);
-     alert('Migration failed. Check console for details.');
-   });
+   // Get token using the app's storage method
+   const token = window.storage?.getToken?.() || localStorage.getItem('abcotronics_token');
+   
+   if (!token) {
+     console.error('❌ Not logged in. Please log in first.');
+     alert('Please log in to the application first!');
+   } else {
+     fetch('/api/run-location-migration', {
+       method: 'POST',
+       headers: {
+         'Content-Type': 'application/json',
+         'Authorization': `Bearer ${token}`
+       }
+     })
+     .then(r => r.json())
+     .then(data => {
+       console.log('✅ Migration Result:', data);
+       if (data.results && data.results.steps) {
+         data.results.steps.forEach(step => {
+           console.log(`Step ${step.step}: ${step.action} - ${step.status}`);
+         });
+       }
+       alert('✅ Migration complete! Check console for details.\n\nRestart your server to see changes.');
+     })
+     .catch(err => {
+       console.error('❌ Error:', err);
+       alert('Migration failed. Check console for details.');
+     });
+   }
    ```
 
 4. **Check the console** - you should see migration results

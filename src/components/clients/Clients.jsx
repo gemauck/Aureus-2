@@ -1727,16 +1727,11 @@ const Clients = React.memo(() => {
             lead.name.toLowerCase().includes(searchTerm.toLowerCase());
             // Contact search removed for leads
         
-        const leadServices = Array.isArray(lead.services)
-            ? lead.services
-            : (typeof lead.services === 'string' ? (()=>{ try { return JSON.parse(lead.services||'[]'); } catch { return []; } })() : []);
         const matchesIndustry = filterIndustry === 'All Industries' || lead.industry === filterIndustry;
         // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
         const matchesStatus = true;
-        const matchesServices = filterServices.length === 0 || 
-            leadServices.some(service => filterServices.includes(service));
         
-        return matchesSearch && matchesIndustry && matchesStatus && matchesServices;
+        return matchesSearch && matchesIndustry && matchesStatus;
     });
 
     // Sort the filtered leads (default to alphabetical by name)
@@ -2834,7 +2829,7 @@ const Clients = React.memo(() => {
             {/* Modern Search and Filters */}
             {viewMode !== 'client-detail' && viewMode !== 'lead-detail' && (
                 <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border p-6 shadow-sm`}>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${viewMode === 'leads' ? 'lg:grid-cols-3' : 'lg:grid-cols-4'}`}>
                         <div className="sm:col-span-2 lg:col-span-1">
                             <div className="relative">
                                 <input
@@ -2897,25 +2892,29 @@ const Clients = React.memo(() => {
                                 <option value="Disinterested">Disinterested</option>
                             </select>
                         </div>
-                        <div>
-                            <ServicesDropdown
-                                services={allServices}
-                                selectedServices={filterServices}
-                                onSelectionChange={setFilterServices}
-                                isDark={isDark}
-                            />
-                        </div>
+                        {viewMode !== 'leads' && (
+                            <div>
+                                <ServicesDropdown
+                                    services={allServices}
+                                    selectedServices={filterServices}
+                                    onSelectionChange={setFilterServices}
+                                    isDark={isDark}
+                                />
+                            </div>
+                        )}
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || filterServices.length > 0) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode !== 'leads' && filterServices.length > 0)) && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                     <span>
-                                        Showing {filteredClients.length} of {clients.length} clients
-                                        {searchTerm && ` matching "${searchTerm}"`}
+                                        {viewMode === 'leads' 
+                                            ? `Showing ${filteredLeads.length} of ${leads.length} leads${searchTerm ? ` matching "${searchTerm}"` : ''}`
+                                            : `Showing ${filteredClients.length} of ${clients.length} clients${searchTerm ? ` matching "${searchTerm}"` : ''}`
+                                        }
                                     </span>
                                 </div>
                                 <button
@@ -2923,7 +2922,9 @@ const Clients = React.memo(() => {
                                         setSearchTerm('');
                                         setFilterIndustry('All Industries');
                                         setFilterStatus('All Status');
-                                        setFilterServices([]);
+                                        if (viewMode !== 'leads') {
+                                            setFilterServices([]);
+                                        }
                                     }}
                                     className="inline-flex items-center gap-1 px-3 py-1.5 text-blue-600 hover:text-blue-700 font-medium text-sm transition-colors"
                                 >

@@ -808,21 +808,33 @@ const ProjectProgressTracker = ({ onBack }) => {
                                             Previous Comments
                                         </label>
                                         <div className="max-h-48 overflow-y-auto space-y-2 bg-gray-50 rounded-lg p-2 border border-gray-200">
-                                            {existingComments.map((comment, idx) => (
-                                                <div key={idx} className="bg-white rounded p-2 border border-gray-100">
-                                                    <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
-                                                    <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                        <span className="font-medium">{(comment.author || comment.createdBy || 'User')}{(comment.authorEmail || comment.createdByEmail) ? ` (${comment.authorEmail || comment.createdByEmail})` : ''}</span>
-                                                        <span>{new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', { 
-                                                            year: 'numeric',
-                                                            month: 'short', 
-                                                            day: '2-digit',
-                                                            hour: '2-digit',
-                                                            minute: '2-digit'
-                                                        })}</span>
+                                            {existingComments.map((comment, idx) => {
+                                                // Ensure all values are strings to prevent React error #300
+                                                const commentText = typeof comment.text === 'string' 
+                                                    ? comment.text 
+                                                    : typeof comment.text === 'object' 
+                                                        ? JSON.stringify(comment.text) 
+                                                        : String(comment.text || '');
+                                                const authorName = String(comment.author || comment.createdBy || 'User');
+                                                const authorEmail = comment.authorEmail || comment.createdByEmail;
+                                                const authorDisplay = authorEmail ? `${authorName} (${String(authorEmail)})` : authorName;
+                                                
+                                                return (
+                                                    <div key={idx} className="bg-white rounded p-2 border border-gray-100">
+                                                        <p className="text-xs text-gray-700 whitespace-pre-wrap">{commentText}</p>
+                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                            <span className="font-medium">{authorDisplay}</span>
+                                                            <span>{new Date(comment.date || comment.timestamp || comment.createdAt).toLocaleString('en-ZA', { 
+                                                                year: 'numeric',
+                                                                month: 'short', 
+                                                                day: '2-digit',
+                                                                hour: '2-digit',
+                                                                minute: '2-digit'
+                                                            })}</span>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 )}
@@ -995,21 +1007,33 @@ const ProjectProgressTracker = ({ onBack }) => {
                                         <div className="mb-3">
                                             <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Previous Comments</div>
                                             <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                                {comments.map((comment, idx) => (
-                                                    <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
-                                                        <p className="text-xs text-gray-700 whitespace-pre-wrap">{comment.text}</p>
-                                                        <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
-                                                            <span className="font-medium">{comment.author || 'User'}{comment.authorEmail ? ` (${comment.authorEmail})` : ''}</span>
-                                                            <span>{new Date(comment.date || comment.timestamp).toLocaleString('en-ZA', { 
-                                                                month: 'short', 
-                                                                day: '2-digit',
-                                                                hour: '2-digit',
-                                                                minute: '2-digit',
-                                                                year: 'numeric'
-                                                            })}</span>
+                                                {comments.map((comment, idx) => {
+                                                    // Ensure all values are strings to prevent React error #300
+                                                    const commentText = typeof comment.text === 'string' 
+                                                        ? comment.text 
+                                                        : typeof comment.text === 'object' 
+                                                            ? JSON.stringify(comment.text) 
+                                                            : String(comment.text || '');
+                                                    const authorName = String(comment.author || 'User');
+                                                    const authorEmail = comment.authorEmail;
+                                                    const authorDisplay = authorEmail ? `${authorName} (${String(authorEmail)})` : authorName;
+                                                    
+                                                    return (
+                                                        <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
+                                                            <p className="text-xs text-gray-700 whitespace-pre-wrap">{commentText}</p>
+                                                            <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
+                                                                <span className="font-medium">{authorDisplay}</span>
+                                                                <span>{new Date(comment.date || comment.timestamp || comment.createdAt || Date.now()).toLocaleString('en-ZA', { 
+                                                                    month: 'short', 
+                                                                    day: '2-digit',
+                                                                    hour: '2-digit',
+                                                                    minute: '2-digit',
+                                                                    year: 'numeric'
+                                                                })}</span>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                         

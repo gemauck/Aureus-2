@@ -173,14 +173,33 @@
         
         // Auto-check if user is logged in
         window.addEventListener('load', () => {
-            const token = localStorage.getItem('auth_token') || 
-                         localStorage.getItem('token') ||
-                         (window.storage && window.storage.getToken && window.storage.getToken());
+            let token = null;
             
+            // Try the app's storage method first
+            if (window.storage && typeof window.storage.getToken === 'function') {
+                token = window.storage.getToken();
+            }
+            
+            // Try direct localStorage
             if (!token) {
-                showStatus('⚠️ Please log in to the application first, then refresh this page.', 'info');
+                token = localStorage.getItem('abcotronics_token');
+            }
+            
+            // Try other common names
+            if (!token) {
+                token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+            }
+            
+            const user = localStorage.getItem('abcotronics_user');
+            const userData = user ? JSON.parse(user) : null;
+            const isAdmin = userData && userData.role && userData.role.toLowerCase() === 'admin';
+            
+            if (!token || token === 'null' || token === 'undefined') {
+                showStatus('⚠️ Not logged in. Open the app in another tab, log in, then refresh this page.', 'info');
+            } else if (!isAdmin) {
+                showStatus('⚠️ Logged in but not as admin. You need admin role to run migration.', 'error');
             } else {
-                showStatus('✅ Ready to run migration. Make sure you are logged in as admin.', 'info');
+                showStatus('✅ Ready to run migration. You are logged in as admin.', 'success');
             }
         });
     </script>

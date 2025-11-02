@@ -461,8 +461,15 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       // Calculate total cost for materials bought
       jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
 
-      // Create stock movements for any stock used (regardless of job card status)
+      // Create stock movements for any stock used (regardless of job card status - including draft)
       if (formData.stockUsed && formData.stockUsed.length > 0) {
+        console.log('📦 Creating stock movements for job card:', {
+          jobCardId: jobCardData.id,
+          status: jobCardData.status,
+          stockItemsCount: formData.stockUsed.length,
+          stockItems: formData.stockUsed
+        });
+        
         try {
           const jobCardId = jobCardData.id;
           const jobCardReference = `Job Card ${jobCardId}`;
@@ -470,7 +477,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           // Create a stock movement for each stock item used
           for (const stockItem of formData.stockUsed) {
             if (!stockItem.locationId || !stockItem.sku || stockItem.quantity <= 0) {
-              console.warn('Skipping invalid stock item:', stockItem);
+              console.warn('⚠️ Skipping invalid stock item:', stockItem);
               continue;
             }
 
@@ -480,20 +487,27 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               itemName: stockItem.itemName || '',
               quantity: parseFloat(stockItem.quantity),
               unitCost: stockItem.unitCost ? parseFloat(stockItem.unitCost) : undefined,
-              fromLocation: stockItem.locationId,
+              fromLocation: stockItem.locationId, // Location ID where stock was taken from
               toLocation: '', // Empty as this is consumption, not a transfer
               reference: jobCardReference,
               notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
               date: new Date().toISOString()
             };
 
+            console.log('📝 Creating stock movement:', movementData);
+
             // Try to create stock movement via API if online
             if (isOnline && window.DatabaseAPI?.createStockMovement) {
               try {
-                await window.DatabaseAPI.createStockMovement(movementData);
-                console.log(`✅ Stock movement created for ${stockItem.itemName}`);
+                const response = await window.DatabaseAPI.createStockMovement(movementData);
+                console.log(`✅ Stock movement created successfully for ${stockItem.itemName}:`, response);
               } catch (error) {
-                console.warn(`⚠️ Failed to create stock movement for ${stockItem.itemName}:`, error);
+                console.error(`❌ Failed to create stock movement for ${stockItem.itemName}:`, error);
+                console.error('Error details:', {
+                  message: error.message,
+                  stack: error.stack,
+                  movementData
+                });
                 // Store in localStorage for offline sync
                 const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
                 cachedMovements.push({
@@ -502,6 +516,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   synced: false
                 });
                 localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                console.log(`📦 Stock movement saved to localStorage for later sync: ${stockItem.itemName}`);
               }
             } else {
               // Offline mode - store in localStorage for later sync
@@ -512,14 +527,18 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                 synced: false
               });
               localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-              console.log(`📦 Stock movement queued for sync: ${stockItem.itemName}`);
+              console.log(`📦 Stock movement queued for sync (offline mode): ${stockItem.itemName}`);
             }
           }
+          console.log('✅ Stock movement creation process completed');
         } catch (error) {
-          console.error('Error creating stock movements:', error);
+          console.error('❌ Error creating stock movements:', error);
+          console.error('Error stack:', error.stack);
           // Don't block save - just warn
-          console.warn('Job card will be saved but stock movements may not have been recorded');
+          console.warn('⚠️ Job card will be saved but stock movements may not have been recorded');
         }
+      } else {
+        console.log('ℹ️ No stock items used in this job card');
       }
 
       // If job card is being marked as completed, remove stock from locations
