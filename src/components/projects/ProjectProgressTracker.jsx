@@ -67,7 +67,8 @@ const ProjectProgressTracker = ({ onBack }) => {
 
     useEffect(() => {
         // Scroll to working months after data loads
-        if (projects.length > 0 && tableRef.current && selectedYear === currentYear) {
+        const projectsLength = Array.isArray(projects) ? projects.length : 0;
+        if (projectsLength > 0 && tableRef.current && selectedYear === currentYear) {
             setTimeout(() => {
                 scrollToWorkingMonths();
             }, 100);
