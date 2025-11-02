@@ -1360,8 +1360,8 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                     <i className="fas fa-grip-vertical text-xs"></i>
                                                 </div>
                                                 <div className="flex-1">
-                                                    <div className="font-medium text-gray-900 text-xs">{project.name}</div>
-                                                    <div className="text-[10px] text-gray-500">{project.client}</div>
+                                                    <div className="font-medium text-gray-900 text-xs">{String(project.name || '')}</div>
+                                                    <div className="text-[10px] text-gray-500">{String(project.client || '')}</div>
                                                 </div>
                                             </div>
                                         </td>
@@ -1375,10 +1375,10 @@ const ProjectProgressTracker = ({ onBack }) => {
                                         ))}
                                         {/* Metadata Cells */}
                                         <td className="px-2.5 py-1.5 text-[10px] text-gray-600 border-l border-gray-200">
-                                            {project.manager || '-'}
+                                            {String(project.manager || '-')}
                                         </td>
                                         <td className="px-2.5 py-1.5 text-[10px] text-gray-600">
-                                            {project.type || '-'}
+                                            {String(project.type || '-')}
                                         </td>
                                         <td className="px-2.5 py-1.5 text-[10px]">
                                             <span className={`px-1.5 py-0.5 text-[9px] rounded font-medium ${
@@ -1389,7 +1389,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                 project.status === 'cancelled' || project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
                                                 'bg-gray-100 text-gray-700'
                                             }`}>
-                                                {project.status || 'Unknown'}
+                                                {String(project.status || 'Unknown')}
                                             </span>
                                         </td>
                                     </tr>
