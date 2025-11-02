@@ -1053,33 +1053,58 @@ const ProjectProgressTracker = ({ onBack }) => {
                                         <div className="mb-3">
                                             <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Previous Comments</div>
                                             <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
-                                                {comments.map((comment, idx) => {
+                                                {Array.isArray(comments) && comments.map((comment, idx) => {
+                                                    // Validate comment is an object
+                                                    if (!comment || typeof comment !== 'object') {
+                                                        console.warn('❌ Invalid comment:', comment);
+                                                        return null;
+                                                    }
+                                                    
                                                     // Ensure all values are strings to prevent React error #300
                                                     const commentText = typeof comment.text === 'string' 
                                                         ? comment.text 
                                                         : typeof comment.text === 'object' 
                                                             ? JSON.stringify(comment.text) 
                                                             : String(comment.text || '');
-                                                    const authorName = String(comment.author || 'User');
-                                                    const authorEmail = comment.authorEmail;
+                                                    const authorName = String(comment.author || comment.createdBy || 'User');
+                                                    const authorEmail = comment.authorEmail || comment.createdByEmail || '';
                                                     const authorDisplay = authorEmail ? `${authorName} (${String(authorEmail)})` : authorName;
                                                     
+                                                    // Ensure date is valid
+                                                    let dateObj;
+                                                    try {
+                                                        const dateValue = comment.date || comment.timestamp || comment.createdAt || Date.now();
+                                                        dateObj = dateValue instanceof Date ? dateValue : new Date(dateValue);
+                                                        if (isNaN(dateObj.getTime())) {
+                                                            dateObj = new Date();
+                                                        }
+                                                    } catch (e) {
+                                                        dateObj = new Date();
+                                                    }
+                                                    
+                                                    const formattedDate = dateObj.toLocaleString('en-ZA', { 
+                                                        month: 'short', 
+                                                        day: '2-digit',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                        year: 'numeric'
+                                                    });
+                                                    
+                                                    // Use a safe key
+                                                    const safeKey = typeof comment.id === 'string' || typeof comment.id === 'number' 
+                                                        ? String(comment.id) 
+                                                        : `comment-${idx}`;
+                                                    
                                                     return (
-                                                        <div key={idx} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
+                                                        <div key={safeKey} className="pb-2 border-b last:border-b-0 bg-gray-50 rounded p-1.5">
                                                             <p className="text-xs text-gray-700 whitespace-pre-wrap">{commentText}</p>
                                                             <div className="flex items-center justify-between mt-1 text-[10px] text-gray-500">
                                                                 <span className="font-medium">{authorDisplay}</span>
-                                                                <span>{new Date(comment.date || comment.timestamp || comment.createdAt || Date.now()).toLocaleString('en-ZA', { 
-                                                                    month: 'short', 
-                                                                    day: '2-digit',
-                                                                    hour: '2-digit',
-                                                                    minute: '2-digit',
-                                                                    year: 'numeric'
-                                                                })}</span>
+                                                                <span>{formattedDate}</span>
                                                             </div>
                                                         </div>
                                                     );
-                                                })}
+                                                }).filter(Boolean)}
                                             </div>
                                         </div>
                                         
@@ -1214,8 +1239,40 @@ const ProjectProgressTracker = ({ onBack }) => {
     // Validate selectedYear is a number
     const safeSelectedYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
     
+    // Log what we're about to render for debugging
+    console.log('🔍 ProjectProgressTracker: About to render', {
+        projectsCount: Array.isArray(projects) ? projects.length : 'invalid',
+        safeProjectsCount: safeProjects.length,
+        monthsIsArray: Array.isArray(months),
+        monthsLength: Array.isArray(months) ? months.length : 'N/A',
+        statusOptionsIsArray: Array.isArray(statusOptions),
+        statusOptionsLength: Array.isArray(statusOptions) ? statusOptions.length : 'N/A',
+        safeSelectedYear,
+        currentYear,
+        selectedYear
+    });
+    
     // Wrap entire render in try-catch to catch any rendering errors
     try {
+        // Validate that safeProjects doesn't contain any objects that could be rendered
+        const hasInvalidProjects = safeProjects.some(p => {
+            if (!p || typeof p !== 'object') return true;
+            // Check if any property that will be rendered is an object
+            if (p.name && typeof p.name === 'object') return true;
+            if (p.client && typeof p.client === 'object') return true;
+            if (p.manager && typeof p.manager === 'object') return true;
+            if (p.type && typeof p.type === 'object') return true;
+            if (p.status && typeof p.status === 'object') return true;
+            return false;
+        });
+        
+        if (hasInvalidProjects) {
+            console.error('❌ ProjectProgressTracker: Invalid projects detected');
+            return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+                React.createElement('p', { className: 'text-red-800' }, 'Error: Invalid project data detected')
+            );
+        }
+        
         return (
             <div className="space-y-3">
                 {/* Header */}
