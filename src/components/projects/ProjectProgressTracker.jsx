@@ -1391,14 +1391,16 @@ const ProjectProgressTracker = ({ onBack }) => {
                             ) : (
                                 safeProjects.map((project, index) => {
                                         // Double-check and sanitize project data before rendering
+                                        // Only include safe properties - explicitly exclude monthlyProgress to prevent React error
                                         const safeProject = {
-                                            ...project,
+                                            id: String(project.id || ''),
                                             name: project.name && typeof project.name !== 'object' ? String(project.name || '') : '',
                                             client: project.client && typeof project.client !== 'object' ? String(project.client || '') : '',
                                             manager: project.manager && typeof project.manager !== 'object' ? String(project.manager || '-') : '-',
                                             type: project.type && typeof project.type !== 'object' ? String(project.type || '-') : '-',
                                             status: project.status && typeof project.status !== 'object' ? String(project.status || 'Unknown') : 'Unknown',
-                                            id: String(project.id || '')
+                                            // Include monthlyProgress but only pass it to functions that need it, never render it directly
+                                            monthlyProgress: project.monthlyProgress || {}
                                         };
                                         
                                         return (
