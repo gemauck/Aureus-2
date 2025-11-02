@@ -1384,35 +1384,40 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                 </div>
                                             </div>
                                         </td>
-                                        {/* Monthly Progress Cells */}
-                                        {months.map(month => (
-                                            <React.Fragment key={`${project.id}-${month}`}>
-                                                {renderProgressCell(project, month, 'compliance')}
-                                                {renderProgressCell(project, month, 'data')}
-                                                {renderProgressCell(project, month, 'comments')}
-                                            </React.Fragment>
-                                        ))}
-                                        {/* Metadata Cells */}
-                                        <td className="px-2.5 py-1.5 text-[10px] text-gray-600 border-l border-gray-200">
-                                            {String(project.manager || '-')}
-                                        </td>
-                                        <td className="px-2.5 py-1.5 text-[10px] text-gray-600">
-                                            {String(project.type || '-')}
-                                        </td>
-                                        <td className="px-2.5 py-1.5 text-[10px]">
-                                            <span className={`px-1.5 py-0.5 text-[9px] rounded font-medium ${
-                                                project.status === 'active' || project.status === 'Active' ? 'bg-green-100 text-green-700' :
-                                                project.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
-                                                project.status === 'on-hold' || project.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
-                                                project.status === 'completed' || project.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
-                                                project.status === 'cancelled' || project.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
-                                                'bg-gray-100 text-gray-700'
-                                            }`}>
-                                                {String(project.status || 'Unknown')}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))
+                                                {/* Monthly Progress Cells */}
+                                                {months.map(month => {
+                                                    // Ensure month is a string
+                                                    const safeMonth = String(month || '');
+                                                    return (
+                                                        <React.Fragment key={`${safeProject.id}-${safeMonth}`}>
+                                                            {renderProgressCell(safeProject, safeMonth, 'compliance')}
+                                                            {renderProgressCell(safeProject, safeMonth, 'data')}
+                                                            {renderProgressCell(safeProject, safeMonth, 'comments')}
+                                                        </React.Fragment>
+                                                    );
+                                                })}
+                                                {/* Metadata Cells */}
+                                                <td className="px-2.5 py-1.5 text-[10px] text-gray-600 border-l border-gray-200">
+                                                    {safeProject.manager}
+                                                </td>
+                                                <td className="px-2.5 py-1.5 text-[10px] text-gray-600">
+                                                    {safeProject.type}
+                                                </td>
+                                                <td className="px-2.5 py-1.5 text-[10px]">
+                                                    <span className={`px-1.5 py-0.5 text-[9px] rounded font-medium ${
+                                                        safeProject.status === 'active' || safeProject.status === 'Active' ? 'bg-green-100 text-green-700' :
+                                                        safeProject.status === 'In Progress' ? 'bg-blue-100 text-blue-700' :
+                                                        safeProject.status === 'on-hold' || safeProject.status === 'On Hold' ? 'bg-yellow-100 text-yellow-700' :
+                                                        safeProject.status === 'completed' || safeProject.status === 'Completed' ? 'bg-purple-100 text-purple-700' :
+                                                        safeProject.status === 'cancelled' || safeProject.status === 'Cancelled' ? 'bg-red-100 text-red-700' :
+                                                        'bg-gray-100 text-gray-700'
+                                                    }`}>
+                                                        {safeProject.status}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
                             )}
                         </tbody>
                     </table>
