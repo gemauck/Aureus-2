@@ -12,10 +12,12 @@ const checkInvitationRoute = () => {
 
 const AppContent = () => {
     // Check invitation route FIRST, before any auth/data loading
+    // Use lowercase comparison for mobile browser compatibility
+    const pathname = (window.location.pathname || '').toLowerCase();
     const urlParams = new URLSearchParams(window.location.search);
-    const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
-    const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
-    const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
+    const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
+    const isResetPage = pathname === '/reset-password' && urlParams.get('token');
+    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
     
     // State to track if JobCardFormPublic component has loaded
     const [jobCardFormLoaded, setJobCardFormLoaded] = React.useState(!!window.JobCardFormPublic);
@@ -155,12 +157,14 @@ const AppContent = () => {
 // App wrapper with all providers
 const App = () => {
     // Check for invitation route BEFORE wrapping in providers
+    // Use lowercase comparison for mobile browser compatibility
+    const pathname = (window.location.pathname || '').toLowerCase();
     const urlParams = new URLSearchParams(window.location.search);
-    const isInvitationPage = window.location.pathname === '/accept-invitation' && urlParams.get('token');
-    const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
+    const isInvitationPage = pathname === '/accept-invitation' && urlParams.get('token');
+    const isResetPage = pathname === '/reset-password' && urlParams.get('token');
     
     // If public job card page, render it directly without providers (no auth needed)
-    const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
+    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
     if (isPublicJobCardPage) {
         // Wait for component to load if not available yet
         if (window.JobCardFormPublic) {

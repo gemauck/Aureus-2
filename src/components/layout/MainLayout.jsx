@@ -14,8 +14,16 @@ const MainLayout = () => {
     const [currentPage, setCurrentPage] = useState(getPageFromURL());
     
     // Update URL to root on initial load to ensure refresh always goes to dashboard
+    // BUT: Don't redirect public routes (job-card, accept-invitation, reset-password)
     React.useEffect(() => {
-        if (window.location.pathname !== '/') {
+        const pathname = (window.location.pathname || '').toLowerCase();
+        const publicRoutes = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
+        const isPublicRoute = publicRoutes.some(route => {
+            const lowerRoute = route.toLowerCase();
+            return pathname === lowerRoute || pathname.startsWith(lowerRoute + '/');
+        });
+        
+        if (pathname !== '/' && !isPublicRoute) {
             window.history.replaceState({ page: 'dashboard' }, '', '/');
         }
     }, []);
