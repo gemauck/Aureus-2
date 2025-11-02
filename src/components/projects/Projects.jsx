@@ -1023,9 +1023,29 @@ const Projects = () => {
             
             console.log('🔍 Tracker props:', trackerProps);
             
-            // Use React.createElement to ensure proper component rendering
+            // TEST: Try calling the function directly first
+            console.log('🔍 TEST: About to call ComponentToRender directly...');
+            console.log('🔍 TEST: ComponentToRender type:', typeof ComponentToRender);
+            console.log('🔍 TEST: trackerProps:', trackerProps);
+            
+            let directResult = null;
+            try {
+                console.log('🔍 TEST: Calling ComponentToRender(trackerProps)...');
+                directResult = ComponentToRender(trackerProps);
+                console.log('✅ TEST: Direct function call succeeded!');
+                console.log('✅ TEST: Result type:', typeof directResult);
+                console.log('✅ TEST: Result:', directResult);
+            } catch (directError) {
+                console.error('❌ TEST: Direct function call FAILED:', directError);
+                console.error('❌ TEST: Error message:', directError.message);
+                console.error('❌ TEST: Error stack:', directError.stack);
+                // Continue to try React.createElement anyway
+            }
+            
+            // Now use React.createElement
             let trackerElement;
             try {
+                console.log('🔍 Creating element with React.createElement...');
                 trackerElement = React.createElement(ComponentToRender, trackerProps);
                 console.log('✅ ProjectProgressTracker element created:', trackerElement);
                 
@@ -1036,6 +1056,11 @@ const Projects = () => {
             } catch (createError) {
                 console.error('❌ Error creating ProjectProgressTracker element:', createError);
                 console.error('❌ CreateError stack:', createError.stack);
+                // If direct call worked, return that instead
+                if (directResult) {
+                    console.log('⚠️ React.createElement failed but direct call worked, using direct result');
+                    return directResult;
+                }
                 throw createError;
             }
             
