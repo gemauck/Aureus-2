@@ -58,7 +58,9 @@ const Calendar = () => {
                                 dataKeys: Object.keys(data || {}),
                                 fullResponse: JSON.stringify(data, null, 2)
                             });
-                            const serverNotes = data?.notes || data?.data?.notes || {};
+                            // The API wraps response in {data: {notes: {...}}}
+                            // So we need to access data.data.notes, not data.notes
+                            const serverNotes = data?.data?.notes || data?.notes || {};
                             console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length, 'dates');
                             if (Object.keys(serverNotes).length > 0) {
                                 console.log('📅 Note dates found:', Object.keys(serverNotes));
@@ -236,7 +238,9 @@ const Calendar = () => {
                                         dataKeys: Object.keys(refreshData || {}),
                                         fullResponse: JSON.stringify(refreshData, null, 2)
                                     });
-                                    const serverNotes = refreshData?.notes || refreshData?.data?.notes || {};
+                                    // The API wraps response in {data: {notes: {...}}}
+                                    // So we need to access data.data.notes, not data.notes
+                                    const serverNotes = refreshData?.data?.notes || refreshData?.notes || {};
                                     
                                     console.log('📋 Server notes keys:', Object.keys(serverNotes));
                                     console.log('📋 Server notes object:', serverNotes);
