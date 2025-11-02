@@ -1426,7 +1426,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                                     </div>
                                                 </td>
                                                 {/* Monthly Progress Cells */}
-                                                {months.map(month => {
+                                                {Array.isArray(months) && months.map(month => {
                                                     // Ensure month is a string
                                                     const safeMonth = String(month || '');
                                                     return (
