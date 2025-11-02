@@ -85,12 +85,13 @@ const ProjectProgressTracker = ({ onBack }) => {
     useEffect(() => {
         // Scroll to working months after data loads
         const projectsLength = Array.isArray(projects) ? projects.length : 0;
-        if (projectsLength > 0 && tableRef.current && selectedYear === currentYear) {
+        const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+        if (projectsLength > 0 && tableRef.current && safeYear === currentYear) {
             setTimeout(() => {
                 scrollToWorkingMonths();
             }, 100);
         }
-    }, [projects, selectedYear]);
+    }, [projects, selectedYear, currentYear]);
 
     // Close comment popup on click outside
     useEffect(() => {
@@ -237,7 +238,8 @@ const ProjectProgressTracker = ({ onBack }) => {
         try {
             const updatedProjects = projects.map(p => {
                 if (p && p.id === selectedProject.id) {
-                    const monthKey = `${selectedMonth}-${selectedYear}`;
+                    const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+                    const monthKey = `${String(selectedMonth || '')}-${safeYear}`;
                     const currentProgress = p.monthlyProgress || {};
                     const monthProgress = currentProgress[monthKey] || {};
                     
@@ -303,7 +305,8 @@ const ProjectProgressTracker = ({ onBack }) => {
     };
 
     const getProgressData = (project, month, field) => {
-        const monthKey = `${month}-${selectedYear}`;
+        const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+        const monthKey = `${String(month || '')}-${safeYear}`;
         return project.monthlyProgress?.[monthKey]?.[field] || null;
     };
 
@@ -318,7 +321,8 @@ const ProjectProgressTracker = ({ onBack }) => {
         try {
             const updatedProjects = projects.map(p => {
                 if (p && p.id === project.id) {
-                    const monthKey = `${month}-${selectedYear}`;
+                    const safeYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
+                    const monthKey = `${String(month || '')}-${safeYear}`;
                     const currentProgress = p.monthlyProgress || {};
                     const monthProgress = currentProgress[monthKey] || {};
                     const updatedMonthProgress = { ...monthProgress };
@@ -799,7 +803,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                     <div className="flex justify-between items-center px-4 py-3 border-b border-gray-200">
                         <div>
                             <h2 className="text-base font-semibold text-gray-900">
-                                {getFieldTitle()} - {String(selectedMonth || '')} {String(selectedYear || '')}
+                                {getFieldTitle()} - {String(selectedMonth || '')} {String(safeSelectedYear || currentYear)}
                             </h2>
                             <p className="text-[10px] text-gray-500 mt-0.5">
                                 {String(selectedProject?.name || '')} • {String(selectedProject?.client || '')}
@@ -999,7 +1003,7 @@ const ProjectProgressTracker = ({ onBack }) => {
             
             // Ensure workingMonths is an array and month index is valid
             const monthIndex = Array.isArray(months) ? months.indexOf(month) : -1;
-            const isWorkingMonth = Array.isArray(workingMonths) && monthIndex >= 0 && workingMonths.includes(monthIndex) && selectedYear === currentYear;
+            const isWorkingMonth = Array.isArray(workingMonths) && monthIndex >= 0 && workingMonths.includes(monthIndex) && safeSelectedYear === currentYear;
             
             return (
                 <td 
@@ -1230,7 +1234,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                 <div className="flex items-center gap-2">
                     <label className="text-[10px] font-medium text-gray-600">Year:</label>
                     <select
-                        value={String(selectedYear || currentYear)}
+                        value={String(safeSelectedYear || currentYear)}
                         onChange={(e) => {
                             const newYear = parseInt(e.target.value);
                             if (!isNaN(newYear)) {
@@ -1249,7 +1253,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                             );
                         })}
                     </select>
-                    {selectedYear === currentYear && (
+                    {safeSelectedYear === currentYear && (
                         <button
                             onClick={scrollToWorkingMonths}
                             className="px-2.5 py-1 bg-primary-50 text-primary-700 rounded-lg hover:bg-primary-100 transition-colors text-[10px] font-medium"
@@ -1353,8 +1357,8 @@ const ProjectProgressTracker = ({ onBack }) => {
                                 {Array.isArray(months) && months.map((month, idx) => {
                                     const safeMonth = String(month || '');
                                     const safeMonthAbbr = safeMonth.slice(0, 3);
-                                    const safeYear = String(selectedYear || '').slice(-2);
-                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && selectedYear === currentYear;
+                                    const safeYear = String(safeSelectedYear || '').slice(-2);
+                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeSelectedYear === currentYear;
                                     return (
                                         <th 
                                             key={safeMonth} 
@@ -1393,7 +1397,7 @@ const ProjectProgressTracker = ({ onBack }) => {
                                 <th className="px-2.5 py-1 sticky left-0 bg-gray-50 z-10 border-r border-gray-200"></th>
                                 {Array.isArray(months) && months.map((month, idx) => {
                                     const safeMonth = String(month || '');
-                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && selectedYear === currentYear;
+                                    const isWorkingMonth = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeSelectedYear === currentYear;
                                     return (
                                         <React.Fragment key={`${safeMonth}-headers`}>
                                             <th className={`px-1.5 py-1 text-left text-[9px] font-medium text-gray-500 border-l border-gray-100 ${
