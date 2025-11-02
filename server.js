@@ -370,10 +370,27 @@ app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => 
 // Explicit mapping for manufacturing endpoints (inventory, boms, production-orders, stock-movements, suppliers)
 app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
   try {
+    console.log('🏭 Manufacturing API:', {
+      method: req.method,
+      url: req.url,
+      params: req.params,
+      resource: req.params.resource
+    })
     const handler = await loadHandler(path.join(apiDir, 'manufacturing.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    if (!handler) {
+      console.error('❌ Manufacturing handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
     return handler(req, res)
   } catch (e) {
+    console.error('❌ Manufacturing API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })
