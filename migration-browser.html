@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Run Multi-Location Inventory Migration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #9ca3af; cursor: not-allowed; }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .status.success { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .status.error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+        .status.info { background: #dbeafe; color: #1e40af; border: 1px solid #3b82f6; }
+        .log {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Multi-Location Inventory Migration</h1>
+        <p>This will run the database migration to enable separate inventories per stock location.</p>
+        
+        <div>
+            <button id="runBtn" onclick="runMigration()">Run Migration</button>
+            <button onclick="location.reload()">Refresh Page</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+        <div id="log" class="log" style="display: none;"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            logDiv.style.display = 'block';
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            statusDiv.style.display = 'block';
+        }
+
+        async function runMigration() {
+            const btn = document.getElementById('runBtn');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            
+            const logDiv = document.getElementById('log');
+            logDiv.textContent = '';
+            logDiv.style.display = 'block';
+            
+            log('🔧 Starting migration...');
+            showStatus('Running migration...', 'info');
+            
+            try {
+                // Get auth token - try multiple methods
+                let token = null;
+                
+                // Method 1: Use window.storage (the app's storage utility)
+                if (window.storage && typeof window.storage.getToken === 'function') {
+                    token = window.storage.getToken();
+                }
+                
+                // Method 2: Direct localStorage access (app uses 'abcotronics_token')
+                if (!token) {
+                    token = localStorage.getItem('abcotronics_token');
+                }
+                
+                // Method 3: Try other common names
+                if (!token) {
+                    token = localStorage.getItem('auth_token') || 
+                            localStorage.getItem('token');
+                }
+                
+                if (!token || token === 'null' || token === 'undefined') {
+                    throw new Error('Not authenticated. Please:\n\n1. Open your application in another tab\n2. Log in to the application\n3. Come back to this page and refresh\n\nOr run the migration directly from the app console (see instructions).');
+                }
+                
+                log('✅ Auth token found');
+                log('📡 Calling migration API...');
+                
+                const response = await fetch('/api/run-location-migration', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log('\n✅ Migration completed successfully!');
+                    log('\n📊 Results:');
+                    
+                    if (result.results && result.results.steps) {
+                        result.results.steps.forEach((step, i) => {
+                            const icon = step.status === 'success' ? '✅' : 
+                                        step.status === 'warning' ? '⚠️' : 
+                                        step.status === 'already exists' ? 'ℹ️' : '❌';
+                            log(`${icon} Step ${step.step}: ${step.action} - ${step.status}`);
+                            if (step.assigned) log(`   → Assigned ${step.assigned} items`);
+                            if (step.created) log(`   → Created Main Warehouse`);
+                        });
+                    }
+                    
+                    showStatus('✅ Migration completed successfully! Restart your server to see changes.', 'success');
+                    
+                    log('\n📋 Next steps:');
+                    log('   1. Restart your server');
+                    log('   2. Go to Manufacturing → Inventory Tab');
+                    log('   3. Use the location selector to filter inventory');
+                    
+                } else {
+                    throw new Error(result.error || result.message || 'Migration failed');
+                }
+                
+            } catch (error) {
+                log(`\n❌ Error: ${error.message}`);
+                showStatus(`❌ Migration failed: ${error.message}`, 'error');
+                
+                if (error.message.includes('authenticated')) {
+                    log('\n💡 Tip: Make sure you are logged in to the application.');
+                    log('   Open the app in another tab, log in, then come back here.');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Migration';
+            }
+        }
+        
+        // Auto-check if user is logged in
+        window.addEventListener('load', () => {
+            const token = localStorage.getItem('auth_token') || 
+                         localStorage.getItem('token') ||
+                         (window.storage && window.storage.getToken && window.storage.getToken());
+            
+            if (!token) {
+                showStatus('⚠️ Please log in to the application first, then refresh this page.', 'info');
+            } else {
+                showStatus('✅ Ready to run migration. Make sure you are logged in as admin.', 'info');
+            }
+        });
+    </script>
+</body>
+</html>
+

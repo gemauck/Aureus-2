@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Get Token & Run Migration</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 900px;
+            margin: 30px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-top: 0; }
+        .step {
+            background: #f9fafb;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #3b82f6;
+            border-radius: 4px;
+        }
+        .step h3 { margin-top: 0; color: #1e40af; }
+        code {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover { background: #2563eb; }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+        }
+        .status.success { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+        .status.error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
+        .status.info { background: #dbeafe; color: #1e40af; border: 1px solid #3b82f6; }
+        .token-display {
+            background: #fef3c7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            word-break: break-all;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 Get Auth Token & Run Migration</h1>
+        
+        <div class="step">
+            <h3>Step 1: Get Your Auth Token</h3>
+            <p>First, you need to be logged in to your application in another browser tab.</p>
+            <ol>
+                <li>Open your ERP application in a new tab and <strong>make sure you're logged in</strong></li>
+                <li>Come back to this tab</li>
+                <p>Then click the button below to try to extract the token from the application's localStorage:</p>
+                <button onclick="tryGetToken()">🔍 Try to Get Token from App</button>
+                <div id="tokenResult"></div>
+            </ol>
+        </div>
+
+        <div class="step">
+            <h3>Step 2: Alternative - Copy Token Manually</h3>
+            <p>If the automatic method doesn't work, manually get your token:</p>
+            <ol>
+                <li>Go to your ERP application (in another tab)</li>
+                <li>Press <strong>F12</strong> to open Developer Tools</li>
+                <li>Go to <strong>Application</strong> tab (Chrome) or <strong>Storage</strong> tab (Firefox)</li>
+                <li>Click on <strong>Local Storage</strong> → your domain</li>
+                <li>Look for keys like: <code>auth_token</code>, <code>token</code>, or <code>jwt_token</code></li>
+                <li>Copy the token value</li>
+                <li>Paste it below:</li>
+            </ol>
+            <input type="text" id="manualToken" placeholder="Paste your auth token here" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;">
+            <button onclick="useManualToken()">Use This Token</button>
+        </div>
+
+        <div class="step">
+            <h3>Step 3: Run Migration</h3>
+            <p>Once you have a token, click below to run the migration:</p>
+            <button id="runBtn" onclick="runMigration()" disabled>Run Migration</button>
+            <div id="status"></div>
+            <div id="log" style="display: none; background: #1f2937; color: #f9fafb; padding: 15px; border-radius: 6px; margin-top: 15px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+
+        function tryGetToken() {
+            const resultDiv = document.getElementById('tokenResult');
+            resultDiv.innerHTML = '<p style="color: #666;">Checking for token...</p>';
+            
+            // Try different ways to get token
+            let token = null;
+            
+            // Method 1: Try localStorage directly
+            token = localStorage.getItem('auth_token') || 
+                    localStorage.getItem('token') || 
+                    localStorage.getItem('jwt_token');
+            
+            // Method 2: Try sessionStorage
+            if (!token) {
+                token = sessionStorage.getItem('auth_token') || 
+                        sessionStorage.getItem('token') || 
+                        sessionStorage.getItem('jwt_token');
+            }
+            
+            // Method 3: Try to access window.storage if it exists (from app)
+            if (!token && window.storage) {
+                try {
+                    if (window.storage.getToken) {
+                        token = window.storage.getToken();
+                    }
+                } catch(e) {
+                    console.log('Could not get token from window.storage:', e);
+                }
+            }
+            
+            if (token) {
+                currentToken = token;
+                resultDiv.innerHTML = `
+                    <div class="status success">
+                        <strong>✅ Token found!</strong>
+                        <div class="token-display">${token.substring(0, 50)}...</div>
+                        <p>Token is ready. You can now run the migration.</p>
+                    </div>
+                `;
+                document.getElementById('runBtn').disabled = false;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="status error">
+                        <strong>❌ Token not found automatically</strong>
+                        <p>Please use Step 2 to get your token manually, or make sure you're logged in to the application in another tab and it's using the same domain.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function useManualToken() {
+            const manualToken = document.getElementById('manualToken').value.trim();
+            if (!manualToken) {
+                alert('Please paste a token first');
+                return;
+            }
+            
+            currentToken = manualToken;
+            document.getElementById('tokenResult').innerHTML = `
+                <div class="status success">
+                    <strong>✅ Token set manually!</strong>
+                    <div class="token-display">${manualToken.substring(0, 50)}...</div>
+                    <p>Token is ready. You can now run the migration.</p>
+                </div>
+            `;
+            document.getElementById('runBtn').disabled = false;
+        }
+
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.style.display = 'block';
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.textContent += `[${timestamp}] ${message}\n`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = message;
+            statusDiv.style.display = 'block';
+        }
+
+        async function runMigration() {
+            if (!currentToken) {
+                showStatus('❌ No token available. Please get your token first.', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('runBtn');
+            btn.disabled = true;
+            btn.textContent = 'Running...';
+            
+            const logDiv = document.getElementById('log');
+            logDiv.textContent = '';
+            logDiv.style.display = 'block';
+            
+            log('🔧 Starting migration...');
+            showStatus('Running migration...', 'info');
+            
+            try {
+                log('📡 Calling migration API...');
+                log(`Using token: ${currentToken.substring(0, 20)}...`);
+                
+                const response = await fetch('/api/run-location-migration', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log('\n✅ Migration completed successfully!');
+                    log('\n📊 Results:');
+                    
+                    if (result.results && result.results.steps) {
+                        result.results.steps.forEach((step) => {
+                            const icon = step.status === 'success' ? '✅' : 
+                                        step.status === 'warning' ? '⚠️' : 
+                                        step.status === 'already exists' ? 'ℹ️' : 
+                                        step.status === 'no action needed' ? 'ℹ️' : '❌';
+                            log(`${icon} Step ${step.step}: ${step.action} - ${step.status}`);
+                            if (step.assigned) log(`   → Assigned ${step.assigned} items`);
+                            if (step.created) log(`   → Created Main Warehouse`);
+                            if (step.id) log(`   → Main Warehouse ID: ${step.id}`);
+                        });
+                    }
+                    
+                    showStatus(`
+                        <strong>✅ Migration completed successfully!</strong>
+                        <p>Now restart your server to see the changes.</p>
+                        <p><strong>Next steps:</strong></p>
+                        <ol>
+                            <li>Restart your server</li>
+                            <li>Go to Manufacturing → Inventory Tab</li>
+                            <li>You should see a location selector dropdown</li>
+                        </ol>
+                    `, 'success');
+                    
+                } else {
+                    throw new Error(result.error || result.message || 'Migration failed');
+                }
+                
+            } catch (error) {
+                log(`\n❌ Error: ${error.message}`);
+                showStatus(`❌ Migration failed: ${error.message}`, 'error');
+                
+                if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+                    log('\n💡 Authentication failed. The token may be invalid or expired.');
+                    log('   Try getting a fresh token from the application.');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Run Migration';
+            }
+        }
+
+        // Try to get token on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                tryGetToken();
+            }, 500);
+        });
+    </script>
+</body>
+</html>
+

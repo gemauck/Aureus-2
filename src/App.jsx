@@ -17,9 +17,35 @@ const AppContent = () => {
     const isResetPage = window.location.pathname === '/reset-password' && urlParams.get('token');
     const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
     
+    // State to track if JobCardFormPublic component has loaded
+    const [jobCardFormLoaded, setJobCardFormLoaded] = React.useState(!!window.JobCardFormPublic);
+    
+    // Check for component loading
+    React.useEffect(() => {
+        if (isPublicJobCardPage && !window.JobCardFormPublic) {
+            // Poll for component to load (since it's loaded with defer)
+            const checkInterval = setInterval(() => {
+                if (window.JobCardFormPublic) {
+                    setJobCardFormLoaded(true);
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                if (!window.JobCardFormPublic) {
+                    console.error('❌ JobCardFormPublic component failed to load after 5 seconds');
+                }
+            }, 5000);
+            
+            return () => clearInterval(checkInterval);
+        }
+    }, [isPublicJobCardPage]);
+    
     // Show public job card form - no auth required
     if (isPublicJobCardPage) {
-        if (window.JobCardFormPublic) {
+        if (window.JobCardFormPublic && jobCardFormLoaded) {
             return <window.JobCardFormPublic />;
         } else {
             return (
@@ -27,6 +53,9 @@ const AppContent = () => {
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                         <p className="text-gray-600">Loading job card form...</p>
+                        {!window.JobCardFormPublic && (
+                            <p className="text-xs text-gray-500 mt-2">Waiting for component to load...</p>
+                        )}
                     </div>
                 </div>
             );
@@ -133,6 +162,7 @@ const App = () => {
     // If public job card page, render it directly without providers (no auth needed)
     const isPublicJobCardPage = window.location.pathname === '/job-card' || window.location.pathname === '/jobcard';
     if (isPublicJobCardPage) {
+        // Wait for component to load if not available yet
         if (window.JobCardFormPublic) {
             return (
                 <window.ThemeProvider>
@@ -140,12 +170,14 @@ const App = () => {
                 </window.ThemeProvider>
             );
         }
+        // Show loading state while component loads
         return (
             <window.ThemeProvider>
                 <div className="min-h-screen flex items-center justify-center bg-gray-50">
                     <div className="text-center">
                         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
                         <p className="text-gray-600">Loading job card form...</p>
+                        <p className="text-xs text-gray-500 mt-2">If this doesn't load, check browser console</p>
                     </div>
                 </div>
             </window.ThemeProvider>
