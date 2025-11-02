@@ -8,27 +8,32 @@ const ProjectProgressTracker = ({ onBack }) => {
         console.warn('⚠️ ProjectProgressTracker: onBack prop is missing or invalid');
     }
     
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth(); // 0-11
+    // Validate all constants immediately and ensure they're safe
+    const currentYear = typeof new Date().getFullYear() === 'number' ? new Date().getFullYear() : 2025;
+    const currentMonth = typeof new Date().getMonth() === 'number' ? new Date().getMonth() : 0; // 0-11
     
     // Calculate working months (2 months in arrears from current month)
     // Example: If current month is October, working months are August and September
     const getWorkingMonths = () => {
         const twoMonthsBack = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
         const oneMonthBack = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [twoMonthsBack, oneMonthBack];
+        return [Number(twoMonthsBack), Number(oneMonthBack)];
     };
     
     const workingMonths = getWorkingMonths();
+    // Validate workingMonths is array of numbers
+    if (!Array.isArray(workingMonths) || workingMonths.some(m => typeof m !== 'number')) {
+        console.error('❌ ProjectProgressTracker: Invalid workingMonths:', workingMonths);
+    }
     // Default scroll position: first working month (2 months back from current)
-    const scrollToMonth = workingMonths[0];
+    const scrollToMonth = typeof workingMonths[0] === 'number' ? workingMonths[0] : 0;
     
     const [projects, setProjects] = useState([]);
     const [selectedProject, setSelectedProject] = useState(null);
     const [showProgressModal, setShowProgressModal] = useState(false);
     const [selectedMonth, setSelectedMonth] = useState(null);
     const [selectedField, setSelectedField] = useState(null); // 'compliance', 'data', or 'comments'
-    const [selectedYear, setSelectedYear] = useState(currentYear);
+    const [selectedYear, setSelectedYear] = useState(Number(currentYear));
     const [draggedProject, setDraggedProject] = useState(null);
     const [dragOverIndex, setDragOverIndex] = useState(null);
     const [isExporting, setIsExporting] = useState(false);
@@ -39,27 +44,39 @@ const ProjectProgressTracker = ({ onBack }) => {
     const tableRef = useRef(null);
     const monthRefs = useRef({});
 
+    // Ensure months is always a valid array of strings
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
-    ];
+    ].filter(m => typeof m === 'string');
 
-    // Generate year options (current year ± 5 years)
+    // Generate year options (current year ± 5 years) - ensure all are numbers
     const yearOptions = [];
     for (let i = currentYear - 5; i <= currentYear + 5; i++) {
-        yearOptions.push(i);
+        if (typeof i === 'number' && !isNaN(i)) {
+            yearOptions.push(Number(i));
+        }
     }
 
     // Status options with color progression from red to green
+    // Ensure all properties are strings to prevent React error #300
     const statusOptions = [
-        { value: 'not-started', label: 'Not Started', color: 'bg-red-100 text-red-800', cellColor: 'bg-red-50', selectColor: 'bg-red-100 text-red-800 border-red-300' },
-        { value: 'data-received', label: 'Data Received', color: 'bg-orange-100 text-orange-800', cellColor: 'bg-orange-50', selectColor: 'bg-orange-100 text-orange-800 border-orange-300' },
-        { value: 'in-progress', label: 'In Progress', color: 'bg-yellow-100 text-yellow-800', cellColor: 'bg-yellow-50', selectColor: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-        { value: 'ready-checking', label: 'Ready for Checking', color: 'bg-lime-100 text-lime-800', cellColor: 'bg-lime-50', selectColor: 'bg-lime-100 text-lime-800 border-lime-300' },
-        { value: 'checked', label: 'Checked', color: 'bg-cyan-100 text-cyan-800', cellColor: 'bg-cyan-50', selectColor: 'bg-cyan-100 text-cyan-800 border-cyan-300' },
-        { value: 'reports-prepared', label: 'Reports Prepared', color: 'bg-blue-100 text-blue-800', cellColor: 'bg-blue-50', selectColor: 'bg-blue-100 text-blue-800 border-blue-300' },
-        { value: 'done', label: 'Done', color: 'bg-green-100 text-green-800', cellColor: 'bg-green-50', selectColor: 'bg-green-100 text-green-800 border-green-300' }
+        { value: String('not-started'), label: String('Not Started'), color: String('bg-red-100 text-red-800'), cellColor: String('bg-red-50'), selectColor: String('bg-red-100 text-red-800 border-red-300') },
+        { value: String('data-received'), label: String('Data Received'), color: String('bg-orange-100 text-orange-800'), cellColor: String('bg-orange-50'), selectColor: String('bg-orange-100 text-orange-800 border-orange-300') },
+        { value: String('in-progress'), label: String('In Progress'), color: String('bg-yellow-100 text-yellow-800'), cellColor: String('bg-yellow-50'), selectColor: String('bg-yellow-100 text-yellow-800 border-yellow-300') },
+        { value: String('ready-checking'), label: String('Ready for Checking'), color: String('bg-lime-100 text-lime-800'), cellColor: String('bg-lime-50'), selectColor: String('bg-lime-100 text-lime-800 border-lime-300') },
+        { value: String('checked'), label: String('Checked'), color: String('bg-cyan-100 text-cyan-800'), cellColor: String('bg-cyan-50'), selectColor: String('bg-cyan-100 text-cyan-800 border-cyan-300') },
+        { value: String('reports-prepared'), label: String('Reports Prepared'), color: String('bg-blue-100 text-blue-800'), cellColor: String('bg-blue-50'), selectColor: String('bg-blue-100 text-blue-800 border-blue-300') },
+        { value: String('done'), label: String('Done'), color: String('bg-green-100 text-green-800'), cellColor: String('bg-green-50'), selectColor: String('bg-green-100 text-green-800 border-green-300') }
     ];
+    
+    // Validate statusOptions array structure
+    if (!Array.isArray(statusOptions)) {
+        console.error('❌ ProjectProgressTracker: statusOptions is not an array');
+        return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+            React.createElement('p', { className: 'text-red-800' }, 'Error: Invalid statusOptions configuration')
+        );
+    }
 
     useEffect(() => {
         loadProjects();
@@ -1182,21 +1199,13 @@ const ProjectProgressTracker = ({ onBack }) => {
     // Validate all constants before render
     if (!Array.isArray(months)) {
         console.error('❌ ProjectProgressTracker: months is not an array:', months);
-        return (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-800">Error: Invalid months configuration</p>
-            </div>
+        return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+            React.createElement('p', { className: 'text-red-800' }, 'Error: Invalid months configuration')
         );
     }
     
-    if (!Array.isArray(statusOptions)) {
-        console.error('❌ ProjectProgressTracker: statusOptions is not an array:', statusOptions);
-        return (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-800">Error: Invalid statusOptions configuration</p>
-            </div>
-        );
-    }
+    // Validate selectedYear is a number
+    const safeSelectedYear = typeof selectedYear === 'number' && !isNaN(selectedYear) ? selectedYear : currentYear;
     
     // Wrap entire render in try-catch to catch any rendering errors
     try {
