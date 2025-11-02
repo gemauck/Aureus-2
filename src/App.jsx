@@ -53,9 +53,8 @@ const AppContent = () => {
 
     // Check public routes FIRST, before any auth/data loading
     // Use lowercase comparison for mobile browser compatibility
-    // NOTE: pathname already declared earlier in AppContent
-    const currentPathname = (window.location.pathname || '').toLowerCase();
-    const isPublicJobCardPage = currentPathname === '/job-card' || currentPathname === '/jobcard';
+    // Reuse pathname already declared at top of AppContent
+    const isPublicJobCardPage = pathname === '/job-card' || pathname === '/jobcard';
     
     // If this is a public job card page, handle it immediately without auth
     // Use React hooks directly
