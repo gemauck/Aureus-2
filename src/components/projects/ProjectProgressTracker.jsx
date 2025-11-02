@@ -1656,6 +1656,18 @@ const ProjectProgressTracker = ({ onBack }) => {
                 </div>
             </div>
         );
+    } catch (outerError) {
+        // Catch any errors in hooks, state initialization, or constant definitions
+        console.error('❌ ProjectProgressTracker: Component initialization error:', outerError);
+        console.error('❌ Error details:', {
+            message: outerError?.message,
+            stack: outerError?.stack,
+            name: outerError?.name
+        });
+        return React.createElement('div', { className: 'p-4 bg-red-50 border border-red-200 rounded-lg' },
+            React.createElement('p', { className: 'text-red-800' }, 'Error initializing progress tracker. Please refresh the page.'),
+            React.createElement('p', { className: 'text-red-600 text-xs mt-1' }, String(outerError?.message || outerError || 'Unknown error'))
+        );
     }
 };
 
