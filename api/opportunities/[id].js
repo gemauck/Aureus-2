@@ -13,8 +13,9 @@ async function handler(req, res) {
       params: req.params
     })
     
-    // Extract ID from params or URL
-    const id = req.params?.id || req.url.split('/').pop()
+    // Extract ID from params or URL (strip query parameters)
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    const id = req.params?.id || urlPath.split('/').pop()
     
     if (!id) {
       return badRequest(res, 'Opportunity ID required')

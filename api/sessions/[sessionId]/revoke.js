@@ -15,8 +15,9 @@ async function handler(req, res) {
       return badRequest(res, 'User not authenticated')
     }
 
-    // Extract sessionId from URL
-    const urlParts = req.url?.split('/').filter(Boolean)
+    // Extract sessionId from URL (strip query parameters)
+    const urlPath = req.url?.split('?')[0].split('#')[0]
+    const urlParts = urlPath?.split('/').filter(Boolean)
     const sessionId = urlParts[urlParts.length - 1] // Last part after /sessions/
 
     if (!sessionId) {

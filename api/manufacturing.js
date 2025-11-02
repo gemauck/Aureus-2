@@ -6,7 +6,8 @@ import { ensureBOMMigration } from './_lib/ensureBOMMigration.js'
 async function handler(req, res) {
   // Ensure BOM migration is applied (non-blocking, safe)
   await ensureBOMMigration().catch(() => {}) // Ignore errors
-  const urlPath = req.url.replace(/^\/api\//, '/')
+  // Strip query parameters and hash from URL path before parsing
+  const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
   const resourceType = pathSegments[1] // inventory, boms, production-orders, stock-movements, locations, location-inventory, stock-transactions
   const id = pathSegments[2]

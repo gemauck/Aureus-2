@@ -60,7 +60,11 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadClients = async () => {
       try {
-        const cached = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
+        // Try multiple localStorage keys that might have client data
+        const cached1 = JSON.parse(localStorage.getItem('manufacturing_clients') || '[]');
+        const cached2 = JSON.parse(localStorage.getItem('clients') || '[]');
+        const cached = cached1.length > 0 ? cached1 : cached2;
+        
         const activeClients = Array.isArray(cached) ? cached.filter(c => {
           const status = (c.status || '').toLowerCase();
           const type = (c.type || 'client').toLowerCase();
@@ -68,14 +72,24 @@ const JobCardFormPublic = () => {
                  (type === 'client' || !c.type);
         }) : [];
         
+        console.log('📋 JobCardFormPublic: Loaded clients from cache:', activeClients.length);
+        
         if (activeClients.length > 0) {
           setClients(activeClients);
+          setIsLoading(false); // Set loading false if we have cached data
         }
 
-        // Try to sync from API if online (no auth needed for public endpoint)
+        // Try to sync from API if online (might require auth, but try anyway)
         if (isOnline) {
           try {
-            const response = await fetch('/api/clients');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch clients from API...');
+            const response = await fetch('/api/clients', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
             if (response.ok) {
               const data = await response.json();
               const allClients = data?.data?.clients || data?.data || [];
@@ -87,17 +101,25 @@ const JobCardFormPublic = () => {
               }) : [];
               
               if (active.length > 0) {
+                console.log('✅ JobCardFormPublic: Loaded clients from API:', active.length);
                 setClients(active);
                 localStorage.setItem('manufacturing_clients', JSON.stringify(active));
+                localStorage.setItem('clients', JSON.stringify(active)); // Also save to main key
               }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: API returned status', response.status, '- using cached data');
             }
           } catch (error) {
-            console.warn('Failed to load clients from API, using cache:', error);
+            console.warn('⚠️ JobCardFormPublic: Failed to load clients from API, using cache:', error.message);
           }
         }
+        
+        // Set loading false even if no cached data (show form with empty selects)
+        if (activeClients.length === 0) {
+          setIsLoading(false);
+        }
       } catch (error) {
-        console.error('Error loading clients:', error);
-      } finally {
+        console.error('❌ JobCardFormPublic: Error loading clients:', error);
         setIsLoading(false);
       }
     };
@@ -108,28 +130,45 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const cached = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
+        // Try multiple localStorage keys
+        const cached1 = JSON.parse(localStorage.getItem('manufacturing_users') || '[]');
+        const cached2 = JSON.parse(localStorage.getItem('users') || '[]');
+        const cached = cached1.length > 0 ? cached1 : cached2;
+        
+        console.log('👥 JobCardFormPublic: Loaded users from cache:', cached.length);
+        
         if (cached.length > 0) {
           setUsers(cached);
         }
 
         if (isOnline) {
           try {
-            const response = await fetch('/api/users');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch users from API...');
+            const response = await fetch('/api/users', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
             if (response.ok) {
               const data = await response.json();
               const usersData = data?.data?.users || data?.data || [];
               if (Array.isArray(usersData) && usersData.length > 0) {
+                console.log('✅ JobCardFormPublic: Loaded users from API:', usersData.length);
                 setUsers(usersData);
                 localStorage.setItem('manufacturing_users', JSON.stringify(usersData));
+                localStorage.setItem('users', JSON.stringify(usersData)); // Also save to main key
               }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Users API returned status', response.status, '- using cached data');
             }
           } catch (error) {
-            console.warn('Failed to load users from API, using cache:', error);
+            console.warn('⚠️ JobCardFormPublic: Failed to load users from API, using cache:', error.message);
           }
         }
       } catch (error) {
-        console.error('Error loading users:', error);
+        console.error('❌ JobCardFormPublic: Error loading users:', error);
       }
     };
     loadUsers();
@@ -139,40 +178,89 @@ const JobCardFormPublic = () => {
   useEffect(() => {
     const loadStockData = async () => {
       try {
+        // Load inventory from cache
         const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
+        console.log('📦 JobCardFormPublic: Loaded inventory from cache:', cachedInventory.length);
+        
         if (cachedInventory.length > 0) {
           setInventory(cachedInventory);
         }
 
+        // Try to load from API if online
         if (isOnline) {
           try {
-            const invResponse = await fetch('/api/manufacturing/inventory');
+            console.log('🌐 JobCardFormPublic: Attempting to fetch inventory from API...');
+            const invResponse = await fetch('/api/manufacturing/inventory', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
             if (invResponse.ok) {
               const invData = await invResponse.json();
               const inventoryItems = invData?.data?.inventory || invData?.data || [];
               if (Array.isArray(inventoryItems) && inventoryItems.length > 0) {
+                console.log('✅ JobCardFormPublic: Loaded inventory from API:', inventoryItems.length);
                 setInventory(inventoryItems);
                 localStorage.setItem('manufacturing_inventory', JSON.stringify(inventoryItems));
               }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Inventory API returned status', invResponse.status, '- using cached data');
             }
           } catch (error) {
-            console.warn('Failed to load inventory:', error);
+            console.warn('⚠️ JobCardFormPublic: Failed to load inventory from API:', error.message);
           }
         }
         
-        const cachedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        // Load stock locations - try multiple keys and provide defaults
+        const cachedLocations1 = JSON.parse(localStorage.getItem('stock_locations') || '[]');
+        const cachedLocations2 = JSON.parse(localStorage.getItem('manufacturing_locations') || '[]');
+        const cachedLocations = cachedLocations1.length > 0 ? cachedLocations1 : cachedLocations2;
+        
+        console.log('📍 JobCardFormPublic: Loaded locations from cache:', cachedLocations.length);
+        
         if (cachedLocations.length > 0) {
           setStockLocations(cachedLocations);
         } else {
+          // Provide default locations if none cached
           const defaultLocations = [
-            { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse' },
-            { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle' }
+            { id: 'LOC001', code: 'WH-MAIN', name: 'Main Warehouse', type: 'warehouse', status: 'active' },
+            { id: 'LOC002', code: 'LDV-001', name: 'Service LDV 1', type: 'vehicle', status: 'active' }
           ];
+          console.log('📍 JobCardFormPublic: Using default locations');
           setStockLocations(defaultLocations);
           localStorage.setItem('stock_locations', JSON.stringify(defaultLocations));
         }
+        
+        // Try to load locations from API if online
+        if (isOnline) {
+          try {
+            console.log('🌐 JobCardFormPublic: Attempting to fetch locations from API...');
+            const locResponse = await fetch('/api/manufacturing/locations', {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            });
+            
+            if (locResponse.ok) {
+              const locData = await locResponse.json();
+              const locations = locData?.data?.locations || locData?.data || [];
+              if (Array.isArray(locations) && locations.length > 0) {
+                console.log('✅ JobCardFormPublic: Loaded locations from API:', locations.length);
+                setStockLocations(locations);
+                localStorage.setItem('stock_locations', JSON.stringify(locations));
+              }
+            } else {
+              console.warn('⚠️ JobCardFormPublic: Locations API returned status', locResponse.status, '- using cached data');
+            }
+          } catch (error) {
+            console.warn('⚠️ JobCardFormPublic: Failed to load locations from API:', error.message);
+          }
+        }
       } catch (error) {
-        console.error('Error loading stock data:', error);
+        console.error('❌ JobCardFormPublic: Error loading stock data:', error);
       }
     };
     loadStockData();
@@ -454,14 +542,14 @@ const JobCardFormPublic = () => {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-gray-50 py-4 px-3 sm:py-8 sm:px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6 mb-4 sm:mb-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Job Card Form</h1>
-              <p className="text-sm text-gray-500 mt-1">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Job Card Form</h1>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
                 {!isOnline && <span className="text-orange-600">⚠️ Offline Mode - Changes will sync when connection is restored</span>}
                 {isOnline && <span className="text-green-600">✓ Online</span>}
               </p>
@@ -470,10 +558,10 @@ const JobCardFormPublic = () => {
         </div>
 
         {/* Form */}
-        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
+        <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-4 sm:space-y-6">
           {/* Agent Name */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Agent Name *
             </label>
             <select
@@ -481,7 +569,8 @@ const JobCardFormPublic = () => {
               value={formData.agentName}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             >
               <option value="">Select technician</option>
               {availableTechnicians.map(tech => (
@@ -493,8 +582,8 @@ const JobCardFormPublic = () => {
           </div>
 
           {/* Client - REQUIRED */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Client *
             </label>
             <select
@@ -502,7 +591,8 @@ const JobCardFormPublic = () => {
               value={formData.clientId}
               onChange={handleChange}
               required
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             >
               <option value="">Select client</option>
               {clients.map(client => (
@@ -513,8 +603,8 @@ const JobCardFormPublic = () => {
 
           {/* Rest of form fields - copy from JobCards.jsx but simplified */}
           {/* Site - OPTIONAL */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Site
             </label>
             <select
@@ -522,7 +612,8 @@ const JobCardFormPublic = () => {
               value={formData.siteId}
               onChange={handleChange}
               disabled={!formData.clientId || availableSites.length === 0}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 bg-white"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             >
               <option value="">
                 {availableSites.length === 0 ? 'No sites available for this client' : 'Select site'}
@@ -536,8 +627,8 @@ const JobCardFormPublic = () => {
           </div>
 
           {/* Location */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Location
             </label>
             <input
@@ -545,14 +636,15 @@ const JobCardFormPublic = () => {
               name="location"
               value={formData.location}
               onChange={handleChange}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
               placeholder="Specific location details"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
           </div>
 
           {/* Reason for Visit - OPTIONAL */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Reason for Call Out / Visit
             </label>
             <textarea
@@ -560,81 +652,91 @@ const JobCardFormPublic = () => {
               value={formData.reasonForVisit}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Why was the agent requested to come out?"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
           </div>
 
           {/* Time of Departure and Arrival */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time of Departure
-              </label>
-              <input
-                type="datetime-local"
-                name="timeOfDeparture"
-                value={formData.timeOfDeparture}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time of Arrival
-              </label>
-              <input
-                type="datetime-local"
-                name="timeOfArrival"
-                value={formData.timeOfArrival}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time of Departure
+                </label>
+                <input
+                  type="datetime-local"
+                  name="timeOfDeparture"
+                  value={formData.timeOfDeparture}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Time of Arrival
+                </label>
+                <input
+                  type="datetime-local"
+                  name="timeOfArrival"
+                  value={formData.timeOfArrival}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
+                />
+              </div>
             </div>
           </div>
 
           {/* Vehicle and Kilometer Readings */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Vehicle Used
-              </label>
-              <input
-                type="text"
-                name="vehicleUsed"
-                value={formData.vehicleUsed}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="e.g., AB12 CD 3456"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                KM Reading Before
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                name="kmReadingBefore"
-                value={formData.kmReadingBefore}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="0.0"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                KM Reading After
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                name="kmReadingAfter"
-                value={formData.kmReadingAfter}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                placeholder="0.0"
-              />
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Vehicle Used
+                </label>
+                <input
+                  type="text"
+                  name="vehicleUsed"
+                  value={formData.vehicleUsed}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., AB12 CD 3456"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  KM Reading Before
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="kmReadingBefore"
+                  value={formData.kmReadingBefore}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.0"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  KM Reading After
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  name="kmReadingAfter"
+                  value={formData.kmReadingAfter}
+                  onChange={handleChange}
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.0"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
+                />
+              </div>
             </div>
           </div>
 
@@ -648,8 +750,8 @@ const JobCardFormPublic = () => {
           )}
 
           {/* Diagnosis */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Diagnosis
             </label>
             <textarea
@@ -657,14 +759,15 @@ const JobCardFormPublic = () => {
               value={formData.diagnosis}
               onChange={handleChange}
               rows={4}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Notes and comments about diagnosis"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
           </div>
 
           {/* Actions Taken */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Actions Taken
             </label>
             <textarea
@@ -672,20 +775,22 @@ const JobCardFormPublic = () => {
               value={formData.actionsTaken}
               onChange={handleChange}
               rows={4}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Describe what actions were taken to resolve the issue"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
           </div>
 
           {/* Stock Used Section */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
-            <div className="grid grid-cols-12 gap-2 mb-3">
-              <div className="col-span-4">
+            <div className="space-y-3 sm:space-y-0 sm:grid sm:grid-cols-12 sm:gap-2 mb-3">
+              <div className="sm:col-span-4">
                 <select
                   value={newStockItem.sku}
                   onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg bg-white"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
                 >
                   <option value="">Select component</option>
                   {inventory.map(item => (
@@ -695,11 +800,12 @@ const JobCardFormPublic = () => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-4">
+              <div className="sm:col-span-4">
                 <select
                   value={newStockItem.locationId}
                   onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg bg-white"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
                 >
                   <option value="">Select location</option>
                   {stockLocations.map(loc => (
@@ -709,7 +815,7 @@ const JobCardFormPublic = () => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <input
                   type="number"
                   step="0.01"
@@ -717,14 +823,15 @@ const JobCardFormPublic = () => {
                   value={newStockItem.quantity || ''}
                   onChange={(e) => setNewStockItem({ ...newStockItem, quantity: parseFloat(e.target.value) || 0 })}
                   placeholder="Qty"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
                 />
               </div>
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <button
                   type="button"
                   onClick={handleAddStockItem}
-                  className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
                 >
                   <i className="fas fa-plus mr-1"></i>Add
                 </button>
@@ -755,16 +862,17 @@ const JobCardFormPublic = () => {
           </div>
 
           {/* Materials Bought Section */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Materials Bought (Not from Stock)</h3>
-            <div className="space-y-2 mb-3">
-              <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-3 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <input
                   type="text"
                   value={newMaterialItem.itemName}
                   onChange={(e) => setNewMaterialItem({ ...newMaterialItem, itemName: e.target.value })}
                   placeholder="Item Name *"
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
                 />
                 <input
                   type="number"
@@ -773,7 +881,8 @@ const JobCardFormPublic = () => {
                   value={newMaterialItem.cost || ''}
                   onChange={(e) => setNewMaterialItem({ ...newMaterialItem, cost: parseFloat(e.target.value) || 0 })}
                   placeholder="Cost (R) *"
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg"
+                  style={{ fontSize: '16px' }} // Prevent zoom on iOS
                 />
               </div>
               <input
@@ -781,19 +890,21 @@ const JobCardFormPublic = () => {
                 value={newMaterialItem.description}
                 onChange={(e) => setNewMaterialItem({ ...newMaterialItem, description: e.target.value })}
                 placeholder="Description"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg"
+                style={{ fontSize: '16px' }} // Prevent zoom on iOS
               />
               <input
                 type="text"
                 value={newMaterialItem.reason}
                 onChange={(e) => setNewMaterialItem({ ...newMaterialItem, reason: e.target.value })}
                 placeholder="Reason for purchase"
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg"
+                style={{ fontSize: '16px' }} // Prevent zoom on iOS
               />
               <button
                 type="button"
                 onClick={handleAddMaterialItem}
-                className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 text-sm font-medium touch-manipulation"
               >
                 <i className="fas fa-plus mr-1"></i>Add Material
               </button>
@@ -837,8 +948,8 @@ const JobCardFormPublic = () => {
           </div>
 
           {/* Other Comments */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Other Comments
             </label>
             <textarea
@@ -846,21 +957,22 @@ const JobCardFormPublic = () => {
               value={formData.otherComments}
               onChange={handleChange}
               rows={3}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-y"
               placeholder="Additional comments or observations"
+              style={{ fontSize: '16px' }} // Prevent zoom on iOS
             />
           </div>
 
           {/* Submit Button */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
             <button
               type="submit"
               disabled={isSubmitting || !formData.clientId}
-              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className="w-full px-6 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-base touch-manipulation"
             >
               {isSubmitting ? 'Saving...' : 'Save Job Card'}
             </button>
-            <p className="text-xs text-gray-500 mt-2 text-center">
+            <p className="text-xs text-gray-500 mt-3 text-center">
               * Client is required. Other fields are optional.
             </p>
           </div>

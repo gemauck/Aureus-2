@@ -14,7 +14,9 @@ async function handler(req, res) {
       user: req.user
     });
     
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Strip query parameters before splitting (safety fallback)
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    const pathSegments = urlPath.split('/').filter(Boolean)
     
     // Extract clientId and contactId from Express params or path
     const clientId = req.params?.clientId || (pathSegments[1] === 'client' ? pathSegments[2] : null)

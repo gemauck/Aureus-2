@@ -16,7 +16,9 @@ async function handler(req, res) {
     })
     
     // Parse the URL path (handle both /api/opportunities/... and /opportunities/...)
-    let pathSegments = req.url.split('/').filter(Boolean)
+    // Strip query parameters before splitting
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    let pathSegments = urlPath.split('/').filter(Boolean)
     // Remove 'api' from the beginning if present
     if (pathSegments[0] === 'api') {
       pathSegments = pathSegments.slice(1)

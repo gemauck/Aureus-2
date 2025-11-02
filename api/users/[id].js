@@ -6,8 +6,9 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
-    // Extract user ID from URL
-    const userId = req.url.split('/').pop()
+    // Extract user ID from URL (strip query parameters)
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    const userId = urlPath.split('/').pop()
 
     if (req.method === 'GET') {
         try {

@@ -3,7 +3,8 @@ import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
 
 async function handler(req, res) {
-  const urlPath = req.url.replace(/^\/api\//, '/')
+  // Strip query parameters before splitting
+  const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
   const pathSegments = urlPath.split('/').filter(Boolean)
   const resourceType = pathSegments[0] // jobcards (direct endpoint, not nested like /api/manufacturing/*)
   const id = pathSegments[1]

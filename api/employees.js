@@ -3,7 +3,9 @@ import { prisma } from './_lib/prisma.js'
 import { ok, created, badRequest, notFound, serverError } from './_lib/response.js'
 
 async function handler(req, res) {
-  const pathSegments = req.url.split('/').filter(Boolean)
+  // Strip query parameters before splitting
+  const urlPath = req.url.split('?')[0].split('#')[0]
+  const pathSegments = urlPath.split('/').filter(Boolean)
   const id = pathSegments[pathSegments.length - 1]
 
   // LIST (GET /api/employees)

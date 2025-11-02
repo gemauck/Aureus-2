@@ -23,7 +23,8 @@ async function handler(req, res) {
     console.log('🔍 Projects API: Original URL:', req.originalUrl)
     
     // Parse the URL path - strip /api/ prefix if present
-    const urlPath = req.url.replace(/^\/api\//, '/')
+    // Strip query parameters before splitting
+    const urlPath = req.url.split('?')[0].split('#')[0].replace(/^\/api\//, '/')
     const pathSegments = urlPath.split('/').filter(Boolean)
     console.log('🔍 Projects API: Path segments:', pathSegments)
     const id = req.params?.id || pathSegments[pathSegments.length - 1]

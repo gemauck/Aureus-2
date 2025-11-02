@@ -16,7 +16,9 @@ async function handler(req, res) {
     })
     
     // Parse the URL path (already has /api/ stripped by server)
-    const pathSegments = req.url.split('/').filter(Boolean)
+    // Strip query parameters before splitting
+    const urlPath = req.url.split('?')[0].split('#')[0]
+    const pathSegments = urlPath.split('/').filter(Boolean)
     const id = pathSegments[pathSegments.length - 1]
 
     // List Time Entries (GET /api/time-entries)
