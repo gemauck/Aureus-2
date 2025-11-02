@@ -1282,6 +1282,12 @@ async function handler(req, res) {
               }
             })
             
+            // Update production order status to completed
+            await tx.productionOrder.update({
+              where: { id },
+              data: { status: 'completed' }
+            })
+            
             console.log(`✅ Added ${quantityProduced} units of ${finishedProduct.name} to inventory with cost ${unitCost} per unit`)
           }, {
             timeout: 30000
@@ -1622,6 +1628,12 @@ async function handler(req, res) {
                 }
               }
               
+              // Update order status in transaction
+              await tx.productionOrder.update({
+                where: { id },
+                data: { status: newStatus }
+              })
+              
               console.log(`✅ Stock return completed for work order ${id}`)
             }, {
               timeout: 30000
@@ -1629,11 +1641,28 @@ async function handler(req, res) {
           }
         }
         
-        // Update order with other fields (status already updated in transaction above if applicable)
-        const order = await prisma.productionOrder.update({
-          where: { id },
-          data: updateData
-        })
+        // Update order with other fields (but remove status if it was already updated in transaction)
+        // Remove status from updateData if it was handled in a transaction above
+        const fieldsToUpdate = { ...updateData }
+        if ((newStatus === 'completed' && oldStatus !== 'completed') ||
+            (newStatus === 'in_production' && oldStatus === 'requested') ||
+            (newStatus === 'requested' && oldStatus === 'in_production') ||
+            newStatus === 'cancelled') {
+          // Status was already updated in the transaction above, remove it from updateData
+          delete fieldsToUpdate.status
+        }
+        
+        // Only update if there are fields to update
+        let order
+        if (Object.keys(fieldsToUpdate).length > 0) {
+          order = await prisma.productionOrder.update({
+            where: { id },
+            data: fieldsToUpdate
+          })
+        } else {
+          // Just fetch the order if no fields to update
+          order = await prisma.productionOrder.findUnique({ where: { id } })
+        }
         
         console.log('✅ Updated production order:', id)
         return ok(res, { 
