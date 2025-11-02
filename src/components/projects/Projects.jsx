@@ -279,6 +279,188 @@ const Projects = () => {
         };
     }, []); // Only run once on initial mount
 
+    // Function to actively load ProjectDetail if not available
+    const loadProjectDetail = async () => {
+        if (window.ProjectDetail) {
+            console.log('✅ ProjectDetail already available');
+            setProjectDetailAvailable(true);
+            return true;
+        }
+        
+        // Check if script is already in DOM
+        const existingScript = document.querySelector(`script[src*="ProjectDetail.js"]`);
+        if (existingScript) {
+            console.log('⏳ ProjectDetail script already loading, waiting...');
+            // Wait for it to finish loading
+            return new Promise((resolve) => {
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.ProjectDetail) {
+                        console.log('✅ ProjectDetail loaded from existing script');
+                        setProjectDetailAvailable(true);
+                        clearInterval(checkInterval);
+                        resolve(true);
+                    } else if (attempts >= 50) {
+                        console.warn('⚠️ ProjectDetail script loaded but component not registered');
+                        clearInterval(checkInterval);
+                        resolve(false);
+                    }
+                }, 100);
+            });
+        }
+        
+        // Try to load ProjectDetail from the lazy loader path
+        const projectDetailPath = './dist/src/components/projects/ProjectDetail.js';
+        console.log('📥 Loading ProjectDetail from:', projectDetailPath);
+        
+        try {
+            const script = document.createElement('script');
+            script.src = projectDetailPath;
+            script.type = 'text/javascript';
+            script.async = false; // Load synchronously to ensure it executes
+            
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('ProjectDetail load timeout after 5 seconds'));
+                }, 5000);
+                
+                script.onload = () => {
+                    console.log('✅ ProjectDetail script loaded, checking registration...');
+                    // Wait for the script to execute and register
+                    let attempts = 0;
+                    const checkInterval = setInterval(() => {
+                        attempts++;
+                        if (window.ProjectDetail) {
+                            console.log('✅ ProjectDetail registered successfully');
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            setProjectDetailAvailable(true);
+                            resolve(true);
+                        } else if (attempts >= 20) {
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            reject(new Error('ProjectDetail not registered after script load (waited 2s)'));
+                        }
+                    }, 100);
+                };
+                
+                script.onerror = (error) => {
+                    clearTimeout(timeout);
+                    console.error('❌ Failed to load ProjectDetail script:', error);
+                    reject(new Error(`Failed to load ProjectDetail script: ${error.message || 'Unknown error'}`));
+                };
+                
+                document.head.appendChild(script);
+            });
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to actively load ProjectDetail:', error);
+            // Try alternative path
+            const altPath = '/dist/src/components/projects/ProjectDetail.js';
+            console.log('🔄 Trying alternative path:', altPath);
+            
+            try {
+                const script2 = document.createElement('script');
+                script2.src = altPath;
+                script2.type = 'text/javascript';
+                script2.async = false;
+                
+                await new Promise((resolve, reject) => {
+                    script2.onload = () => {
+                        setTimeout(() => {
+                            if (window.ProjectDetail) {
+                                setProjectDetailAvailable(true);
+                                resolve(true);
+                            } else {
+                                reject(new Error('ProjectDetail not registered from alt path'));
+                            }
+                        }, 200);
+                    };
+                    script2.onerror = () => reject(new Error('Alt path also failed'));
+                    document.head.appendChild(script2);
+                });
+                return true;
+            } catch (altError) {
+                console.error('❌ Alternative path also failed:', altError);
+                return false;
+            }
+        }
+    };
+    
+    // Wait for ProjectDetail component to load if it's not available yet
+    useEffect(() => {
+        // Check immediately
+        if (window.ProjectDetail) {
+            setProjectDetailAvailable(true);
+            setWaitingForProjectDetail(false);
+            return;
+        }
+        
+        if (viewingProject) {
+            setWaitingForProjectDetail(true);
+            let checkInterval = null;
+            let cancelled = false;
+            
+            // Try to actively load it first
+            loadProjectDetail().then(success => {
+                if (cancelled) return;
+                if (success) {
+                    setWaitingForProjectDetail(false);
+                    // Removed forced re-render - React will re-render automatically
+                } else {
+                    // Fall back to polling
+                    let checkCount = 0;
+                    const maxChecks = 50; // 5 seconds total (50 * 100ms)
+                    
+                    checkInterval = setInterval(() => {
+                        if (cancelled) {
+                            clearInterval(checkInterval);
+                            return;
+                        }
+                        checkCount++;
+                        if (window.ProjectDetail) {
+                            setProjectDetailAvailable(true);
+                            setWaitingForProjectDetail(false);
+                            clearInterval(checkInterval);
+                            // Removed forced re-render - React will re-render automatically
+                        } else if (checkCount >= maxChecks) {
+                            setWaitingForProjectDetail(false);
+                            clearInterval(checkInterval);
+                        }
+                    }, 100);
+                }
+            });
+            
+            return () => {
+                cancelled = true;
+                if (checkInterval) clearInterval(checkInterval);
+            };
+        }
+    }, [viewingProject]);
+    
+    // Also listen for when ProjectDetail loads globally
+    useEffect(() => {
+        const checkProjectDetail = () => {
+            if (window.ProjectDetail && !projectDetailAvailable) {
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+                // Removed forced re-render - React will re-render automatically
+            }
+        };
+        
+        // Check periodically even when not viewing a project
+        const interval = setInterval(checkProjectDetail, 500);
+        
+        // Also check on window load events
+        window.addEventListener('load', checkProjectDetail);
+        
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('load', checkProjectDetail);
+        };
+    }, [projectDetailAvailable, viewingProject]);
+
     // Helper function to sync existing projects with clients
     // This is a non-critical operation - failures won't crash the component
     const syncProjectsWithClients = async (projectsList) => {
@@ -966,188 +1148,6 @@ const Projects = () => {
             );
         }
     }
-
-    // Function to actively load ProjectDetail if not available
-    const loadProjectDetail = async () => {
-        if (window.ProjectDetail) {
-            console.log('✅ ProjectDetail already available');
-            setProjectDetailAvailable(true);
-            return true;
-        }
-        
-        // Check if script is already in DOM
-        const existingScript = document.querySelector(`script[src*="ProjectDetail.js"]`);
-        if (existingScript) {
-            console.log('⏳ ProjectDetail script already loading, waiting...');
-            // Wait for it to finish loading
-            return new Promise((resolve) => {
-                let attempts = 0;
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    if (window.ProjectDetail) {
-                        console.log('✅ ProjectDetail loaded from existing script');
-                        setProjectDetailAvailable(true);
-                        clearInterval(checkInterval);
-                        resolve(true);
-                    } else if (attempts >= 50) {
-                        console.warn('⚠️ ProjectDetail script loaded but component not registered');
-                        clearInterval(checkInterval);
-                        resolve(false);
-                    }
-                }, 100);
-            });
-        }
-        
-        // Try to load ProjectDetail from the lazy loader path
-        const projectDetailPath = './dist/src/components/projects/ProjectDetail.js';
-        console.log('📥 Loading ProjectDetail from:', projectDetailPath);
-        
-        try {
-            const script = document.createElement('script');
-            script.src = projectDetailPath;
-            script.type = 'text/javascript';
-            script.async = false; // Load synchronously to ensure it executes
-            
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('ProjectDetail load timeout after 5 seconds'));
-                }, 5000);
-                
-                script.onload = () => {
-                    console.log('✅ ProjectDetail script loaded, checking registration...');
-                    // Wait for the script to execute and register
-                    let attempts = 0;
-                    const checkInterval = setInterval(() => {
-                        attempts++;
-                        if (window.ProjectDetail) {
-                            console.log('✅ ProjectDetail registered successfully');
-                            clearTimeout(timeout);
-                            clearInterval(checkInterval);
-                            setProjectDetailAvailable(true);
-                            resolve(true);
-                        } else if (attempts >= 20) {
-                            clearTimeout(timeout);
-                            clearInterval(checkInterval);
-                            reject(new Error('ProjectDetail not registered after script load (waited 2s)'));
-                        }
-                    }, 100);
-                };
-                
-                script.onerror = (error) => {
-                    clearTimeout(timeout);
-                    console.error('❌ Failed to load ProjectDetail script:', error);
-                    reject(new Error(`Failed to load ProjectDetail script: ${error.message || 'Unknown error'}`));
-                };
-                
-                document.head.appendChild(script);
-            });
-            return true;
-        } catch (error) {
-            console.error('❌ Failed to actively load ProjectDetail:', error);
-            // Try alternative path
-            const altPath = '/dist/src/components/projects/ProjectDetail.js';
-            console.log('🔄 Trying alternative path:', altPath);
-            
-            try {
-                const script2 = document.createElement('script');
-                script2.src = altPath;
-                script2.type = 'text/javascript';
-                script2.async = false;
-                
-                await new Promise((resolve, reject) => {
-                    script2.onload = () => {
-                        setTimeout(() => {
-                            if (window.ProjectDetail) {
-                                setProjectDetailAvailable(true);
-                                resolve(true);
-                            } else {
-                                reject(new Error('ProjectDetail not registered from alt path'));
-                            }
-                        }, 200);
-                    };
-                    script2.onerror = () => reject(new Error('Alt path also failed'));
-                    document.head.appendChild(script2);
-                });
-                return true;
-            } catch (altError) {
-                console.error('❌ Alternative path also failed:', altError);
-                return false;
-            }
-        }
-    };
-    
-    // Wait for ProjectDetail component to load if it's not available yet
-    useEffect(() => {
-        // Check immediately
-        if (window.ProjectDetail) {
-            setProjectDetailAvailable(true);
-            setWaitingForProjectDetail(false);
-            return;
-        }
-        
-        if (viewingProject) {
-            setWaitingForProjectDetail(true);
-            let checkInterval = null;
-            let cancelled = false;
-            
-            // Try to actively load it first
-            loadProjectDetail().then(success => {
-                if (cancelled) return;
-                if (success) {
-                    setWaitingForProjectDetail(false);
-                    // Removed forced re-render - React will re-render automatically
-                } else {
-                    // Fall back to polling
-                    let checkCount = 0;
-                    const maxChecks = 50; // 5 seconds total (50 * 100ms)
-                    
-                    checkInterval = setInterval(() => {
-                        if (cancelled) {
-                            clearInterval(checkInterval);
-                            return;
-                        }
-                        checkCount++;
-                        if (window.ProjectDetail) {
-                            setProjectDetailAvailable(true);
-                            setWaitingForProjectDetail(false);
-                            clearInterval(checkInterval);
-                            // Removed forced re-render - React will re-render automatically
-                        } else if (checkCount >= maxChecks) {
-                            setWaitingForProjectDetail(false);
-                            clearInterval(checkInterval);
-                        }
-                    }, 100);
-                }
-            });
-            
-            return () => {
-                cancelled = true;
-                if (checkInterval) clearInterval(checkInterval);
-            };
-        }
-    }, [viewingProject]);
-    
-    // Also listen for when ProjectDetail loads globally
-    useEffect(() => {
-        const checkProjectDetail = () => {
-            if (window.ProjectDetail && !projectDetailAvailable) {
-                setProjectDetailAvailable(true);
-                setWaitingForProjectDetail(false);
-                // Removed forced re-render - React will re-render automatically
-            }
-        };
-        
-        // Check periodically even when not viewing a project
-        const interval = setInterval(checkProjectDetail, 500);
-        
-        // Also check on window load events
-        window.addEventListener('load', checkProjectDetail);
-        
-        return () => {
-            clearInterval(interval);
-            window.removeEventListener('load', checkProjectDetail);
-        };
-    }, [projectDetailAvailable, viewingProject]);
 
     if (viewingProject) {
         try {

@@ -3,9 +3,18 @@ const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
-const ProjectProgressTracker = (props) => {
+const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Immediate logging to confirm function is called
-    console.log('🔍 ProjectProgressTracker: FUNCTION CALLED', props);
+    console.log('🔍 ProjectProgressTracker: FUNCTION CALLED');
+    console.log('🔍 Props received:', props);
+    console.log('🔍 Props type:', typeof props);
+    console.log('🔍 React available:', typeof React !== 'undefined');
+    console.log('🔍 useState available:', typeof useState !== 'undefined');
+    
+    // Check if this is being called
+    if (!props) {
+        console.warn('⚠️ ProjectProgressTracker: No props received, using defaults');
+    }
     
     // Validate props
     const onBack = props && typeof props.onBack === 'function' ? props.onBack : () => console.warn('onBack not available');
