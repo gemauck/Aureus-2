@@ -1153,9 +1153,29 @@ const Manufacturing = () => {
         {/* Mobile Card View - Shows on mobile devices */}
         <div className="table-mobile space-y-3">
           {productionOrders.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
               <i className="fas fa-industry text-4xl mb-4 text-gray-300"></i>
-              <p className="text-sm">No production orders found</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">No production orders found</p>
+              <p className="text-xs text-gray-500 mb-4">Create your first production order to get started</p>
+              <button
+                onClick={() => { 
+                  const nextWO = getNextWorkOrderNumber();
+                  setFormData({ 
+                    workOrderNumber: nextWO,
+                    startDate: null,
+                    priority: 'normal',
+                    status: 'requested',
+                    clientId: 'stock',
+                    allocationType: 'stock'
+                  });
+                  setModalType('add_production'); 
+                  setShowModal(true); 
+                }}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                Create Production Order
+              </button>
             </div>
           ) : (
             productionOrders.map(order => {
@@ -1271,7 +1291,37 @@ const Manufacturing = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {productionOrders.map(order => {
+                {productionOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="px-3 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <i className="fas fa-industry text-4xl mb-4 text-gray-300"></i>
+                        <p className="text-sm font-medium text-gray-700 mb-2">No production orders found</p>
+                        <p className="text-xs text-gray-500 mb-4">Create your first production order to get started</p>
+                        <button
+                          onClick={() => { 
+                            const nextWO = getNextWorkOrderNumber();
+                            setFormData({ 
+                              workOrderNumber: nextWO,
+                              startDate: null,
+                              priority: 'normal',
+                              status: 'requested',
+                              clientId: 'stock',
+                              allocationType: 'stock'
+                            });
+                            setModalType('add_production'); 
+                            setShowModal(true); 
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <i className="fas fa-plus text-xs"></i>
+                          Create Production Order
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  productionOrders.map(order => {
                   const progress = (order.quantityProduced / order.quantity) * 100;
                   return (
                     <tr key={order.id} className="hover:bg-gray-50">
@@ -1332,7 +1382,8 @@ const Manufacturing = () => {
                       </td>
                     </tr>
                   );
-                })}
+                })
+                )}
               </tbody>
             </table>
           </div>
