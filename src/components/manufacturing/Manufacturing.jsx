@@ -37,6 +37,7 @@ const Manufacturing = () => {
   const [bomComponents, setBomComponents] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+  const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -80,7 +81,7 @@ const Manufacturing = () => {
           console.log('⚡ Manufacturing: Loaded suppliers from cache:', cachedSuppliers.length);
         }
 
-        // Load stock locations and categories from localStorage (synchronous)
+        // Load stock locations from localStorage first, then sync from API
         const loadedLocations = JSON.parse(localStorage.getItem('stock_locations') || '[]');
         setStockLocations(loadedLocations);
 
@@ -111,10 +112,36 @@ const Manufacturing = () => {
         // Create parallel API calls
         const apiCalls = [];
 
-        // Inventory
-        if (typeof window.DatabaseAPI.getInventory === 'function') {
+        // Stock Locations
+        if (typeof window.DatabaseAPI.getStockLocations === 'function') {
           apiCalls.push(
-            window.DatabaseAPI.getInventory()
+            window.DatabaseAPI.getStockLocations()
+              .then(locResponse => {
+                const locData = locResponse?.data?.locations || [];
+                setStockLocations(locData);
+                localStorage.setItem('stock_locations', JSON.stringify(locData));
+                console.log('✅ Manufacturing: Stock locations synced:', locData.length);
+                
+                // Ensure main warehouse exists (LOC001)
+                const mainWarehouse = locData.find(loc => loc.code === 'LOC001');
+                if (!mainWarehouse && locData.length === 0) {
+                  console.warn('⚠️ Main warehouse (LOC001) not found - inventory may need assignment');
+                }
+                
+                return { type: 'locations', data: locData };
+              })
+              .catch(error => {
+                console.error('Error loading stock locations:', error);
+                return { type: 'locations', error };
+              })
+          );
+        }
+
+        // Inventory - Load based on selected location
+        if (typeof window.DatabaseAPI.getInventory === 'function') {
+          const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+          apiCalls.push(
+            window.DatabaseAPI.getInventory(locationIdToLoad)
               .then(invResponse => {
                 const invData = invResponse?.data?.inventory || [];
                 const processed = invData.map(item => ({ ...item, id: item.id }));
@@ -618,9 +645,32 @@ const Manufacturing = () => {
     );
   };
 
+  // Reload inventory when location changes
+  useEffect(() => {
+    if (activeTab === 'inventory' && window.DatabaseAPI?.getInventory) {
+      const loadInventoryForLocation = async () => {
+        try {
+          const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
+          const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad);
+          const invData = invResponse?.data?.inventory || [];
+          const processed = invData.map(item => ({ ...item, id: item.id }));
+          setInventory(processed);
+          localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
+          console.log(`✅ Inventory loaded for location ${selectedLocationId}:`, processed.length);
+        } catch (error) {
+          console.error('Error loading inventory for location:', error);
+        }
+      };
+      loadInventoryForLocation();
+    }
+  }, [selectedLocationId, activeTab]);
+
   const InventoryView = () => {
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
+    
+    // Get main warehouse for default selection
+    const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001');
     
     const filteredInventory = inventory.filter(item => {
       const name = (item.name || '').toString().toLowerCase();
@@ -637,6 +687,20 @@ const Manufacturing = () => {
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 flex-1">
+              {/* Location Selector */}
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white font-medium"
+                title="Select Stock Location"
+              >
+                <option value="all">All Locations</option>
+                {stockLocations.map(loc => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.code} - {loc.name}
+                  </option>
+                ))}
+              </select>
               <div className="relative flex-1 max-w-md">
                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
                 <input
@@ -1446,6 +1510,10 @@ const Manufacturing = () => {
   };
 
   const openAddItemModal = () => {
+    // Set locationId based on selected location (or main warehouse as default)
+    const locationId = selectedLocationId && selectedLocationId !== 'all' 
+      ? selectedLocationId 
+      : (stockLocations.find(loc => loc.code === 'LOC001')?.id || null);
     setFormData({
       sku: '', // Will be auto-generated by backend
       name: '',
@@ -1616,12 +1684,18 @@ const Manufacturing = () => {
         }
       } else {
         // Create new - include quantity for initial stock, but not SKU (auto-generated)
+        // Set locationId based on selected location (or main warehouse as default)
+        const locationId = selectedLocationId && selectedLocationId !== 'all' 
+          ? selectedLocationId 
+          : (stockLocations.find(loc => loc.code === 'LOC001')?.id || null);
+        
         const createData = {
           ...itemData,
           quantity: parseFloat(formData.quantity) || 0,
           inProductionQuantity: parseFloat(formData.inProductionQuantity) || 0,
           completedQuantity: parseFloat(formData.completedQuantity) || 0,
-          lastRestocked: new Date().toISOString().split('T')[0]
+          lastRestocked: new Date().toISOString().split('T')[0],
+          locationId: locationId // Include locationId
         };
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {

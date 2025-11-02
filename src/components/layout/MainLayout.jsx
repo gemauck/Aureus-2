@@ -582,7 +582,7 @@ const MainLayout = () => {
             <div className={`flex-1 overflow-auto ${isMobile && sidebarOpen ? 'ml-0' : ''}`}>
                 {/* Header - Fixed on mobile, static on desktop */}
                 <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
-                    <div className="flex items-center flex-1">
+                    <div className="flex items-center flex-1 min-w-0">
                         {/* Hamburger Menu Button - Show on mobile, toggle sidebar */}
                         <button 
                             onClick={() => {
@@ -592,7 +592,7 @@ const MainLayout = () => {
                                 setSidebarOpen(newState);
                                 setMobileMenuOpen(newState);
                             }}
-                            className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50`}
+                            className={`items-center justify-center ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'} mr-2 sm:mr-3 p-2 rounded transition-colors touch-target min-w-[44px] min-h-[44px] hamburger-menu-btn z-50 flex-shrink-0`}
                             aria-label="Toggle sidebar"
                             style={{ 
                                 display: isMobile ? 'flex' : 'none'
@@ -600,6 +600,14 @@ const MainLayout = () => {
                         >
                             <i className="fas fa-bars text-xl"></i>
                         </button>
+                        {/* Abcotronics Logo - Show on mobile in header */}
+                        {isMobile && (
+                            <div className="flex items-center mr-3 flex-shrink-0">
+                                <h1 className={`abcotronics-logo abcotronics-logo-text font-bold ${isDark ? 'text-white' : 'text-primary-600'} text-base sm:text-lg`} style={!isDark ? { color: '#0369a1' } : {}}>
+                                    Abcotronics
+                                </h1>
+                            </div>
+                        )}
                         <div className="relative hidden lg:block">
                             <input
                                 type="text"
@@ -612,12 +620,11 @@ const MainLayout = () => {
                             />
                             <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
                         </div>
-                        {/* Mobile header branding removed - sidebar always shows Abcotronics, no duplication needed */}
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-2 flex-shrink-0">
                         {/* Settings Button */}
                         <button 
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'}`}
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
                             title="Settings"
                             onClick={() => {
                                 console.log('🔧 Settings button clicked');
@@ -631,11 +638,11 @@ const MainLayout = () => {
                         {/* Theme Selector Dropdown */}
                         <div className="relative theme-selector">
                             <button 
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'}`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
                                 title="Theme options"
                                 onClick={() => setShowThemeMenu(!showThemeMenu)}
                             >
-                                <div className="flex items-center space-x-2">
+                                <div className="flex items-center space-x-1 sm:space-x-2">
                                     <i className={`fas fa-${isDark ? 'sun' : 'moon'} text-sm`}></i>
                                     <span className="text-xs font-medium hidden lg:block">
                                         {isDark ? 'Light' : 'Dark'}

@@ -102,35 +102,36 @@ const HR = () => {
     };
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-3 p-2 sm:p-0">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-2">
                 <div>
-                    <h1 className="text-lg font-bold text-gray-900">Human Resources</h1>
-                    <p className="text-xs text-gray-600 mt-0.5">Employee leave management and HR administration</p>
+                    <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Human Resources</h1>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">Employee leave management and HR administration</p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <div className="bg-green-50 border border-green-200 rounded-lg px-3 py-1.5">
-                        <p className="text-[10px] text-green-700 font-medium">South African BCEA Compliant</p>
+                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-1.5">
+                        <p className="text-[10px] sm:text-xs text-green-700 dark:text-green-300 font-medium">South African BCEA Compliant</p>
                     </div>
                 </div>
             </div>
 
             {/* Tabs */}
-            <div className="bg-white rounded-lg border border-gray-200">
-                <div className="flex border-b border-gray-200">
+            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setCurrentTab(tab.id)}
-                            className={`flex-1 px-4 py-2.5 text-xs font-medium transition-colors ${
+                            className={`flex-1 min-w-[120px] px-3 sm:px-4 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
                                 currentTab === tab.id
-                                    ? 'text-primary-600 border-b-2 border-primary-600 bg-primary-50'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                                    ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600 dark:border-primary-400 bg-primary-50 dark:bg-primary-900/20'
+                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
                             }`}
                         >
                             <i className={`fas ${tab.icon} mr-1.5`}></i>
-                            {tab.label}
+                            <span className="hidden sm:inline">{tab.label}</span>
+                            <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                         </button>
                     ))}
                 </div>

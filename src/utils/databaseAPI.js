@@ -636,9 +636,10 @@ const DatabaseAPI = {
     },
 
     // MANUFACTURING OPERATIONS - INVENTORY
-    async getInventory() {
-        console.log('📡 Fetching inventory from database...');
-        const raw = await this.makeRequest('/manufacturing/inventory');
+    async getInventory(locationId = null) {
+        console.log('📡 Fetching inventory from database...', locationId ? `(location: ${locationId})` : '(all locations)');
+        const endpoint = locationId && locationId !== 'all' ? `/manufacturing/inventory?locationId=${locationId}` : '/manufacturing/inventory';
+        const raw = await this.makeRequest(endpoint);
         const normalized = {
             data: {
                 inventory: Array.isArray(raw?.data?.inventory)
@@ -681,6 +682,25 @@ const DatabaseAPI = {
         });
         console.log('✅ Inventory item deleted from database');
         return response;
+    },
+
+    // MANUFACTURING OPERATIONS - STOCK LOCATIONS
+    async getStockLocations() {
+        console.log('📡 Fetching stock locations from database...');
+        const raw = await this.makeRequest('/manufacturing/locations');
+        const normalized = {
+            data: {
+                locations: Array.isArray(raw?.data?.locations)
+                    ? raw.data.locations
+                    : Array.isArray(raw?.locations)
+                        ? raw.locations
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Stock locations fetched from database:', normalized.data.locations.length);
+        return normalized;
     },
 
     // MANUFACTURING OPERATIONS - BOMs

@@ -475,13 +475,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             }
 
             const movementData = {
-              type: 'issue', // Stock being issued/taken from location
+              type: 'consumption', // Stock being consumed/used in job card
               sku: stockItem.sku,
               itemName: stockItem.itemName || '',
               quantity: parseFloat(stockItem.quantity),
               unitCost: stockItem.unitCost ? parseFloat(stockItem.unitCost) : undefined,
               fromLocation: stockItem.locationId,
-              toLocation: '', // Empty as this is an issue, not a transfer
+              toLocation: '', // Empty as this is consumption, not a transfer
               reference: jobCardReference,
               notes: `Stock used in job card: ${jobCardReference}${formData.location ? ` - Location: ${formData.location}` : ''}`,
               date: new Date().toISOString()

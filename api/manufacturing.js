@@ -62,6 +62,54 @@ async function handler(req, res) {
             meta: JSON.stringify(body.meta || {})
           }
         })
+        
+        // Create inventory items for the new location based on main warehouse inventory
+        try {
+          const mainWarehouse = await prisma.stockLocation.findFirst({ 
+            where: { code: 'LOC001' } // Main warehouse code
+          })
+          
+          if (mainWarehouse) {
+            // Get all inventory items from main warehouse
+            const mainWarehouseInventory = await prisma.inventoryItem.findMany({
+              where: { locationId: mainWarehouse.id }
+            })
+            
+            // Create duplicate inventory items for the new location
+            for (const item of mainWarehouseInventory) {
+              await prisma.inventoryItem.create({
+                data: {
+                  sku: item.sku,
+                  name: item.name,
+                  thumbnail: item.thumbnail,
+                  category: item.category,
+                  type: item.type,
+                  quantity: 0, // New location starts with 0 quantity
+                  allocatedQuantity: 0,
+                  inProductionQuantity: 0,
+                  completedQuantity: 0,
+                  unit: item.unit,
+                  reorderPoint: item.reorderPoint,
+                  reorderQty: item.reorderQty,
+                  location: item.location,
+                  locationId: location.id, // Link to new location
+                  unitCost: item.unitCost,
+                  totalValue: 0,
+                  supplier: item.supplier,
+                  supplierPartNumbers: item.supplierPartNumbers,
+                  legacyPartNumber: item.legacyPartNumber,
+                  status: 'out_of_stock', // New location starts empty
+                  ownerId: item.ownerId
+                }
+              })
+            }
+            console.log(`✅ Created ${mainWarehouseInventory.length} inventory items for new location ${location.code}`)
+          }
+        } catch (invError) {
+          console.warn('⚠️ Could not create inventory for new location:', invError.message)
+          // Don't fail location creation if inventory creation fails
+        }
+        
         return created(res, { location })
       } catch (e) {
         return serverError(res, 'Failed to create location', e.message)
@@ -305,10 +353,22 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
+        
+        // Parse query parameters from URL
+        const urlObj = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+        const locationId = req.query?.locationId || req.query?.location || urlObj.searchParams.get('locationId') || urlObj.searchParams.get('location')
+        
+        // Build query with optional location filter
+        const whereClause = {}
+        if (locationId && locationId !== 'all' && locationId !== '') {
+          whereClause.locationId = locationId
+        }
+        
         const items = await prisma.inventoryItem.findMany({
+          where: whereClause,
           orderBy: { createdAt: 'desc' }
         })
-        console.log('🧪 Manufacturing List inventory', { owner, count: items.length })
+        console.log('🧪 Manufacturing List inventory', { owner, locationId, count: items.length })
         
         // Format dates for response
         const formatted = items.map(item => ({
@@ -558,6 +618,17 @@ async function handler(req, res) {
         const totalValue = quantity * (parseFloat(body.unitCost) || 0)
         const lastRestocked = body.lastRestocked ? new Date(body.lastRestocked) : new Date()
         
+        // Get locationId - if not provided, default to main warehouse
+        let locationId = body.locationId || null
+        if (!locationId) {
+          const mainWarehouse = await prisma.stockLocation.findFirst({ 
+            where: { code: 'LOC001' } 
+          })
+          if (mainWarehouse) {
+            locationId = mainWarehouse.id
+          }
+        }
+        
         const item = await prisma.inventoryItem.create({
           data: {
             sku: sku,
@@ -572,6 +643,7 @@ async function handler(req, res) {
             reorderPoint: reorderPoint,
             reorderQty: parseFloat(body.reorderQty) || 0,
             location: body.location || '',
+            locationId: locationId, // Link to stock location
             unitCost: parseFloat(body.unitCost) || 0,
             totalValue,
             supplier: body.supplier || '',
