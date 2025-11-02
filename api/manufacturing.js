@@ -568,8 +568,10 @@ async function handler(req, res) {
             name: body.name,
             thumbnail: body.thumbnail || '',
             category: body.category || 'components',
-            type: body.type || 'raw_material',
+            type: body.type || 'component',
             quantity: quantity,
+            inProductionQuantity: parseFloat(body.inProductionQuantity) || 0,
+            completedQuantity: parseFloat(body.completedQuantity) || 0,
             unit: body.unit || 'pcs',
             reorderPoint: reorderPoint,
             reorderQty: parseFloat(body.reorderQty) || 0,
@@ -1346,13 +1348,172 @@ async function handler(req, res) {
           }
         }
         
-        // Handle status change from 'requested' to 'in_production' - deduct stock
+        // Handle status change TO 'received' - allocate/reserve stock for BOM components
+        if (newStatus === 'received' && oldStatus !== 'received') {
+          console.log(`📋 Triggering stock allocation for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          
+          if (!existingOrder.bomId) {
+            console.log(`⚠️ Order ${id} has no BOM - skipping stock allocation`)
+          } else {
+            try {
+              await prisma.$transaction(async (tx) => {
+                const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
+                if (!orderInTx) {
+                  throw new Error(`Order ${id} not found`)
+                }
+                
+                const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+                if (!bom) {
+                  throw new Error(`BOM not found: ${orderInTx.bomId}`)
+                }
+                
+                const components = parseJson(bom.components, [])
+                const validComponents = components.filter(c => c.sku && c.quantity)
+                
+                if (validComponents.length === 0) {
+                  console.log(`⚠️ BOM ${orderInTx.bomId} has no components - skipping stock allocation`)
+                  return
+                }
+                
+                const now = new Date()
+                const lastMovement = await tx.stockMovement.findFirst({ orderBy: { createdAt: 'desc' } })
+                let seq = lastMovement && lastMovement.movementId?.startsWith('MOV')
+                  ? parseInt(lastMovement.movementId.replace('MOV', '')) + 1
+                  : 1
+                
+                for (const component of validComponents) {
+                  const requiredQty = parseFloat(component.quantity) * orderInTx.quantity
+                  if (requiredQty <= 0) continue
+                  
+                  const inventoryItem = await tx.inventoryItem.findFirst({
+                    where: { sku: component.sku }
+                  })
+                  
+                  if (!inventoryItem) {
+                    console.log(`⚠️ Inventory item not found for SKU: ${component.sku} - skipping`)
+                    continue
+                  }
+                  
+                  // Allocate stock (increase allocatedQuantity)
+                  const currentAllocated = inventoryItem.allocatedQuantity || 0
+                  await tx.inventoryItem.update({
+                    where: { id: inventoryItem.id },
+                    data: {
+                      allocatedQuantity: currentAllocated + requiredQty,
+                      // Update status if needed
+                      status: (inventoryItem.quantity - (currentAllocated + requiredQty)) > (inventoryItem.reorderPoint || 0) 
+                        ? 'in_stock' 
+                        : ((inventoryItem.quantity - (currentAllocated + requiredQty)) > 0 ? 'low_stock' : 'out_of_stock')
+                    }
+                  })
+                  
+                  // Create stock movement record for allocation
+                  await tx.stockMovement.create({
+                    data: {
+                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                      date: now,
+                      type: 'adjustment',
+                      itemName: component.name || component.sku,
+                      sku: component.sku,
+                      quantity: 0, // No quantity change, just allocation
+                      fromLocation: '',
+                      toLocation: '',
+                      reference: orderInTx.workOrderNumber || id,
+                      performedBy: req.user?.name || 'System',
+                      notes: `Stock allocated for ${orderInTx.productName} (Order received) - ${requiredQty} reserved`
+                    }
+                  })
+                  
+                  console.log(`📋 Allocated ${requiredQty} of ${component.sku} for production order ${id}`)
+                }
+                
+                // Update order status
+                await tx.productionOrder.update({
+                  where: { id },
+                  data: { status: 'received' }
+                })
+                
+                console.log(`✅ Stock allocation completed for production order ${id}`)
+              }, {
+                timeout: 30000
+              })
+            } catch (transactionError) {
+              console.error('❌ Transaction failed when allocating stock for received order:', transactionError)
+              throw transactionError
+            }
+          }
+        }
+        
+        // Handle stock release when changing FROM 'received' to another status (except in_production)
+        if (oldStatus === 'received' && newStatus !== 'received' && newStatus !== 'in_production') {
+          console.log(`↩️ Triggering stock deallocation for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
+          
+          if (!existingOrder.bomId) {
+            console.log(`⚠️ Order ${id} has no BOM - skipping stock deallocation`)
+          } else {
+            try {
+              await prisma.$transaction(async (tx) => {
+                const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
+                if (!orderInTx) {
+                  throw new Error(`Order ${id} not found`)
+                }
+                
+                const bom = await tx.bOM.findUnique({ where: { id: orderInTx.bomId } })
+                if (!bom) {
+                  throw new Error(`BOM not found: ${orderInTx.bomId}`)
+                }
+                
+                const components = parseJson(bom.components, [])
+                const validComponents = components.filter(c => c.sku && c.quantity)
+                
+                for (const component of validComponents) {
+                  const allocatedQty = parseFloat(component.quantity) * orderInTx.quantity
+                  if (allocatedQty <= 0) continue
+                  
+                  const inventoryItem = await tx.inventoryItem.findFirst({
+                    where: { sku: component.sku }
+                  })
+                  
+                  if (!inventoryItem) continue
+                  
+                  const currentAllocated = inventoryItem.allocatedQuantity || 0
+                  const newAllocated = Math.max(0, currentAllocated - allocatedQty)
+                  
+                  await tx.inventoryItem.update({
+                    where: { id: inventoryItem.id },
+                    data: {
+                      allocatedQuantity: newAllocated,
+                      status: (inventoryItem.quantity - newAllocated) > (inventoryItem.reorderPoint || 0) 
+                        ? 'in_stock' 
+                        : ((inventoryItem.quantity - newAllocated) > 0 ? 'low_stock' : 'out_of_stock')
+                    }
+                  })
+                  
+                  console.log(`↩️ Deallocated ${allocatedQty} of ${component.sku} for production order ${id}`)
+                }
+                
+                // Update order status
+                await tx.productionOrder.update({
+                  where: { id },
+                  data: { status: newStatus }
+                })
+              }, {
+                timeout: 30000
+              })
+            } catch (transactionError) {
+              console.error('❌ Transaction failed when deallocating stock:', transactionError)
+              // Don't throw - allow status change to continue
+            }
+          }
+        }
+        
+        // Handle status change from 'requested' or 'received' to 'in_production' - deduct stock
         // WRAPPED IN TRANSACTION to ensure atomicity (deduction + movement + status update)
-        if (newStatus === 'in_production' && oldStatus === 'requested') {
+        if (newStatus === 'in_production' && (oldStatus === 'requested' || oldStatus === 'received')) {
           console.log(`✅ Triggering stock deduction for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
           // IDEMPOTENCY CHECK: Verify status hasn't changed (prevent double deduction)
-          if (existingOrder.status !== 'requested') {
+          if (existingOrder.status !== 'requested' && existingOrder.status !== 'received') {
             return badRequest(res, `Order status is already ${existingOrder.status}, cannot process stock deduction`)
           }
           
@@ -1386,7 +1547,7 @@ async function handler(req, res) {
           await prisma.$transaction(async (tx) => {
             // Re-fetch order within transaction for consistency
             const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
-            if (!orderInTx || orderInTx.status !== 'requested') {
+            if (!orderInTx || (orderInTx.status !== 'requested' && orderInTx.status !== 'received')) {
               throw new Error(`Order ${id} not found or already processed (status: ${orderInTx?.status || 'unknown'})`)
             }
             
@@ -1454,9 +1615,16 @@ async function handler(req, res) {
                     quantity: { decrement: requiredQty }
                   }
                   
-                  // Only decrement allocatedQuantity if it exists (handle legacy orders)
-                  if (allocatedQty > 0) {
-                    updateData.allocatedQuantity = { decrement: requiredQty }
+                  // Decrement allocatedQuantity if it exists (handle legacy orders and allocated stock from 'received' status)
+                  // When coming from 'received' status, stock was already allocated, so we need to decrement allocatedQuantity
+                  // For 'requested' status, allocatedQuantity may be 0, so we only decrement if it exists
+                  if (allocatedQty > 0 || oldStatus === 'received') {
+                    // For received orders, we know stock was allocated, so always decrement
+                    // For requested orders, only decrement if there's allocation (may be 0 for legacy orders)
+                    const decrementAmount = oldStatus === 'received' ? requiredQty : Math.min(requiredQty, allocatedQty)
+                    if (decrementAmount > 0) {
+                      updateData.allocatedQuantity = { decrement: decrementAmount }
+                    }
                   }
                   
                   // Always update (no where clause restrictions to allow negative stock)
@@ -1515,6 +1683,62 @@ async function handler(req, res) {
               }
             }
             
+            // If coming from 'received' status, allocate finished product to stock in production
+            if (oldStatus === 'received') {
+              console.log(`📦 Allocating finished product to stock in production for order ${id}`)
+              
+              // Get the finished product inventory item
+              let finishedProduct;
+              if (bomInTx.inventoryItemId) {
+                finishedProduct = await tx.inventoryItem.findUnique({
+                  where: { id: bomInTx.inventoryItemId }
+                })
+              }
+              
+              if (!finishedProduct) {
+                // Fallback: Find by SKU
+                finishedProduct = await tx.inventoryItem.findFirst({
+                  where: { sku: bomInTx.productSku }
+                })
+              }
+              
+              if (finishedProduct) {
+                const orderQuantity = orderInTx.quantity
+                const currentAllocated = finishedProduct.allocatedQuantity || 0
+                
+                // Allocate the order quantity to stock in production (increase allocatedQuantity)
+                await tx.inventoryItem.update({
+                  where: { id: finishedProduct.id },
+                  data: {
+                    allocatedQuantity: currentAllocated + orderQuantity,
+                    // Set status to in_production to indicate stock is being produced
+                    status: 'in_production'
+                  }
+                })
+                
+                console.log(`📦 Allocated ${orderQuantity} units of ${finishedProduct.name} to stock in production`)
+                
+                // Create stock movement record for allocation
+                await tx.stockMovement.create({
+                  data: {
+                    movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                    date: now,
+                    type: 'adjustment',
+                    itemName: finishedProduct.name,
+                    sku: finishedProduct.sku,
+                    quantity: 0, // No quantity change, just allocation tracking
+                    fromLocation: '',
+                    toLocation: '',
+                    reference: orderInTx.workOrderNumber || id,
+                    performedBy: req.user?.name || 'System',
+                    notes: `Stock in production allocated for ${orderInTx.productName} - ${orderQuantity} units in production`
+                  }
+                })
+              } else {
+                console.log(`⚠️ Finished product not found for SKU: ${bomInTx.productSku} - skipping allocation`)
+              }
+            }
+            
             // Update order status (final step - ensures everything else succeeded)
             await tx.productionOrder.update({
               where: { id },
@@ -1527,9 +1751,10 @@ async function handler(req, res) {
           })
         }
         
-        // Handle stock return: status change from 'in_production' to 'requested' or 'cancelled'
-        // Also handle cancellation of 'requested' orders (return allocated stock)
+        // Handle stock return: status change from 'in_production' to 'requested', 'received', or 'cancelled'
+        // Also handle cancellation of 'requested' or 'received' orders (return allocated stock)
         if ((newStatus === 'requested' && oldStatus === 'in_production') || 
+            (newStatus === 'received' && oldStatus === 'in_production') ||
             newStatus === 'cancelled') {
           console.log(`↩️ Triggering stock return for production order ${id} (status: ${oldStatus} -> ${newStatus})`)
           
@@ -1591,11 +1816,14 @@ async function handler(req, res) {
                   console.log(`↩️ Inventory item found: Yes (current qty: ${inventoryItem.quantity}, allocated: ${inventoryItem.allocatedQuantity || 0})`)
                   
                   // Determine what to return based on order's previous state
-                  // Scenario 1: In Production -> Requested/Cancelled
+                  // Scenario 1: In Production -> Requested/Received/Cancelled
                   //   - Stock was deducted from quantity (and allocatedQuantity if it existed)
                   //   - Return stock to quantity
-                  //   - If going back to "requested", also re-allocate it
+                  //   - If going back to "requested" or "received", also re-allocate it
                   // Scenario 2: Requested -> Cancelled
+                  //   - Stock was only allocated (not deducted)
+                  //   - Release allocation (reduce allocatedQuantity, quantity unchanged)
+                  // Scenario 3: Received -> Cancelled
                   //   - Stock was only allocated (not deducted)
                   //   - Release allocation (reduce allocatedQuantity, quantity unchanged)
                   
@@ -1606,19 +1834,19 @@ async function handler(req, res) {
                     updateData.quantity = { increment: returnQty }
                     console.log(`↩️ Returning ${returnQty} to quantity for ${component.sku} (was in production)`)
                     
-                    // If reverting to "requested", re-allocate the stock
-                    if (newStatus === 'requested') {
+                    // If reverting to "requested" or "received", re-allocate the stock
+                    if (newStatus === 'requested' || newStatus === 'received') {
                       updateData.allocatedQuantity = { increment: returnQty }
-                      console.log(`↩️ Re-allocating ${returnQty} for ${component.sku} (back to requested)`)
+                      console.log(`↩️ Re-allocating ${returnQty} for ${component.sku} (back to ${newStatus})`)
                     }
                     // If cancelling, just return to quantity (don't re-allocate)
                     
-                  } else if (oldStatus === 'requested' && newStatus === 'cancelled') {
+                  } else if ((oldStatus === 'requested' || oldStatus === 'received') && newStatus === 'cancelled') {
                     // Stock was only allocated, not deducted - release allocation
                     const currentAllocated = inventoryItem.allocatedQuantity || 0
                     if (currentAllocated >= returnQty) {
                       updateData.allocatedQuantity = { decrement: returnQty }
-                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (cancelled requested order)`)
+                      console.log(`↩️ Releasing ${returnQty} from allocation for ${component.sku} (cancelled ${oldStatus} order)`)
                     } else {
                       // Release whatever is allocated (handle edge cases)
                       if (currentAllocated > 0) {
@@ -1687,6 +1915,62 @@ async function handler(req, res) {
                 }
               }
               
+              // If reverting from in_production to received/requested, deallocate finished product
+              if (oldStatus === 'in_production' && (newStatus === 'received' || newStatus === 'requested')) {
+                console.log(`↩️ Deallocating finished product from stock in production for order ${id}`)
+                
+                // Get the finished product inventory item
+                let finishedProduct;
+                if (bom.inventoryItemId) {
+                  finishedProduct = await tx.inventoryItem.findUnique({
+                    where: { id: bom.inventoryItemId }
+                  })
+                }
+                
+                if (!finishedProduct) {
+                  finishedProduct = await tx.inventoryItem.findFirst({
+                    where: { sku: bom.productSku }
+                  })
+                }
+                
+                if (finishedProduct) {
+                  const orderQuantity = orderInTx.quantity
+                  const currentAllocated = finishedProduct.allocatedQuantity || 0
+                  const newAllocated = Math.max(0, currentAllocated - orderQuantity)
+                  
+                  // Deallocate finished product from stock in production
+                  await tx.inventoryItem.update({
+                    where: { id: finishedProduct.id },
+                    data: {
+                      allocatedQuantity: newAllocated,
+                      // Update status if no longer in production
+                      status: newAllocated === 0 && finishedProduct.quantity === 0 
+                        ? 'out_of_stock' 
+                        : (newAllocated === 0 ? 'in_stock' : finishedProduct.status)
+                    }
+                  })
+                  
+                  console.log(`↩️ Deallocated ${orderQuantity} units of ${finishedProduct.name} from stock in production`)
+                  
+                  // Create stock movement record
+                  await tx.stockMovement.create({
+                    data: {
+                      movementId: `MOV${String(seq++).padStart(4, '0')}`,
+                      date: now,
+                      type: 'adjustment',
+                      itemName: finishedProduct.name,
+                      sku: finishedProduct.sku,
+                      quantity: 0,
+                      fromLocation: '',
+                      toLocation: '',
+                      reference: orderInTx.workOrderNumber || id,
+                      performedBy: req.user?.name || 'System',
+                      notes: `Stock in production deallocated for ${orderInTx.productName} - ${orderQuantity} units removed from production`
+                    }
+                  })
+                }
+              }
+              
               // Update order status in transaction
               await tx.productionOrder.update({
                 where: { id },
@@ -1704,8 +1988,10 @@ async function handler(req, res) {
         // Remove status and completedDate from updateData if they were handled in a transaction above
         const fieldsToUpdate = { ...updateData }
         if ((newStatus === 'completed' && oldStatus !== 'completed') ||
-            (newStatus === 'in_production' && oldStatus === 'requested') ||
+            (newStatus === 'in_production' && (oldStatus === 'requested' || oldStatus === 'received')) ||
             (newStatus === 'requested' && oldStatus === 'in_production') ||
+            (newStatus === 'received' && oldStatus !== 'received') ||
+            (oldStatus === 'received' && newStatus !== 'received' && newStatus !== 'in_production') ||
             newStatus === 'cancelled') {
           // Status was already updated in the transaction above, remove it from updateData
           delete fieldsToUpdate.status
