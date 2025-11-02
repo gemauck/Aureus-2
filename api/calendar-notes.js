@@ -39,6 +39,8 @@ async function handler(req, res) {
 
         let whereClause = { userId }
         
+        console.log('📅 GET calendar notes - userId:', userId, 'whereClause:', JSON.stringify(whereClause))
+        
         if (startDate && endDate) {
           whereClause.date = {
             gte: startDate,
@@ -52,13 +54,29 @@ async function handler(req, res) {
         })
 
         console.log('✅ Calendar notes retrieved successfully:', notes.length)
+        if (notes.length > 0) {
+          console.log('📅 Sample note dates:', notes.slice(0, 3).map(n => ({
+            rawDate: n.date,
+            isoString: n.date.toISOString(),
+            dateStr: n.date.toISOString().split('T')[0],
+            noteLength: n.note?.length || 0
+          })))
+        }
         
         // Return as object keyed by date string for easy lookup
+        // Handle date conversion properly to avoid timezone issues
         const notesByDate = {}
         notes.forEach(note => {
-          const dateStr = note.date.toISOString().split('T')[0] // YYYY-MM-DD
+          // Convert date to YYYY-MM-DD format, handling timezone correctly
+          // Use UTC date parts to ensure consistent YYYY-MM-DD format
+          const year = note.date.getUTCFullYear()
+          const month = String(note.date.getUTCMonth() + 1).padStart(2, '0')
+          const day = String(note.date.getUTCDate()).padStart(2, '0')
+          const dateStr = `${year}-${month}-${day}`
           notesByDate[dateStr] = note.note
         })
+        
+        console.log('📅 Returning notesByDate with keys:', Object.keys(notesByDate))
         
         return ok(res, { notes: notesByDate })
       } catch (dbError) {
@@ -71,7 +89,7 @@ async function handler(req, res) {
     if (req.method === 'GET' && pathSegments.length === 2 && pathSegments[0] === 'calendar-notes') {
       try {
         const dateStr = id // Expecting YYYY-MM-DD format
-        const date = new Date(dateStr + 'T00:00:00') // Parse as date only
+        const date = new Date(dateStr + 'T00:00:00Z') // Parse as UTC midnight
 
         if (isNaN(date.getTime())) {
           return badRequest(res, 'Invalid date format. Expected YYYY-MM-DD')
@@ -116,16 +134,37 @@ async function handler(req, res) {
       }
 
       const dateStr = body.date
-      const date = new Date(dateStr + 'T00:00:00') // Parse as date only
+      // Parse date as UTC midnight to ensure consistent storage
+      // This avoids timezone conversion issues
+      const date = new Date(dateStr + 'T00:00:00Z') // Z = UTC
 
       if (isNaN(date.getTime())) {
+        console.error('❌ Invalid date format:', dateStr)
         return badRequest(res, 'Invalid date format. Expected YYYY-MM-DD')
       }
 
       const noteText = body.note || ''
       const userId = req.user?.sub
 
+      console.log('📅 Saving calendar note:', {
+        userId,
+        dateStr,
+        date: date.toISOString(),
+        noteLength: noteText.length
+      })
+
       try {
+        // Validate userId exists in database
+        const userExists = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { id: true }
+        })
+        
+        if (!userExists) {
+          console.error('❌ User not found in database:', userId)
+          return serverError(res, 'User not found', `User ID ${userId} does not exist`)
+        }
+
         // Use upsert to create or update
         const note = await prisma.calendarNote.upsert({
           where: {
@@ -145,11 +184,46 @@ async function handler(req, res) {
           }
         })
 
-        console.log('✅ Calendar note saved successfully for date:', dateStr)
-        return ok(res, { note: note.note, id: note.id, date: note.date })
+        console.log('✅ Calendar note saved successfully:', {
+          id: note.id,
+          userId: note.userId,
+          date: note.date.toISOString(),
+          dateStr: note.date.toISOString().split('T')[0],
+          noteLength: note.note.length
+        })
+        
+        // Return the saved note with proper formatting
+        const responseData = {
+          note: note.note,
+          id: note.id,
+          date: note.date.toISOString(),
+          saved: true,
+          message: 'Calendar note saved successfully'
+        }
+        
+        return ok(res, responseData)
       } catch (dbError) {
-        console.error('❌ Database error saving calendar note:', dbError)
-        return serverError(res, 'Failed to save calendar note', dbError.message)
+        console.error('❌ Database error saving calendar note:', {
+          error: dbError,
+          code: dbError.code,
+          message: dbError.message,
+          meta: dbError.meta,
+          userId,
+          dateStr,
+          date: date.toISOString()
+        })
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to save calendar note'
+        if (dbError.code === 'P2002') {
+          errorMessage = 'A note for this date already exists (unique constraint violation)'
+        } else if (dbError.code === 'P2003') {
+          errorMessage = 'Invalid user reference'
+        } else if (dbError.message) {
+          errorMessage = dbError.message
+        }
+        
+        return serverError(res, errorMessage, dbError.message || 'Unknown database error')
       }
     }
 
@@ -157,7 +231,7 @@ async function handler(req, res) {
     if (req.method === 'DELETE' && pathSegments.length === 2 && pathSegments[0] === 'calendar-notes') {
       try {
         const dateStr = id // Expecting YYYY-MM-DD format
-        const date = new Date(dateStr + 'T00:00:00')
+        const date = new Date(dateStr + 'T00:00:00Z') // Parse as UTC midnight
 
         if (isNaN(date.getTime())) {
           return badRequest(res, 'Invalid date format. Expected YYYY-MM-DD')

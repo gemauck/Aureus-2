@@ -177,29 +177,45 @@ const Calendar = () => {
                     const data = await res.json();
                     console.log('✅ Saved note to server successfully:', dateString, data);
                     
-                    // After successful save, refresh from server to get latest state
-                    // This ensures we have the exact server state (including any server-side processing)
-                    setTimeout(async () => {
-                        try {
-                            const refreshRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
-                                headers: { 
-                                    Authorization: `Bearer ${token}`,
-                                    'Cache-Control': 'no-cache, no-store, must-revalidate'
-                                },
-                                credentials: 'include',
-                                cache: 'no-store'
-                            });
-                            if (refreshRes.ok) {
-                                const refreshData = await refreshRes.json();
-                                const serverNotes = refreshData?.notes || {};
-                                setNotes(serverNotes);
-                                localStorage.setItem(notesKey, JSON.stringify(serverNotes));
-                                console.log('✅ Calendar notes refreshed after save');
+                    // Verify the save was successful
+                    if (data.saved !== false) {
+                        // After successful save, refresh from server to get latest state
+                        // This ensures we have the exact server state (including any server-side processing)
+                        setTimeout(async () => {
+                            try {
+                                const refreshRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                                    headers: { 
+                                        Authorization: `Bearer ${token}`,
+                                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                        'Pragma': 'no-cache'
+                                    },
+                                    credentials: 'include',
+                                    cache: 'no-store'
+                                });
+                                if (refreshRes.ok) {
+                                    const refreshData = await refreshRes.json();
+                                    const serverNotes = refreshData?.notes || {};
+                                    setNotes(serverNotes);
+                                    localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                                    console.log('✅ Calendar notes refreshed after save - verified saved:', dateString, serverNotes[dateString] ? 'YES' : 'NO');
+                                    
+                                    // Show success message to user
+                                    if (window.showNotification) {
+                                        window.showNotification('Calendar note saved successfully', 'success');
+                                    }
+                                } else {
+                                    console.error('❌ Failed to refresh after save:', refreshRes.status);
+                                }
+                            } catch (refreshError) {
+                                console.error('Error refreshing after save:', refreshError);
                             }
-                        } catch (refreshError) {
-                            console.error('Error refreshing after save:', refreshError);
-                        }
-                    }, 500); // Small delay to ensure server has processed
+                        }, 500); // Small delay to ensure server has processed
+                    } else {
+                        console.error('❌ Server returned saved=false:', data);
+                        alert('Failed to save calendar note. Please try again.');
+                        setNotes(previousNotes);
+                        localStorage.setItem(notesKey, JSON.stringify(previousNotes));
+                    }
                 } else {
                     const errorText = await res.text();
                     let errorData;
@@ -210,6 +226,11 @@ const Calendar = () => {
                     }
                     console.error('❌ Failed to save note to server:', res.status, errorData);
                     console.error('Request body was:', requestBody);
+                    console.error('User ID from storage:', userId);
+                    
+                    // Show error to user
+                    const errorMessage = errorData?.error?.message || errorData?.message || `Failed to save: ${res.status}`;
+                    alert(`Failed to save calendar note: ${errorMessage}`);
                     
                     // Revert optimistic update on error - restore previous state
                     setNotes(previousNotes);
@@ -218,8 +239,39 @@ const Calendar = () => {
                 }
             } catch (error) {
                 console.error('❌ Error saving note to server:', error);
+                console.error('Error details:', {
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                });
+                
+                // Show error to user
+                alert(`Network error saving calendar note: ${error.message}. The note may still be saved - please refresh to check.`);
+                
                 // Don't revert on network errors - the note might have been saved
                 // The periodic refresh will sync the correct state
+                // Try to verify by refreshing after a delay
+                setTimeout(async () => {
+                    try {
+                        const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                            headers: { 
+                                Authorization: `Bearer ${token}`,
+                                'Cache-Control': 'no-cache, no-store, must-revalidate'
+                            },
+                            credentials: 'include',
+                            cache: 'no-store'
+                        });
+                        if (verifyRes.ok) {
+                            const verifyData = await verifyRes.json();
+                            const serverNotes = verifyData?.notes || {};
+                            setNotes(serverNotes);
+                            localStorage.setItem(notesKey, JSON.stringify(serverNotes));
+                            console.log('✅ Calendar notes synced after network error');
+                        }
+                    } catch (verifyError) {
+                        console.error('Error verifying save:', verifyError);
+                    }
+                }, 1000);
             }
         } catch (error) {
             console.error('Error saving notes:', error);
