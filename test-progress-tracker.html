@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Progress Tracker Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .success { color: green; }
+        .error { color: red; }
+        .warning { color: orange; }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        #results {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Project Progress Tracker Component Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Component Availability</h2>
+        <p>This test checks if the ProjectProgressTracker component is properly loaded and registered.</p>
+        <button onclick="runTest()">Run Test</button>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function runTest() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Running tests...\n\n';
+            
+            const tests = [];
+            
+            // Test 1: Check if component is loaded
+            tests.push({
+                name: 'Component Registration',
+                test: () => {
+                    if (typeof window.ProjectProgressTracker !== 'undefined') {
+                        return { success: true, message: 'Component is registered on window.ProjectProgressTracker' };
+                    }
+                    return { success: false, message: 'Component NOT found on window.ProjectProgressTracker' };
+                }
+            });
+            
+            // Test 2: Check component type
+            tests.push({
+                name: 'Component Type',
+                test: () => {
+                    const comp = window.ProjectProgressTracker;
+                    if (!comp) {
+                        return { success: false, message: 'Component is undefined' };
+                    }
+                    const type = typeof comp;
+                    const isFunction = type === 'function';
+                    const isObject = type === 'object';
+                    const hasTypeof = comp.$$typeof !== undefined;
+                    const hasType = comp.type !== undefined;
+                    
+                    return {
+                        success: isFunction || (isObject && (hasTypeof || hasType)),
+                        message: `Type: ${type}, isFunction: ${isFunction}, has$$typeof: ${hasTypeof}, hasType: ${hasType}`,
+                        details: {
+                            value: comp,
+                            type: type,
+                            keys: isObject ? Object.keys(comp).slice(0, 10) : []
+                        }
+                    };
+                }
+            });
+            
+            // Test 3: Check React availability
+            tests.push({
+                name: 'React Availability',
+                test: () => {
+                    const hasReact = typeof window.React !== 'undefined';
+                    const hasCreateElement = hasReact && typeof window.React.createElement === 'function';
+                    return {
+                        success: hasReact && hasCreateElement,
+                        message: `React available: ${hasReact}, createElement available: ${hasCreateElement}`
+                    };
+                }
+            });
+            
+            // Test 4: Check ErrorBoundary
+            tests.push({
+                name: 'ErrorBoundary Availability',
+                test: () => {
+                    const hasErrorBoundary = typeof window.ErrorBoundary !== 'undefined';
+                    return {
+                        success: hasErrorBoundary,
+                        message: `ErrorBoundary available: ${hasErrorBoundary}`
+                    };
+                }
+            });
+            
+            // Test 5: Try to create element (if possible)
+            tests.push({
+                name: 'Element Creation Test',
+                test: () => {
+                    try {
+                        if (!window.React || !window.ProjectProgressTracker) {
+                            return { success: false, message: 'React or ProjectProgressTracker not available' };
+                        }
+                        
+                        const element = window.React.createElement(window.ProjectProgressTracker, {
+                            onBack: () => console.log('onBack called')
+                        });
+                        
+                        return {
+                            success: true,
+                            message: 'Successfully created React element',
+                            details: {
+                                elementType: typeof element,
+                                hasType: element.$$typeof !== undefined
+                            }
+                        };
+                    } catch (error) {
+                        return {
+                            success: false,
+                            message: `Failed to create element: ${error.message}`,
+                            error: error.stack
+                        };
+                    }
+                }
+            });
+            
+            // Run all tests
+            let output = '';
+            let passed = 0;
+            let failed = 0;
+            
+            tests.forEach((test, index) => {
+                try {
+                    const result = test.test();
+                    const status = result.success ? '✅ PASS' : '❌ FAIL';
+                    output += `${index + 1}. ${test.name}: ${status}\n`;
+                    output += `   ${result.message}\n`;
+                    
+                    if (result.details) {
+                        output += `   Details: ${JSON.stringify(result.details, null, 2)}\n`;
+                    }
+                    
+                    if (result.error) {
+                        output += `   Error: ${result.error}\n`;
+                    }
+                    
+                    output += '\n';
+                    
+                    if (result.success) {
+                        passed++;
+                    } else {
+                        failed++;
+                    }
+                } catch (error) {
+                    output += `${index + 1}. ${test.name}: ❌ ERROR\n`;
+                    output += `   ${error.message}\n\n`;
+                    failed++;
+                }
+            });
+            
+            output += `\n=== SUMMARY ===\n`;
+            output += `Passed: ${passed}/${tests.length}\n`;
+            output += `Failed: ${failed}/${tests.length}\n`;
+            
+            results.innerHTML = output;
+        }
+        
+        // Auto-run test when page loads (after a delay to allow scripts to load)
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                console.log('🔍 Running automatic test...');
+                runTest();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
+

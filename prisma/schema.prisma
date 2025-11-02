@@ -403,6 +403,8 @@ model InventoryItem {
   reorderPoint        Float     @default(0)
   reorderQty          Float     @default(0)
   location            String    @default("")
+  locationId          String?   // Link to StockLocation - each location has its own inventory
+  stockLocation       StockLocation? @relation(fields: [locationId], references: [id])
   unitCost            Float     @default(0)
   totalValue          Float     @default(0)
   supplier            String    @default("")
@@ -421,6 +423,7 @@ model InventoryItem {
   @@index([category])
   @@index([status])
   @@index([ownerId])
+  @@index([locationId])
 }
 
 model BOM {
@@ -518,6 +521,7 @@ model StockLocation {
   updatedAt     DateTime @updatedAt
 
   inventory LocationInventory[]
+  inventoryItems InventoryItem[] // Inventory items specific to this location
 
   @@index([type])
   @@index([status])

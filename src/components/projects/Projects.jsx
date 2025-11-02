@@ -772,41 +772,6 @@ const Projects = () => {
             );
         }
         
-        // Validate that ProjectProgressTracker is actually a function
-        if (typeof window.ProjectProgressTracker !== 'function') {
-            console.error('❌ ProjectProgressTracker is not a function:', typeof window.ProjectProgressTracker);
-            return (
-                <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <button 
-                            onClick={() => setShowProgressTracker(false)} 
-                            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            <i className="fas fa-arrow-left"></i>
-                        </button>
-                        <h1 className="text-lg font-semibold text-gray-900">Project Progress Tracker</h1>
-                    </div>
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <div className="flex items-start">
-                            <i className="fas fa-exclamation-triangle text-red-600 mt-0.5 mr-3"></i>
-                            <div className="flex-1">
-                                <h3 className="text-sm font-semibold text-red-800 mb-1">Component Load Error</h3>
-                                <p className="text-sm text-red-700">
-                                    The Progress Tracker component failed to load properly. Please refresh the page.
-                                </p>
-                                <button
-                                    onClick={() => window.location.reload()}
-                                    className="mt-2 px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs font-medium"
-                                >
-                                    Reload Page
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-        
         // Wrap in ErrorBoundary for additional safety
         // Use React.createElement to avoid JSX issues with window components
         const ErrorBoundary = window.ErrorBoundary || (({ children }) => children);
@@ -820,7 +785,7 @@ const Projects = () => {
         
         const isValidComponent = ProjectProgressTracker && (
             typeof ProjectProgressTracker === 'function' ||
-            (typeof ProjectProgressTracker === 'object' && ProjectProgressTracker.$$typeof)
+            (typeof ProjectProgressTracker === 'object' && (ProjectProgressTracker.$$typeof || ProjectProgressTracker.type))
         );
         
         console.log('🔍 isValidComponent:', isValidComponent);
