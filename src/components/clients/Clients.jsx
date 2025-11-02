@@ -110,6 +110,109 @@ function processClientData(rawClients, cacheKey) {
     return processed;
 }
 
+// Services Dropdown Component with checkboxes
+const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDark }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => document.removeEventListener('mousedown', handleClickOutside);
+        }
+    }, [isOpen]);
+
+    const handleToggle = (service) => {
+        if (selectedServices.includes(service)) {
+            onSelectionChange(selectedServices.filter(s => s !== service));
+        } else {
+            onSelectionChange([...selectedServices, service]);
+        }
+    };
+
+    const handleClear = (e) => {
+        e.stopPropagation();
+        onSelectionChange([]);
+    };
+
+    const displayText = selectedServices.length === 0 
+        ? 'All Services' 
+        : selectedServices.length === 1 
+            ? selectedServices[0] 
+            : `${selectedServices.length} selected`;
+
+    return (
+        <div className="relative" ref={dropdownRef}>
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors text-left flex items-center justify-between ${
+                    isDark 
+                        ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
+                        : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
+                }`}
+            >
+                <span>{displayText}</span>
+                <div className="flex items-center gap-2">
+                    {selectedServices.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={handleClear}
+                            className={`transition-colors ${
+                                isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
+                            }`}
+                            title="Clear selection"
+                        >
+                            <i className="fas fa-times text-xs"></i>
+                        </button>
+                    )}
+                    <i className={`fas fa-chevron-${isOpen ? 'up' : 'down'} text-xs`}></i>
+                </div>
+            </button>
+            {isOpen && services.length > 0 && (
+                <div className={`absolute z-50 w-full mt-1 border rounded-lg shadow-lg max-h-60 overflow-auto ${
+                    isDark 
+                        ? 'bg-gray-700 border-gray-600' 
+                        : 'bg-white border-gray-300'
+                }`}>
+                    {services.map(service => {
+                        const isSelected = selectedServices.includes(service);
+                        return (
+                            <label
+                                key={service}
+                                className={`flex items-center px-4 py-2 cursor-pointer hover:bg-opacity-50 ${
+                                    isDark 
+                                        ? 'hover:bg-gray-600' 
+                                        : 'hover:bg-gray-100'
+                                }`}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleToggle(service)}
+                                    className={`mr-3 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                                        isDark ? 'bg-gray-600 border-gray-500' : ''
+                                    }`}
+                                />
+                                <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                                    {service}
+                                </span>
+                            </label>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+};
+
 // No initial data - all data comes from database
 
 const Clients = React.memo(() => {
@@ -2816,47 +2919,12 @@ const Clients = React.memo(() => {
                             </select>
                         </div>
                         <div>
-                            <div className="relative">
-                                <select
-                                    multiple
-                                    value={filterServices}
-                                    onChange={(e) => {
-                                        const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                        setFilterServices(selected);
-                                    }}
-                                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm transition-colors ${
-                                        isDark 
-                                            ? 'bg-gray-700 border-gray-600 text-gray-200 focus:bg-gray-700' 
-                                            : 'bg-gray-50 border-gray-300 text-gray-900 focus:bg-white'
-                                    }`}
-                                    size={allServices.length > 0 ? Math.min(allServices.length + 1, 5) : 1}
-                                    title="Hold Ctrl/Cmd to select multiple services"
-                                >
-                                    {allServices.length === 0 ? (
-                                        <option disabled>No services available</option>
-                                    ) : (
-                                        allServices.map(service => (
-                                            <option key={service} value={service}>{service}</option>
-                                        ))
-                                    )}
-                                </select>
-                                {filterServices.length > 0 && (
-                                    <button
-                                        onClick={() => setFilterServices([])}
-                                        className={`absolute right-2 top-2 transition-colors ${
-                                            isDark ? 'text-gray-400 hover:text-gray-200' : 'text-gray-400 hover:text-gray-600'
-                                        }`}
-                                        title="Clear services filter"
-                                    >
-                                        <i className="fas fa-times text-xs"></i>
-                                    </button>
-                                )}
-                            </div>
-                            {filterServices.length > 0 && (
-                                <div className="mt-1 text-xs text-gray-500">
-                                    {filterServices.length} selected
-                                </div>
-                            )}
+                            <ServicesDropdown
+                                services={allServices}
+                                selectedServices={filterServices}
+                                onSelectionChange={setFilterServices}
+                                isDark={isDark}
+                            />
                         </div>
                     </div>
                     
