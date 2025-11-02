@@ -3199,7 +3199,7 @@ const Manufacturing = () => {
           <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
               <h2 className="text-lg font-semibold text-gray-900">
-                {modalType === 'add_production' ? 'New Work Order' : 'Edit Work Order'}
+                {modalType === 'add_production' ? 'New Production Order' : 'Edit Production Order'}
               </h2>
               <button
                 onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); }}
@@ -3210,9 +3210,9 @@ const Manufacturing = () => {
             </div>
             <div className="p-4">
               <div className="space-y-4">
-                {/* Work Order Number */}
+                {/* Production Order Number */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Work Order Number</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Production Order Number</label>
                   <div className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-300 rounded-lg text-gray-700 font-mono">
                     {formData.workOrderNumber || getNextWorkOrderNumber()}
                   </div>
@@ -3429,7 +3429,7 @@ const Manufacturing = () => {
                 }}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
-                {modalType === 'add_production' ? 'Create Work Order' : 'Update Order'}
+                {modalType === 'add_production' ? 'Create Production Order' : 'Update Order'}
               </button>
             </div>
           </div>
@@ -4423,7 +4423,7 @@ const Manufacturing = () => {
             { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
-            { id: 'production', label: 'Work Orders', icon: 'fa-industry' },
+            { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
