@@ -47,6 +47,37 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
 
+  // Load job cards with offline support
+  const loadJobCards = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      // First, try to load from localStorage (offline support)
+      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      if (cached.length > 0) {
+        setJobCards(cached);
+        setIsLoading(false);
+      }
+
+      // Then try to sync from API if online
+      if (isOnline && window.DatabaseAPI?.getJobCards) {
+        try {
+          const response = await window.DatabaseAPI.getJobCards();
+          const jobCardsData = response?.data?.jobCards || response?.data || [];
+          if (Array.isArray(jobCardsData) && jobCardsData.length > 0) {
+            setJobCards(jobCardsData);
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
+          }
+        } catch (error) {
+          console.warn('⚠️ Failed to sync job cards from API, using cached data:', error.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading job cards:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isOnline]);
+
   // Monitor online/offline status and auto-sync when coming back online
   useEffect(() => {
     const handleOnline = async () => {
@@ -64,9 +95,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
           }
         }
-        
-        // Reload other data (users, clients, inventory)
-        loadJobCards();
       } catch (error) {
         console.warn('Failed to sync when coming back online:', error);
       }
@@ -84,7 +112,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [loadJobCards]);
+  }, []); // Remove loadJobCards dependency to avoid circular reference
 
   // Load users if not provided - with offline support
   useEffect(() => {
@@ -214,37 +242,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     loadStockData();
   }, [isOnline]);
 
-  // Load job cards with offline support
-  const loadJobCards = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      // First, try to load from localStorage (offline support)
-      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      if (cached.length > 0) {
-        setJobCards(cached);
-        setIsLoading(false);
-      }
-
-      // Then try to sync from API if online
-      if (isOnline && window.DatabaseAPI?.getJobCards) {
-        try {
-          const response = await window.DatabaseAPI.getJobCards();
-          const jobCardsData = response?.data?.jobCards || response?.data || [];
-          if (Array.isArray(jobCardsData) && jobCardsData.length > 0) {
-            setJobCards(jobCardsData);
-            localStorage.setItem('manufacturing_jobcards', JSON.stringify(jobCardsData));
-          }
-        } catch (error) {
-          console.warn('⚠️ Failed to sync job cards from API, using cached data:', error.message);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading job cards:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [isOnline]);
-
+  // Initial load of job cards
   useEffect(() => {
     loadJobCards();
   }, [loadJobCards]);

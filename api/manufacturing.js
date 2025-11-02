@@ -1113,8 +1113,7 @@ async function handler(req, res) {
           }
           
           // Create order (will rollback allocations if this fails)
-          return await tx.productionOrder.create({
-          data: {
+          const createData = {
             bomId: body.bomId || '',
             productSku: body.productSku,
             productName: body.productName,
@@ -1122,9 +1121,6 @@ async function handler(req, res) {
             quantityProduced: parseInt(body.quantityProduced) || 0,
             status: orderStatus,
             priority: body.priority || 'normal',
-            startDate: body.startDate ? new Date(body.startDate) : null,
-            targetDate: body.targetDate ? new Date(body.targetDate) : null,
-            completedDate: body.completedDate ? new Date(body.completedDate) : null,
             assignedTo: body.assignedTo || '',
             totalCost: parseFloat(body.totalCost) || 0,
             notes: body.notes || '',
@@ -1133,8 +1129,14 @@ async function handler(req, res) {
             allocationType: body.allocationType || 'stock',
             createdBy: body.createdBy || req.user?.name || 'System',
             ownerId: null
-          }
-          })
+          };
+          
+          // Only set date fields if they're provided (let Prisma defaults handle the rest)
+          if (body.startDate) createData.startDate = new Date(body.startDate);
+          if (body.targetDate) createData.targetDate = new Date(body.targetDate);
+          if (body.completedDate) createData.completedDate = new Date(body.completedDate);
+          
+          return await tx.productionOrder.create({ data: createData })
         })
         
         console.log('✅ Created production order:', order.id)
@@ -1198,7 +1200,8 @@ async function handler(req, res) {
             return badRequest(res, 'Order has no BOM - cannot complete production')
           }
           
-          await prisma.$transaction(async (tx) => {
+          try {
+            await prisma.$transaction(async (tx) => {
             // Re-fetch order within transaction for consistency
             const orderInTx = await tx.productionOrder.findUnique({ where: { id } })
             if (!orderInTx) {
@@ -1304,16 +1307,42 @@ async function handler(req, res) {
               }
             })
             
-            // Update production order status to completed
+            // Update production order status to completed, and set completedDate if provided
+            const completionUpdate = { status: 'completed' }
+            if (body.completedDate) {
+              completionUpdate.completedDate = new Date(body.completedDate)
+            } else {
+              completionUpdate.completedDate = new Date()
+            }
+            
             await tx.productionOrder.update({
               where: { id },
-              data: { status: 'completed' }
+              data: completionUpdate
             })
             
             console.log(`✅ Added ${quantityProduced} units of ${finishedProduct.name} to inventory with cost ${unitCost} per unit`)
           }, {
             timeout: 30000
           })
+          } catch (transactionError) {
+            console.error('❌ Transaction failed when completing production order:', transactionError)
+            console.error('❌ Error details:', {
+              message: transactionError.message,
+              code: transactionError.code,
+              id: id,
+              bomId: existingOrder.bomId
+            })
+            
+            // Provide user-friendly error message
+            if (transactionError.message.includes('not found')) {
+              return badRequest(res, transactionError.message)
+            }
+            if (transactionError.message.includes('Finished product inventory item not found')) {
+              return badRequest(res, transactionError.message)
+            }
+            
+            throw transactionError // Re-throw to be caught by outer try-catch
+          }
         }
         
         // Handle status change from 'requested' to 'in_production' - deduct stock
@@ -1671,8 +1700,8 @@ async function handler(req, res) {
           }
         }
         
-        // Update order with other fields (but remove status if it was already updated in transaction)
-        // Remove status from updateData if it was handled in a transaction above
+        // Update order with other fields (but remove status and completedDate if they were already updated in transaction)
+        // Remove status and completedDate from updateData if they were handled in a transaction above
         const fieldsToUpdate = { ...updateData }
         if ((newStatus === 'completed' && oldStatus !== 'completed') ||
             (newStatus === 'in_production' && oldStatus === 'requested') ||
@@ -1680,6 +1709,10 @@ async function handler(req, res) {
             newStatus === 'cancelled') {
           // Status was already updated in the transaction above, remove it from updateData
           delete fieldsToUpdate.status
+          // completedDate was also set in the transaction for 'completed' status
+          if (newStatus === 'completed' && oldStatus !== 'completed') {
+            delete fieldsToUpdate.completedDate
+          }
         }
         
         // Only update if there are fields to update

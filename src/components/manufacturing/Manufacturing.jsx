@@ -1620,7 +1620,7 @@ const Manufacturing = () => {
     try {
       // Validate inventory item is selected (REQUIRED)
       if (!formData.inventoryItemId) {
-        alert('Please select a finished product inventory item before saving the BOM. Create the inventory item first if it does not exist.');
+        alert('⚠️ REQUIRED: You must select a finished product inventory item before creating the BOM.\n\nIf you haven\'t created the finished product yet:\n1. Go to the Inventory tab\n2. Add a new item\n3. Set Type to "Finished Good"\n4. Set Category to "Finished Goods"\n5. Then return here to create the BOM.');
         return;
       }
       
@@ -2082,8 +2082,6 @@ const Manufacturing = () => {
         quantityProduced: 0,
         status: formData.status || 'requested',
         priority: formData.priority || 'normal',
-        startDate: formData.startDate || null,
-        targetDate: formData.targetDate || null,
         assignedTo: formData.assignedTo || '',
         totalCost: totalCost,
         notes: formData.notes || '',
@@ -2092,6 +2090,10 @@ const Manufacturing = () => {
         allocationType: allocationType,
         createdBy: user?.name || 'System'
       };
+
+      // Only include date fields if they have values
+      if (formData.startDate) orderData.startDate = formData.startDate;
+      if (formData.targetDate) orderData.targetDate = formData.targetDate;
 
       console.log('📤 Sending production order data:', orderData);
       const response = await safeCallAPI('createProductionOrder', orderData);
@@ -2742,7 +2744,11 @@ const Manufacturing = () => {
                           setFormData({ ...formData, inventoryItemId: '' });
                         }
                       }}
-                      className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white ${
+                        !formData.inventoryItemId 
+                          ? 'border-red-400 focus:ring-red-500 focus:border-red-400' 
+                          : 'border-blue-300'
+                      }`}
                       required
                     >
                       <option value="">-- Select finished product inventory item --</option>
@@ -3124,8 +3130,13 @@ const Manufacturing = () => {
                 </button>
                 <button
                   onClick={handleSaveBom}
-                  className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className={`px-4 py-2 text-sm rounded-lg ${
+                    bomComponents.length === 0 || !formData.inventoryItemId
+                      ? 'bg-gray-400 text-white cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
                   disabled={bomComponents.length === 0 || !formData.inventoryItemId}
+                  title={!formData.inventoryItemId ? 'Please select a finished product inventory item first' : bomComponents.length === 0 ? 'Please add at least one component' : ''}
                 >
                   {modalType === 'edit_bom' ? 'Update BOM' : 'Create BOM'}
                 </button>
