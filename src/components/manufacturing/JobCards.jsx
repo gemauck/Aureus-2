@@ -26,9 +26,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     location: '',
     locationLatitude: '',
     locationLongitude: '',
+    vehicleId: '',
+    vehicleUsed: '',
     timeOfDeparture: '',
     timeOfArrival: '',
-    vehicleUsed: '',
+    departureFromSite: '',
+    arrivalBackAtOffice: '',
     kmReadingBefore: '',
     kmReadingAfter: '',
     reasonForVisit: '',
@@ -46,12 +49,16 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [inventory, setInventory] = useState([]);
   const [stockLocations, setStockLocations] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
   const [mapInstance, setMapInstance] = useState(null);
   const [locationMarker, setLocationMarker] = useState(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const locationMapRef = useRef(null);
+  const [showVehicleModal, setShowVehicleModal] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [vehicleFormData, setVehicleFormData] = useState({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
 
   // Load job cards with offline support - defined as a stable function reference
   const loadJobCardsRef = useRef(null);
@@ -321,6 +328,39 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     loadStockData();
   }, [isOnline]);
 
+  // Load vehicles - with offline support
+  useEffect(() => {
+    const loadVehicles = async () => {
+      try {
+        // First, load from cache for instant UI
+        const cached = JSON.parse(localStorage.getItem('manufacturing_vehicles') || '[]');
+        if (cached.length > 0) {
+          setVehicles(cached);
+        }
+
+        // Then try to sync from API if online
+        if (isOnline && window.DatabaseAPI?.getVehicles) {
+          try {
+            const response = await window.DatabaseAPI.getVehicles();
+            const vehiclesData = response?.data?.vehicles || response?.data || [];
+            if (Array.isArray(vehiclesData) && vehiclesData.length > 0) {
+              setVehicles(vehiclesData);
+              localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
+            }
+          } catch (error) {
+            console.warn('Failed to load vehicles from API, using cache:', error);
+            if (cached.length > 0) setVehicles(cached);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load vehicles:', error);
+        const cached = JSON.parse(localStorage.getItem('manufacturing_vehicles') || '[]');
+        if (cached.length > 0) setVehicles(cached);
+      }
+    };
+    loadVehicles();
+  }, [isOnline]);
+
   // Initial load of job cards - run only once on mount
   useEffect(() => {
     const initLoad = async () => {
@@ -376,9 +416,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         location: editingJobCard.location || '',
         locationLatitude: editingJobCard.locationLatitude || '',
         locationLongitude: editingJobCard.locationLongitude || '',
+        vehicleId: editingJobCard.vehicleId || '',
+        vehicleUsed: editingJobCard.vehicleUsed || '',
         timeOfDeparture: editingJobCard.timeOfDeparture ? editingJobCard.timeOfDeparture.substring(0, 16) : '',
         timeOfArrival: editingJobCard.timeOfArrival ? editingJobCard.timeOfArrival.substring(0, 16) : '',
-        vehicleUsed: editingJobCard.vehicleUsed || '',
+        departureFromSite: editingJobCard.departureFromSite ? editingJobCard.departureFromSite.substring(0, 16) : '',
+        arrivalBackAtOffice: editingJobCard.arrivalBackAtOffice ? editingJobCard.arrivalBackAtOffice.substring(0, 16) : '',
         kmReadingBefore: editingJobCard.kmReadingBefore || '',
         kmReadingAfter: editingJobCard.kmReadingAfter || '',
         reasonForVisit: editingJobCard.reasonForVisit || '',
@@ -522,6 +565,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       const kmBefore = parseFloat(formData.kmReadingBefore) || 0;
       const kmAfter = parseFloat(formData.kmReadingAfter) || 0;
       jobCardData.travelKilometers = Math.max(0, kmAfter - kmBefore);
+
+      // Calculate total time in minutes
+      const totalMinutes = calculateTotalTime();
+      jobCardData.totalTimeMinutes = totalMinutes;
 
       // Calculate total cost for materials bought
       jobCardData.totalMaterialsCost = (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0);
@@ -817,9 +864,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       location: '',
       locationLatitude: '',
       locationLongitude: '',
+      vehicleId: '',
+      vehicleUsed: '',
       timeOfDeparture: '',
       timeOfArrival: '',
-      vehicleUsed: '',
+      departureFromSite: '',
+      arrivalBackAtOffice: '',
       kmReadingBefore: '',
       kmReadingAfter: '',
       reasonForVisit: '',
@@ -840,6 +890,19 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       locationMarker.remove();
       setLocationMarker(null);
     }
+  };
+
+  // Calculate total time in minutes
+  const calculateTotalTime = () => {
+    const departure = formData.timeOfDeparture ? new Date(formData.timeOfDeparture) : null;
+    const arrivalBack = formData.arrivalBackAtOffice ? new Date(formData.arrivalBackAtOffice) : null;
+    
+    if (departure && arrivalBack && arrivalBack > departure) {
+      const diffMs = arrivalBack - departure;
+      const diffMinutes = Math.round(diffMs / (1000 * 60));
+      return diffMinutes;
+    }
+    return 0;
   };
 
   // Initialize map for location selection (only when showAddPage becomes true)
@@ -1067,6 +1130,83 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     );
   };
 
+  // Vehicle management handlers
+  const handleSaveVehicle = async () => {
+    try {
+      if (!vehicleFormData.name || !vehicleFormData.reg) {
+        if (window.showNotification) {
+          window.showNotification('Vehicle name and registration number are required', 'error');
+        } else {
+          alert('Vehicle name and registration number are required');
+        }
+        return;
+      }
+
+      if (editingVehicle && window.DatabaseAPI?.updateVehicle) {
+        await window.DatabaseAPI.updateVehicle(editingVehicle.id, vehicleFormData);
+        if (window.showNotification) {
+          window.showNotification('Vehicle updated successfully!', 'success');
+        }
+      } else if (window.DatabaseAPI?.createVehicle) {
+        await window.DatabaseAPI.createVehicle(vehicleFormData);
+        if (window.showNotification) {
+          window.showNotification('Vehicle created successfully!', 'success');
+        }
+      }
+
+      // Reload vehicles
+      if (isOnline && window.DatabaseAPI?.getVehicles) {
+        const response = await window.DatabaseAPI.getVehicles();
+        const vehiclesData = response?.data?.vehicles || response?.data || [];
+        if (Array.isArray(vehiclesData)) {
+          setVehicles(vehiclesData);
+          localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
+        }
+      }
+
+      setShowVehicleModal(false);
+      setEditingVehicle(null);
+      setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
+    } catch (error) {
+      console.error('Error saving vehicle:', error);
+      if (window.showNotification) {
+        window.showNotification(`Failed to save vehicle: ${error.message}`, 'error');
+      } else {
+        alert(`Failed to save vehicle: ${error.message}`);
+      }
+    }
+  };
+
+  const handleDeleteVehicle = async (vehicleId) => {
+    if (!confirm('Are you sure you want to delete this vehicle?')) return;
+
+    try {
+      if (window.DatabaseAPI?.deleteVehicle) {
+        await window.DatabaseAPI.deleteVehicle(vehicleId);
+        if (window.showNotification) {
+          window.showNotification('Vehicle deleted successfully!', 'success');
+        }
+
+        // Reload vehicles
+        if (isOnline && window.DatabaseAPI?.getVehicles) {
+          const response = await window.DatabaseAPI.getVehicles();
+          const vehiclesData = response?.data?.vehicles || response?.data || [];
+          if (Array.isArray(vehiclesData)) {
+            setVehicles(vehiclesData);
+            localStorage.setItem('manufacturing_vehicles', JSON.stringify(vehiclesData));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting vehicle:', error);
+      if (window.showNotification) {
+        window.showNotification(`Failed to delete vehicle: ${error.message}`, 'error');
+      } else {
+        alert(`Failed to delete vehicle: ${error.message}`);
+      }
+    }
+  };
+
   const openAddPage = () => {
     setEditingJobCard(null);
     resetForm();
@@ -1269,49 +1409,146 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             />
           </div>
 
-          {/* Time of Departure and Arrival */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time of Departure
+          {/* Vehicle Selection */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <div className="flex items-center justify-between mb-3">
+              <label className="block text-sm font-semibold text-gray-900">
+                Vehicle Used
               </label>
-              <input
-                type="datetime-local"
-                name="timeOfDeparture"
-                value={formData.timeOfDeparture}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+              {user?.role === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingVehicle(null);
+                    setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
+                    setShowVehicleModal(true);
+                  }}
+                  className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700"
+                >
+                  <i className="fas fa-plus mr-1"></i>Add Vehicle
+                </button>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Time of Arrival
-              </label>
-              <input
-                type="datetime-local"
-                name="timeOfArrival"
-                value={formData.timeOfArrival}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <select
+                  name="vehicleId"
+                  value={formData.vehicleId}
+                  onChange={(e) => {
+                    const selectedVehicle = vehicles.find(v => v.id === e.target.value);
+                    setFormData(prev => ({
+                      ...prev,
+                      vehicleId: e.target.value,
+                      vehicleUsed: selectedVehicle ? `${selectedVehicle.name} (${selectedVehicle.reg})` : ''
+                    }));
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Select vehicle or enter manually</option>
+                  {vehicles.map(vehicle => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.name} - {vehicle.reg} {vehicle.model ? `(${vehicle.model})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <input
+                  type="text"
+                  name="vehicleUsed"
+                  value={formData.vehicleUsed}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Or enter vehicle manually (e.g., AB12 CD 3456)"
+                />
+              </div>
             </div>
           </div>
 
-          {/* Vehicle and Kilometer Readings */}
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Vehicle Used
-              </label>
-              <input
-                type="text"
-                name="vehicleUsed"
-                value={formData.vehicleUsed}
-                onChange={handleChange}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., AB12 CD 3456"
-              />
+          {/* Time Tracking Section */}
+          <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4">Time Tracking</h3>
+            
+            {/* To Site */}
+            <div className="mb-4 pb-4 border-b border-gray-200">
+              <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">To Site</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Departure from Office *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="timeOfDeparture"
+                    value={formData.timeOfDeparture}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Arrival at Site *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="timeOfArrival"
+                    value={formData.timeOfArrival}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
             </div>
+
+            {/* From Site */}
+            <div className="mb-4 pb-4 border-b border-gray-200">
+              <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">From Site</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Departure from Site *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="departureFromSite"
+                    value={formData.departureFromSite}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Arrival back at Office *
+                  </label>
+                  <input
+                    type="datetime-local"
+                    name="arrivalBackAtOffice"
+                    value={formData.arrivalBackAtOffice}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Total Time Display */}
+            {calculateTotalTime() > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-blue-900">
+                    <i className="fas fa-clock mr-2"></i>
+                    Total Time:
+                  </span>
+                  <span className="text-lg font-bold text-blue-700">
+                    {Math.floor(calculateTotalTime() / 60)}h {calculateTotalTime() % 60}m
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Kilometer Readings */}
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 KM Reading Before
@@ -1665,6 +1902,147 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             </button>
           </div>
         </form>
+
+        {/* Vehicle Management Modal */}
+        {showVehicleModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowVehicleModal(false);
+                    setEditingVehicle(null);
+                    setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Vehicle Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={vehicleFormData.name}
+                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Service Van 1"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Model
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicleFormData.model}
+                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, model: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., Toyota Hilux"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicleFormData.type}
+                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, type: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., Van, Truck, Car"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Registration Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicleFormData.reg}
+                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, reg: e.target.value.toUpperCase() })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="e.g., AB12 CD 3456"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Asset Number
+                    </label>
+                    <input
+                      type="text"
+                      value={vehicleFormData.assetNumber}
+                      onChange={(e) => setVehicleFormData({ ...vehicleFormData, assetNumber: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Asset number"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    value={vehicleFormData.notes}
+                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="Additional notes about the vehicle"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={vehicleFormData.status}
+                    onChange={(e) => setVehicleFormData({ ...vehicleFormData, status: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="maintenance">Maintenance</option>
+                  </select>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowVehicleModal(false);
+                      setEditingVehicle(null);
+                      setVehicleFormData({ name: '', model: '', type: '', reg: '', assetNumber: '', notes: '', status: 'active' });
+                    }}
+                    className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveVehicle}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    {editingVehicle ? 'Update Vehicle' : 'Create Vehicle'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

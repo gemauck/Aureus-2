@@ -956,6 +956,54 @@ const DatabaseAPI = {
         return response;
     },
 
+    // PURCHASE ORDERS
+    async getPurchaseOrders() {
+        console.log('📡 Fetching purchase orders from database...');
+        const raw = await this.makeRequest('/purchase-orders');
+        const normalized = {
+            data: {
+                purchaseOrders: Array.isArray(raw?.data?.purchaseOrders)
+                    ? raw.data.purchaseOrders
+                    : Array.isArray(raw?.purchaseOrders)
+                        ? raw.purchaseOrders
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Purchase orders fetched from database:', normalized.data.purchaseOrders.length);
+        return normalized;
+    },
+
+    async createPurchaseOrder(orderData) {
+        console.log('📡 Creating purchase order in database...');
+        const response = await this.makeRequest('/purchase-orders', {
+            method: 'POST',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Purchase order created in database');
+        return response;
+    },
+
+    async updatePurchaseOrder(id, orderData) {
+        console.log(`📡 Updating purchase order ${id} in database...`);
+        const response = await this.makeRequest(`/purchase-orders/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Purchase order updated in database');
+        return response;
+    },
+
+    async deletePurchaseOrder(id) {
+        console.log(`📡 Deleting purchase order ${id} from database...`);
+        const response = await this.makeRequest(`/purchase-orders/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Purchase order deleted from database');
+        return response;
+    },
+
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
     async getStockMovements() {
         console.log('📡 Fetching stock movements from database...');
@@ -1182,6 +1230,50 @@ const DatabaseAPI = {
     async getStarredClients() {
         console.log('⭐ Fetching starred clients/leads...');
         const response = await this.makeRequest('/starred-clients');
+        return response;
+    },
+
+    // VEHICLES
+    async getVehicles() {
+        console.log('📡 Fetching vehicles from database...');
+        const response = await this.makeRequest('/vehicles');
+        console.log('✅ Vehicles fetched from database');
+        return response;
+    },
+
+    async getVehicle(id) {
+        console.log(`📡 Fetching vehicle ${id} from database...`);
+        const response = await this.makeRequest(`/vehicles/${id}`);
+        console.log('✅ Vehicle fetched from database');
+        return response;
+    },
+
+    async createVehicle(vehicleData) {
+        console.log('📡 Creating vehicle in database...');
+        const response = await this.makeRequest('/vehicles', {
+            method: 'POST',
+            body: JSON.stringify(vehicleData)
+        });
+        console.log('✅ Vehicle created in database');
+        return response;
+    },
+
+    async updateVehicle(id, vehicleData) {
+        console.log(`📡 Updating vehicle ${id} in database...`);
+        const response = await this.makeRequest(`/vehicles/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(vehicleData)
+        });
+        console.log('✅ Vehicle updated in database');
+        return response;
+    },
+
+    async deleteVehicle(id) {
+        console.log(`📡 Deleting vehicle ${id} from database...`);
+        const response = await this.makeRequest(`/vehicles/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Vehicle deleted from database');
         return response;
     },
 

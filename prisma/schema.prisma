@@ -586,22 +586,51 @@ model LocationInventory {
 }
 
 model Supplier {
-  id            String   @id @default(cuid())
-  code          String   @default("")
+  id            String         @id @default(cuid())
+  code          String         @default("")
   name          String
-  contactPerson String   @default("")
-  email         String   @default("")
-  phone         String   @default("")
-  website       String   @default("")
-  address       String   @default("")
-  paymentTerms  String   @default("Net 30")
-  status        String   @default("active") // active, inactive
-  notes         String   @default("")
+  contactPerson String         @default("")
+  email         String         @default("")
+  phone         String         @default("")
+  website       String         @default("")
+  address       String         @default("")
+  paymentTerms  String         @default("Net 30")
+  status        String         @default("active") // active, inactive
+  notes         String         @default("")
   ownerId       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  purchaseOrders PurchaseOrder[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@index([name])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model PurchaseOrder {
+  id               String    @id @default(cuid())
+  orderNumber      String    @unique // Auto-generated: PO0001, PO0002, etc.
+  supplierId       String
+  supplierName     String    @default("")
+  supplier         Supplier  @relation(fields: [supplierId], references: [id])
+  status           String    @default("draft") // draft, sent, confirmed, received, cancelled
+  priority         String    @default("normal") // low, normal, high, urgent
+  orderDate        DateTime  @default(now())
+  expectedDate     DateTime?
+  receivedDate     DateTime?
+  subtotal         Float     @default(0)
+  tax              Float     @default(0)
+  total            Float     @default(0)
+  items            String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  shippingAddress  String    @default("")
+  shippingMethod   String    @default("")
+  notes            String    @default("")
+  internalNotes    String    @default("")
+  ownerId          String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([supplierId])
   @@index([status])
   @@index([ownerId])
 }
@@ -711,6 +740,27 @@ model PasswordHistory {
   @@index([createdAt])
 }
 
+// Vehicles - Company vehicles for job cards
+model Vehicle {
+  id          String    @id @default(cuid())
+  name        String    // Vehicle name/identifier
+  model       String    @default("") // Vehicle model
+  type        String    @default("") // Vehicle type (van, truck, car, etc.)
+  reg         String    @unique // Registration number
+  assetNumber String    @default("") // Asset number
+  status      String    @default("active") // active, inactive, maintenance
+  notes       String    @default("")
+  ownerId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  jobCards    JobCard[]
+
+  @@index([status])
+  @@index([ownerId])
+  @@index([reg])
+}
+
 // Field Agent Job Cards
 model JobCard {
   id                 String    @id @default(cuid())
@@ -722,31 +772,39 @@ model JobCard {
   siteId             String    @default("") // Site/location ID
   siteName           String    @default("") // Site name
   location           String    @default("") // Specific location details
-  timeOfDeparture    DateTime? // When agent left
-  timeOfArrival      DateTime? // When agent arrived
-  vehicleUsed        String    @default("") // Vehicle information
-  kmReadingBefore    Float     @default(0) // Odometer reading before
-  kmReadingAfter     Float     @default(0) // Odometer reading after
-  travelKilometers   Float     @default(0) // Calculated distance
-  reasonForVisit     String    @default("") // Why requested to come out
-  diagnosis          String    @default("") // Notes and comments about diagnosis
-  actionsTaken       String    @default("") // Actions taken to resolve the issue
-  stockUsed          String    @default("[]") // JSON array of stock items used
-  materialsBought    String    @default("[]") // JSON array of materials purchased
-  totalMaterialsCost Float     @default(0) // Total cost of materials bought
-  otherComments      String    @default("") // Additional comments
-  photos             String    @default("[]") // JSON array of photo URLs
-  status             String    @default("draft") // draft, submitted, completed
-  submittedAt        DateTime?
-  completedAt        DateTime?
-  ownerId            String? // User who created the job card
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  locationLatitude   String    @default("") // GPS latitude
+  locationLongitude  String    @default("") // GPS longitude
+  vehicleId           String? // Reference to Vehicle
+  vehicleUsed         String    @default("") // Vehicle information (legacy/fallback)
+  vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
+  timeOfDeparture     DateTime? // When agent left office
+  timeOfArrival       DateTime? // When agent arrived at site
+  departureFromSite   DateTime? // When agent left site
+  arrivalBackAtOffice DateTime? // When agent arrived back at office
+  totalTimeMinutes    Int       @default(0) // Calculated total time in minutes
+  kmReadingBefore     Float     @default(0) // Odometer reading before
+  kmReadingAfter      Float     @default(0) // Odometer reading after
+  travelKilometers    Float     @default(0) // Calculated distance
+  reasonForVisit      String    @default("") // Why requested to come out
+  diagnosis           String    @default("") // Notes and comments about diagnosis
+  actionsTaken        String    @default("") // Actions taken to resolve the issue
+  stockUsed           String    @default("[]") // JSON array of stock items used
+  materialsBought     String    @default("[]") // JSON array of materials purchased
+  totalMaterialsCost  Float     @default(0) // Total cost of materials bought
+  otherComments       String    @default("") // Additional comments
+  photos              String    @default("[]") // JSON array of photo URLs
+  status              String    @default("draft") // draft, submitted, completed
+  submittedAt         DateTime?
+  completedAt         DateTime?
+  ownerId             String? // User who created the job card
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@index([clientId])
   @@index([ownerId])
   @@index([status])
   @@index([createdAt])
+  @@index([vehicleId])
 }
 
 // Client News Articles - Daily news search results
