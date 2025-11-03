@@ -103,13 +103,6 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                             disabled
                         ></textarea>
                     )}
-                    <div className="flex justify-end mt-1.5">
-                        {window.CommentInputWithMentions && (
-                            <small className="text-[9px] text-gray-500 mr-2">
-                                Tip: @mention users to notify them
-                            </small>
-                        )}
-                    </div>
                 </div>
             </div>
         </>
