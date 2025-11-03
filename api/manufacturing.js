@@ -413,8 +413,78 @@ async function handler(req, res) {
         })
         console.log('🧪 Manufacturing List inventory', { owner, locationId, count: items.length })
         
+        // Deduplicate by SKU and locationId - merge duplicates intelligently
+        // When locationId is not filtered, we still deduplicate items with same SKU+locationId
+        // This handles true duplicates (same SKU, same locationId, appearing twice)
+        const itemMap = new Map();
+        for (const item of items) {
+          // Normalize locationId: treat null, undefined, and empty string the same
+          const locationKey = (item.locationId && item.locationId !== 'null' && item.locationId !== 'undefined') 
+            ? String(item.locationId) 
+            : 'null';
+          const key = `${item.sku}::${locationKey}`;
+          
+          if (!itemMap.has(key)) {
+            itemMap.set(key, { ...item });
+          } else {
+            // Merge duplicate: combine quantities and use best metadata
+            const existing = itemMap.get(key);
+            
+            // Store original quantities before merging
+            const existingQty = existing.quantity || 0;
+            const itemQty = item.quantity || 0;
+            
+            // Merge quantities and allocated quantities
+            existing.quantity = existingQty + itemQty;
+            existing.allocatedQuantity = (existing.allocatedQuantity || 0) + (item.allocatedQuantity || 0);
+            existing.totalValue = (existing.totalValue || 0) + (item.totalValue || 0);
+            
+            // Use metadata from the item with non-zero quantity if available
+            if (itemQty > 0 && existingQty === 0) {
+              existing.thumbnail = item.thumbnail || existing.thumbnail;
+              existing.supplier = item.supplier || existing.supplier;
+              existing.location = item.location || existing.location;
+              existing.unitCost = item.unitCost || existing.unitCost;
+              existing.category = item.category || existing.category;
+              existing.type = item.type || existing.type;
+            }
+            
+            // Prefer valid locationId if one has it and the other doesn't
+            if (item.locationId && !existing.locationId) {
+              existing.locationId = item.locationId;
+            }
+            
+            // Update status based on merged quantity
+            if (existing.quantity === 0) {
+              existing.status = 'out_of_stock';
+            } else if (existing.quantity < (existing.reorderPoint || 0)) {
+              existing.status = 'low_stock';
+            } else {
+              existing.status = 'in_stock';
+            }
+            
+            // Use most recent updatedAt
+            if (new Date(item.updatedAt) > new Date(existing.updatedAt)) {
+              existing.updatedAt = item.updatedAt;
+              existing.createdAt = existing.createdAt < item.createdAt ? existing.createdAt : item.createdAt;
+            }
+            
+            itemMap.set(key, existing);
+            console.log(`⚠️  Merged duplicate: SKU ${item.sku}, Location: ${locationKey} - Combined qty: ${existing.quantity} (was ${existingQty} + ${itemQty})`);
+          }
+        }
+        
+        const deduplicatedItems = Array.from(itemMap.values());
+        
+        if (deduplicatedItems.length < items.length) {
+          const removedCount = items.length - deduplicatedItems.length;
+          console.log(`⚠️  Deduplication: Removed ${removedCount} duplicate inventory items (${items.length} → ${deduplicatedItems.length})`);
+        } else {
+          console.log(`✅ No duplicates found (${items.length} items)`);
+        }
+        
         // Format dates for response
-        const formatted = items.map(item => ({
+        const formatted = deduplicatedItems.map(item => ({
           ...item,
           lastRestocked: formatDate(item.lastRestocked),
           createdAt: formatDate(item.createdAt),
