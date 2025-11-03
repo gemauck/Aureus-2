@@ -76,8 +76,7 @@ async function handler(req, res) {
           client: {
             select: {
               id: true,
-              name: true,
-              company: true
+              name: true
             }
           }
         }
@@ -88,7 +87,7 @@ async function handler(req, res) {
           id: `project-${project.id}`,
           type: 'project',
           title: project.name,
-          subtitle: project.client?.name || project.client?.company || project.description,
+          subtitle: project.client?.name || project.description,
           link: `#/projects?highlight=${project.id}`
         })
       }
