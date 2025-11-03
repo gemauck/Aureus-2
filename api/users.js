@@ -300,12 +300,13 @@ async function handler(req, res) {
 
             // Delete user and related records in a transaction
             await prisma.$transaction(async (tx) => {
-                // Delete memberships
+                // Delete memberships first
                 await tx.membership.deleteMany({
                     where: { userId: userId }
                 })
 
                 // Delete related records that can be safely cascaded
+                // Note: Order matters - delete records that reference User first
                 await tx.passwordReset.deleteMany({
                     where: { userId: userId }
                 })
@@ -315,6 +316,15 @@ async function handler(req, res) {
                 })
                 
                 await tx.session.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                // Delete audit logs and other references
+                await tx.auditLog.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.notification.deleteMany({
                     where: { userId: userId }
                 })
 
