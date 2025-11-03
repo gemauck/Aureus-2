@@ -105,9 +105,8 @@
         
         // Account & Settings
         './src/components/account/Account.jsx',
-        './src/components/settings/NotificationSettings.jsx', // Load before Settings
         './src/components/settings/Settings.jsx',
-        // SettingsPortal moved to early load in index.html
+        // NotificationSettings and SettingsPortal moved to early load in index.html
         
         // Feedback widgets
         './src/components/feedback/FeedbackWidget.jsx',
