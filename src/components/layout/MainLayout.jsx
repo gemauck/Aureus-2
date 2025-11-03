@@ -488,7 +488,7 @@ const MainLayout = () => {
             }}
             >
                 {/* Logo - Always show "Abcotronics" text ONLY in sidebar */}
-                <div className={`h-14 lg:h-12 flex items-center ${(!sidebarOpen && !isMobile) ? 'justify-center' : 'justify-between'} px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`h-14 flex items-center ${(!sidebarOpen && !isMobile) ? 'justify-center' : 'justify-between'} px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {/* Always show "Abcotronics" text - adjust size based on sidebar state - ONLY in sidebar, never in header */}
                     {((sidebarOpen && !isMobile) || (sidebarOpen && isMobile)) && (
                         <div className="flex-1 flex justify-center min-w-0">
@@ -593,7 +593,7 @@ const MainLayout = () => {
             {/* Main Content */}
             <div className={`flex-1 overflow-auto ${isMobile && sidebarOpen ? 'ml-0' : ''}`}>
                 {/* Header - Fixed on mobile, static on desktop */}
-                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 lg:h-10 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
+                <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b h-14 flex items-center justify-between px-4 header-mobile sticky lg:static top-0 z-50 lg:z-auto`}>
                     <div className="flex items-center flex-1 min-w-0 overflow-hidden">
                         {/* Hamburger Menu Button - Show on mobile, toggle sidebar */}
                         <button 
@@ -700,18 +700,22 @@ const MainLayout = () => {
                                 </h1>
                             </div>
                         )}
-                        <div className="relative hidden lg:block">
-                            <input
-                                type="text"
-                                placeholder="Search..."
-                                className={`w-32 sm:w-48 pl-6 pr-3 py-1 text-xs border rounded focus:ring-1 focus:ring-primary-500 focus:border-transparent ${
-                                    isDark 
-                                        ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' 
-                                        : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                                }`}
-                            />
-                            <i className={`fas fa-search absolute left-2 top-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
-                        </div>
+                        {window.GlobalSearch ? (
+                            <window.GlobalSearch isMobile={false} isDark={isDark} />
+                        ) : (
+                            <div className="relative hidden lg:block">
+                                <input
+                                    type="text"
+                                    placeholder="Q Search..."
+                                    className={`w-48 pl-8 pr-3 py-1.5 text-sm border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-all ${
+                                        isDark 
+                                            ? 'bg-gray-700 border-gray-600 text-gray-200 placeholder-gray-400' 
+                                            : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
+                                    }`}
+                                />
+                                <i className={`fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-sm ${isDark ? 'text-gray-400' : 'text-gray-400'}`}></i>
+                            </div>
+                        )}
                     </div>
                     {/* Desktop: Action buttons on the right */}
                     {!isMobile && (
