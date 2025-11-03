@@ -15,8 +15,9 @@ model User {
   name               String?
   passwordHash       String?
   provider           String    @default("local")
-  role               String    @default("user") // admin, manager, user (Admin > Manager > User hierarchy)
+  role               String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
   permissions        String    @default("[]") // JSON array of custom permissions that override role permissions
+  accessibleProjectIds String  @default("[]") // JSON array of project IDs that guest users can access
   status             String    @default("active") // active, suspended, inactive
   department         String    @default("")
   jobTitle           String    @default("")

@@ -1339,6 +1339,9 @@ if (window.api) {
     window.api.getUsers = DatabaseAPI.getUsers.bind(DatabaseAPI);
     window.api.inviteUser = DatabaseAPI.inviteUser.bind(DatabaseAPI);
     
+    window.api.getSettings = DatabaseAPI.getSettings.bind(DatabaseAPI);
+    window.api.updateSettings = DatabaseAPI.updateSettings.bind(DatabaseAPI);
+    
     window.api.bulkUpdateClients = DatabaseAPI.bulkUpdateClients.bind(DatabaseAPI);
     window.api.bulkDeleteClients = DatabaseAPI.bulkDeleteClients.bind(DatabaseAPI);
     
