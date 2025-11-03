@@ -94,11 +94,54 @@ async function handler(req, res) {
         documentSections: typeof body.documentSections === 'string' ? body.documentSections : JSON.stringify(body.documentSections)
       }
       
-      // Handle monthlyProgress separately if provided
+      // Handle monthlyProgress separately if provided - with validation for safety
       if (body.monthlyProgress !== undefined && body.monthlyProgress !== null) {
-        updateData.monthlyProgress = typeof body.monthlyProgress === 'string' 
-          ? body.monthlyProgress 
-          : JSON.stringify(body.monthlyProgress)
+        try {
+          let monthlyProgressString = body.monthlyProgress;
+          
+          // If it's already a string, validate it's valid JSON
+          if (typeof monthlyProgressString === 'string') {
+            // Validate JSON structure
+            const parsed = JSON.parse(monthlyProgressString);
+            
+            // Ensure it's an object (not array, null, or primitive)
+            if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+              throw new Error('monthlyProgress must be an object');
+            }
+            
+            // Validate structure - each key should be a month-year format
+            // and values should be objects with valid fields
+            for (const key in parsed) {
+              if (typeof parsed[key] !== 'object' || Array.isArray(parsed[key]) || parsed[key] === null) {
+                console.warn(`⚠️ Invalid month data structure for key: ${key}`);
+                // Don't fail, but log warning
+              } else {
+                // Check for valid field names (compliance, data, comments)
+                const validFields = ['compliance', 'data', 'comments'];
+                for (const field in parsed[key]) {
+                  if (validFields.includes(field) && typeof parsed[key][field] !== 'string') {
+                    // Convert non-string values to strings for safety
+                    parsed[key][field] = String(parsed[key][field] || '');
+                  }
+                }
+              }
+            }
+            
+            // Re-stringify the validated/cleaned data
+            monthlyProgressString = JSON.stringify(parsed);
+          } else {
+            // If it's an object, validate and stringify
+            if (typeof monthlyProgressString !== 'object' || Array.isArray(monthlyProgressString)) {
+              throw new Error('monthlyProgress must be an object');
+            }
+            monthlyProgressString = JSON.stringify(monthlyProgressString);
+          }
+          
+          updateData.monthlyProgress = monthlyProgressString;
+        } catch (error) {
+          console.error('❌ Invalid monthlyProgress data:', error);
+          return serverError(res, 'Invalid monthlyProgress format. Must be valid JSON object.', error.message);
+        }
       }
       
       // Remove undefined values

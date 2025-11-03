@@ -282,61 +282,171 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         }
     };
     
-    // Save progress data
+    // Validate progress data before saving
+    const validateProgressData = (progress) => {
+        try {
+            // Ensure it's an object
+            if (typeof progress !== 'object' || Array.isArray(progress)) {
+                return { valid: false, error: 'Progress data must be an object' };
+            }
+            
+            // Validate structure - each key should be "Month-Year" format
+            for (const key in progress) {
+                if (typeof progress[key] !== 'object' || Array.isArray(progress[key])) {
+                    return { valid: false, error: `Invalid month data structure for ${key}` };
+                }
+                
+                // Each month data should only contain valid fields
+                const validFields = ['compliance', 'data', 'comments'];
+                for (const field in progress[key]) {
+                    if (!validFields.includes(field)) {
+                        console.warn(`⚠️ Unknown field in progress data: ${field}`);
+                    }
+                    
+                    // Values should be strings
+                    if (progress[key][field] !== null && typeof progress[key][field] !== 'string') {
+                        return { valid: false, error: `Field ${field} must be a string` };
+                    }
+                }
+            }
+            
+            return { valid: true };
+        } catch (e) {
+            return { valid: false, error: `Validation error: ${e.message}` };
+        }
+    };
+    
+    // Save progress data with safety checks
     const saveProgressData = async (project, month, field, value) => {
+        // Validate inputs
+        if (!project || !project.id) {
+            console.error('❌ ProjectProgressTracker: Invalid project for save');
+            alert('Invalid project. Cannot save.');
+            return;
+        }
+        
+        if (!month || !field) {
+            console.error('❌ ProjectProgressTracker: Invalid month or field');
+            return;
+        }
+        
+        // Sanitize value - ensure it's a string and limit length for safety
+        const sanitizedValue = typeof value === 'string' ? value.slice(0, 5000) : String(value || '').slice(0, 5000);
+        
         try {
             setSaving(true);
             const safeYear = Number(selectedYear) || currentYear;
+            if (isNaN(safeYear)) {
+                throw new Error('Invalid year');
+            }
+            
             const key = String(month) + '-' + String(safeYear);
             
-            // Get current monthlyProgress or create new
+            // Get current monthlyProgress - preserve all existing data
             const currentProgress = project.monthlyProgress || {};
-            const currentMonthData = currentProgress[key] || {};
             
-            // Update the field
+            // Ensure currentProgress is an object (not a string)
+            let parsedProgress = currentProgress;
+            if (typeof currentProgress === 'string' && currentProgress.trim()) {
+                try {
+                    parsedProgress = JSON.parse(currentProgress);
+                } catch (e) {
+                    console.warn('⚠️ ProjectProgressTracker: Failed to parse existing monthlyProgress, creating new:', e);
+                    parsedProgress = {};
+                }
+            }
+            
+            // Ensure parsedProgress is a valid object
+            if (typeof parsedProgress !== 'object' || Array.isArray(parsedProgress)) {
+                parsedProgress = {};
+            }
+            
+            // Preserve existing month data for all months
+            const currentMonthData = parsedProgress[key] || {};
+            
+            // Only update the specific field, preserve all other fields in this month
             const updatedMonthData = {
                 ...currentMonthData,
-                [field]: value || ''
+                [field]: sanitizedValue
             };
             
+            // Preserve all other months' data
             const updatedProgress = {
-                ...currentProgress,
+                ...parsedProgress,
                 [key]: updatedMonthData
             };
             
-            // Update project via API
-            // Convert monthlyProgress to JSON string for database storage
-            const updatePayload = {
-                monthlyProgress: typeof updatedProgress === 'string' ? updatedProgress : JSON.stringify(updatedProgress)
-            };
-            
-            if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
-                await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            } else if (window.api && window.api.updateProject) {
-                await window.api.updateProject(project.id, updatePayload);
-            } else {
-                console.error('❌ ProjectProgressTracker: No updateProject method available');
-                throw new Error('Update API not available');
+            // Validate before saving
+            const validation = validateProgressData(updatedProgress);
+            if (!validation.valid) {
+                throw new Error(`Data validation failed: ${validation.error}`);
             }
             
-            // Update local state
-            setProjects(prevProjects => prevProjects.map(p => 
-                p.id === project.id 
-                    ? { ...p, monthlyProgress: updatedProgress }
-                    : p
-            ));
+            // Store backup of current state before update
+            const backupProgress = JSON.parse(JSON.stringify(parsedProgress));
             
-            // Clear editing state
-            setEditingCell(null);
+            // Update project via API - only send monthlyProgress field to prevent overwriting other fields
+            const updatePayload = {
+                monthlyProgress: JSON.stringify(updatedProgress)
+            };
+            
+            let updateSuccess = false;
+            let apiError = null;
+            
+            try {
+                if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
+                    await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                    updateSuccess = true;
+                } else if (window.api && window.api.updateProject) {
+                    await window.api.updateProject(project.id, updatePayload);
+                    updateSuccess = true;
+                } else {
+                    throw new Error('Update API not available');
+                }
+            } catch (apiErr) {
+                apiError = apiErr;
+                console.error('❌ ProjectProgressTracker: API update failed:', apiErr);
+                
+                // Restore backup on failure
+                setProjects(prevProjects => prevProjects.map(p => 
+                    p.id === project.id 
+                        ? { ...p, monthlyProgress: backupProgress }
+                        : p
+                ));
+                
+                throw apiErr;
+            }
+            
+            if (updateSuccess) {
+                // Only update local state after successful API call
+                setProjects(prevProjects => prevProjects.map(p => 
+                    p.id === project.id 
+                        ? { ...p, monthlyProgress: updatedProgress }
+                        : p
+                ));
+                
+                // Clear editing state only after successful save
+                setEditingCell(null);
+                const cellKey = `${project.id}-${month}-${field}`;
+                setCellValues(prev => {
+                    const updated = { ...prev };
+                    delete updated[cellKey];
+                    return updated;
+                });
+            }
+        } catch (e) {
+            console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
+            const errorMessage = e.message || 'Failed to save. Please try again.';
+            alert(`Save failed: ${errorMessage}`);
+            
+            // Reset cell value to original on error
             const cellKey = `${project.id}-${month}-${field}`;
             setCellValues(prev => {
                 const updated = { ...prev };
-                delete updated[cellKey];
+                const originalValue = getProgressData(project, month, field);
+                updated[cellKey] = originalValue;
                 return updated;
             });
-        } catch (e) {
-            console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
-            alert('Failed to save. Please try again.');
         } finally {
             setSaving(false);
         }

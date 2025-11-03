@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -109,6 +109,7 @@ model Client {
   projects      Project[]
   invoices      Invoice[]
   opportunities Opportunity[]
+  salesOrders   SalesOrder[]
   tags          ClientTag[]
   newsArticles  ClientNews[]
   createdAt     DateTime      @default(now())
@@ -202,6 +203,36 @@ model Opportunity {
   client    Client   @relation(fields: [clientId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model SalesOrder {
+  id               String    @id @default(cuid())
+  orderNumber      String    @unique // Auto-generated: SO0001, SO0002, etc.
+  clientId         String?
+  clientName       String    @default("")
+  opportunityId    String?   // Link to originating opportunity
+  status           String    @default("draft") // draft, confirmed, in_production, completed, shipped, cancelled
+  priority         String    @default("normal") // low, normal, high, urgent
+  orderDate        DateTime  @default(now())
+  requiredDate     DateTime?
+  shippedDate      DateTime?
+  subtotal         Float     @default(0)
+  tax              Float     @default(0)
+  total            Float     @default(0)
+  items            String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  shippingAddress  String    @default("")
+  shippingMethod   String    @default("")
+  notes            String    @default("")
+  internalNotes    String    @default("")
+  ownerId          String?
+  client           Client?   @relation(fields: [clientId], references: [id])
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@index([ownerId])
+  @@index([opportunityId])
 }
 
 model Invoice {
@@ -761,7 +792,7 @@ model NotificationSetting {
   userId                    String   @unique
   user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   emailMentions             Boolean  @default(true)
-  emailComments             Boolean  @default(false)
+  emailComments             Boolean  @default(true)
   emailTasks                Boolean  @default(false)
   emailInvoices             Boolean  @default(true)
   emailSystem               Boolean  @default(true)

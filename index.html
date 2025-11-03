@@ -465,6 +465,13 @@
     <script defer src="./dist/src/components/common/NotificationCenter.js"></script>
     <script defer src="./dist/src/components/common/GlobalSearch.js"></script>
     
+    <!-- Debug GlobalSearch loading -->
+    <script>
+        window.addEventListener('load', () => {
+            console.log('🔍 GlobalSearch loaded:', typeof window.GlobalSearch);
+        });
+    </script>
+    
     <!-- 🚀 ENABLE LOAD-ONCE ARCHITECTURE -->
     <script>
         // Toggle between old and new architecture
