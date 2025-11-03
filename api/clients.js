@@ -94,6 +94,7 @@ async function handler(req, res) {
           console.log(`🔍 DEBUG: Simple count found ${simpleCount} clients with type=client`)
           
           // Use Prisma to include tags relation - needed for list view
+          // Note: starredBy relation removed because StarredClient table doesn't exist in restored DB
           console.log('🔍 Querying clients with type=client, validUserId:', validUserId)
           rawClients = await prisma.client.findMany({
             where: {
@@ -104,12 +105,8 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              },
-              starredBy: validUserId ? {
-                where: {
-                  userId: validUserId
-                }
-              } : false
+              }
+              // starredBy relation removed - StarredClient table doesn't exist in restored database
             },
             orderBy: {
               createdAt: 'desc'
@@ -141,12 +138,8 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              },
-              starredBy: validUserId ? {
-                where: {
-                  userId: validUserId
-                }
-              } : false
+              }
+              // starredBy relation removed - StarredClient table doesn't exist in restored database
             },
             orderBy: {
               createdAt: 'desc'
@@ -164,8 +157,8 @@ async function handler(req, res) {
         // Parse JSON fields before returning and add starred status
         const parsedClients = clients.map(client => {
           const parsed = parseClientJsonFields(client)
-          // Check if current user has starred this client
-          parsed.isStarred = userId && client.starredBy && client.starredBy.length > 0
+          // Check if current user has starred this client (skip if starredBy doesn't exist)
+          parsed.isStarred = false // StarredClient table doesn't exist in restored database
           return parsed
         })
         console.log(`✅ Returning ${parsedClients.length} parsed clients`)
