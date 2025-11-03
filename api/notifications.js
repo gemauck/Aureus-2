@@ -52,7 +52,8 @@ async function handler(req, res) {
     
     if (req.method === 'PATCH') {
         try {
-            const { read, notificationIds } = req.body;
+            const body = req.body || await parseJsonBody(req);
+            const { read, notificationIds } = body;
             
             if (read === undefined || notificationIds === undefined) {
                 return badRequest(res, 'Missing required fields: read, notificationIds');
@@ -76,7 +77,8 @@ async function handler(req, res) {
     
     if (req.method === 'POST') {
         try {
-            const { userId: targetUserId, type, title, message, link, metadata } = req.body;
+            const body = req.body || await parseJsonBody(req);
+            const { userId: targetUserId, type, title, message, link, metadata } = body;
             
             if (!targetUserId || !type || !title || !message) {
                 return badRequest(res, 'Missing required fields: userId, type, title, message');

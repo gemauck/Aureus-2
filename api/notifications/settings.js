@@ -4,6 +4,7 @@ import { prisma } from '../_lib/prisma.js'
 import { badRequest, ok, serverError, unauthorized } from '../_lib/response.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { parseJsonBody } from '../_lib/body.js'
 
 async function handler(req, res) {
     const userId = req.user?.id;
@@ -35,6 +36,7 @@ async function handler(req, res) {
     
     if (req.method === 'PUT') {
         try {
+            const body = req.body || await parseJsonBody(req);
             const {
                 emailMentions,
                 emailComments,
@@ -46,7 +48,7 @@ async function handler(req, res) {
                 inAppTasks,
                 inAppInvoices,
                 inAppSystem
-            } = req.body;
+            } = body;
             
             // Update settings (upsert)
             const settings = await prisma.notificationSetting.upsert({
