@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState } = React;
+const { useState, useEffect, useRef } = React;
 
 const TaskDetailModal = ({ 
     task, 
@@ -42,6 +42,28 @@ const TaskDetailModal = ({
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [newTag, setNewTag] = useState('');
     const [tags, setTags] = useState(task?.tags || []);
+    const commentsContainerRef = useRef(null);
+    const leftContentRef = useRef(null);
+
+    // Auto-scroll to last comment when comments tab is opened
+    useEffect(() => {
+        if (activeTab === 'comments' && commentsContainerRef.current && comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                // Scroll the parent scrollable container to show the last comment
+                if (leftContentRef.current) {
+                    // Find the last comment element
+                    const lastComment = commentsContainerRef.current.lastElementChild;
+                    if (lastComment) {
+                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else {
+                        // Fallback: scroll container to bottom
+                        leftContentRef.current.scrollTop = leftContentRef.current.scrollHeight;
+                    }
+                }
+            }, 150);
+        }
+    }, [activeTab, comments.length]); // Re-scroll when tab changes or comments update
 
     const handleSave = () => {
         const title = (editedTask && typeof editedTask.title === 'string') ? editedTask.title : '';
@@ -223,7 +245,7 @@ const TaskDetailModal = ({
                 {/* Content Area */}
                 <div className="flex-1 overflow-hidden flex">
                     {/* Left Side - Main Content */}
-                    <div className="flex-1 overflow-y-auto p-4">
+                    <div ref={leftContentRef} className="flex-1 overflow-y-auto p-4">
                         {/* Tabs */}
                         <div className="flex gap-3 border-b border-gray-200 mb-4 overflow-x-auto">
                             <button
@@ -574,7 +596,7 @@ const TaskDetailModal = ({
                                 </div>
 
                                 {/* Comments List */}
-                                <div className="space-y-2">
+                                <div ref={commentsContainerRef} className="space-y-2">
                                     {comments.length === 0 ? (
                                         <div className="text-center py-6 text-gray-500">
                                             <i className="fas fa-comments text-3xl mb-1.5"></i>

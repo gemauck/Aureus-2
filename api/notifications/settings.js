@@ -7,9 +7,11 @@ import { withLogging } from '../_lib/logger.js'
 import { parseJsonBody } from '../_lib/body.js'
 
 async function handler(req, res) {
-    const userId = req.user?.id;
+    // JWT payload uses 'sub' for user ID, not 'id'
+    const userId = req.user?.sub || req.user?.id;
     
     if (!userId) {
+        console.error('❌ Notification Settings: No user ID found in token. req.user =', req.user);
         return unauthorized(res, 'Authentication required');
     }
 

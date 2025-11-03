@@ -22,6 +22,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
+    // Refs for auto-scrolling comments
+    const commentsContainerRef = useRef(null);
+    const contentScrollableRef = useRef(null);
+    
+    // Auto-scroll to last comment when notes tab is opened
+    useEffect(() => {
+        if (activeTab === 'notes' && commentsContainerRef.current && formData.comments && formData.comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                // Scroll the parent scrollable container to show the last comment
+                if (contentScrollableRef.current) {
+                    // Find the last comment element
+                    const lastComment = commentsContainerRef.current?.lastElementChild;
+                    if (lastComment) {
+                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else if (contentScrollableRef.current) {
+                        // Fallback: scroll container to bottom
+                        contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
+                    }
+                }
+            }, 150);
+        }
+    }, [activeTab, formData.comments?.length]); // Re-scroll when tab changes or comments update
+    
     // Update tab when initialTab prop changes
     useEffect(() => {
         setActiveTab(initialTab);
@@ -1640,7 +1664,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     className={`flex-shrink-0 transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
                                     title={client.isStarred ? 'Unstar this client' : 'Star this client'}
                                 >
-                                    <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-300' : 'text-gray-300'}`}></i>
+                                    <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
                                 </button>
                             )}
                             <div className="min-w-0 flex-1">
@@ -1729,7 +1753,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 </div>
 
                 {/* Content */}
-                <div className={`flex-1 overflow-y-auto ${isFullPage ? 'p-8' : 'p-6'}`}>
+                <div ref={contentScrollableRef} className={`flex-1 overflow-y-auto ${isFullPage ? 'p-8' : 'p-6'}`}>
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
@@ -3512,7 +3536,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     ))}
                                 </div>
 
-                                <div className="space-y-2">
+                                <div ref={commentsContainerRef} className="space-y-2">
                                     {(!formData.comments || formData.comments.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
                                             <i className="fas fa-comment-alt text-3xl mb-2"></i>

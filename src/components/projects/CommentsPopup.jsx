@@ -1,10 +1,23 @@
 // Get React hooks from window
-const { useState } = React;
+const { useState, useEffect, useRef } = React;
 
 // Inline Comments Popup Component
 const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, position }) => {
     const comments = task.comments || [];
     const recentComments = comments.slice(-3).reverse(); // Show last 3 comments
+    const commentsContainerRef = useRef(null);
+
+    // Auto-scroll to last comment when popup opens
+    useEffect(() => {
+        if (commentsContainerRef.current && recentComments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (commentsContainerRef.current) {
+                    commentsContainerRef.current.scrollTop = commentsContainerRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    }, [task?.id, recentComments.length]); // Re-scroll when task changes or comments update
 
     const handleAdd = (commentText) => {
         if (commentText && commentText.trim()) {
@@ -45,7 +58,7 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                 </div>
 
                 {/* Comments List */}
-                <div className="max-h-48 overflow-y-auto px-3 py-2">
+                <div ref={commentsContainerRef} className="max-h-48 overflow-y-auto px-3 py-2">
                     {recentComments.length === 0 ? (
                         <div className="text-center py-4 text-gray-400">
                             <i className="fas fa-comment text-2xl mb-1"></i>

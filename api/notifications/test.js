@@ -10,9 +10,11 @@ async function handler(req, res) {
         return badRequest(res, 'Method not allowed');
     }
     
-    const userId = req.user?.id;
+    // JWT payload uses 'sub' for user ID, not 'id'
+    const userId = req.user?.sub || req.user?.id;
     
     if (!userId) {
+        console.error('❌ Test Notification: No user ID found in token. req.user =', req.user);
         return badRequest(res, 'Authentication required');
     }
     

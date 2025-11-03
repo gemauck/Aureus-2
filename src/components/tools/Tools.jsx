@@ -1,15 +1,59 @@
 // Use React from window
-const { useState } = React;
+const { useState, useEffect } = React;
 
 const Tools = () => {
     const [currentTool, setCurrentTool] = useState(null);
+    const [toolComponents, setToolComponents] = useState({
+        PDFToWordConverter: null,
+        HandwritingToWord: null,
+        UnitConverter: null,
+        TankSizeCalculator: null
+    });
 
-    // Get tool components from window
-    const PDFToWordConverter = window.PDFToWordConverter;
-    const HandwritingToWord = window.HandwritingToWord;
-    const UnitConverter = window.UnitConverter;
-    const TankSizeCalculator = window.TankSizeCalculator;
+    // Wait for tool components to load from window
+    useEffect(() => {
+        let timeoutId = null;
+        let retryCount = 0;
+        const maxRetries = 100; // Stop after 10 seconds (100 * 100ms)
+        
+        const checkComponents = () => {
+            const components = {
+                PDFToWordConverter: window.PDFToWordConverter,
+                HandwritingToWord: window.HandwritingToWord,
+                UnitConverter: window.UnitConverter,
+                TankSizeCalculator: window.TankSizeCalculator
+            };
+            
+            // Check if any component is missing
+            const allLoaded = Object.values(components).every(comp => comp !== undefined && comp !== null);
+            
+            if (!allLoaded && retryCount < maxRetries) {
+                // Components not loaded yet, wait a bit and check again
+                retryCount++;
+                timeoutId = setTimeout(checkComponents, 100);
+            } else {
+                // All components loaded or max retries reached
+                setToolComponents(components);
+                if (retryCount >= maxRetries) {
+                    console.warn('Some tool components failed to load after maximum retries');
+                }
+            }
+        };
+        
+        // Initial check
+        checkComponents();
+        
+        // Also listen for window load events
+        window.addEventListener('load', checkComponents);
+        
+        // Cleanup
+        return () => {
+            if (timeoutId) clearTimeout(timeoutId);
+            window.removeEventListener('load', checkComponents);
+        };
+    }, []);
 
+    // Build tools array with components
     const tools = [
         {
             id: 'tank-calculator',
@@ -17,7 +61,7 @@ const Tools = () => {
             description: 'Calculate tank volumes, fuel weights, and generate calibration charts',
             icon: 'fa-gas-pump',
             color: 'blue',
-            component: TankSizeCalculator
+            component: toolComponents.TankSizeCalculator
         },
         {
             id: 'unit-converter',
@@ -25,7 +69,7 @@ const Tools = () => {
             description: 'Convert between different units of measurement',
             icon: 'fa-exchange-alt',
             color: 'orange',
-            component: UnitConverter
+            component: toolComponents.UnitConverter
         },
         {
             id: 'pdf-to-word',
@@ -33,7 +77,7 @@ const Tools = () => {
             description: 'Extract text from PDF documents and save as RTF format',
             icon: 'fa-file-pdf',
             color: 'red',
-            component: PDFToWordConverter
+            component: toolComponents.PDFToWordConverter
         },
         {
             id: 'handwriting-to-word',
@@ -41,7 +85,7 @@ const Tools = () => {
             description: 'Convert handwritten text images to editable RTF documents using OCR',
             icon: 'fa-pen-fancy',
             color: 'purple',
-            component: HandwritingToWord
+            component: toolComponents.HandwritingToWord
         }
     ];
 
@@ -116,7 +160,35 @@ const Tools = () => {
             );
         }
 
-        const ToolComponent = currentTool.component;
+        // Get the current component from the tools array (in case it was loaded after tool selection)
+        const currentToolWithComponent = tools.find(t => t.id === currentTool.id);
+        const ToolComponent = currentToolWithComponent?.component;
+        
+        // If component is not loaded yet, show loading state
+        if (!ToolComponent) {
+            return (
+                <div className="max-w-6xl mx-auto">
+                    <div className="mb-3 flex items-center">
+                        <button
+                            onClick={() => setCurrentTool(null)}
+                            className="text-xs text-gray-600 hover:text-gray-900 flex items-center"
+                        >
+                            <i className="fas fa-arrow-left mr-1.5 text-[10px]"></i>
+                            Back to Tools
+                        </button>
+                        <div className="ml-3 pl-3 border-l border-gray-300">
+                            <h2 className="text-sm font-semibold text-gray-900">{currentTool.name}</h2>
+                            <p className="text-[10px] text-gray-600">{currentTool.description}</p>
+                        </div>
+                    </div>
+                    <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+                        <i className="fas fa-spinner fa-spin text-3xl text-gray-400 mb-4"></i>
+                        <p className="text-gray-500">Loading {currentTool.name}...</p>
+                        <p className="text-xs text-gray-400 mt-2">Please wait while the tool component loads</p>
+                    </div>
+                </div>
+            );
+        }
         
         return (
             <div className="max-w-6xl mx-auto">
@@ -133,7 +205,7 @@ const Tools = () => {
                         <p className="text-[10px] text-gray-600">{currentTool.description}</p>
                     </div>
                 </div>
-                {ToolComponent ? <ToolComponent /> : <div>Tool loading...</div>}
+                <ToolComponent />
             </div>
         );
     };

@@ -597,6 +597,24 @@ const DatabaseAPI = {
         return response;
     },
 
+    // SETTINGS OPERATIONS
+    async getSettings() {
+        console.log('📡 Fetching system settings from database...');
+        const response = await this.makeRequest('/settings');
+        console.log('✅ Settings fetched from database');
+        return response;
+    },
+
+    async updateSettings(settingsData) {
+        console.log('📡 Updating system settings in database...');
+        const response = await this.makeRequest('/settings', {
+            method: 'PUT',
+            body: JSON.stringify(settingsData)
+        });
+        console.log('✅ Settings updated in database');
+        return response;
+    },
+
     // BULK OPERATIONS
     async bulkUpdateClients(clientsData) {
         console.log('📡 Bulk updating clients in database...');

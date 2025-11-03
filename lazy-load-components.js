@@ -114,6 +114,13 @@
         './src/components/feedback/FeedbackWidget.jsx',
         './src/components/feedback/SectionCommentWidget.jsx',
         
+        // Tools - Load tool components before Tools.jsx
+        './src/components/tools/TankSizeCalculator.jsx',
+        './src/components/tools/UnitConverter.jsx',
+        './src/components/tools/PDFToWordConverter.jsx',
+        './src/components/tools/HandwritingToWord.jsx',
+        './src/components/tools/Tools.jsx',
+        
         // Utils and integrations
         './src/utils/permissions.js',
         './src/utils/whatsapp.js',

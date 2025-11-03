@@ -96,6 +96,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     const [hoverCommentCell, setHoverCommentCell] = useState(null); // Track which cell's popup is open
     const [quickComment, setQuickComment] = useState(''); // For quick comment input
     const [commentPopupPosition, setCommentPopupPosition] = useState({ top: 0, left: 0 }); // Store popup position
+    const commentPopupContainerRef = useRef(null); // Ref for comment popup scrollable container
     
     // Ref to track if this is the initial mount (prevent save on initial load)
     const isInitialMount = useRef(true);
@@ -231,6 +232,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         return () => clearTimeout(timeoutId);
     }, [sections, project.id]);
+
+    // Auto-scroll to last comment when comment popup opens
+    useEffect(() => {
+        if (hoverCommentCell && commentPopupContainerRef.current) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (commentPopupContainerRef.current) {
+                    commentPopupContainerRef.current.scrollTop = commentPopupContainerRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    }, [hoverCommentCell, sections]); // Re-scroll when popup opens or sections change
 
     // Close comment popup on click outside
     useEffect(() => {
@@ -1377,7 +1390,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         {comments.length > 0 && (
                             <div className="mb-3">
                                 <div className="text-[10px] font-semibold text-gray-600 mb-1.5">Comments</div>
-                                <div className="max-h-32 overflow-y-auto space-y-2 mb-2">
+                                <div ref={commentPopupContainerRef} className="max-h-32 overflow-y-auto space-y-2 mb-2">
                                     {comments.map((comment, idx) => {
                                         const currentUser = getCurrentUser();
                                         const canDelete = comment?.authorId === currentUser.id || 

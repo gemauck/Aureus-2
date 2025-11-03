@@ -880,3 +880,26 @@ model StarredClient {
   @@index([userId])
   @@index([clientId])
 }
+
+// System Settings - Global application configuration
+model SystemSettings {
+  id             String   @id @default("system") // Single row for global settings
+  companyName    String   @default("Abcotronics")
+  timezone       String   @default("Africa/Johannesburg")
+  currency       String   @default("ZAR")
+  dateFormat     String   @default("DD/MM/YYYY")
+  language       String   @default("en")
+  sessionTimeout Int      @default(30)
+  requirePasswordChange Boolean @default(false)
+  twoFactorAuth  Boolean  @default(false)
+  auditLogging   Boolean  @default(true)
+  emailProvider  String   @default("gmail")
+  googleCalendar Boolean  @default(false)
+  quickbooks     Boolean  @default(false)
+  slack          Boolean  @default(false)
+  updatedBy      String?  // User ID who last updated
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([updatedBy])
+}
