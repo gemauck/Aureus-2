@@ -4,34 +4,22 @@ const { useState, useEffect } = React;
 const Settings = () => {
     const [activeTab, setActiveTab] = useState('general');
     const [settings, setSettings] = useState({
-        general: {
-            companyName: 'Abcotronics',
-            timezone: 'Africa/Johannesburg',
-            currency: 'ZAR',
-            dateFormat: 'DD/MM/YYYY',
-            language: 'en'
-        },
-        notifications: {
-            emailNotifications: true,
-            projectUpdates: true,
-            clientUpdates: true,
-            invoiceReminders: true,
-            systemAlerts: true
-        },
-        security: {
-            sessionTimeout: 30,
-            requirePasswordChange: false,
-            twoFactorAuth: false,
-            auditLogging: true
-        },
-        integrations: {
-            googleCalendar: false,
-            quickbooks: false,
-            slack: false,
-            emailProvider: 'gmail'
-        }
+        companyName: 'Abcotronics',
+        timezone: 'Africa/Johannesburg',
+        currency: 'ZAR',
+        dateFormat: 'DD/MM/YYYY',
+        language: 'en',
+        sessionTimeout: 30,
+        requirePasswordChange: false,
+        twoFactorAuth: false,
+        auditLogging: true,
+        emailProvider: 'gmail',
+        googleCalendar: false,
+        quickbooks: false,
+        slack: false
     });
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(true);
     const [saveStatus, setSaveStatus] = useState('');
     const { isDark } = window.useTheme();
 
@@ -48,17 +36,18 @@ const Settings = () => {
         setSaveStatus('Saving...');
         
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            // Save to localStorage for now
-            localStorage.setItem('erp_settings', JSON.stringify(settings));
-            
-            setSaveStatus('Settings saved successfully!');
-            setTimeout(() => setSaveStatus(''), 3000);
+            // Save to database via API
+            if (window.DatabaseAPI?.updateSettings) {
+                await window.DatabaseAPI.updateSettings(settings);
+                setSaveStatus('Settings saved successfully!');
+                setTimeout(() => setSaveStatus(''), 3000);
+            } else {
+                throw new Error('DatabaseAPI not available');
+            }
         } catch (error) {
-            setSaveStatus('Error saving settings');
-            setTimeout(() => setSaveStatus(''), 3000);
+            console.error('Error saving settings:', error);
+            setSaveStatus('Error saving settings: ' + error.message);
+            setTimeout(() => setSaveStatus(''), 5000);
         } finally {
             setIsLoading(false);
         }
@@ -67,32 +56,19 @@ const Settings = () => {
     const handleReset = () => {
         if (confirm('Are you sure you want to reset all settings to default?')) {
             setSettings({
-                general: {
-                    companyName: 'Abcotronics',
-                    timezone: 'Africa/Johannesburg',
-                    currency: 'ZAR',
-                    dateFormat: 'DD/MM/YYYY',
-                    language: 'en'
-                },
-                notifications: {
-                    emailNotifications: true,
-                    projectUpdates: true,
-                    clientUpdates: true,
-                    invoiceReminders: true,
-                    systemAlerts: true
-                },
-                security: {
-                    sessionTimeout: 30,
-                    requirePasswordChange: false,
-                    twoFactorAuth: false,
-                    auditLogging: true
-                },
-                integrations: {
-                    googleCalendar: false,
-                    quickbooks: false,
-                    slack: false,
-                    emailProvider: 'gmail'
-                }
+                companyName: 'Abcotronics',
+                timezone: 'Africa/Johannesburg',
+                currency: 'ZAR',
+                dateFormat: 'DD/MM/YYYY',
+                language: 'en',
+                sessionTimeout: 30,
+                requirePasswordChange: false,
+                twoFactorAuth: false,
+                auditLogging: true,
+                emailProvider: 'gmail',
+                googleCalendar: false,
+                quickbooks: false,
+                slack: false
             });
         }
     };
@@ -116,11 +92,24 @@ const Settings = () => {
     };
 
     useEffect(() => {
-        // Load saved settings
-        const savedSettings = localStorage.getItem('erp_settings');
-        if (savedSettings) {
-            setSettings(JSON.parse(savedSettings));
-        }
+        // Load settings from database
+        const loadSettings = async () => {
+            setIsLoadingData(true);
+            try {
+                if (window.DatabaseAPI?.getSettings) {
+                    const response = await window.DatabaseAPI.getSettings();
+                    const dbSettings = response?.data?.settings;
+                    if (dbSettings) {
+                        setSettings(dbSettings);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading settings:', error);
+            } finally {
+                setIsLoadingData(false);
+            }
+        };
+        loadSettings();
     }, []);
 
     const renderGeneralSettings = () => (
@@ -131,11 +120,8 @@ const Settings = () => {
                 </label>
                 <input
                     type="text"
-                    value={settings.general.companyName}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        general: { ...prev.general, companyName: e.target.value }
-                    }))}
+                    value={settings.companyName}
+                    onChange={(e) => setSettings(prev => ({ ...prev, companyName: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
@@ -147,11 +133,8 @@ const Settings = () => {
                     Timezone
                 </label>
                 <select
-                    value={settings.general.timezone}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        general: { ...prev.general, timezone: e.target.value }
-                    }))}
+                    value={settings.timezone}
+                    onChange={(e) => setSettings(prev => ({ ...prev, timezone: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
@@ -168,11 +151,8 @@ const Settings = () => {
                     Currency
                 </label>
                 <select
-                    value={settings.general.currency}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        general: { ...prev.general, currency: e.target.value }
-                    }))}
+                    value={settings.currency}
+                    onChange={(e) => setSettings(prev => ({ ...prev, currency: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
@@ -189,11 +169,8 @@ const Settings = () => {
                     Date Format
                 </label>
                 <select
-                    value={settings.general.dateFormat}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        general: { ...prev.general, dateFormat: e.target.value }
-                    }))}
+                    value={settings.dateFormat}
+                    onChange={(e) => setSettings(prev => ({ ...prev, dateFormat: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
@@ -208,34 +185,13 @@ const Settings = () => {
 
     const renderNotificationsSettings = () => (
         <div className="space-y-6">
-            {Object.entries(settings.notifications).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                    <div>
-                        <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                        </label>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {key === 'emailNotifications' && 'Receive email notifications for important events'}
-                            {key === 'projectUpdates' && 'Get notified when projects are updated'}
-                            {key === 'clientUpdates' && 'Get notified when client information changes'}
-                            {key === 'invoiceReminders' && 'Receive reminders for overdue invoices'}
-                            {key === 'systemAlerts' && 'Get system alerts and maintenance notifications'}
-                        </p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={value}
-                            onChange={(e) => setSettings(prev => ({
-                                ...prev,
-                                notifications: { ...prev.notifications, [key]: e.target.checked }
-                            }))}
-                            className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    </label>
+            {window.NotificationSettings ? (
+                <window.NotificationSettings />
+            ) : (
+                <div className="text-center py-12">
+                    <p className="text-gray-500">Notification settings are managed separately.</p>
                 </div>
-            ))}
+            )}
         </div>
     );
 
@@ -249,37 +205,33 @@ const Settings = () => {
                     type="number"
                     min="5"
                     max="480"
-                    value={settings.security.sessionTimeout}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        security: { ...prev.security, sessionTimeout: parseInt(e.target.value) }
-                    }))}
+                    value={settings.sessionTimeout}
+                    onChange={(e) => setSettings(prev => ({ ...prev, sessionTimeout: parseInt(e.target.value) }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
                 />
             </div>
 
-            {Object.entries(settings.security).filter(([key]) => key !== 'sessionTimeout').map(([key, value]) => (
+            {[
+                { key: 'requirePasswordChange', label: 'Require Password Change', desc: 'Require users to change passwords periodically' },
+                { key: 'twoFactorAuth', label: 'Two Factor Auth', desc: 'Enable two-factor authentication for enhanced security' },
+                { key: 'auditLogging', label: 'Audit Logging', desc: 'Log all user actions for security auditing' }
+            ].map(({ key, label, desc }) => (
                 <div key={key} className="flex items-center justify-between">
                     <div>
                         <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                            {label}
                         </label>
                         <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {key === 'requirePasswordChange' && 'Require users to change passwords periodically'}
-                            {key === 'twoFactorAuth' && 'Enable two-factor authentication for enhanced security'}
-                            {key === 'auditLogging' && 'Log all user actions for security auditing'}
+                            {desc}
                         </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input
                             type="checkbox"
-                            checked={value}
-                            onChange={(e) => setSettings(prev => ({
-                                ...prev,
-                                security: { ...prev.security, [key]: e.target.checked }
-                            }))}
+                            checked={settings[key]}
+                            onChange={(e) => setSettings(prev => ({ ...prev, [key]: e.target.checked }))}
                             className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
@@ -296,11 +248,8 @@ const Settings = () => {
                     Email Provider
                 </label>
                 <select
-                    value={settings.integrations.emailProvider}
-                    onChange={(e) => setSettings(prev => ({
-                        ...prev,
-                        integrations: { ...prev.integrations, emailProvider: e.target.value }
-                    }))}
+                    value={settings.emailProvider}
+                    onChange={(e) => setSettings(prev => ({ ...prev, emailProvider: e.target.value }))}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                         isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
                     }`}
@@ -311,26 +260,25 @@ const Settings = () => {
                 </select>
             </div>
 
-            {Object.entries(settings.integrations).filter(([key]) => key !== 'emailProvider').map(([key, value]) => (
+            {[
+                { key: 'googleCalendar', label: 'Google Calendar', desc: 'Sync with Google Calendar for scheduling' },
+                { key: 'quickbooks', label: 'Quickbooks', desc: 'Integrate with QuickBooks for accounting' },
+                { key: 'slack', label: 'Slack', desc: 'Send notifications to Slack channels' }
+            ].map(({ key, label, desc }) => (
                 <div key={key} className="flex items-center justify-between">
                     <div>
                         <label className={`text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                            {label}
                         </label>
                         <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {key === 'googleCalendar' && 'Sync with Google Calendar for scheduling'}
-                            {key === 'quickbooks' && 'Integrate with QuickBooks for accounting'}
-                            {key === 'slack' && 'Send notifications to Slack channels'}
+                            {desc}
                         </p>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input
                             type="checkbox"
-                            checked={value}
-                            onChange={(e) => setSettings(prev => ({
-                                ...prev,
-                                integrations: { ...prev.integrations, [key]: e.target.checked }
-                            }))}
+                            checked={settings[key]}
+                            onChange={(e) => setSettings(prev => ({ ...prev, [key]: e.target.checked }))}
                             className="sr-only peer"
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
@@ -412,6 +360,17 @@ const Settings = () => {
                 return renderGeneralSettings();
         }
     };
+
+    if (isLoadingData) {
+        return (
+            <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
+                <div className="text-center">
+                    <i className="fas fa-spinner fa-spin text-4xl text-gray-400 mb-4"></i>
+                    <p className="text-gray-500">Loading settings...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>

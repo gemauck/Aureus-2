@@ -352,8 +352,23 @@ const DatabaseAPI = {
     async getClients() {
         console.log('📡 Fetching clients from database...');
         const response = await this.makeRequest('/clients');
+        console.log('🔍 Raw clients API response structure:', {
+            hasResponse: !!response,
+            hasData: !!response?.data,
+            dataKeys: response?.data ? Object.keys(response.data) : [],
+            clientsInData: !!response?.data?.clients,
+            clientsCount: response?.data?.clients?.length || 0,
+            clientsIsArray: Array.isArray(response?.data?.clients),
+            fullResponse: JSON.stringify(response).substring(0, 500)
+        });
         const clients = response?.data?.clients || [];
         console.log(`✅ Clients fetched from database: ${clients.length}`);
+        if (clients.length === 0) {
+            console.warn('⚠️ WARNING: No clients found in database response. This could indicate:');
+            console.warn('   1. Database is empty (no client records exist)');
+            console.warn('   2. All records have type != "client" (they might be leads or null)');
+            console.warn('   3. Response structure mismatch');
+        }
         return response;
     },
 
@@ -401,6 +416,16 @@ const DatabaseAPI = {
         const endpoint = forceRefresh ? `/leads?_t=${Date.now()}` : '/leads';
         console.log('🔄 Lead API endpoint:', endpoint);
         const raw = await this.makeRequest(endpoint);
+        console.log('🔍 Raw leads API response structure:', {
+            hasResponse: !!raw,
+            hasData: !!raw?.data,
+            dataKeys: raw?.data ? Object.keys(raw.data) : [],
+            leadsInData: !!raw?.data?.leads,
+            leadsCount: raw?.data?.leads?.length || 0,
+            leadsIsArray: Array.isArray(raw?.data?.leads),
+            dataIsArray: Array.isArray(raw?.data),
+            fullResponse: JSON.stringify(raw).substring(0, 500)
+        });
         // Normalize payload to { data: { leads: [...] } } for downstream consumers
         const normalized = {
             data: {
@@ -412,6 +437,12 @@ const DatabaseAPI = {
             }
         };
         console.log('✅ Leads fetched from database:', normalized.data.leads.length);
+        if (normalized.data.leads.length === 0) {
+            console.warn('⚠️ WARNING: No leads found in database response. This could indicate:');
+            console.warn('   1. Database is empty (no lead records exist)');
+            console.warn('   2. All records have type != "lead" (they might be clients or null)');
+            console.warn('   3. Response structure mismatch');
+        }
         return normalized;
     },
 
