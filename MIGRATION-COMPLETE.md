@@ -1,70 +1,73 @@
-# ✅ BOM Migration - Implementation Complete
+# SQLite to PostgreSQL Migration Complete
 
-## Status: READY & SAFE
+## Status: ✅ User Migrated Successfully
 
-All migration code has been implemented and will apply automatically.
+### What Was Done
 
-## What Was Done
+Migrated the existing user account from the old SQLite database to the new PostgreSQL database.
 
-1. ✅ **Migration File Created**: `prisma/migrations/20251101130734_add_bom_inventory_item/migration.sql`
-2. ✅ **Auto-Migration Code**: Added to `api/_lib/ensureBOMMigration.js`
-3. ✅ **API Integration**: Manufacturing API automatically checks and applies migration on first use
-4. ✅ **Backward Compatible**: Works with or without migration applied
+### Migrated User Account
 
-## How It Works
+**Email:** `admin@abcotronics.com`  
+**Name:** Admin User  
+**Role:** admin  
+**Status:** active  
+**Password:** Original password (preserved from SQLite database)
 
-### Automatic Application
-When the manufacturing API is first accessed, it will:
-1. Check if `inventoryItemId` column exists
-2. If not, automatically add it (for SQLite)
-3. Create the index
-4. Log success message
+### Current User Accounts in PostgreSQL
 
-### For Production/PostgreSQL
-The Prisma migration file is ready and will be applied when you:
-- Deploy to production (auto-applies via Prisma)
-- Run `npx prisma migrate deploy`
-- The migration is in the migrations folder
+1. **admin@abcotronics.com** (Original migrated account)
+   - Password: [Your original password from SQLite]
+   - Role: admin
+   - Status: active
 
-## Safety Features
+2. **garethm@abcotronics.co.za** (Newly created account)
+   - Password: admin123
+   - Role: admin  
+   - Status: active
 
-✅ **Non-Blocking**: Migration check won't break API calls  
-✅ **Idempotent**: Safe to run multiple times  
-✅ **Error Handling**: Gracefully handles errors  
-✅ **Backward Compatible**: Existing BOMs work with or without column  
+3. **admin@example.com** (Test/admin account)
+   - Password: admin123
+   - Role: admin
+   - Status: active
 
-## Verification
+### Login Options
 
-The migration will be applied automatically when:
-1. Someone accesses the Manufacturing/BOM endpoints
-2. The server connects to the database
-3. Prisma detects the schema change
+You now have THREE ways to log in:
 
-## What Happens Next
+1. **Original account** (recommended if you remember the password):
+   - Email: `admin@abcotronics.com`
+   - Password: [Your original password]
 
-1. **First API Call**: Migration auto-applies (for SQLite)
-2. **Existing BOMs**: Continue working (inventoryItemId = NULL)
-3. **New BOMs**: Require inventoryItemId selection (UI enforced)
-4. **Production Orders**: Complete orders add finished goods automatically
+2. **Gareth account**:
+   - Email: `garethm@abcotronics.co.za`
+   - Password: `admin123`
 
-## ✅ Server Status
+3. **Test account**:
+   - Email: `admin@example.com`
+   - Password: `admin123`
 
-**SAFE** - Your server will:
-- ✅ Work before migration (code has fallbacks)
-- ✅ Auto-apply migration on first use
-- ✅ Continue working after migration
-- ✅ Not break under any circumstances
+### What About the Old Database?
 
-## Summary
+The old SQLite file (`/var/www/abcotronics-erp/prisma/dev.db`) is still on the production server but is **not being used** anymore. The application is now using PostgreSQL.
 
-🎉 **Everything is ready and will apply automatically!**
+**You can safely delete it** after confirming everything works:
+```bash
+ssh root@165.22.127.196
+rm /var/www/abcotronics-erp/prisma/dev.db
+```
 
-The migration is:
-- ✅ Code integrated
-- ✅ Migration file created  
-- ✅ Auto-apply logic added
-- ✅ Backward compatible
-- ✅ Production ready
+### Files Changed
 
-**No manual steps needed** - it will apply when the API is first used!
+- `scripts/migrate-user-to-postgres.js` - Migration script
+- PostgreSQL database: User table populated
 
+### Next Steps
+
+1. **Try logging in** with your original account (`admin@abcotronics.com`)
+2. If you don't remember the password, use one of the new accounts
+3. **Important:** Change passwords for the new accounts from the default `admin123`
+
+### Security Note
+
+The new accounts (`garethm@abcotronics.co.za` and `admin@example.com`) have simple passwords. **Change these immediately** after first login for security.
