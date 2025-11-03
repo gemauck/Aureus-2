@@ -580,7 +580,8 @@ const DatabaseAPI = {
     async getUsers() {
         console.log('📡 Fetching users from database...');
         const response = await this.makeRequest('/users');
-        console.log('✅ Users fetched from database:', response.data?.length || 0);
+        const usersCount = response.data?.users?.length || response.data?.data?.users?.length || (Array.isArray(response.data) ? response.data.length : 0);
+        console.log('✅ Users fetched from database:', usersCount);
         return response;
     },
 
