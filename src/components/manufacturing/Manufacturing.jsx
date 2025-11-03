@@ -868,7 +868,7 @@ const Manufacturing = () => {
                       <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
                         <div>
                           <span className="text-gray-500">Category:</span>
-                          <span className="ml-1 text-gray-900 capitalize">{item.category.replace('_', ' ')}</span>
+                          <span className="ml-1 text-gray-900 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Type:</span>
@@ -1080,7 +1080,7 @@ const Manufacturing = () => {
                         ? item.legacyPartNumber 
                         : <span className="text-gray-400">-</span>}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category.replace('_', ' ')}</td>
+                    <td className="px-3 py-2 text-sm text-gray-600 capitalize">{item.category ? item.category.replace('_', ' ') : 'N/A'}</td>
                     <td className="px-3 py-2 text-sm text-gray-600 capitalize">
                       {item.type === 'final_product' ? 'Final Product' : item.type === 'component' ? 'Component' : item.type.replace('_', ' ')}
                     </td>
@@ -1678,12 +1678,6 @@ const Manufacturing = () => {
 
   const handleSaveItem = async () => {
     try {
-      // Validate required fields
-      if (!formData.category || formData.category.trim() === '') {
-        alert('Please select or add a category for this item.');
-        return;
-      }
-      
       // Don't include quantity in update (it's read-only)
       // Don't include SKU in create (auto-generated) or update (read-only)
       // Don't include location (removed)
@@ -2220,8 +2214,21 @@ const Manufacturing = () => {
         }
         setShowModal(false);
       } catch (error) {
-        console.error('Error deleting supplier:', error);
-        alert(`Failed to delete supplier: ${error.message}`);
+        // Check if error is 404 (supplier not found) - treat as success since it's already deleted
+        const isNotFound = error.message?.includes('404') || error.message?.includes('not found');
+        
+        if (isNotFound) {
+          // Supplier already deleted on server, just update local state
+          console.log('ℹ️ Supplier not found on server (already deleted), removing from local state');
+          const updatedSuppliers = suppliers.filter(s => s.id !== supplierId);
+          setSuppliers(updatedSuppliers);
+          localStorage.setItem('manufacturing_suppliers', JSON.stringify(updatedSuppliers));
+          setShowModal(false);
+        } else {
+          // Other errors - show alert
+          console.error('Error deleting supplier:', error);
+          alert(`Failed to delete supplier: ${error.message}`);
+        }
       }
     }
   };
@@ -2610,13 +2617,12 @@ const Manufacturing = () => {
 
                 {/* Category - with create/delete functionality */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                   <div className="flex gap-2">
                     <select
                       value={formData.category || ''}
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
                     >
                       {categories.length === 0 ? (
                         <option value="">No categories yet - Add one using the + button</option>
@@ -3411,7 +3417,7 @@ const Manufacturing = () => {
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Category</p>
-                      <p className="text-sm text-gray-900 capitalize">{selectedItem.category.replace('_', ' ')}</p>
+                      <p className="text-sm text-gray-900 capitalize">{selectedItem.category ? selectedItem.category.replace('_', ' ') : 'N/A'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Type</p>
