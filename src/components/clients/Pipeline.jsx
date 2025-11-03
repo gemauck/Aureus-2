@@ -38,6 +38,7 @@ const Pipeline = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
+    const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -552,7 +553,7 @@ const Pipeline = () => {
         setIsDragging(false);
     };
 
-    // Mobile touch drag handlers
+    // Mobile touch drag handlers - use document-level listeners for better mobile support
     const handleTouchStart = (e, item, type) => {
         if (e.touches.length !== 1) return; // Only handle single touch
         
@@ -560,7 +561,7 @@ const Pipeline = () => {
         const cardElement = e.currentTarget;
         const cardRect = cardElement.getBoundingClientRect();
         
-        setTouchDragState({
+        const dragState = {
             item,
             type,
             startY: touch.clientY,
@@ -568,119 +569,171 @@ const Pipeline = () => {
             startX: touch.clientX,
             currentX: touch.clientX,
             cardRect,
-            initialStage: item.stage
-        });
+            initialStage: item.stage,
+            cardElement
+        };
+        
+        setTouchDragState(dragState);
         setDraggedItem(item);
         setDraggedType(type);
         setIsDragging(true);
+        
+        // Add global touch event listeners to document
+        const touchMoveHandler = (moveEvent) => {
+            if (!dragState || moveEvent.touches.length !== 1) return;
+            
+            const moveTouch = moveEvent.touches[0];
+            
+            // Find which stage column we're over
+            const stageElements = document.querySelectorAll('[data-pipeline-stage]');
+            let targetStage = null;
+            
+            stageElements.forEach(stageEl => {
+                const rect = stageEl.getBoundingClientRect();
+                if (moveTouch.clientX >= rect.left && moveTouch.clientX <= rect.right &&
+                    moveTouch.clientY >= rect.top && moveTouch.clientY <= rect.bottom) {
+                    targetStage = stageEl.getAttribute('data-pipeline-stage');
+                }
+            });
+            
+            // Update drag state
+            dragState.currentY = moveTouch.clientY;
+            dragState.currentX = moveTouch.clientX;
+            dragState.targetStage = targetStage;
+            
+            setTouchDragState({ ...dragState });
+            
+            moveEvent.preventDefault();
+        };
+        
+        const touchEndHandler = async (endEvent) => {
+            // Remove listeners
+            document.removeEventListener('touchmove', touchMoveHandler, { passive: false });
+            document.removeEventListener('touchend', touchEndHandler);
+            document.removeEventListener('touchcancel', touchEndHandler);
+            
+            // Restore body scrolling
+            if (dragState.cleanup) {
+                dragState.cleanup();
+            }
+            
+            // Remove visual feedback
+            if (dragState.cardElement) {
+                dragState.cardElement.style.transform = '';
+                dragState.cardElement.style.opacity = '';
+                dragState.cardElement.style.zIndex = '';
+            }
+            
+            const { item, type, targetStage, initialStage } = dragState;
+            
+            // Only perform drop if we moved enough (to distinguish from tap)
+            const deltaX = Math.abs(dragState.currentX - dragState.startX);
+            const deltaY = Math.abs(dragState.currentY - dragState.startY);
+            const minDragDistance = 10; // pixels
+            
+            if ((deltaX > minDragDistance || deltaY > minDragDistance) && 
+                targetStage && targetStage !== initialStage) {
+                
+                // Perform the drop
+                const token = storage.getToken();
+                
+                if (type === 'lead') {
+                    const updatedLeads = leads.map(lead => 
+                        lead.id === item.id ? { ...lead, stage: targetStage } : lead
+                    );
+                    setLeads(updatedLeads);
+                    
+                    if (token && window.DatabaseAPI) {
+                        try {
+                            await window.DatabaseAPI.updateLead(item.id, { stage: targetStage });
+                            console.log('✅ Pipeline: Lead stage updated via touch drag');
+                        } catch (error) {
+                            console.warn('⚠️ Pipeline: Failed to update lead stage in API:', error);
+                        }
+                    }
+                } else if (type === 'opportunity') {
+                    const updatedClients = clients.map(client => {
+                        if (client.id === item.clientId) {
+                            const updatedOpportunities = client.opportunities.map(opp =>
+                                opp.id === item.id ? { ...opp, stage: targetStage } : opp
+                            );
+                            return { ...client, opportunities: updatedOpportunities };
+                        }
+                        return client;
+                    });
+                    setClients(updatedClients);
+                    storage.setClients(updatedClients);
+                    
+                    if (token && window.api?.updateOpportunity) {
+                        try {
+                            await window.api.updateOpportunity(item.id, { stage: targetStage });
+                            console.log('✅ Pipeline: Opportunity stage updated via touch drag:', targetStage);
+                        } catch (error) {
+                            console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
+                        }
+                    } else if (token && window.DatabaseAPI) {
+                        try {
+                            const clientToUpdate = updatedClients.find(c => c.id === item.clientId);
+                            if (clientToUpdate) {
+                                await window.DatabaseAPI.updateClient(item.clientId, { 
+                                    opportunities: clientToUpdate.opportunities 
+                                });
+                                console.log('✅ Pipeline: Client opportunities updated via touch drag');
+                            }
+                        } catch (error) {
+                            console.warn('⚠️ Pipeline: Failed to update client opportunities in API:', error);
+                        }
+                    }
+                }
+            }
+            
+            // Reset state
+            setTouchDragState(null);
+            setDraggedItem(null);
+            setDraggedType(null);
+            setIsDragging(false);
+            
+            // Prevent click event from firing if we dragged
+            if (deltaX > minDragDistance || deltaY > minDragDistance) {
+                setJustDragged(true);
+                endEvent.preventDefault();
+                // Reset justDragged after a short delay
+                setTimeout(() => setJustDragged(false), 300);
+            }
+        };
+        
+        // Add visual feedback
+        cardElement.style.transform = 'scale(0.95)';
+        cardElement.style.opacity = '0.7';
+        cardElement.style.zIndex = '1000';
+        
+        // Prevent body scrolling during drag
+        const originalOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        
+        // Add global listeners
+        document.addEventListener('touchmove', touchMoveHandler, { passive: false });
+        document.addEventListener('touchend', touchEndHandler);
+        document.addEventListener('touchcancel', touchEndHandler);
+        
+        // Store cleanup function in dragState
+        dragState.cleanup = () => {
+            document.body.style.overflow = originalOverflow;
+        };
         
         // Prevent scrolling while dragging
         e.preventDefault();
     };
 
+    // Legacy handlers for compatibility (now handled by document listeners)
     const handleTouchMove = (e) => {
-        if (!touchDragState || e.touches.length !== 1) return;
-        
-        const touch = e.touches[0];
-        const deltaY = touch.clientY - touchDragState.startY;
-        const deltaX = touch.clientX - touchDragState.startX;
-        
-        // Find which stage column we're over
-        const stageElements = document.querySelectorAll('[data-pipeline-stage]');
-        let targetStage = null;
-        
-        stageElements.forEach(stageEl => {
-            const rect = stageEl.getBoundingClientRect();
-            if (touch.clientX >= rect.left && touch.clientX <= rect.right &&
-                touch.clientY >= rect.top && touch.clientY <= rect.bottom) {
-                targetStage = stageEl.getAttribute('data-pipeline-stage');
-            }
-        });
-        
-        setTouchDragState({
-            ...touchDragState,
-            currentY: touch.clientY,
-            currentX: touch.clientX,
-            targetStage
-        });
-        
-        e.preventDefault();
+        // This is now handled by document-level listeners
+        // Keep for backward compatibility but don't prevent default here
     };
 
     const handleTouchEnd = async (e) => {
-        if (!touchDragState) return;
-        
-        const { item, type, targetStage, initialStage } = touchDragState;
-        
-        // If we found a target stage and it's different, perform the drop
-        if (targetStage && targetStage !== initialStage) {
-            // Create a synthetic drop event
-            const syntheticEvent = {
-                preventDefault: () => {},
-                currentTarget: e.currentTarget
-            };
-            
-            // Use the existing handleDrop logic
-            const token = storage.getToken();
-            
-            if (type === 'lead') {
-                const updatedLeads = leads.map(lead => 
-                    lead.id === item.id ? { ...lead, stage: targetStage } : lead
-                );
-                setLeads(updatedLeads);
-                
-                if (token && window.DatabaseAPI) {
-                    try {
-                        await window.DatabaseAPI.updateLead(item.id, { stage: targetStage });
-                        console.log('✅ Pipeline: Lead stage updated via touch drag');
-                    } catch (error) {
-                        console.warn('⚠️ Pipeline: Failed to update lead stage in API:', error);
-                    }
-                }
-            } else if (type === 'opportunity') {
-                const updatedClients = clients.map(client => {
-                    if (client.id === item.clientId) {
-                        const updatedOpportunities = client.opportunities.map(opp =>
-                            opp.id === item.id ? { ...opp, stage: targetStage } : opp
-                        );
-                        return { ...client, opportunities: updatedOpportunities };
-                    }
-                    return client;
-                });
-                setClients(updatedClients);
-                storage.setClients(updatedClients);
-                
-                if (token && window.api?.updateOpportunity) {
-                    try {
-                        await window.api.updateOpportunity(item.id, { stage: targetStage });
-                        console.log('✅ Pipeline: Opportunity stage updated via touch drag:', targetStage);
-                    } catch (error) {
-                        console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
-                    }
-                } else if (token && window.DatabaseAPI) {
-                    try {
-                        const clientToUpdate = updatedClients.find(c => c.id === item.clientId);
-                        if (clientToUpdate) {
-                            await window.DatabaseAPI.updateClient(item.clientId, { 
-                                opportunities: clientToUpdate.opportunities 
-                            });
-                            console.log('✅ Pipeline: Client opportunities updated via touch drag');
-                        }
-                    } catch (error) {
-                        console.warn('⚠️ Pipeline: Failed to update client opportunities in API:', error);
-                    }
-                }
-            }
-        }
-        
-        // Reset state
-        setTouchDragState(null);
-        setDraggedItem(null);
-        setDraggedType(null);
-        setIsDragging(false);
-        
-        // Prevent click event from firing
-        e.preventDefault();
+        // This is now handled by document-level listeners
+        // Keep for backward compatibility
     };
 
     // Get deal age in days
@@ -711,15 +764,17 @@ const Pipeline = () => {
                 onDragStart={() => handleDragStart(item, item.type)}
                 onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
                 onClick={(e) => {
-                    // Prevent click if we just completed a drag
-                    if (touchDragState) return;
+                    // Prevent click if we just completed a drag or are currently dragging
+                    if (justDragged || touchDragState || isDragging) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
                     setSelectedDeal(item);
                     setShowDealModal(true);
                 }}
-                className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden ${!isDragging ? 'hover:shadow-md transition' : ''} ${
+                className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden touch-none ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
                 }`}
                 style={{
@@ -727,7 +782,10 @@ const Pipeline = () => {
                     minHeight: '75px',
                     maxHeight: '75px',
                     padding: '4px',
-                    boxSizing: 'border-box'
+                    boxSizing: 'border-box',
+                    WebkitTouchCallout: 'none',
+                    WebkitUserSelect: 'none',
+                    userSelect: 'none'
                 }}
             >
                 {/* Header with Badge - Fixed height */}
@@ -785,11 +843,10 @@ const Pipeline = () => {
                         key={stage.id} 
                         data-pipeline-stage={stage.name}
                         className={`flex-1 min-w-[240px] bg-gray-50 rounded-lg p-3 ${!isDragging ? 'transition-all' : ''} ${
-                            isDraggedOver || (touchDragState && touchDragState.targetStage === stage.name) ? 'ring-2 ring-primary-500 bg-primary-50' : ''
+                            isDraggedOver || (touchDragState && touchDragState.targetStage === stage.name) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
                         }`}
                         onDragOver={handleDragOver}
                         onDrop={(e) => handleDrop(e, stage.name)}
-                        onTouchMove={handleTouchMove}
                     >
                         {/* Stage Header */}
                         <div className="mb-2 px-1">

@@ -29,7 +29,7 @@ if [ -n "$(git status --porcelain)" ]; then
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         git add .
-        git commit -m "Fix: Dark mode star icon visibility - starred clients now use filled yellow, unstarred use white outline in dark mode"
+        git commit -m "Fix: Pipeline drag and drop now works on mobile devices - implemented document-level touch handlers"
         echo "📤 Pushing to git..."
         git push origin main || git push origin master
         echo "✅ Changes committed and pushed"
@@ -89,6 +89,6 @@ DEPLOY
 
 echo ""
 echo "✅ Deployment successful!"
-echo "🎨 Dark mode star icon fixes are now live!"
+echo "📱 Pipeline drag and drop mobile fix is now live!"
 echo "💡 Hard refresh your browser (Cmd+Shift+R / Ctrl+Shift+R) to see the changes"
 
