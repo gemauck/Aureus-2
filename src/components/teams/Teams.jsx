@@ -1013,11 +1013,12 @@ const Teams = () => {
                         {activeTab === 'meetings' && selectedTeam?.id === 'management' && (
                             <div>
                                 {window.ManagementMeetingNotes ? (
-                                    React.createElement(window.ManagementMeetingNotes)
+                                    <window.ManagementMeetingNotes />
                                 ) : (
                                     <div className="text-center py-12">
                                         <i className="fas fa-calendar-alt text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
                                         <p className="text-sm text-gray-500 dark:text-slate-400">Meeting Notes component loading...</p>
+                                        <p className="text-xs text-gray-400 mt-2 dark:text-slate-500">If this persists, please refresh the page</p>
                                     </div>
                                 )}
                             </div>

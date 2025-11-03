@@ -18,9 +18,31 @@ const ManagementMeetingNotes = () => {
         const loadMeetings = async () => {
             try {
                 setIsLoading(true);
-                const savedMeetings = await (window.dataService?.getManagementMeetings?.() || Promise.resolve([]));
+                
+                // Add timeout to prevent infinite loading
+                const timeout = setTimeout(() => {
+                    console.warn('Management meetings load timeout, using empty array');
+                    setMeetings([]);
+                    setIsLoading(false);
+                }, 3000);
+                
+                let savedMeetings = [];
+                if (window.dataService?.getManagementMeetings) {
+                    savedMeetings = await window.dataService.getManagementMeetings();
+                } else {
+                    // Fallback to localStorage directly
+                    try {
+                        const stored = localStorage.getItem('abcotronics_management_meetings');
+                        savedMeetings = stored ? JSON.parse(stored) : [];
+                    } catch (e) {
+                        console.error('Error reading from localStorage:', e);
+                        savedMeetings = [];
+                    }
+                }
+                
+                clearTimeout(timeout);
                 const meetingsArray = Array.isArray(savedMeetings) ? savedMeetings : [];
-                setMeetings(meetingsArray.sort((a, b) => new Date(b.meetingDate) - new Date(a.meetingDate)));
+                setMeetings(meetingsArray.sort((a, b) => new Date(b.meetingDate || 0) - new Date(a.meetingDate || 0)));
                 setIsLoading(false);
             } catch (error) {
                 console.error('Error loading management meetings:', error);
@@ -109,7 +131,19 @@ const ManagementMeetingNotes = () => {
             updatedMeetings.sort((a, b) => new Date(b.meetingDate) - new Date(a.meetingDate));
             
             setMeetings(updatedMeetings);
-            await (window.dataService?.setManagementMeetings?.(updatedMeetings) || Promise.resolve());
+            
+            // Save to dataService or localStorage fallback
+            if (window.dataService?.setManagementMeetings) {
+                await window.dataService.setManagementMeetings(updatedMeetings);
+            } else {
+                // Fallback to localStorage directly
+                try {
+                    localStorage.setItem('abcotronics_management_meetings', JSON.stringify(updatedMeetings));
+                } catch (e) {
+                    console.error('Error saving to localStorage:', e);
+                }
+            }
+            
             setShowModal(false);
             setEditingMeeting(null);
         } catch (error) {
@@ -123,7 +157,18 @@ const ManagementMeetingNotes = () => {
             try {
                 const updatedMeetings = meetings.filter(m => m.id !== id);
                 setMeetings(updatedMeetings);
-                await (window.dataService?.setManagementMeetings?.(updatedMeetings) || Promise.resolve());
+                
+                // Save to dataService or localStorage fallback
+                if (window.dataService?.setManagementMeetings) {
+                    await window.dataService.setManagementMeetings(updatedMeetings);
+                } else {
+                    // Fallback to localStorage directly
+                    try {
+                        localStorage.setItem('abcotronics_management_meetings', JSON.stringify(updatedMeetings));
+                    } catch (e) {
+                        console.error('Error saving to localStorage:', e);
+                    }
+                }
             } catch (error) {
                 console.error('Error deleting meeting:', error);
                 alert('Failed to delete meeting. Please try again.');
