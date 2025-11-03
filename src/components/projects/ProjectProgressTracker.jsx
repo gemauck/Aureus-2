@@ -38,6 +38,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const [projects, setProjects] = useState(() => []);
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [loadError, setLoadError] = useState(null);
+    const [editingCell, setEditingCell] = useState(null); // {projectId, month, field}
+    const [cellValues, setCellValues] = useState({}); // {[projectId-month-field]: value}
+    const [saving, setSaving] = useState(false);
     
     // Refs
     const tableRef = useRef(null);
@@ -249,143 +252,239 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Get progress data safely - with full error handling
     const getProgressData = (project, month, field) => {
         try {
-            if (!project || !month || !field) return null;
+            if (!project || !month || !field) return '';
             const safeYear = Number(selectedYear) || currentYear;
-            if (isNaN(safeYear)) return null; // Safety check for year
+            if (isNaN(safeYear)) return '';
             
             const key = String(month || '') + '-' + String(safeYear);
-            if (!key || key.length < 5) return null; // Invalid key format
+            if (!key || key.length < 5) return '';
             
-            const progress = project.monthlyProgress;
-            if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return null;
+            const progress = project.monthlyProgress || {};
+            if (!progress || typeof progress !== 'object' || Array.isArray(progress)) return '';
             
-            const monthData = progress[key];
-            if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) return null;
+            const monthData = progress[key] || {};
+            if (!monthData || typeof monthData !== 'object' || Array.isArray(monthData)) return '';
             
             const fieldData = monthData[field];
-            if (fieldData && typeof fieldData === 'object' && !Array.isArray(fieldData) && !(fieldData instanceof Date)) {
-                return null;
+            
+            // Extract link or text from object, or return string directly
+            if (typeof fieldData === 'string') {
+                return fieldData;
+            } else if (fieldData && typeof fieldData === 'object' && !Array.isArray(fieldData)) {
+                // If it's an object, try to get link or text
+                return fieldData.link || fieldData.text || '';
             }
-            return fieldData || null;
+            
+            return fieldData || '';
         } catch (e) {
             console.warn('⚠️ ProjectProgressTracker: Error in getProgressData:', e);
-            return null;
+            return '';
         }
     };
     
-    // Render progress cell - with full error handling
+    // Save progress data
+    const saveProgressData = async (project, month, field, value) => {
+        try {
+            setSaving(true);
+            const safeYear = Number(selectedYear) || currentYear;
+            const key = String(month) + '-' + String(safeYear);
+            
+            // Get current monthlyProgress or create new
+            const currentProgress = project.monthlyProgress || {};
+            const currentMonthData = currentProgress[key] || {};
+            
+            // Update the field
+            const updatedMonthData = {
+                ...currentMonthData,
+                [field]: value || ''
+            };
+            
+            const updatedProgress = {
+                ...currentProgress,
+                [key]: updatedMonthData
+            };
+            
+            // Update project via API
+            // Convert monthlyProgress to JSON string for database storage
+            const updatePayload = {
+                monthlyProgress: typeof updatedProgress === 'string' ? updatedProgress : JSON.stringify(updatedProgress)
+            };
+            
+            if (window.DatabaseAPI && window.DatabaseAPI.updateProject) {
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+            } else if (window.api && window.api.updateProject) {
+                await window.api.updateProject(project.id, updatePayload);
+            } else {
+                console.error('❌ ProjectProgressTracker: No updateProject method available');
+                throw new Error('Update API not available');
+            }
+            
+            // Update local state
+            setProjects(prevProjects => prevProjects.map(p => 
+                p.id === project.id 
+                    ? { ...p, monthlyProgress: updatedProgress }
+                    : p
+            ));
+            
+            // Clear editing state
+            setEditingCell(null);
+            const cellKey = `${project.id}-${month}-${field}`;
+            setCellValues(prev => {
+                const updated = { ...prev };
+                delete updated[cellKey];
+                return updated;
+            });
+        } catch (e) {
+            console.error('❌ ProjectProgressTracker: Error saving progress data:', e);
+            alert('Failed to save. Please try again.');
+        } finally {
+            setSaving(false);
+        }
+    };
+    
+    // Render progress cell - editable input fields
     const renderProgressCell = (project, month, field) => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
-            console.warn('⚠️ ProjectProgressTracker: Invalid renderProgressCell params:', { project: !!project, month, field });
             return React.createElement('td', {
                 key: (project?.id || 'unknown') + '-' + String(month) + '-' + String(field),
                 className: 'px-2 py-1 text-xs border-l border-gray-100'
             }, React.createElement('span', { className: 'text-gray-400 text-[10px]' }, '-'));
         }
         
-        let data;
-        try {
-            data = getProgressData(project, month, field);
-        } catch (e) {
-            console.warn('⚠️ ProjectProgressTracker: Error getting progress data:', e);
-            data = null;
-        }
-        
         const safeMonth = String(month || '');
         const monthIdx = months.indexOf(safeMonth);
         const isWorking = Array.isArray(workingMonths) && workingMonths.includes(monthIdx) && selectedYear === currentYear;
+        const cellKey = `${project.id}-${safeMonth}-${field}`;
+        const isEditing = editingCell && editingCell.projectId === project.id && editingCell.month === safeMonth && editingCell.field === field;
         
-        if (field === 'comments') {
-            // Handle comments - can be array, string, or object
-            let comments = [];
-            if (Array.isArray(data)) {
-                comments = data;
-            } else if (typeof data === 'string' && data.trim()) {
-                comments = [data];
-            } else if (data && typeof data === 'object') {
-                // If it's an object, try to extract text or use the object itself
-                if (data.text) {
-                    comments = Array.isArray(data.text) ? data.text : [data.text];
-                } else {
-                    comments = [JSON.stringify(data)];
-                }
-            }
-            
-            return React.createElement('td', {
-                key: project.id + '-' + safeMonth + '-' + field,
-                className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '')
-            }, React.createElement('div', {
-                className: 'flex flex-col gap-0.5'
-            }, comments.length > 0 ? comments.map((comment, idx) => 
-                React.createElement('span', {
-                    key: idx,
-                    className: 'text-[10px] text-gray-600'
-                }, String(comment || ''))
-            ) : React.createElement('span', {
-                className: 'text-gray-400 text-[10px]'
-            }, '-')));
-        }
+        // Get current value
+        const currentValue = getProgressData(project, safeMonth, field);
+        const displayValue = cellValues[cellKey] !== undefined ? cellValues[cellKey] : currentValue;
         
-        if (!data) {
-            return React.createElement('td', {
-                key: project.id + '-' + safeMonth + '-' + field,
-                className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '')
-            }, React.createElement('span', { className: 'text-gray-400 text-[10px]' }, '-'));
-        }
+        // Handle edit start
+        const handleStartEdit = () => {
+            setEditingCell({ projectId: project.id, month: safeMonth, field: field });
+            setCellValues(prev => ({ ...prev, [cellKey]: currentValue }));
+        };
         
-        // Handle simple string values (like person names or simple status)
-        if (typeof data === 'string') {
-            if (field === 'compliance') {
-                // If it's a simple string for compliance, show it as a badge
-                const statusLower = data.toLowerCase().trim();
-                const config = getStatusConfig(statusLower === 'active' ? 'checked' : statusLower);
-                return React.createElement('td', {
-                    key: project.id + '-' + safeMonth + '-' + field,
-                    className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '')
-                }, React.createElement('span', {
-                    className: String(config.color || 'bg-gray-100 text-gray-800') + ' px-1.5 py-0.5 rounded text-[9px] font-medium'
-                }, String(data)));
+        // Handle input change
+        const handleChange = (e) => {
+            setCellValues(prev => ({ ...prev, [cellKey]: e.target.value }));
+        };
+        
+        // Handle save
+        const handleBlur = () => {
+            const newValue = cellValues[cellKey] !== undefined ? cellValues[cellKey] : displayValue;
+            if (newValue !== currentValue) {
+                saveProgressData(project, safeMonth, field, newValue);
             } else {
-                // For data field, just show the string
+                setEditingCell(null);
+                setCellValues(prev => {
+                    const updated = { ...prev };
+                    delete updated[cellKey];
+                    return updated;
+                });
+            }
+        };
+        
+        // Handle key press
+        const handleKeyDown = (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleBlur();
+            } else if (e.key === 'Escape') {
+                setEditingCell(null);
+                setCellValues(prev => {
+                    const updated = { ...prev };
+                    delete updated[cellKey];
+                    return updated;
+                });
+            }
+        };
+        
+        const baseClassName = 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '');
+        
+        // Render editable cell
+        if (isEditing || !currentValue) {
+            // For comments, use textarea; for compliance/data, use input
+            if (field === 'comments') {
                 return React.createElement('td', {
-                    key: project.id + '-' + safeMonth + '-' + field,
-                    className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '')
-                }, React.createElement('span', {
-                    className: 'text-gray-700 text-[10px]'
-                }, String(data)));
+                    key: cellKey,
+                    className: baseClassName
+                }, React.createElement('textarea', {
+                    value: displayValue || '',
+                    onChange: handleChange,
+                    onBlur: handleBlur,
+                    onKeyDown: handleKeyDown,
+                    placeholder: 'Enter comments...',
+                    className: 'w-full px-1.5 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500',
+                    rows: 2,
+                    autoFocus: true
+                }));
+            } else {
+                // For compliance and data - input field for pasting links
+                return React.createElement('td', {
+                    key: cellKey,
+                    className: baseClassName
+                }, React.createElement('input', {
+                    type: 'text',
+                    value: displayValue || '',
+                    onChange: handleChange,
+                    onBlur: handleBlur,
+                    onKeyDown: handleKeyDown,
+                    placeholder: field === 'compliance' ? 'Paste compliance link...' : 'Paste data link...',
+                    className: 'w-full px-1.5 py-1 text-[10px] border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500',
+                    autoFocus: true
+                }));
             }
         }
         
-        // Handle complex object structure (existing format)
-        if (typeof data === 'object' && !Array.isArray(data)) {
-            const status = data.status && typeof data.status === 'string' ? data.status : String(data.status || '');
-            const config = getStatusConfig(status);
-            const text = data.text && typeof data.text === 'string' ? data.text : String(data.text || '');
-            const link = data.link && typeof data.link === 'string' ? data.link : '';
-            const date = data.date ? String(data.date) : '';
-            
-            return React.createElement('td', {
-                key: project.id + '-' + safeMonth + '-' + field,
-                className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '') + ' ' + String(config.cellColor || '')
-            }, React.createElement('div', { className: 'flex flex-col gap-0.5' },
-                status ? React.createElement('span', { className: String(config.color || '') + ' px-1.5 py-0.5 rounded text-[9px] font-medium' }, String(config.label || '')) : null,
-                text ? React.createElement('span', { className: 'text-gray-700 text-[10px]' }, String(text)) : null,
-                link ? React.createElement('a', {
-                    href: String(link),
-                    target: '_blank',
-                    rel: 'noopener noreferrer',
-                    className: 'text-primary-600 hover:text-primary-700 text-[10px]'
-                }, 'View') : null,
-                date ? React.createElement('span', { className: 'text-gray-500 text-[9px]' }, String(date)) : null
-            ));
-        }
+        // Display mode - click to edit
+        const displayContent = currentValue ? (
+            field === 'comments' ? (
+                React.createElement('div', {
+                    className: 'text-[10px] text-gray-600 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded',
+                    onClick: handleStartEdit,
+                    title: 'Click to edit'
+                }, String(currentValue))
+            ) : (
+                React.createElement('div', {
+                    className: 'flex items-center gap-1'
+                },
+                    currentValue.startsWith('http') ? React.createElement('a', {
+                        href: currentValue,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        onClick: (e) => e.stopPropagation(),
+                        className: 'text-primary-600 hover:text-primary-700 text-[10px] underline truncate max-w-[150px]',
+                        title: currentValue
+                    }, 'Link') : React.createElement('span', {
+                        className: 'text-gray-700 text-[10px] truncate max-w-[150px]',
+                        title: currentValue
+                    }, String(currentValue)),
+                    React.createElement('button', {
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            handleStartEdit();
+                        },
+                        className: 'opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 ml-1',
+                        title: 'Click to edit'
+                    }, React.createElement('i', { className: 'fas fa-edit text-[9px]' }))
+                )
+            )
+        ) : (
+            React.createElement('div', {
+                className: 'text-gray-400 text-[10px] cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded',
+                onClick: handleStartEdit,
+                title: 'Click to add'
+            }, '-')
+        );
         
-        // Fallback for unexpected data types
         return React.createElement('td', {
-            key: project.id + '-' + safeMonth + '-' + field,
-            className: 'px-2 py-1 text-xs border-l border-gray-100' + (isWorking ? ' bg-primary-50 bg-opacity-30' : '')
-        }, React.createElement('span', { className: 'text-gray-400 text-[10px]' }, '-'));
+            key: cellKey,
+            className: baseClassName + ' group'
+        }, displayContent);
     };
     
     // Safe year
@@ -439,24 +538,51 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         React.createElement('div', { ref: tableRef, className: 'overflow-x-auto border border-gray-200 rounded-lg' },
             React.createElement('table', { className: 'w-full text-left' },
                 React.createElement('thead', { className: 'bg-gray-50' },
+                    // First row: Month headers
                     React.createElement('tr', null,
-                        React.createElement('th', { className: 'px-2.5 py-1.5 text-left text-[10px] font-semibold sticky left-0 bg-gray-50 z-10 border-r' }, 'Project'),
+                        React.createElement('th', { 
+                            rowSpan: 2,
+                            className: 'px-2.5 py-1.5 text-left text-[10px] font-semibold sticky left-0 bg-gray-50 z-10 border-r' 
+                        }, 'Project'),
                         Array.isArray(months) && months.map((month, idx) => {
                             const safeMonth = String(month || '');
                             const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
-                            return React.createElement(React.Fragment, { key: safeMonth },
-                                React.createElement('th', {
-                                    colSpan: 3,
-                                    className: 'px-1.5 py-1.5 text-center text-[10px] font-semibold border-l' + (isWorking ? ' bg-primary-50 text-primary-700' : '')
-                                }, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)),
-                                React.createElement('th', { className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') }, 'Compliance'),
-                                React.createElement('th', { className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') }, 'Data'),
-                                React.createElement('th', { className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') }, 'Comments')
-                            );
+                            return React.createElement('th', {
+                                key: safeMonth + '-header',
+                                colSpan: 3,
+                                className: 'px-1.5 py-1.5 text-center text-[10px] font-semibold border-l' + (isWorking ? ' bg-primary-50 text-primary-700' : '')
+                            }, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2));
                         }),
-                        React.createElement('th', { className: 'px-2.5 py-1.5 text-[10px] border-l' }, 'PM'),
-                        React.createElement('th', { className: 'px-2.5 py-1.5 text-[10px]' }, 'Type'),
-                        React.createElement('th', { className: 'px-2.5 py-1.5 text-[10px]' }, 'Status')
+                        React.createElement('th', { 
+                            rowSpan: 2,
+                            className: 'px-2.5 py-1.5 text-[10px] border-l' 
+                        }, 'PM'),
+                        React.createElement('th', { 
+                            rowSpan: 2,
+                            className: 'px-2.5 py-1.5 text-[10px]' 
+                        }, 'Type'),
+                        React.createElement('th', { 
+                            rowSpan: 2,
+                            className: 'px-2.5 py-1.5 text-[10px]' 
+                        }, 'Status')
+                    ),
+                    // Second row: Sub-headers (Compliance, Data, Comments) for each month
+                    React.createElement('tr', null,
+                        Array.isArray(months) && months.map((month, idx) => {
+                            const safeMonth = String(month || '');
+                            const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
+                            return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
+                                React.createElement('th', { 
+                                    className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') 
+                                }, 'Compliance'),
+                                React.createElement('th', { 
+                                    className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') 
+                                }, 'Data'),
+                                React.createElement('th', { 
+                                    className: 'px-1.5 py-1 text-left text-[9px] border-l' + (isWorking ? ' bg-primary-50' : '') 
+                                }, 'Comments')
+                            );
+                        })
                     )
                 ),
                 React.createElement('tbody', null,

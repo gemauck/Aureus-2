@@ -26,9 +26,9 @@ async function handler(req, res) {
         where: {
           OR: [
             { name: { contains: searchTerm, mode: 'insensitive' } },
-            { company: { contains: searchTerm, mode: 'insensitive' } },
-            { email: { contains: searchTerm, mode: 'insensitive' } },
-            { phone: { contains: searchTerm, mode: 'insensitive' } }
+            { industry: { contains: searchTerm, mode: 'insensitive' } },
+            { website: { contains: searchTerm, mode: 'insensitive' } },
+            { notes: { contains: searchTerm, mode: 'insensitive' } }
           ]
         },
         take: 10,
@@ -36,9 +36,8 @@ async function handler(req, res) {
         select: {
           id: true,
           name: true,
-          company: true,
-          email: true,
-          phone: true,
+          industry: true,
+          website: true,
           type: true
         }
       })
@@ -47,8 +46,8 @@ async function handler(req, res) {
         results.push({
           id: `client-${client.id}`,
           type: client.type === 'lead' ? 'lead' : 'client',
-          title: client.name || client.company,
-          subtitle: client.company || client.email || client.phone,
+          title: client.name,
+          subtitle: client.industry || client.website || '',
           link: `#/${client.type === 'lead' ? 'clients' : 'clients'}?view=${client.type === 'lead' ? 'leads' : 'clients'}&highlight=${client.id}`
         })
       }
@@ -134,22 +133,19 @@ async function handler(req, res) {
       const opportunities = await prisma.opportunity.findMany({
         where: {
           OR: [
-            { name: { contains: searchTerm, mode: 'insensitive' } },
-            { description: { contains: searchTerm, mode: 'insensitive' } }
+            { title: { contains: searchTerm, mode: 'insensitive' } }
           ]
         },
         take: 10,
-        orderBy: { name: 'asc' },
+        orderBy: { title: 'asc' },
         select: {
           id: true,
-          name: true,
-          description: true,
+          title: true,
           clientId: true,
           client: {
             select: {
               id: true,
-              name: true,
-              company: true
+              name: true
             }
           }
         }
@@ -159,8 +155,8 @@ async function handler(req, res) {
         results.push({
           id: `opportunity-${opportunity.id}`,
           type: 'opportunity',
-          title: opportunity.name,
-          subtitle: opportunity.client?.name || opportunity.client?.company,
+          title: opportunity.title,
+          subtitle: opportunity.client?.name || '',
           link: `#/clients?view=opportunities&highlight=${opportunity.id}`
         })
       }
@@ -174,7 +170,7 @@ async function handler(req, res) {
         where: {
           OR: [
             { invoiceNumber: { contains: searchTerm, mode: 'insensitive' } },
-            { description: { contains: searchTerm, mode: 'insensitive' } }
+            { notes: { contains: searchTerm, mode: 'insensitive' } }
           ]
         },
         take: 10,
@@ -182,13 +178,11 @@ async function handler(req, res) {
         select: {
           id: true,
           invoiceNumber: true,
-          description: true,
           clientId: true,
           client: {
             select: {
               id: true,
-              name: true,
-              company: true
+              name: true
             }
           }
         }
@@ -199,7 +193,7 @@ async function handler(req, res) {
           id: `invoice-${invoice.id}`,
           type: 'invoice',
           title: invoice.invoiceNumber || 'Invoice',
-          subtitle: invoice.client?.name || invoice.client?.company,
+          subtitle: invoice.client?.name || '',
           link: `#/invoicing?highlight=${invoice.id}`
         })
       }
