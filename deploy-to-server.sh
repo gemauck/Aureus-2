@@ -38,12 +38,36 @@ git clean -fd
 echo ""
 echo "✅ Code updated"
 
+# Install dependencies if needed
+echo ""
+echo "📦 Checking dependencies..."
+if [ -f package.json ]; then
+    npm ci --omit=dev || npm install --omit=dev || true
+fi
+
+# Build frontend (JSX → dist)
+echo ""
+echo "🏗️  Building frontend (JSX → dist)..."
+if command -v npm &> /dev/null; then
+    npm run build:jsx || node build-jsx.js || echo "⚠️  JSX build failed, continuing anyway..."
+else
+    echo "⚠️  npm not found, skipping build"
+fi
+
+# Generate Prisma client if needed
+echo ""
+echo "🗄️  Generating Prisma client..."
+if command -v npx &> /dev/null && [ -f prisma/schema.prisma ]; then
+    npx prisma generate || echo "⚠️  Prisma generate failed, continuing anyway..."
+fi
+
 # Restart the application
 echo ""
 echo "🔄 Restarting application..."
 if command -v pm2 &> /dev/null; then
     pm2 restart abcotronics-erp || pm2 restart all
     echo "✅ Application restarted with PM2"
+    pm2 save || true
 elif command -v systemctl &> /dev/null; then
     systemctl restart abcotronics-erp || echo "⚠️  Systemd service not found, app may be running differently"
 else

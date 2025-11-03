@@ -48,11 +48,20 @@ echo "🔧 Setting up environment..."
 if [ ! -f .env ]; then
     cat > .env << 'EOF'
 NODE_ENV=production
-DATABASE_URL="postgresql://doadmin:CHANGE_THIS_PASSWORD@your-db-host:25060/defaultdb?sslmode=require"
+DATABASE_URL="file:./prisma/dev.db"
 JWT_SECRET="CHANGE_THIS_TO_YOUR_JWT_SECRET"
 PORT=3000
+APP_URL="https://abcoafrica.co.za"
 EOF
-    echo "⚠️  IMPORTANT: Edit .env file and add your database credentials!"
+    echo "⚠️  IMPORTANT: Edit .env file and add your JWT_SECRET!"
+fi
+
+# Ensure database file exists
+mkdir -p prisma
+if [ ! -f prisma/dev.db ]; then
+    touch prisma/dev.db
+    chmod 666 prisma/dev.db
+    echo "✅ Created empty database file"
 fi
 
 # Generate Prisma client
@@ -77,7 +86,9 @@ export default {
     exec_mode: 'fork',
     env: {
       NODE_ENV: 'production',
-      PORT: 3000
+      PORT: 3000,
+      DATABASE_URL: 'file:./prisma/dev.db',
+      APP_URL: 'https://abcoafrica.co.za'
     },
     error_file: './logs/pm2-error.log',
     out_file: './logs/pm2-out.log',
@@ -93,9 +104,9 @@ mkdir -p logs
 # Stop existing PM2 process
 pm2 delete abcotronics-erp || true
 
-# Start the application
+# Start the application using ecosystem config
 echo "🚀 Starting application..."
-pm2 start server.js --name abcotronics-erp
+pm2 start ecosystem.config.mjs
 
 # Save PM2 configuration
 pm2 save
