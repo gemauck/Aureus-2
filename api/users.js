@@ -14,74 +14,88 @@ async function handler(req, res) {
                 return unauthorized(res, 'Authentication required')
             }
             
-            // Only admins can access user list
             const userRole = req.user?.role?.toLowerCase();
-            if (userRole !== 'admin') {
-                console.log('⚠️ Users endpoint: Non-admin access attempt by:', req.user.sub)
-                return unauthorized(res, 'Admin access required to view users')
-            }
+            const isAdmin = userRole === 'admin';
 
-            console.log('✅ Users endpoint: Admin access granted, fetching users...')
+            // All authenticated users get basic user info for mentions
+            // Only admins get full HR data
+            console.log(`✅ Users endpoint: Fetching users for ${isAdmin ? 'admin' : 'regular user'}...`)
 
-            // Get all users with HR fields
             let users = []
+            let invitations = []
+            
             try {
-                // First, get all user fields without permissions to avoid errors
-                const usersQuery = await prisma.user.findMany({
-                    select: {
-                        id: true,
-                        email: true,
-                        name: true,
-                        role: true,
-                        // permissions: true, // Temporarily removed - will add back after fixing schema
-                        status: true,
-                        department: true,
-                        jobTitle: true,
-                        phone: true,
-                        // HR/Employee fields
-                        employeeNumber: true,
-                        position: true,
-                        employmentDate: true,
-                        idNumber: true,
-                        taxNumber: true,
-                        bankName: true,
-                        accountNumber: true,
-                        branchCode: true,
-                        salary: true,
-                        employmentStatus: true,
-                        address: true,
-                        emergencyContact: true,
-                        createdAt: true,
-                        lastLoginAt: true,
-                        lastSeenAt: true,
-                        invitedBy: true
-                    },
-                    orderBy: { createdAt: 'desc' }
-                })
-                
-                // Manually add permissions field (default to empty array if column doesn't exist)
-                users = usersQuery.map(user => ({
-                    ...user,
-                    permissions: '[]' // Default permissions
-                }))
-                console.log(`✅ Users endpoint: Fetched ${users.length} users`)
+                // Non-admins get minimal data for @mentions
+                if (!isAdmin) {
+                    const usersQuery = await prisma.user.findMany({
+                        select: {
+                            id: true,
+                            email: true,
+                            name: true,
+                            status: true
+                        },
+                        where: {
+                            status: { not: 'inactive' } // Only active users for mentions
+                        },
+                        orderBy: { name: 'asc' }
+                    })
+                    users = usersQuery
+                    console.log(`✅ Users endpoint: Fetched ${users.length} users for mentions`)
+                } else {
+                    // Admins get full data
+                    const usersQuery = await prisma.user.findMany({
+                        select: {
+                            id: true,
+                            email: true,
+                            name: true,
+                            role: true,
+                            // permissions: true, // Temporarily removed - will add back after fixing schema
+                            status: true,
+                            department: true,
+                            jobTitle: true,
+                            phone: true,
+                            // HR/Employee fields
+                            employeeNumber: true,
+                            position: true,
+                            employmentDate: true,
+                            idNumber: true,
+                            taxNumber: true,
+                            bankName: true,
+                            accountNumber: true,
+                            branchCode: true,
+                            salary: true,
+                            employmentStatus: true,
+                            address: true,
+                            emergencyContact: true,
+                            createdAt: true,
+                            lastLoginAt: true,
+                            lastSeenAt: true,
+                            invitedBy: true
+                        },
+                        orderBy: { createdAt: 'desc' }
+                    })
+                    
+                    // Manually add permissions field (default to empty array if column doesn't exist)
+                    users = usersQuery.map(user => ({
+                        ...user,
+                        permissions: '[]' // Default permissions
+                    }))
+                    console.log(`✅ Users endpoint: Fetched ${users.length} users with full details`)
+                    
+                    // Get all invitations (only for admins)
+                    try {
+                        invitations = await prisma.invitation.findMany({
+                            orderBy: { createdAt: 'desc' }
+                        })
+                        console.log(`✅ Users endpoint: Fetched ${invitations.length} invitations`)
+                    } catch (invitationError) {
+                        console.warn('⚠️ Invitation table not accessible, returning empty list:', invitationError.message)
+                    }
+                }
             } catch (userQueryError) {
                 console.error('❌ Users endpoint: Failed to query users:', userQueryError)
                 console.error('❌ Users endpoint: Error stack:', userQueryError.stack)
                 throw new Error(`Database query failed: ${userQueryError.message}`)
-            }
-
-            // Get all invitations (graceful if table missing)
-            let invitations = []
-            try {
-                invitations = await prisma.invitation.findMany({
-                    orderBy: { createdAt: 'desc' }
-                })
-                console.log(`✅ Users endpoint: Fetched ${invitations.length} invitations`)
-            } catch (invitationError) {
-                // If Invitation model/table isn't available yet, return empty list
-                console.warn('⚠️ Invitation table not accessible, returning empty list:', invitationError.message)
-                invitations = []
             }
 
             return ok(res, {
