@@ -14,14 +14,30 @@ async function handler(req, res) {
             return badRequest(res, 'Token is required')
         }
 
+        console.log('🔍 Looking up invitation token:', token.substring(0, 20) + '...')
+        
         // Find invitation
         const invitation = await prisma.invitation.findUnique({
             where: { token }
         })
 
         if (!invitation) {
-            return badRequest(res, 'Invalid invitation token')
+            console.log('❌ Invitation not found for token:', token.substring(0, 20) + '...')
+            // Check if token format is valid (64 hex characters)
+            if (!/^[a-f0-9]{64}$/i.test(token)) {
+                return badRequest(res, 'Invalid invitation token format')
+            }
+            // Check if there are any pending invitations to give helpful hint
+            const pendingCount = await prisma.invitation.count({
+                where: { status: 'pending' }
+            })
+            if (pendingCount === 0) {
+                return badRequest(res, 'Invalid invitation token. No pending invitations found. Please request a new invitation.')
+            }
+            return badRequest(res, 'Invalid invitation token. This invitation may have expired or been cancelled. Please request a new invitation link.')
         }
+        
+        console.log('✅ Invitation found:', invitation.email, 'Status:', invitation.status)
 
         if (new Date() > invitation.expiresAt) {
             return badRequest(res, 'Invitation has expired')
