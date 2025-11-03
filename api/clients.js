@@ -72,6 +72,20 @@ async function handler(req, res) {
         // Try query with type filter first, fallback to all clients if type column doesn't exist
         let rawClients
         try {
+          // Verify userId exists before using it in relation
+          let validUserId = null
+          if (userId) {
+            try {
+              const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+              if (userExists) {
+                validUserId = userId
+              }
+            } catch (userCheckError) {
+              // User doesn't exist, skip starredBy relation
+              console.warn('⚠️ User does not exist, skipping starredBy relation:', userId)
+            }
+          }
+          
           // Use Prisma to include tags relation - needed for list view
           rawClients = await prisma.client.findMany({
             where: {
@@ -83,9 +97,9 @@ async function handler(req, res) {
                   tag: true
                 }
               },
-              starredBy: userId ? {
+              starredBy: validUserId ? {
                 where: {
-                  userId
+                  userId: validUserId
                 }
               } : false
             },
@@ -96,6 +110,21 @@ async function handler(req, res) {
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.warn('⚠️ Type filter failed, trying without filter:', typeError.message)
+          
+          // Verify userId exists before using it in relation
+          let validUserId = null
+          if (userId) {
+            try {
+              const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+              if (userExists) {
+                validUserId = userId
+              }
+            } catch (userCheckError) {
+              // User doesn't exist, skip starredBy relation
+              console.warn('⚠️ User does not exist, skipping starredBy relation:', userId)
+            }
+          }
+          
           rawClients = await prisma.client.findMany({
             include: {
               tags: {
@@ -103,9 +132,9 @@ async function handler(req, res) {
                   tag: true
                 }
               },
-              starredBy: userId ? {
+              starredBy: validUserId ? {
                 where: {
-                  userId
+                  userId: validUserId
                 }
               } : false
             },
