@@ -159,9 +159,9 @@ function getTransporter() {
                     // Do not fail on invalid certs for development
                     rejectUnauthorized: false
                 },
-                connectionTimeout: 30000, // 30 seconds for cloud servers
-                greetingTimeout: 30000,
-                socketTimeout: 30000,
+                connectionTimeout: 5000, // 5 seconds - fail fast if no config
+                greetingTimeout: 5000,
+                socketTimeout: 5000,
                 debug: process.env.NODE_ENV === 'development', // Enable debug output
                 logger: process.env.NODE_ENV === 'development' // Enable logging
             });
@@ -306,11 +306,23 @@ export const sendInvitationEmail = async (invitationData) => {
     
     try {
         const emailTransporter = getTransporter();
-        
+
         // Get SendGrid API key - check multiple sources
         const sendGridKey = process.env.SENDGRID_API_KEY || 
                            (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
+        
+        // Early exit if no email configuration at all
+        const hasAnyConfig = !!(
+            process.env.SENDGRID_API_KEY || 
+            (process.env.SMTP_USER && process.env.SMTP_PASS) ||
+            (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) ||
+            process.env.SMTP_URL
+        );
+        
+        if (!hasAnyConfig) {
+            throw new Error('Email configuration not available. Please configure SENDGRID_API_KEY or SMTP settings in your .env file.');
+        }
         
         console.log('📧 Sending email with options:', {
             from: mailOptions.from,
@@ -328,7 +340,12 @@ export const sendInvitationEmail = async (invitationData) => {
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
             // Only try SMTP if we have a valid transporter
-            result = await emailTransporter.sendMail(mailOptions);
+            // Use Promise.race to prevent long timeouts
+            const sendPromise = emailTransporter.sendMail(mailOptions);
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Email sending timed out after 10 seconds')), 10000)
+            );
+            result = await Promise.race([sendPromise, timeoutPromise]);
         } else {
             // No valid email configuration
             throw new Error('No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.');
