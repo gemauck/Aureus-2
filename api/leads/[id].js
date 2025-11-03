@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { searchAndSaveNewsForClient } from '../client-news/search.js'
 
 async function handler(req, res) {
   try {
@@ -109,6 +110,10 @@ async function handler(req, res) {
         }
         console.log('🔍 Found existing lead - current status:', existing.status)
         
+        // Store old name and website for RSS feed update
+        const oldName = existing.name
+        const oldWebsite = existing.website
+        
         // Now update it
         const lead = await prisma.client.update({
           where: { id },
@@ -117,6 +122,16 @@ async function handler(req, res) {
         console.log('✅ Lead updated successfully:', lead.id)
         console.log('✅ New status:', lead.status, '(was:', existing.status, ')')
         console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
+        
+        // If name changed, trigger RSS feed update (async, don't wait)
+        if (updateData.name !== undefined && oldName && oldName !== lead.name) {
+          console.log(`📰 Lead name changed from "${oldName}" to "${lead.name}" - triggering RSS feed update`)
+          // Trigger RSS search asynchronously (don't block the response)
+          searchAndSaveNewsForClient(lead.id, lead.name, lead.website || oldWebsite || '').catch(error => {
+            console.error('❌ Error updating RSS feed after name change:', error)
+          })
+        }
+        
         return ok(res, { lead })
       } catch (dbError) {
         console.error('❌ Database error updating lead:', dbError)

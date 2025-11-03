@@ -55,7 +55,7 @@ function parseRSS(xmlText) {
 }
 
 // Search news for a client using Google News RSS (no API key required)
-async function searchNewsForClient(clientName, website) {
+export async function searchNewsForClient(clientName, website) {
   try {
     console.log(`📰 Searching news for client: ${clientName}`)
     
@@ -109,6 +109,84 @@ async function searchNewsForClient(clientName, website) {
   }
 }
 
+// Helper function to search and save news for a specific client
+export async function searchAndSaveNewsForClient(clientId, clientName, website) {
+  try {
+    console.log(`📰 Searching and saving news for client: ${clientName} (${clientId})`)
+    
+    // Check if client is subscribed to RSS feeds
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { rssSubscribed: true }
+    })
+    
+    if (!client) {
+      console.warn(`⚠️ Client not found: ${clientId}`)
+      return { success: false, articlesFound: 0 }
+    }
+    
+    // Only search if subscribed
+    if (client.rssSubscribed === false) {
+      console.log(`⏭️ Client ${clientName} is not subscribed to RSS feeds, skipping search`)
+      return { success: true, articlesFound: 0, skipped: true }
+    }
+    
+    const articles = await searchNewsForClient(clientName, website || '')
+    
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    
+    let articlesSaved = 0
+    
+    // Process and save articles
+    for (const article of articles) {
+      if (!article.url || !article.title) {
+        continue
+      }
+      
+      const publishedDate = new Date(article.publishedAt || Date.now())
+      const isNew = publishedDate >= today
+      
+      // Check if article already exists
+      const existing = await prisma.clientNews.findFirst({
+        where: {
+          clientId: clientId,
+          url: article.url
+        }
+      })
+      
+      if (!existing && article.url) {
+        await prisma.clientNews.create({
+          data: {
+            clientId: clientId,
+            title: article.title,
+            description: article.description || '',
+            url: article.url,
+            source: article.source || 'Google News',
+            publishedAt: publishedDate,
+            isNew: isNew
+          }
+        })
+        articlesSaved++
+        console.log(`   ✅ Saved article: ${article.title}`)
+      } else if (existing && isNew && !existing.isNew) {
+        // Update isNew flag if article was previously marked as old
+        await prisma.clientNews.update({
+          where: { id: existing.id },
+          data: { isNew: true }
+        })
+      }
+    }
+    
+    console.log(`✅ News search completed for ${clientName}. Found ${articlesSaved} new articles`)
+    return { success: true, articlesFound: articlesSaved }
+    
+  } catch (error) {
+    console.error(`❌ Error searching and saving news for client ${clientName}:`, error)
+    return { success: false, articlesFound: 0, error: error.message }
+  }
+}
+
 async function handler(req, res) {
   try {
     console.log('🔍 Client News Search API:', {
@@ -152,55 +230,23 @@ async function handler(req, res) {
         const today = new Date()
         today.setHours(0, 0, 0, 0)
 
-        // Search news for each client
+        // Search news for each client using the helper function
         for (const client of clients) {
           try {
-            const articles = await searchNewsForClient(
+            const result = await searchAndSaveNewsForClient(
+              client.id,
               client.name,
               client.website || ''
             )
-
-            // Process and save articles
-            for (const article of articles) {
-              if (!article.url || !article.title) {
-                continue
-              }
-
-              const publishedDate = new Date(article.publishedAt || Date.now())
-              const isNew = publishedDate >= today
-
-              // Check if article already exists
-              const existing = await prisma.clientNews.findFirst({
-                where: {
-                  clientId: client.id,
-                  url: article.url
-                }
+            
+            // Track articles for response (we don't have individual articles from the helper,
+            // but we can note that articles were processed)
+            if (result.articlesFound > 0) {
+              allArticles.push({
+                clientName: client.name,
+                title: `${result.articlesFound} new article(s) found`,
+                source: 'Google News'
               })
-
-              if (!existing && article.url) {
-                await prisma.clientNews.create({
-                  data: {
-                    clientId: client.id,
-                    title: article.title,
-                    description: article.description || '',
-                    url: article.url,
-                    source: article.source || 'Google News',
-                    publishedAt: publishedDate,
-                    isNew: isNew
-                  }
-                })
-                allArticles.push({
-                  clientName: client.name,
-                  title: article.title,
-                  source: article.source || 'Google News'
-                })
-              } else if (existing && isNew && !existing.isNew) {
-                // Update isNew flag if article was previously marked as old
-                await prisma.clientNews.update({
-                  where: { id: existing.id },
-                  data: { isNew: true }
-                })
-              }
             }
 
             // Small delay to avoid rate limiting

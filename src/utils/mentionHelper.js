@@ -85,12 +85,17 @@ const MentionHelper = {
                 ? commentText.substring(0, 100) + '...' 
                 : commentText;
             
-            const response = await fetch('/api/notifications', {
+            // Use proper API base URL like other components
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const fullUrl = `${apiBase}/api/notifications`;
+            
+            const requestOptions = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     userId: mentionedUserId,
                     type: 'mention',
@@ -103,7 +108,35 @@ const MentionHelper = {
                         fullComment: commentText
                     }
                 })
-            });
+            };
+            
+            let response = await fetch(fullUrl, requestOptions);
+            
+            // If 401, try to refresh token and retry once
+            if (!response.ok && response.status === 401) {
+                try {
+                    const refreshUrl = `${apiBase}/api/auth/refresh`;
+                    const refreshRes = await fetch(refreshUrl, { 
+                        method: 'POST', 
+                        credentials: 'include', 
+                        headers: { 'Content-Type': 'application/json' } 
+                    });
+                    
+                    if (refreshRes.ok) {
+                        const text = await refreshRes.text();
+                        const refreshData = text ? JSON.parse(text) : {};
+                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                        
+                        if (newToken && window.storage?.setToken) {
+                            window.storage.setToken(newToken);
+                            requestOptions.headers['Authorization'] = `Bearer ${newToken}`;
+                            response = await fetch(fullUrl, requestOptions);
+                        }
+                    }
+                } catch (refreshError) {
+                    console.error('❌ Token refresh failed:', refreshError);
+                }
+            }
             
             if (response.ok) {
                 const data = await response.json();

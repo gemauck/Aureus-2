@@ -4,6 +4,7 @@ import { badRequest, ok, serverError, notFound } from '../_lib/response.js'
 import { parseJsonBody } from '../_lib/body.js'
 import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
+import { searchAndSaveNewsForClient } from '../client-news/search.js'
 
 async function handler(req, res) {
   try {
@@ -101,6 +102,20 @@ async function handler(req, res) {
       }
       
       try {
+        // Check if name is being updated - fetch current client first
+        let oldName = null
+        let oldWebsite = null
+        if (updateData.name !== undefined) {
+          const existingClient = await prisma.client.findUnique({
+            where: { id },
+            select: { name: true, website: true }
+          })
+          if (existingClient) {
+            oldName = existingClient.name
+            oldWebsite = existingClient.website
+          }
+        }
+        
         console.log('🔍 Calling Prisma update with ID:', id)
         const client = await prisma.client.update({
           where: { id },
@@ -115,6 +130,15 @@ async function handler(req, res) {
         const fs = await import('fs')
         const afterUpdateLog = `\n=== AFTER UPDATE ===\nClient: ${client.name}\nComments: ${client.comments}\nComments Length: ${client.comments?.length}\n`
         fs.writeFileSync('/tmp/client-update.log', afterUpdateLog, { flag: 'a' })
+        
+        // If name changed, trigger RSS feed update (async, don't wait)
+        if (updateData.name !== undefined && oldName && oldName !== client.name) {
+          console.log(`📰 Client name changed from "${oldName}" to "${client.name}" - triggering RSS feed update`)
+          // Trigger RSS search asynchronously (don't block the response)
+          searchAndSaveNewsForClient(client.id, client.name, client.website || oldWebsite || '').catch(error => {
+            console.error('❌ Error updating RSS feed after name change:', error)
+          })
+        }
         
         return ok(res, { client })
       } catch (dbError) {
