@@ -106,7 +106,7 @@ pm2 delete abcotronics-erp || true
 
 # Start the application using ecosystem config
 echo "🚀 Starting application..."
-pm2 start server.js --name abcotronics-erp --instances 1 --exec-mode fork
+pm2 start server.js --name abcotronics-erp -i 1
 
 # Save PM2 configuration
 pm2 save
