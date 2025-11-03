@@ -87,6 +87,7 @@ async function handler(req, res) {
           }
           
           // Use Prisma to include tags relation - needed for list view
+          console.log('🔍 Querying clients with type=client, validUserId:', validUserId)
           rawClients = await prisma.client.findMany({
             where: {
               type: 'client'
@@ -107,6 +108,7 @@ async function handler(req, res) {
               createdAt: 'desc'
             }
           })
+          console.log(`🔍 Raw query returned ${rawClients.length} clients`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.warn('⚠️ Type filter failed, trying without filter:', typeError.message)
