@@ -4,7 +4,7 @@ const { useState, useEffect } = React;
 const NotificationSettings = () => {
     const [settings, setSettings] = useState({
         emailMentions: true,
-        emailComments: false,
+        emailComments: true,
         emailTasks: false,
         emailInvoices: true,
         emailSystem: true,
@@ -40,7 +40,7 @@ const NotificationSettings = () => {
                 if (loadedSettings) {
                     setSettings({
                         emailMentions: loadedSettings.emailMentions !== undefined ? loadedSettings.emailMentions : true,
-                        emailComments: loadedSettings.emailComments !== undefined ? loadedSettings.emailComments : false,
+                        emailComments: loadedSettings.emailComments !== undefined ? loadedSettings.emailComments : true,
                         emailTasks: loadedSettings.emailTasks !== undefined ? loadedSettings.emailTasks : false,
                         emailInvoices: loadedSettings.emailInvoices !== undefined ? loadedSettings.emailInvoices : true,
                         emailSystem: loadedSettings.emailSystem !== undefined ? loadedSettings.emailSystem : true,
