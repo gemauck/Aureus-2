@@ -38,11 +38,18 @@ git clean -fd
 echo ""
 echo "✅ Code updated"
 
-# Install dependencies if needed
+# Install dependencies if needed (including dev dependencies for build)
 echo ""
-echo "📦 Checking dependencies..."
+echo "📦 Installing/updating dependencies..."
 if [ -f package.json ]; then
-    npm ci --omit=dev || npm install --omit=dev || true
+    # First try to install all dependencies (needed for build tools like esbuild)
+    npm install || npm ci || echo "⚠️  npm install had issues, continuing..."
+    
+    # Specifically ensure esbuild is available for building
+    if ! command -v npx &> /dev/null || ! npx esbuild --version &> /dev/null; then
+        echo "📦 Installing esbuild for building..."
+        npm install esbuild --save-dev || echo "⚠️  esbuild install failed, continuing..."
+    fi
 fi
 
 # Build frontend (JSX → dist)
