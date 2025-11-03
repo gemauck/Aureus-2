@@ -52,6 +52,8 @@
         './src/components/teams/WorkflowExecutionModal.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
+        './src/components/teams/ManagementMeetingModal.jsx',
+        './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/Teams.jsx',
         './src/components/teams/TeamsSimple.jsx',
         

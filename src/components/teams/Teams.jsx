@@ -481,6 +481,19 @@ const Teams = () => {
                                 <i className="fas fa-bullhorn mr-1"></i>
                                 Notices
                             </button>
+                            {selectedTeam?.id === 'management' && (
+                                <button
+                                    onClick={() => setActiveTab('meetings')}
+                                    className={`px-3 py-1.5 text-xs rounded-lg transition ${
+                                        activeTab === 'meetings'
+                                            ? 'bg-primary-600 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+                                    }`}
+                                >
+                                    <i className="fas fa-calendar-check mr-1"></i>
+                                    Meeting Notes
+                                </button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -926,7 +939,7 @@ const Teams = () => {
 
                         {activeTab === 'notices' && (
                             <div>
-									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Notice Board</h3>
+								<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Notice Board</h3>
                                 {displayNotices.length > 0 ? (
                                     <div className="space-y-3">
                                         {displayNotices.map(notice => (
@@ -992,6 +1005,19 @@ const Teams = () => {
                                         >
                                             Post First Notice
                                         </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {activeTab === 'meetings' && selectedTeam?.id === 'management' && (
+                            <div>
+                                {window.ManagementMeetingNotes ? (
+                                    React.createElement(window.ManagementMeetingNotes)
+                                ) : (
+                                    <div className="text-center py-12">
+                                        <i className="fas fa-calendar-alt text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                        <p className="text-sm text-gray-500 dark:text-slate-400">Meeting Notes component loading...</p>
                                     </div>
                                 )}
                             </div>

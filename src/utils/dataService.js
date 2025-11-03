@@ -290,6 +290,16 @@
         }
     },
 
+    async getManagementMeetings() {
+        return safeStorageCall(window.storage, 'getManagementMeetings', []);
+    },
+
+    async setManagementMeetings(meetings) {
+        if (typeof window.storage?.setManagementMeetings === 'function') {
+            window.storage.setManagementMeetings(meetings);
+        }
+    },
+
     async getTeamTasks() {
         return safeStorageCall(window.storage, 'getTeamTasks', []);
     },
