@@ -5,10 +5,10 @@
 DROPLET_IP="165.22.127.196"
 APP_DIR="/var/www/abcotronics-erp"
 
-# Restored database connection details
+# Restored database connection details (from 10 PM backup - Nov 3, 2025)
 DB_USER="doadmin"
-DB_PASSWORD="YOUR_PASSWORD_HERE"
-DB_HOST="dbaas-db-6934625-nov-3-backup-do-user-28031752-0.e.db.ondigitalocean.com"
+DB_PASSWORD="${DB_PASSWORD}"
+DB_HOST="dbaas-db-6934625-nov-3-backup-nov-3-backup2-do-user-28031752-0.e.db.ondigitalocean.com"
 DB_PORT="25060"
 DB_NAME="defaultdb"
 
