@@ -6,6 +6,7 @@
         // Defer heavier or non-critical modules until after first paint
         // Dashboard variants
         './src/components/dashboard/Calendar.jsx',
+        './src/components/daily-notes/DailyNotes.jsx',
         './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
         './src/components/dashboard/DashboardEnhanced.jsx',
@@ -52,8 +53,6 @@
         './src/components/teams/WorkflowExecutionModal.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
-        './src/components/teams/ManagementMeetingModal.jsx',
-        './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/Teams.jsx',
         './src/components/teams/TeamsSimple.jsx',
         
@@ -114,12 +113,12 @@
         './src/components/feedback/FeedbackWidget.jsx',
         './src/components/feedback/SectionCommentWidget.jsx',
         
-        // Tools - Load tool components before Tools.jsx
-        './src/components/tools/TankSizeCalculator.jsx',
-        './src/components/tools/UnitConverter.jsx',
-        './src/components/tools/PDFToWordConverter.jsx',
-        './src/components/tools/HandwritingToWord.jsx',
-        './src/components/tools/Tools.jsx',
+        // Tools - MOVED to index.html for early loading (main menu item)
+        // './src/components/tools/TankSizeCalculator.jsx',
+        // './src/components/tools/UnitConverter.jsx',
+        // './src/components/tools/PDFToWordConverter.jsx',
+        // './src/components/tools/HandwritingToWord.jsx',
+        // './src/components/tools/Tools.jsx',
         
         // Utils and integrations
         './src/utils/permissions.js',

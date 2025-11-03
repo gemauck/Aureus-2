@@ -5,6 +5,8 @@ const Calendar = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState(null);
     const [showNotesModal, setShowNotesModal] = useState(false);
+    const [showDailyNotes, setShowDailyNotes] = useState(false);
+    const [dailyNotesDate, setDailyNotesDate] = useState(null);
     const [notes, setNotes] = useState({}); // { '2024-01-15': 'note text' }
     const { isDark } = window.useTheme();
     const [isSaving, setIsSaving] = useState(false); // Prevent refresh during save
@@ -410,14 +412,20 @@ const Calendar = () => {
         setCurrentDate(new Date());
     };
     
-    // Handle day click
+    // Handle day click - open DailyNotes full-page editor
     const handleDayClick = (day) => {
         if (day === null) return;
         
         const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-        setSelectedDate({ date, dateString, day });
-        setShowNotesModal(true);
+        setDailyNotesDate(date);
+        setShowDailyNotes(true);
+    };
+    
+    // Handle opening daily notes list view
+    const handleOpenDailyNotes = () => {
+        setDailyNotesDate(null);
+        setShowDailyNotes(true);
     };
     
     // Format date string helper
@@ -443,34 +451,84 @@ const Calendar = () => {
         );
     };
     
+    // Get DailyNotes component
+    const DailyNotes = window.DailyNotes || (() => null);
+    
     return (
         <>
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`}>
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center space-x-2">
-                        <button
-                            onClick={goToPreviousMonth}
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
-                        >
-                            <i className="fas fa-chevron-left text-xs"></i>
-                        </button>
-                        <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-                        </h2>
-                        <button
-                            onClick={goToNextMonth}
-                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
-                        >
-                            <i className="fas fa-chevron-right text-xs"></i>
-                        </button>
+            {/* Daily Notes Full-Page View */}
+            {showDailyNotes && DailyNotes && (
+                <DailyNotes 
+                    initialDate={dailyNotesDate}
+                    onClose={() => {
+                        setShowDailyNotes(false);
+                        setDailyNotesDate(null);
+                        // Reload notes after closing
+                        const loadNotes = async () => {
+                            try {
+                                const user = window.storage?.getUser?.();
+                                const userId = user?.id || user?.email || 'default';
+                                const token = window.storage?.getToken?.();
+                                if (token) {
+                                    const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                                        headers: { 
+                                            Authorization: `Bearer ${token}`,
+                                            'Cache-Control': 'no-cache'
+                                        },
+                                        credentials: 'include'
+                                    });
+                                    if (res.ok) {
+                                        const data = await res.json();
+                                        const serverNotes = data?.data?.notes || data?.notes || {};
+                                        setNotes(serverNotes);
+                                    }
+                                }
+                            } catch (error) {
+                                console.error('Error reloading notes:', error);
+                            }
+                        };
+                        loadNotes();
+                    }}
+                />
+            )}
+            
+            {!showDailyNotes && (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`}>
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={goToPreviousMonth}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
+                            >
+                                <i className="fas fa-chevron-left text-xs"></i>
+                            </button>
+                            <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+                            </h2>
+                            <button
+                                onClick={goToNextMonth}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
+                            >
+                                <i className="fas fa-chevron-right text-xs"></i>
+                            </button>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={handleOpenDailyNotes}
+                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium mr-2`}
+                                title="Open Daily Notes"
+                            >
+                                <i className="fas fa-sticky-note mr-1"></i>
+                                Notes
+                            </button>
+                            <button
+                                onClick={goToToday}
+                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium`}
+                            >
+                                Today
+                            </button>
+                        </div>
                     </div>
-                    <button
-                        onClick={goToToday}
-                        className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium`}
-                    >
-                        Today
-                    </button>
-                </div>
                 
                 {/* Day names header */}
                 <div className="grid grid-cols-7 mb-1" style={{ gap: '2px' }}>
@@ -528,28 +586,6 @@ const Calendar = () => {
                     })}
                 </div>
             </div>
-            
-            {/* Notes Modal */}
-            {showNotesModal && selectedDate && (
-                <DayNotesModal
-                    date={selectedDate.date}
-                    dateString={selectedDate.dateString}
-                    initialNote={notes[selectedDate.dateString] || ''}
-                    onSave={async (noteText) => {
-                        console.log('📝 Calendar: onSave called with noteText length:', noteText?.length || 0);
-                        try {
-                            await saveNotes(selectedDate.dateString, noteText);
-                            console.log('✅ Calendar: saveNotes completed');
-                        } catch (error) {
-                            console.error('❌ Calendar: Error in saveNotes:', error);
-                            alert(`Failed to save calendar note: ${error.message || 'Unknown error'}`);
-                            return; // Don't close modal on error
-                        }
-                        setShowNotesModal(false);
-                    }}
-                    onClose={() => setShowNotesModal(false)}
-                    isDark={isDark}
-                />
             )}
         </>
     );
