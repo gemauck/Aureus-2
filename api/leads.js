@@ -142,12 +142,8 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              },
-              starredBy: userId ? {
-                where: {
-                  userId
-                }
-              } : false
+              }
+              // starredBy relation removed - StarredClient table doesn't exist in restored database
             },
             orderBy: { createdAt: 'desc' } 
           })
@@ -169,12 +165,8 @@ async function handler(req, res) {
                   include: {
                     tag: true
                   }
-                },
-                starredBy: userId ? {
-                  where: {
-                    userId
-                  }
-                } : false
+                }
+                // starredBy relation removed - StarredClient table doesn't exist in restored database
               },
               orderBy: { createdAt: 'desc' }
             })
@@ -204,7 +196,7 @@ async function handler(req, res) {
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
           // Check if current user has starred this lead
-          parsed.isStarred = userId && lead.starredBy && lead.starredBy.length > 0;
+          parsed.isStarred = false; // StarredClient table doesn't exist in restored database
           return parsed;
         });
         
