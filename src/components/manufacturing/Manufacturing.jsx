@@ -35,6 +35,8 @@ const Manufacturing = () => {
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
   const [bomComponents, setBomComponents] = useState([]);
+  const [salesOrderItems, setSalesOrderItems] = useState([]);
+  const [newSalesOrderItem, setNewSalesOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
@@ -1954,6 +1956,112 @@ const Manufacturing = () => {
         console.error('Error deleting sales order:', error);
         alert('Failed to delete sales order. Please try again.');
       }
+    }
+  };
+
+  const openAddSalesOrderModal = () => {
+    setFormData({
+      clientId: '',
+      clientName: '',
+      status: 'draft',
+      priority: 'normal',
+      orderDate: new Date().toISOString().split('T')[0],
+      requiredDate: '',
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      shippingAddress: '',
+      shippingMethod: '',
+      notes: '',
+      internalNotes: ''
+    });
+    setSalesOrderItems([]);
+    setNewSalesOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+    setModalType('add_sales');
+    setShowModal(true);
+  };
+
+  const handleAddSalesOrderItem = () => {
+    if (!newSalesOrderItem.sku || !newSalesOrderItem.name || newSalesOrderItem.quantity <= 0 || newSalesOrderItem.unitPrice <= 0) {
+      alert('Please fill in all fields: SKU, Name, Quantity > 0, and Unit Price > 0');
+      return;
+    }
+    
+    const total = newSalesOrderItem.quantity * newSalesOrderItem.unitPrice;
+    const item = {
+      id: Date.now().toString(),
+      sku: newSalesOrderItem.sku,
+      name: newSalesOrderItem.name,
+      quantity: parseFloat(newSalesOrderItem.quantity),
+      unitPrice: parseFloat(newSalesOrderItem.unitPrice),
+      total: total
+    };
+    
+    setSalesOrderItems([...salesOrderItems, item]);
+    setNewSalesOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+  };
+
+  const handleRemoveSalesOrderItem = (itemId) => {
+    setSalesOrderItems(salesOrderItems.filter(item => item.id !== itemId));
+  };
+
+  const handleSaveSalesOrder = async () => {
+    try {
+      if (!formData.clientId && !formData.clientName) {
+        alert('Please select a client');
+        return;
+      }
+      
+      if (salesOrderItems.length === 0) {
+        alert('Please add at least one order item');
+        return;
+      }
+
+      // Calculate totals
+      const subtotal = salesOrderItems.reduce((sum, item) => sum + item.total, 0);
+      const tax = formData.tax || 0;
+      const total = subtotal + tax;
+
+      const orderData = {
+        clientId: formData.clientId || null,
+        clientName: formData.clientName || '',
+        status: formData.status || 'draft',
+        priority: formData.priority || 'normal',
+        orderDate: formData.orderDate || new Date().toISOString(),
+        requiredDate: formData.requiredDate || null,
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        items: salesOrderItems.map(item => ({
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        })),
+        shippingAddress: formData.shippingAddress || '',
+        shippingMethod: formData.shippingMethod || '',
+        notes: formData.notes || '',
+        internalNotes: formData.internalNotes || ''
+      };
+
+      const response = await safeCallAPI('createSalesOrder', orderData);
+      
+      if (response?.data?.salesOrder) {
+        const updatedOrders = [...salesOrders, { ...response.data.salesOrder, id: response.data.salesOrder.id }];
+        setSalesOrders(updatedOrders);
+        localStorage.setItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
+        alert('Sales order created successfully!');
+      } else {
+        alert('Sales order created but response data incomplete. Please refresh to verify.');
+      }
+
+      setShowModal(false);
+      setFormData({});
+      setSalesOrderItems([]);
+    } catch (error) {
+      console.error('❌ Error saving sales order:', error);
+      alert(`Failed to save sales order: ${error.message}`);
     }
   };
 
@@ -4776,6 +4884,304 @@ const Manufacturing = () => {
       );
     }
 
+    // ADD SALES ORDER
+    if (modalType === 'add_sales') {
+      // Calculate totals from items
+      const subtotal = salesOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
+      const tax = formData.tax || 0;
+      const total = subtotal + tax;
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">New Sales Order</h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setSalesOrderItems([]); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="space-y-4">
+                {/* Client Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
+                  <select
+                    value={formData.clientId || ''}
+                    onChange={(e) => {
+                      const selectedClient = clients.find(c => c.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        clientId: e.target.value,
+                        clientName: selectedClient ? selectedClient.name : ''
+                      });
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Select a client...</option>
+                    {clients.map(client => (
+                      <option key={client.id} value={client.id}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Order Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Order Date *</label>
+                    <input
+                      type="date"
+                      value={formData.orderDate || ''}
+                      onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Required Date</label>
+                    <input
+                      type="date"
+                      value={formData.requiredDate || ''}
+                      onChange={(e) => setFormData({ ...formData, requiredDate: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select
+                      value={formData.status || 'draft'}
+                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="in_production">In Production</option>
+                      <option value="completed">Completed</option>
+                      <option value="shipped">Shipped</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      value={formData.priority || 'normal'}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Order Items Section */}
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
+                  
+                  {/* Add Item Form */}
+                  <div className="grid grid-cols-12 gap-2 mb-3">
+                    <div className="col-span-4">
+                      <select
+                        value={newSalesOrderItem.sku}
+                        onChange={(e) => {
+                          const sku = e.target.value;
+                          const invItem = inventory.find(item => item.sku === sku || item.id === sku);
+                          setNewSalesOrderItem({
+                            ...newSalesOrderItem,
+                            sku: sku,
+                            name: invItem ? invItem.name : newSalesOrderItem.name
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select from inventory</option>
+                        {inventory.map(item => (
+                          <option key={item.id || item.sku} value={item.sku || item.id}>
+                            {item.name} ({item.sku || item.id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-4">
+                      <input
+                        type="text"
+                        value={newSalesOrderItem.name}
+                        onChange={(e) => setNewSalesOrderItem({ ...newSalesOrderItem, name: e.target.value })}
+                        placeholder="Item Name *"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={newSalesOrderItem.quantity || ''}
+                        onChange={(e) => setNewSalesOrderItem({ ...newSalesOrderItem, quantity: parseFloat(e.target.value) || 0 })}
+                        placeholder="Qty"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleAddSalesOrderItem}
+                        className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      >
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={newSalesOrderItem.unitPrice || ''}
+                      onChange={(e) => setNewSalesOrderItem({ ...newSalesOrderItem, unitPrice: parseFloat(e.target.value) || 0 })}
+                      placeholder="Unit Price *"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddSalesOrderItem}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      <i className="fas fa-plus mr-1"></i> Add Item
+                    </button>
+                  </div>
+
+                  {/* Items List */}
+                  {salesOrderItems.length > 0 && (
+                    <div className="space-y-2">
+                      {salesOrderItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                            <p className="text-xs text-gray-600">SKU: {item.sku} • Qty: {item.quantity} • R {item.unitPrice.toFixed(2)} each</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="text-sm font-semibold text-blue-600">R {item.total.toFixed(2)}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSalesOrderItem(item.id)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Remove"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Totals */}
+                {salesOrderItems.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Subtotal:</p>
+                        <p className="text-lg font-bold text-gray-900">R {subtotal.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <label className="block text-gray-600 mb-1">Tax (R)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.tax || ''}
+                          onChange={(e) => setFormData({ ...formData, tax: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Total:</p>
+                        <p className="text-lg font-bold text-blue-600">R {total.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Shipping Information */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Shipping Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Address</label>
+                      <textarea
+                        value={formData.shippingAddress || ''}
+                        onChange={(e) => setFormData({ ...formData, shippingAddress: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Enter shipping address"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Shipping Method</label>
+                      <input
+                        type="text"
+                        value={formData.shippingMethod || ''}
+                        onChange={(e) => setFormData({ ...formData, shippingMethod: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., Standard, Express, Courier"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Order Notes</label>
+                      <textarea
+                        value={formData.notes || ''}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Notes visible to client"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Internal Notes</label>
+                      <textarea
+                        value={formData.internalNotes || ''}
+                        onChange={(e) => setFormData({ ...formData, internalNotes: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Internal notes (not visible to client)"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowModal(false); setFormData({}); setSalesOrderItems([]); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSalesOrder}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create Sales Order
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -4793,7 +5199,7 @@ const Manufacturing = () => {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Sales Orders</h3>
             <button
-              onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+              onClick={openAddSalesOrderModal}
               className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
             >
               <i className="fas fa-plus text-xs"></i>
@@ -4808,9 +5214,9 @@ const Manufacturing = () => {
             <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
               <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
               <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
-              <p className="text-xs text-gray-500 mb-4">Sales orders will appear here when created</p>
+              <p className="text-xs text-gray-500 mb-4">Create your first sales order to get started</p>
               <button
-                onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+                onClick={openAddSalesOrderModal}
                 className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
               >
                 <i className="fas fa-plus text-xs"></i>
@@ -4914,9 +5320,9 @@ const Manufacturing = () => {
                       <div className="flex flex-col items-center justify-center">
                         <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
                         <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
-                        <p className="text-xs text-gray-500 mb-4">Sales orders will appear here when created</p>
+                        <p className="text-xs text-gray-500 mb-4">Create your first sales order to get started</p>
                         <button
-                          onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+                          onClick={openAddSalesOrderModal}
                           className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
                         >
                           <i className="fas fa-plus text-xs"></i>
