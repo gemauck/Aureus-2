@@ -319,12 +319,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   useEffect(() => {
     const initLoad = async () => {
       await loadJobCardsRef.current?.();
-      
-      // After initial load, check if there are any unsynced cards and try to sync
-      if (navigator.onLine && syncPendingJobCardsRef.current) {
-        console.log('🔍 Checking for unsynced job cards on mount...');
-        await syncPendingJobCardsRef.current();
-      }
+      // NOTE: Don't sync pending cards on mount - they're already on the server
+      // syncPendingJobCards should only be called when coming back online
     };
     initLoad();
   }, []); // Empty dependency array - only run on mount
@@ -784,12 +780,6 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       setJobCards(updatedJobCards);
       localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
       console.log('✅ Job card removed from local state');
-
-      // Reload job cards from server to ensure sync (only if online)
-      if (isOnline && loadJobCardsRef.current) {
-        console.log('🔄 Reloading job cards after deletion to ensure sync...');
-        await loadJobCardsRef.current();
-      }
 
       alert('Job card deleted successfully!');
     } catch (error) {

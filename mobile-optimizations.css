@@ -2290,3 +2290,453 @@
     border: 1px solid #000 !important;
   }
 }
+/* Comprehensive Mobile Component Fixes */
+/* This file fixes all components that look bad on mobile */
+
+@media (max-width: 768px) {
+  /* ============================================
+     GRID LAYOUT FIXES - Force single column
+     ============================================ */
+  
+  /* Force grids to single column on mobile - but be smart about it */
+  form .grid,
+  [class*="Modal"] .grid,
+  [class*="modal"] .grid,
+  [role="dialog"] .grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  /* Force multi-column grids in forms to stack */
+  form .grid.grid-cols-2,
+  form .grid.grid-cols-3,
+  form .grid.grid-cols-4,
+  form .grid.grid-cols-5,
+  form .grid.grid-cols-6,
+  form .grid.grid-cols-12 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  /* Exception: Allow horizontal scrolling grids for navigation/tabs */
+  .overflow-x-auto .grid,
+  [class*="overflow-x-auto"] .grid,
+  [class*="tabs"] .grid,
+  [class*="nav"] .grid {
+    grid-template-columns: repeat(auto-fit, minmax(min-content, 1fr)) !important;
+    gap: 8px !important;
+  }
+  
+  /* Dashboard stats grids can stay 2 columns if space allows */
+  .grid[class*="stats"],
+  .grid[class*="summary"],
+  .grid[class*="metrics"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  /* ============================================
+     FORM FIXES
+     ============================================ */
+  
+  /* All forms should have proper spacing */
+  form {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 8px !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Form sections */
+  form > div,
+  form > section,
+  form fieldset {
+    margin-bottom: 16px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Form groups - stack vertically */
+  .form-group,
+  form .space-y > *,
+  form [class*="space-y"] > * {
+    margin-bottom: 16px !important;
+    width: 100% !important;
+  }
+  
+  /* Input groups */
+  .input-group,
+  [class*="input-group"] {
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+  
+  .input-group > *,
+  [class*="input-group"] > * {
+    width: 100% !important;
+    margin-bottom: 8px !important;
+    margin-right: 0 !important;
+  }
+  
+  /* ============================================
+     MODAL FIXES
+     ============================================ */
+  
+  /* All modals should be fullscreen on mobile */
+  [class*="modal"],
+  [class*="Modal"],
+  [role="dialog"],
+  .fixed[class*="inset"] {
+    left: 0 !important;
+    right: 0 !important;
+    top: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Modal content */
+  [class*="modal-content"],
+  [class*="Modal"] > div,
+  [role="dialog"] > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 12px !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+  
+  /* Modal headers */
+  [class*="modal-header"],
+  [class*="Modal"] > div:first-child {
+    padding: 12px !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: white !important;
+    border-bottom: 1px solid #e5e7eb !important;
+  }
+  
+  .dark [class*="modal-header"],
+  .dark [class*="Modal"] > div:first-child {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+  
+  /* Modal body - scrollable */
+  [class*="modal-body"],
+  [class*="Modal"] > div:not(:first-child):not(:last-child) {
+    padding: 12px !important;
+    overflow-y: auto !important;
+    flex: 1 !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  
+  /* Modal footer */
+  [class*="modal-footer"],
+  [class*="Modal"] > div:last-child {
+    padding: 12px !important;
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 10 !important;
+    background: white !important;
+    border-top: 1px solid #e5e7eb !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  
+  .dark [class*="modal-footer"],
+  .dark [class*="Modal"] > div:last-child {
+    background: #1f2937 !important;
+    border-top-color: #374151 !important;
+  }
+  
+  /* Modal footer buttons stack vertically */
+  [class*="modal-footer"] button,
+  [class*="Modal"] > div:last-child button {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  
+  /* ============================================
+     JOB CARDS COMPONENT FIXES
+     ============================================ */
+  
+  /* JobCards form grids */
+  form .grid.grid-cols-2,
+  form .grid.grid-cols-3,
+  form .grid.grid-cols-4,
+  form .grid.grid-cols-12 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  
+  /* JobCards specific - time inputs side by side is OK if they fit */
+  form .grid.grid-cols-2 input[type="time"],
+  form .grid.grid-cols-2 input[type="date"] {
+    grid-column: 1 / -1 !important;
+  }
+  
+  /* ============================================
+     CARD FIXES
+     ============================================ */
+  
+  /* All cards should be properly sized */
+  .card,
+  [class*="card"],
+  [class*="Card"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin-bottom: 12px !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
+  }
+  
+  /* Card content */
+  .card-body,
+  [class*="card-body"],
+  [class*="Card"] > div {
+    padding: 8px !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* ============================================
+     TABLE FIXES
+     ============================================ */
+  
+  /* Hide tables on mobile (they should convert to cards) */
+  table {
+    display: none !important;
+  }
+  
+  /* Ensure table wrappers don't overflow */
+  .table-responsive,
+  [class*="table-wrapper"],
+  [class*="overflow-x-auto"]:has(table) {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* ============================================
+     BUTTON GROUP FIXES
+     ============================================ */
+  
+  /* Button groups stack on mobile */
+  .flex[class*="gap"]:has(button),
+  [class*="button-group"],
+  .space-x-2:has(button),
+  .space-x-3:has(button),
+  .space-x-4:has(button) {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+  
+  /* Exception: Horizontal scrollable button groups */
+  .overflow-x-auto:has(button),
+  [class*="tabs"]:has(button),
+  [class*="nav"]:has(button) {
+    flex-direction: row !important;
+    gap: 4px !important;
+  }
+  
+  /* ============================================
+     TEXT AND TYPOGRAPHY FIXES
+     ============================================ */
+  
+  /* Prevent text overflow */
+  p, span, div, h1, h2, h3, h4, h5, h6 {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+  }
+  
+  /* Headings scale down */
+  h1 {
+    font-size: 1.5rem !important;
+  }
+  
+  h2 {
+    font-size: 1.25rem !important;
+  }
+  
+  h3 {
+    font-size: 1.125rem !important;
+  }
+  
+  /* ============================================
+     SPACING FIXES
+     ============================================ */
+  
+  /* Reduce excessive padding */
+  .p-6,
+  .px-6,
+  .py-6 {
+    padding: 12px !important;
+  }
+  
+  .p-8,
+  .px-8,
+  .py-8 {
+    padding: 16px !important;
+  }
+  
+  /* Reduce excessive margins */
+  .m-6,
+  .mx-6,
+  .my-6 {
+    margin: 12px !important;
+  }
+  
+  .m-8,
+  .mx-8,
+  .my-8 {
+    margin: 16px !important;
+  }
+  
+  /* ============================================
+     SPECIFIC COMPONENT FIXES
+     ============================================ */
+  
+  /* Manufacturing component */
+  [class*="Manufacturing"] .grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Dashboard stats can stay 2 columns */
+  [class*="Dashboard"] .grid[class*="stats"],
+  [class*="Dashboard"] .grid[class*="metrics"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  
+  /* Client/Lead modals */
+  [class*="ClientModal"],
+  [class*="LeadModal"],
+  [class*="DetailModal"] {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+  }
+  
+  /* Invoice modals */
+  [class*="InvoiceModal"],
+  [class*="PaymentModal"],
+  [class*="ExpenseModal"] {
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+  
+  /* User modals */
+  [class*="UserModal"] {
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+  
+  /* Project modals */
+  [class*="ProjectModal"],
+  [class*="TaskModal"] {
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+  
+  /* ============================================
+     FIXED WIDTH FIXES
+     ============================================ */
+  
+  /* Remove fixed widths */
+  [style*="width"],
+  [class*="w-"],
+  [class*="min-w-"],
+  [class*="max-w-"] {
+    max-width: 100% !important;
+  }
+  
+  /* Exception: Keep responsive width utilities */
+  .w-full,
+  .w-screen {
+    width: 100% !important;
+  }
+  
+  /* Exception: Keep small fixed widths for icons */
+  .w-4, .w-5, .w-6, .w-8,
+  .min-w-4, .min-w-5, .min-w-6, .min-w-8 {
+    /* Keep as is */
+  }
+}
+
+/* Additional fixes for very small screens */
+@media (max-width: 480px) {
+  /* Even tighter spacing */
+  form {
+    padding: 6px !important;
+  }
+  
+  .card,
+  [class*="card"] {
+    padding: 8px !important;
+    margin-bottom: 8px !important;
+  }
+  
+  /* Force single column for stats too */
+  .grid[class*="stats"],
+  .grid[class*="summary"] {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Smaller headings */
+  h1 {
+    font-size: 1.25rem !important;
+  }
+  
+  h2 {
+    font-size: 1.125rem !important;
+  }
+  
+  h3 {
+    font-size: 1rem !important;
+  }
+}
+
+/* Critical fixes for 350px and below */
+@media (max-width: 350px) {
+  /* Minimal spacing */
+  form {
+    padding: 4px !important;
+  }
+  
+  .card,
+  [class*="card"] {
+    padding: 6px !important;
+    margin-bottom: 6px !important;
+  }
+  
+  [class*="modal-content"],
+  [class*="Modal"] > div {
+    padding: 8px !important;
+  }
+  
+  /* Ultra-compact text */
+  h1 {
+    font-size: 1.125rem !important;
+  }
+  
+  h2 {
+    font-size: 1rem !important;
+  }
+  
+  h3 {
+    font-size: 0.875rem !important;
+  }
+}
+

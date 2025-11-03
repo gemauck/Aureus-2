@@ -89,10 +89,11 @@ const CommentsPopup = ({ task, isSubtask, parentId, onAddComment, onClose, posit
                     {window.CommentInputWithMentions ? (
                         <window.CommentInputWithMentions
                             onSubmit={handleAdd}
-                            placeholder="Add a comment... (@mention users, Enter to send)"
+                            placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
                             rows={2}
                             taskTitle={task.title || 'Task'}
                             taskLink={`/projects?task=${task.id}`}
+                            showButton={true}
                         />
                     ) : (
                         <textarea
