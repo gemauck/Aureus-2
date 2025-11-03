@@ -79,12 +79,19 @@ async function handler(req, res) {
               const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
               if (userExists) {
                 validUserId = userId
+              } else {
+                console.warn('⚠️ User does not exist in database:', userId)
               }
             } catch (userCheckError) {
               // User doesn't exist, skip starredBy relation
-              console.warn('⚠️ User does not exist, skipping starredBy relation:', userId)
+              console.warn('⚠️ User check failed, skipping starredBy relation:', userId, userCheckError.message)
             }
           }
+          
+          // TEMPORARY DEBUG: Test simple query first
+          console.log('🔍 DEBUG: Testing simple count query...')
+          const simpleCount = await prisma.client.count({ where: { type: 'client' } })
+          console.log(`🔍 DEBUG: Simple count found ${simpleCount} clients with type=client`)
           
           // Use Prisma to include tags relation - needed for list view
           console.log('🔍 Querying clients with type=client, validUserId:', validUserId)
@@ -108,7 +115,7 @@ async function handler(req, res) {
               createdAt: 'desc'
             }
           })
-          console.log(`🔍 Raw query returned ${rawClients.length} clients`)
+          console.log(`🔍 Raw query returned ${rawClients.length} clients (expected ${simpleCount})`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.error('❌ Type filter failed, trying without filter:', typeError.message)
