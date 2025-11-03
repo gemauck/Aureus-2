@@ -1423,29 +1423,44 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         
                         {/* Quick Comment Input */}
                         <div>
-                            <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
-                            <textarea
-                                value={quickComment}
-                                onChange={(e) => setQuickComment(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && e.ctrlKey) {
-                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                    }
-                                }}
-                                className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                rows="2"
-                                placeholder="Type comment... (Ctrl+Enter to submit)"
-                                autoFocus
-                            />
-                            <button
-                                onClick={() => {
-                                    handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
-                                }}
-                                disabled={!quickComment.trim()}
-                                className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Add Comment
-                            </button>
+                            {window.CommentInputWithMentions ? (
+                                <window.CommentInputWithMentions
+                                    onSubmit={(commentText) => {
+                                        handleAddComment(parseInt(sectionId), parseInt(documentId), month, commentText);
+                                    }}
+                                    placeholder="Add a comment... (@mention users, Shift+Enter for new line, Enter to send)"
+                                    rows={2}
+                                    taskTitle={document?.name || 'Document'}
+                                    taskLink={`#${section?.name || 'Section'}-${document?.name || 'Document'}`}
+                                    showButton={true}
+                                />
+                            ) : (
+                                <>
+                                    <div className="text-[10px] font-semibold text-gray-600 mb-1">Add Comment</div>
+                                    <textarea
+                                        value={quickComment}
+                                        onChange={(e) => setQuickComment(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && e.ctrlKey) {
+                                                handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                            }
+                                        }}
+                                        className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                        rows="2"
+                                        placeholder="Type comment... (Ctrl+Enter to submit)"
+                                        autoFocus
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            handleAddComment(parseInt(sectionId), parseInt(documentId), month, quickComment);
+                                        }}
+                                        disabled={!quickComment.trim()}
+                                        className="mt-1.5 w-full px-2 py-1 bg-primary-600 text-white rounded text-[10px] font-medium hover:bg-primary-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        Add Comment
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
