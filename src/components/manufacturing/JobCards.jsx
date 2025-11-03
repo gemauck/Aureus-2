@@ -24,6 +24,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     siteId: '',
     siteName: '',
     location: '',
+    locationLatitude: '',
+    locationLongitude: '',
     timeOfDeparture: '',
     timeOfArrival: '',
     vehicleUsed: '',
@@ -46,6 +48,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [stockLocations, setStockLocations] = useState([]);
   const [newStockItem, setNewStockItem] = useState({ sku: '', quantity: 0, locationId: '' });
   const [newMaterialItem, setNewMaterialItem] = useState({ itemName: '', description: '', reason: '', cost: 0 });
+  const [mapInstance, setMapInstance] = useState(null);
+  const [locationMarker, setLocationMarker] = useState(null);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const locationMapRef = useRef(null);
 
   // Load job cards with offline support - defined as a stable function reference
   const loadJobCardsRef = useRef(null);
@@ -368,6 +374,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         siteId: editingJobCard.siteId || '',
         siteName: editingJobCard.siteName || '',
         location: editingJobCard.location || '',
+        locationLatitude: editingJobCard.locationLatitude || '',
+        locationLongitude: editingJobCard.locationLongitude || '',
         timeOfDeparture: editingJobCard.timeOfDeparture ? editingJobCard.timeOfDeparture.substring(0, 16) : '',
         timeOfArrival: editingJobCard.timeOfArrival ? editingJobCard.timeOfArrival.substring(0, 16) : '',
         vehicleUsed: editingJobCard.vehicleUsed || '',
@@ -807,6 +815,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       siteId: '',
       siteName: '',
       location: '',
+      locationLatitude: '',
+      locationLongitude: '',
       timeOfDeparture: '',
       timeOfArrival: '',
       vehicleUsed: '',
@@ -825,6 +835,236 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     setTechnicianInput('');
     setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
+    // Clear map marker
+    if (locationMarker) {
+      locationMarker.remove();
+      setLocationMarker(null);
+    }
+  };
+
+  // Initialize map for location selection (only when showAddPage becomes true)
+  useEffect(() => {
+    if (!showAddPage || !locationMapRef.current) {
+      // Clean up when hiding the form
+      if (mapInstance) {
+        mapInstance.remove();
+        setMapInstance(null);
+      }
+      if (locationMarker) {
+        locationMarker.remove();
+        setLocationMarker(null);
+      }
+      return;
+    }
+
+    // Wait for Leaflet to be available
+    if (typeof L === 'undefined') {
+      const checkLeaflet = setInterval(() => {
+        if (typeof L !== 'undefined') {
+          clearInterval(checkLeaflet);
+          initializeLocationMap();
+        }
+      }, 100);
+      return () => clearInterval(checkLeaflet);
+    }
+
+    initializeLocationMap();
+
+    function initializeLocationMap() {
+      // Clean up existing map
+      if (mapInstance) {
+        mapInstance.remove();
+      }
+
+      // Default center (South Africa - approximate center)
+      const defaultLat = formData.locationLatitude ? parseFloat(formData.locationLatitude) : -26.2041;
+      const defaultLng = formData.locationLongitude ? parseFloat(formData.locationLongitude) : 28.0473;
+      const defaultZoom = (formData.locationLatitude && formData.locationLongitude) ? 15 : 6;
+
+      // Create map
+      const map = L.map(locationMapRef.current).setView([defaultLat, defaultLng], defaultZoom);
+      setMapInstance(map);
+
+      // Add OpenStreetMap tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Add existing marker if coordinates exist
+      if (formData.locationLatitude && formData.locationLongitude) {
+        const lat = parseFloat(formData.locationLatitude);
+        const lng = parseFloat(formData.locationLongitude);
+        const marker = L.marker([lat, lng], { draggable: true })
+          .addTo(map)
+          .bindPopup('Location Pin<br>Drag to adjust');
+        setLocationMarker(marker);
+
+        // Update coordinates when marker is dragged
+        marker.on('dragend', function() {
+          const pos = marker.getLatLng();
+          setFormData(prev => ({
+            ...prev,
+            locationLatitude: pos.lat.toString(),
+            locationLongitude: pos.lng.toString()
+          }));
+        });
+      }
+
+      // Add click handler to place/update marker
+      let currentMarkerRef = null;
+      map.on('click', function(e) {
+        const { lat, lng } = e.latlng;
+
+        // Remove existing marker
+        if (currentMarkerRef) {
+          currentMarkerRef.remove();
+        }
+
+        // Create new marker
+        const marker = L.marker([lat, lng], { draggable: true })
+          .addTo(map)
+          .bindPopup('Location Pin<br>Drag to adjust')
+          .openPopup();
+        currentMarkerRef = marker;
+        setLocationMarker(marker);
+
+        // Update form data
+        setFormData(prev => ({
+          ...prev,
+          locationLatitude: lat.toString(),
+          locationLongitude: lng.toString()
+        }));
+
+        // Update coordinates when marker is dragged
+        marker.on('dragend', function() {
+          const pos = marker.getLatLng();
+          setFormData(prev => ({
+            ...prev,
+            locationLatitude: pos.lat.toString(),
+            locationLongitude: pos.lng.toString()
+          }));
+        });
+      });
+    }
+
+    // Cleanup function
+    return () => {
+      if (mapInstance) {
+        mapInstance.remove();
+        setMapInstance(null);
+      }
+      if (locationMarker) {
+        locationMarker.remove();
+        setLocationMarker(null);
+      }
+    };
+  }, [showAddPage]); // Only depend on showAddPage
+
+  // Update marker position when coordinates change externally (e.g., from GPS or editing existing card)
+  useEffect(() => {
+    if (!mapInstance || !showAddPage || !locationMarker) return;
+
+    const lat = formData.locationLatitude ? parseFloat(formData.locationLatitude) : null;
+    const lng = formData.locationLongitude ? parseFloat(formData.locationLongitude) : null;
+
+    if (lat && lng) {
+      // Only update if marker position is different (to avoid loops)
+      try {
+        const currentPos = locationMarker.getLatLng();
+        if (Math.abs(currentPos.lat - lat) > 0.0001 || Math.abs(currentPos.lng - lng) > 0.0001) {
+          locationMarker.setLatLng([lat, lng]);
+          mapInstance.setView([lat, lng], 15);
+          locationMarker.openPopup();
+        }
+      } catch (e) {
+        // Marker might be removed, ignore
+        console.warn('Marker update failed:', e);
+      }
+    }
+  }, [formData.locationLatitude, formData.locationLongitude, mapInstance, showAddPage, locationMarker]);
+
+  // Get current GPS location
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      if (window.showNotification) {
+        window.showNotification('Geolocation is not supported by your browser', 'error');
+      } else {
+        alert('Geolocation is not supported by your browser');
+      }
+      return;
+    }
+
+    setIsGettingLocation(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        
+        // Update form data
+        setFormData(prev => ({
+          ...prev,
+          locationLatitude: latitude.toString(),
+          locationLongitude: longitude.toString()
+        }));
+
+        // Update map if it exists
+        if (mapInstance) {
+          mapInstance.setView([latitude, longitude], 15);
+
+          // Remove existing marker
+          if (locationMarker) {
+            locationMarker.remove();
+          }
+
+          // Create new marker at current location
+          const marker = L.marker([latitude, longitude], { draggable: true })
+            .addTo(mapInstance)
+            .bindPopup('Current Location<br>Drag to adjust')
+            .openPopup();
+          setLocationMarker(marker);
+
+          // Update coordinates when marker is dragged
+          marker.on('dragend', function() {
+            const pos = marker.getLatLng();
+            setFormData(prev => ({
+              ...prev,
+              locationLatitude: pos.lat.toString(),
+              locationLongitude: pos.lng.toString()
+            }));
+          });
+        }
+
+        setIsGettingLocation(false);
+        if (window.showNotification) {
+          window.showNotification('Location detected successfully!', 'success');
+        }
+      },
+      (error) => {
+        setIsGettingLocation(false);
+        let errorMessage = 'Failed to get location';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please enable location permissions.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out.';
+            break;
+        }
+        if (window.showNotification) {
+          window.showNotification(errorMessage, 'error');
+        } else {
+          alert(errorMessage);
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    );
   };
 
   const openAddPage = () => {
@@ -980,18 +1220,52 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             </div>
           </div>
 
-          {/* Location */}
+          {/* Location with Map */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Location
             </label>
+            
+            {/* GPS Detection Button */}
+            <div className="mb-2">
+              <button
+                type="button"
+                onClick={handleGetCurrentLocation}
+                disabled={isGettingLocation}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium flex items-center gap-2"
+              >
+                <i className={`fas ${isGettingLocation ? 'fa-spinner fa-spin' : 'fa-map-marker-alt'}`}></i>
+                {isGettingLocation ? 'Detecting Location...' : 'Detect Current Location (GPS)'}
+              </button>
+              {(formData.locationLatitude && formData.locationLongitude) && (
+                <span className="ml-3 text-xs text-gray-600">
+                  <i className="fas fa-check-circle text-green-600 mr-1"></i>
+                  Coordinates: {parseFloat(formData.locationLatitude).toFixed(6)}, {parseFloat(formData.locationLongitude).toFixed(6)}
+                </span>
+              )}
+            </div>
+
+            {/* Interactive Map */}
+            <div className="mb-3">
+              <div 
+                ref={locationMapRef}
+                className="w-full h-64 rounded-lg border border-gray-300 overflow-hidden"
+                style={{ minHeight: '256px' }}
+              ></div>
+              <p className="text-xs text-gray-500 mt-1">
+                <i className="fas fa-info-circle mr-1"></i>
+                Click on the map to place a location pin, or use GPS detection above
+              </p>
+            </div>
+
+            {/* Location Text Input */}
             <input
               type="text"
               name="location"
               value={formData.location}
               onChange={handleChange}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Specific location details"
+              placeholder="Specific location details (e.g., building name, floor, room number)"
             />
           </div>
 
