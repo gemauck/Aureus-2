@@ -28,6 +28,7 @@ const Manufacturing = () => {
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
   const [movements, setMovements] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -57,6 +58,7 @@ const Manufacturing = () => {
         const cachedBOMs = JSON.parse(localStorage.getItem('manufacturing_boms') || '[]');
         const cachedProductionOrders = JSON.parse(localStorage.getItem('manufacturing_production_orders') || '[]');
         const cachedSalesOrders = JSON.parse(localStorage.getItem('manufacturing_sales_orders') || '[]');
+        const cachedPurchaseOrders = JSON.parse(localStorage.getItem('manufacturing_purchase_orders') || '[]');
         const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
@@ -75,6 +77,10 @@ const Manufacturing = () => {
         if (cachedSalesOrders.length > 0) {
           setSalesOrders(cachedSalesOrders);
           console.log('⚡ Manufacturing: Loaded sales orders from cache:', cachedSalesOrders.length);
+        }
+        if (cachedPurchaseOrders.length > 0) {
+          setPurchaseOrders(cachedPurchaseOrders);
+          console.log('⚡ Manufacturing: Loaded purchase orders from cache:', cachedPurchaseOrders.length);
         }
         if (cachedMovements.length > 0) {
           setMovements(cachedMovements);
@@ -223,6 +229,25 @@ const Manufacturing = () => {
               .catch(error => {
                 console.error('Error loading sales orders:', error);
                 return { type: 'salesOrders', error };
+              })
+          );
+        }
+
+        // Purchase Orders
+        if (typeof window.DatabaseAPI.getPurchaseOrders === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI.getPurchaseOrders()
+              .then(ordersResponse => {
+                const ordersData = ordersResponse?.data?.purchaseOrders || [];
+                const processed = ordersData.map(order => ({ ...order, id: order.id }));
+                setPurchaseOrders(processed);
+                localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(processed));
+                console.log('✅ Manufacturing: Purchase orders synced:', processed.length);
+                return { type: 'purchaseOrders', data: processed };
+              })
+              .catch(error => {
+                console.error('Error loading purchase orders:', error);
+                return { type: 'purchaseOrders', error };
               })
           );
         }
@@ -1711,9 +1736,9 @@ const Manufacturing = () => {
         category: formData.category,
         type: formData.type,
         unit: formData.unit,
-        reorderPoint: parseFloat(formData.reorderPoint) || 0,
-        reorderQty: parseFloat(formData.reorderQty) || 0,
-        unitCost: parseFloat(formData.unitCost) || 0,
+        reorderPoint: formData.reorderPoint === undefined || formData.reorderPoint === null || formData.reorderPoint === '' ? undefined : parseFloat(formData.reorderPoint),
+        reorderQty: formData.reorderQty === undefined || formData.reorderQty === null || formData.reorderQty === '' ? undefined : parseFloat(formData.reorderQty),
+        unitCost: formData.unitCost === undefined || formData.unitCost === null || formData.unitCost === '' ? undefined : parseFloat(formData.unitCost),
         supplier: formData.supplier || ''
       };
       
@@ -1726,10 +1751,10 @@ const Manufacturing = () => {
       }
       // Include production tracking fields for Final Products
       if (formData.inProductionQuantity !== undefined) {
-        itemData.inProductionQuantity = parseFloat(formData.inProductionQuantity) || 0;
+        itemData.inProductionQuantity = formData.inProductionQuantity === undefined || formData.inProductionQuantity === null || formData.inProductionQuantity === '' ? undefined : parseFloat(formData.inProductionQuantity);
       }
       if (formData.completedQuantity !== undefined) {
-        itemData.completedQuantity = parseFloat(formData.completedQuantity) || 0;
+        itemData.completedQuantity = formData.completedQuantity === undefined || formData.completedQuantity === null || formData.completedQuantity === '' ? undefined : parseFloat(formData.completedQuantity);
       }
 
       if (selectedItem?.id) {
@@ -1749,9 +1774,9 @@ const Manufacturing = () => {
         
         const createData = {
           ...itemData,
-          quantity: parseFloat(formData.quantity) || 0,
-          inProductionQuantity: parseFloat(formData.inProductionQuantity) || 0,
-          completedQuantity: parseFloat(formData.completedQuantity) || 0,
+          quantity: formData.quantity === undefined || formData.quantity === null || formData.quantity === '' ? undefined : parseFloat(formData.quantity),
+          inProductionQuantity: formData.inProductionQuantity === undefined || formData.inProductionQuantity === null || formData.inProductionQuantity === '' ? undefined : parseFloat(formData.inProductionQuantity),
+          completedQuantity: formData.completedQuantity === undefined || formData.completedQuantity === null || formData.completedQuantity === '' ? undefined : parseFloat(formData.completedQuantity),
           lastRestocked: new Date().toISOString().split('T')[0],
           locationId: locationId // Include locationId
         };
@@ -1928,6 +1953,20 @@ const Manufacturing = () => {
       } catch (error) {
         console.error('Error deleting sales order:', error);
         alert('Failed to delete sales order. Please try again.');
+      }
+    }
+  };
+
+  const handleDeletePurchaseOrder = async (orderId) => {
+    if (confirm('Are you sure you want to delete this purchase order? This action cannot be undone.')) {
+      try {
+        await safeCallAPI('deletePurchaseOrder', orderId);
+        const updatedOrders = purchaseOrders.filter(order => order.id !== orderId);
+        setPurchaseOrders(updatedOrders);
+        localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+      } catch (error) {
+        console.error('Error deleting purchase order:', error);
+        alert('Failed to delete purchase order. Please try again.');
       }
     }
   };
@@ -4443,6 +4482,300 @@ const Manufacturing = () => {
       );
     }
 
+    if (modalType === 'view_purchase') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Purchase Order Details</h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              {selectedItem && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Order Number</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.orderNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(selectedItem.status)}`}>
+                        {selectedItem.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Supplier</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.supplierName || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Order Date</p>
+                      <p className="text-sm text-gray-900">{selectedItem.orderDate || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Expected Date</p>
+                      <p className="text-sm text-gray-900">{selectedItem.expectedDate || '-'}</p>
+                    </div>
+                    {selectedItem.receivedDate && (
+                      <div>
+                        <p className="text-xs text-gray-500">Received Date</p>
+                        <p className="text-sm text-green-600">{selectedItem.receivedDate}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Priority</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                        selectedItem.priority === 'high' ? 'text-red-600 bg-red-50' : 
+                        selectedItem.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        'text-gray-600 bg-gray-50'
+                      }`}>
+                        {selectedItem.priority}
+                      </span>
+                    </div>
+                    {selectedItem.toLocation && (
+                      <div>
+                        <p className="text-xs text-gray-500">Receiving Location</p>
+                        <p className="text-sm text-gray-900">{selectedItem.toLocation}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Subtotal</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(selectedItem.subtotal || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Tax</p>
+                      <p className="text-sm text-gray-900">{formatCurrency(selectedItem.tax || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-lg font-bold text-blue-600">{formatCurrency(selectedItem.total || 0)}</p>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  {selectedItem.items && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
+                      {(() => {
+                        const items = typeof selectedItem.items === 'string' ? JSON.parse(selectedItem.items || '[]') : (selectedItem.items || []);
+                        return items.length > 0 ? (
+                          <div className="space-y-2">
+                            {items.map((item, idx) => (
+                              <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-900">{item.name || item.itemName}</p>
+                                    <p className="text-xs text-gray-500">SKU: {item.sku || '-'}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold text-gray-900">Qty: {item.quantity}</p>
+                                    <p className="text-xs text-gray-500">{formatCurrency(item.total || item.unitPrice * item.quantity)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No items in this order</p>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {(selectedItem.notes || selectedItem.internalNotes) && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
+                      {selectedItem.notes && (
+                        <div className="mb-2">
+                          <p className="text-xs text-gray-500">Order Notes</p>
+                          <p className="text-sm text-gray-900">{selectedItem.notes}</p>
+                        </div>
+                      )}
+                      {selectedItem.internalNotes && (
+                        <div>
+                          <p className="text-xs text-gray-500">Internal Notes</p>
+                          <p className="text-sm text-gray-900">{selectedItem.internalNotes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // VIEW SALES ORDER
+    if (modalType === 'view_sales') {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Sales Order Details</h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              {selectedItem && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500">Order Number</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.orderNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Status</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(selectedItem.status)}`}>
+                        {selectedItem.status.replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Client</p>
+                      <p className="text-sm font-semibold text-gray-900">{selectedItem.clientName || '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Order Date</p>
+                      <p className="text-sm text-gray-900">{selectedItem.orderDate ? selectedItem.orderDate.split('T')[0] : '-'}</p>
+                    </div>
+                    {selectedItem.requiredDate && (
+                      <div>
+                        <p className="text-xs text-gray-500">Required Date</p>
+                        <p className="text-sm text-gray-900">{selectedItem.requiredDate.split('T')[0]}</p>
+                      </div>
+                    )}
+                    {selectedItem.shippedDate && (
+                      <div>
+                        <p className="text-xs text-gray-500">Shipped Date</p>
+                        <p className="text-sm text-green-600">{selectedItem.shippedDate.split('T')[0]}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500">Priority</p>
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${
+                        selectedItem.priority === 'high' ? 'text-red-600 bg-red-50' : 
+                        selectedItem.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        'text-gray-600 bg-gray-50'
+                      }`}>
+                        {selectedItem.priority}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Subtotal</p>
+                      <p className="text-sm font-semibold text-gray-900">{formatCurrency(selectedItem.subtotal || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Tax</p>
+                      <p className="text-sm text-gray-900">{formatCurrency(selectedItem.tax || 0)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Total</p>
+                      <p className="text-lg font-bold text-blue-600">{formatCurrency(selectedItem.total || 0)}</p>
+                    </div>
+                  </div>
+
+                  {/* Items List */}
+                  {selectedItem.items && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
+                      {(() => {
+                        const items = typeof selectedItem.items === 'string' ? JSON.parse(selectedItem.items || '[]') : (selectedItem.items || []);
+                        return items.length > 0 ? (
+                          <div className="space-y-2">
+                            {items.map((item, idx) => (
+                              <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium text-gray-900">{item.name || item.itemName}</p>
+                                    <p className="text-xs text-gray-500">SKU: {item.sku || '-'}</p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-sm font-semibold text-gray-900">Qty: {item.quantity}</p>
+                                    <p className="text-xs text-gray-500">{formatCurrency(item.total || (item.unitPrice * item.quantity))}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No items in this order</p>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Shipping Info */}
+                  {(selectedItem.shippingAddress || selectedItem.shippingMethod) && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Shipping Information</h3>
+                      {selectedItem.shippingAddress && (
+                        <div className="mb-2">
+                          <p className="text-xs text-gray-500">Shipping Address</p>
+                          <p className="text-sm text-gray-900">{selectedItem.shippingAddress}</p>
+                        </div>
+                      )}
+                      {selectedItem.shippingMethod && (
+                        <div>
+                          <p className="text-xs text-gray-500">Shipping Method</p>
+                          <p className="text-sm text-gray-900">{selectedItem.shippingMethod}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Notes */}
+                  {(selectedItem.notes || selectedItem.internalNotes) && (
+                    <div className="border-t border-gray-200 pt-4">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
+                      {selectedItem.notes && (
+                        <div className="mb-2">
+                          <p className="text-xs text-gray-500">Order Notes</p>
+                          <p className="text-sm text-gray-900">{selectedItem.notes}</p>
+                        </div>
+                      )}
+                      {selectedItem.internalNotes && (
+                        <div>
+                          <p className="text-xs text-gray-500">Internal Notes</p>
+                          <p className="text-sm text-gray-900">{selectedItem.internalNotes}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -4459,6 +4792,13 @@ const Manufacturing = () => {
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Sales Orders</h3>
+            <button
+              onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+              className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+            >
+              <i className="fas fa-plus text-xs"></i>
+              New Sales Order
+            </button>
           </div>
         </div>
 
@@ -4468,7 +4808,14 @@ const Manufacturing = () => {
             <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
               <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
               <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
-              <p className="text-xs text-gray-500">Sales orders will appear here when created</p>
+              <p className="text-xs text-gray-500 mb-4">Sales orders will appear here when created</p>
+              <button
+                onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                Create Sales Order
+              </button>
             </div>
           ) : (
             salesOrders.map(order => {
@@ -4567,7 +4914,14 @@ const Manufacturing = () => {
                       <div className="flex flex-col items-center justify-center">
                         <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
                         <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
-                        <p className="text-xs text-gray-500">Sales orders will appear here when created</p>
+                        <p className="text-xs text-gray-500 mb-4">Sales orders will appear here when created</p>
+                        <button
+                          onClick={() => alert('Sales order creation coming soon. For now, sales orders can be created through the Clients module.')}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <i className="fas fa-plus text-xs"></i>
+                          Create Sales Order
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -4595,6 +4949,173 @@ const Manufacturing = () => {
                           </button>
                           <button
                             onClick={() => handleDeleteSalesOrder(order.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Delete"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const PurchaseOrdersView = () => {
+    const formatDate = (date) => {
+      if (!date) return '-';
+      if (typeof date === 'string') return date.split('T')[0];
+      return new Date(date).toISOString().split('T')[0];
+    };
+
+    return (
+      <div className="space-y-3">
+        {/* Controls */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Purchase Orders</h3>
+          </div>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="table-mobile space-y-3">
+          {purchaseOrders.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+              <i className="fas fa-file-invoice-dollar text-4xl mb-4 text-gray-300"></i>
+              <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
+              <p className="text-xs text-gray-500">Purchase orders will appear here when created</p>
+            </div>
+          ) : (
+            purchaseOrders.map(order => {
+              const orderItems = typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || []);
+              return (
+                <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2 mb-2">
+                        <h3 className="text-base font-semibold text-gray-900">{order.orderNumber}</h3>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize flex-shrink-0 ${getStatusColor(order.status)}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1">Supplier: {order.supplierName || '-'}</p>
+                      <p className="text-xs text-gray-500">Items: {orderItems.length}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mb-3 pt-3 border-t border-gray-200">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Priority</div>
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize ${
+                        order.priority === 'high' ? 'text-red-600 bg-red-50' : 
+                        order.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        'text-gray-600 bg-gray-50'
+                      }`}>
+                        {order.priority}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Total</div>
+                      <div className="text-lg font-bold text-blue-600">{formatCurrency(order.total || 0)}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 mb-3 pt-3 border-t border-gray-200 text-sm">
+                    <div>
+                      <span className="text-gray-500">Order Date:</span>
+                      <span className="ml-2 text-gray-900">{formatDate(order.orderDate)}</span>
+                    </div>
+                    {order.expectedDate && (
+                      <div>
+                        <span className="text-gray-500">Expected:</span>
+                        <span className="ml-2 text-gray-900">{formatDate(order.expectedDate)}</span>
+                      </div>
+                    )}
+                    {order.receivedDate && (
+                      <div>
+                        <span className="text-gray-500">Received:</span>
+                        <span className="ml-2 text-green-600">{formatDate(order.receivedDate)}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => { setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                      className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+                    >
+                      <i className="fas fa-eye mr-1"></i> View
+                    </button>
+                    <button
+                      onClick={() => handleDeletePurchaseOrder(order.id)}
+                      className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="table-responsive bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Order #</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Order Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Expected Date</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {purchaseOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-3 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <i className="fas fa-file-invoice-dollar text-4xl mb-4 text-gray-300"></i>
+                        <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
+                        <p className="text-xs text-gray-500">Purchase orders will appear here when created</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  purchaseOrders.map(order => (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{order.orderNumber}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{order.supplierName || '-'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.orderDate)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.expectedDate)}</td>
+                      <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(order.total || 0)}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedItem(order); setModalType('view_purchase'); setShowModal(true); }}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            title="View"
+                          >
+                            <i className="fas fa-eye"></i>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePurchaseOrder(order.id)}
                             className="text-red-600 hover:text-red-800 text-sm font-medium"
                             title="Delete"
                           >
@@ -4919,6 +5440,7 @@ const Manufacturing = () => {
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
             { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
             { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
+            { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
@@ -4947,6 +5469,7 @@ const Manufacturing = () => {
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'sales' && <SalesOrdersView />}
+        {activeTab === 'purchase' && <PurchaseOrdersView />}
         {activeTab === 'movements' && <MovementsView />}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'jobcards' && window.JobCards && (
