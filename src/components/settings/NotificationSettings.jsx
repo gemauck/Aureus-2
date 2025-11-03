@@ -28,8 +28,14 @@ const NotificationSettings = () => {
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch('/api/notifications/settings', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            // Use proper API base URL like other components
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/notifications/settings`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
             });
             
             if (response.ok) {
@@ -70,12 +76,15 @@ const NotificationSettings = () => {
                 return;
             }
             
-            const response = await fetch('/api/notifications/settings', {
+            // Use proper API base URL like other components
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/notifications/settings`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify(settings)
             });
             
@@ -183,6 +192,59 @@ const NotificationSettings = () => {
                 </div>
             </div>
             
+            {/* Test Notification Section */}
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-gray-200' : 'text-gray-900'}`}>
+                    <i className="fas fa-vial mr-2"></i>
+                    Test Notifications
+                </h3>
+                <p className={`text-xs mb-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    Create a test notification to verify your notification settings are working correctly.
+                </p>
+                <button
+                    onClick={async () => {
+                        try {
+                            const token = window.storage?.getToken?.();
+                            if (!token) {
+                                alert('Please log in first');
+                                return;
+                            }
+                            
+                            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+                            const response = await fetch(`${apiBase}/api/notifications/test`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                credentials: 'include',
+                                body: JSON.stringify({
+                                    type: 'system',
+                                    title: 'Test Notification',
+                                    message: 'This is a test notification. If you can see this, notifications are working!'
+                                })
+                            });
+                            
+                            if (response.ok) {
+                                const data = await response.json();
+                                alert('✅ Test notification created! Check the notification bell icon in the header.');
+                                console.log('Test notification created:', data);
+                            } else {
+                                const error = await response.text();
+                                alert('Failed to create test notification: ' + error);
+                            }
+                        } catch (error) {
+                            console.error('Error creating test notification:', error);
+                            alert('Error creating test notification: ' + error.message);
+                        }
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                >
+                    <i className="fas fa-bell mr-2"></i>
+                    Create Test Notification
+                </button>
+            </div>
+            
             {/* Save Button */}
             <div className="flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-700">
                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
@@ -203,5 +265,6 @@ const NotificationSettings = () => {
 // Make available globally
 if (typeof window !== 'undefined') {
     window.NotificationSettings = NotificationSettings;
+    console.log('🔔 NotificationSettings component loaded and registered');
 }
 

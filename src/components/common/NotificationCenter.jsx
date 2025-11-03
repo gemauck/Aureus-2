@@ -168,7 +168,13 @@ const NotificationCenter = () => {
         <div className="relative" ref={dropdownRef}>
             {/* Bell Icon Button */}
             <button
-                onClick={() => setIsOpen(!isOpen)}
+                onClick={() => {
+                    setIsOpen(!isOpen);
+                    // Reload notifications when opening dropdown
+                    if (!isOpen) {
+                        loadNotifications();
+                    }
+                }}
                 className={`relative ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
                 title="Notifications"
             >
@@ -271,19 +277,22 @@ const NotificationCenter = () => {
                     </div>
                     
                     {/* Footer */}
-                    {notifications.length > 0 && (
-                        <div className={`px-4 py-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
-                            <button
-                                onClick={() => {
-                                    window.location.hash = '#/settings';
-                                    setIsOpen(false);
-                                }}
-                                className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                            >
-                                Notification Settings
-                            </button>
-                        </div>
-                    )}
+                    <div className={`px-4 py-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
+                        <button
+                            onClick={() => {
+                                // Navigate to settings page using MainLayout navigation system
+                                const event = new CustomEvent('navigateToPage', {
+                                    detail: { page: 'settings' }
+                                });
+                                window.dispatchEvent(event);
+                                setIsOpen(false);
+                            }}
+                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                        >
+                            <i className="fas fa-cog mr-1"></i>
+                            Notification Settings
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

@@ -299,15 +299,32 @@ async function handler(req, res) {
             }
 
             // Delete user and related records in a transaction
+            // Order matters: delete all records that reference User BEFORE deleting User
             await prisma.$transaction(async (tx) => {
-                // Delete memberships first
+                // 1. Delete memberships
                 await tx.membership.deleteMany({
                     where: { userId: userId }
                 })
 
-                // Delete related records that can be safely cascaded
-                // Note: Order matters - delete records that reference User first
+                // 2. Delete one-to-one relationships (must use delete, not deleteMany)
+                await tx.twoFactor.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.notificationSetting.deleteMany({
+                    where: { userId: userId }
+                })
+
+                // 3. Delete related records that reference User by foreign key
                 await tx.passwordReset.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.passwordHistory.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.securityEvent.deleteMany({
                     where: { userId: userId }
                 })
                 
@@ -319,19 +336,30 @@ async function handler(req, res) {
                     where: { userId: userId }
                 })
                 
-                // Delete audit logs and other references
                 await tx.auditLog.deleteMany({
+                    where: { actorId: userId }
+                })
+                
+                await tx.feedback.deleteMany({
                     where: { userId: userId }
                 })
                 
+                await tx.message.deleteMany({
+                    where: { senderId: userId }
+                })
+                
+                // Note: Notification and NotificationSetting have onDelete: Cascade
+                // but we delete them explicitly to be safe
                 await tx.notification.deleteMany({
                     where: { userId: userId }
                 })
 
-                // Finally delete the user
+                // 4. Finally delete the user
                 await tx.user.delete({
                     where: { id: userId }
                 })
+            }, {
+                timeout: 10000 // 10 second timeout for the transaction
             })
 
             console.log(`✅ User deleted successfully: ${userId}`)

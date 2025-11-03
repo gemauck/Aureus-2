@@ -273,3 +273,5 @@ echo "   App: pm2 logs $APP_NAME"
 echo ""
 echo "Certificate auto-renewal is configured. Check status: certbot certificates"
 
+image.png
+RE
