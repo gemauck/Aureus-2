@@ -37,6 +37,8 @@ const Manufacturing = () => {
   const [bomComponents, setBomComponents] = useState([]);
   const [salesOrderItems, setSalesOrderItems] = useState([]);
   const [newSalesOrderItem, setNewSalesOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+  const [purchaseOrderItems, setPurchaseOrderItems] = useState([]);
+  const [newPurchaseOrderItem, setNewPurchaseOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
@@ -1960,10 +1962,10 @@ const Manufacturing = () => {
   };
 
   const openAddSalesOrderModal = () => {
+    console.log('🔵 Opening Sales Order modal...');
     setFormData({
       clientId: '',
       clientName: '',
-      status: 'draft',
       priority: 'normal',
       orderDate: new Date().toISOString().split('T')[0],
       requiredDate: '',
@@ -1979,6 +1981,7 @@ const Manufacturing = () => {
     setNewSalesOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
     setModalType('add_sales');
     setShowModal(true);
+    console.log('🔵 Modal state set:', { modalType: 'add_sales', showModal: true });
   };
 
   const handleAddSalesOrderItem = () => {
@@ -2025,7 +2028,7 @@ const Manufacturing = () => {
       const orderData = {
         clientId: formData.clientId || null,
         clientName: formData.clientName || '',
-        status: formData.status || 'draft',
+        status: 'confirmed', // Sales orders are automatically confirmed when created
         priority: formData.priority || 'normal',
         orderDate: formData.orderDate || new Date().toISOString(),
         requiredDate: formData.requiredDate || null,
@@ -2048,10 +2051,99 @@ const Manufacturing = () => {
       const response = await safeCallAPI('createSalesOrder', orderData);
       
       if (response?.data?.salesOrder) {
-        const updatedOrders = [...salesOrders, { ...response.data.salesOrder, id: response.data.salesOrder.id }];
+        const createdOrder = response.data.salesOrder;
+        const orderNumber = createdOrder.orderNumber || createdOrder.id;
+        
+        // Create stock movements for each item (consumption - items being sold)
+        if (salesOrderItems && salesOrderItems.length > 0) {
+          console.log('📦 Creating stock movements for sales order:', {
+            orderNumber: orderNumber,
+            itemsCount: salesOrderItems.length,
+            items: salesOrderItems
+          });
+          
+          try {
+            // Get default warehouse location (main warehouse)
+            const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
+            const defaultLocationId = mainWarehouse ? mainWarehouse.id : '';
+            const defaultLocationName = mainWarehouse ? mainWarehouse.name : 'Main Warehouse';
+            
+            // Create a stock movement for each item in the sales order
+            for (const orderItem of salesOrderItems) {
+              if (!orderItem.sku || orderItem.quantity <= 0) {
+                console.warn('⚠️ Skipping invalid order item:', orderItem);
+                continue;
+              }
+
+              // Find the inventory item to get unit cost
+              const invItem = inventory.find(item => item.sku === orderItem.sku || item.id === orderItem.sku);
+              const unitCost = invItem?.unitCost || orderItem.unitPrice || 0;
+
+              const movementData = {
+                type: 'consumption', // Stock being consumed/sold
+                sku: orderItem.sku,
+                itemName: orderItem.name || '',
+                quantity: parseFloat(orderItem.quantity),
+                unitCost: unitCost ? parseFloat(unitCost) : undefined,
+                fromLocation: String(defaultLocationId || ''), // Location where stock is taken from (convert to string)
+                toLocation: '', // Empty as this is consumption/sale, not a transfer
+                reference: `Sales Order ${orderNumber}`,
+                performedBy: user?.name || 'System',
+                notes: `Stock sold to client: ${formData.clientName || 'N/A'} - Sales Order ${orderNumber}`,
+                date: new Date().toISOString()
+              };
+
+              console.log('📝 Creating stock movement:', movementData);
+
+              // Try to create stock movement via API
+              if (window.DatabaseAPI?.createStockMovement) {
+                try {
+                  const movementResponse = await safeCallAPI('createStockMovement', movementData);
+                  console.log(`✅ Stock movement created successfully for ${orderItem.name}:`, movementResponse);
+                } catch (error) {
+                  console.error(`❌ Failed to create stock movement for ${orderItem.name}:`, error);
+                  console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    movementData
+                  });
+                  // Store in localStorage for offline sync
+                  const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+                  cachedMovements.push({
+                    ...movementData,
+                    id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    synced: false
+                  });
+                  localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                  console.log(`📦 Stock movement saved to localStorage for later sync: ${orderItem.name}`);
+                }
+              } else {
+                // Offline mode - store in localStorage for later sync
+                const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+                cachedMovements.push({
+                  ...movementData,
+                  id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  synced: false
+                });
+                localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                console.log(`📦 Stock movement queued for sync (offline mode): ${orderItem.name}`);
+              }
+            }
+            console.log('✅ Stock movement creation process completed');
+          } catch (error) {
+            console.error('❌ Error creating stock movements:', error);
+            console.error('Error stack:', error.stack);
+            // Don't block save - just warn
+            console.warn('⚠️ Sales order will be saved but stock movements may not have been recorded');
+          }
+        } else {
+          console.log('ℹ️ No items in sales order to create stock movements for');
+        }
+
+        const updatedOrders = [...salesOrders, { ...createdOrder, id: createdOrder.id }];
         setSalesOrders(updatedOrders);
         localStorage.setItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
-        alert('Sales order created successfully!');
+        alert('Sales order created successfully! Stock movements have been recorded.');
       } else {
         alert('Sales order created but response data incomplete. Please refresh to verify.');
       }
@@ -2062,6 +2154,207 @@ const Manufacturing = () => {
     } catch (error) {
       console.error('❌ Error saving sales order:', error);
       alert(`Failed to save sales order: ${error.message}`);
+    }
+  };
+
+  const openAddPurchaseOrderModal = () => {
+    console.log('🔵 Opening Purchase Order modal...');
+    // Get default warehouse location
+    const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
+    console.log('🔵 Main warehouse:', mainWarehouse);
+    setFormData({
+      supplierId: '',
+      supplierName: '',
+      status: 'draft',
+      priority: 'normal',
+      orderDate: new Date().toISOString().split('T')[0],
+      expectedDate: '',
+      toLocationId: mainWarehouse ? mainWarehouse.id : '',
+      subtotal: 0,
+      tax: 0,
+      total: 0,
+      notes: '',
+      internalNotes: ''
+    });
+    setPurchaseOrderItems([]);
+    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+    setModalType('add_purchase');
+    setShowModal(true);
+    console.log('🔵 Modal state set:', { modalType: 'add_purchase', showModal: true });
+  };
+
+  const handleAddPurchaseOrderItem = () => {
+    if (!newPurchaseOrderItem.sku || !newPurchaseOrderItem.name || newPurchaseOrderItem.quantity <= 0 || newPurchaseOrderItem.unitPrice <= 0) {
+      alert('Please fill in all fields: SKU, Name, Quantity > 0, and Unit Price > 0');
+      return;
+    }
+    
+    const total = newPurchaseOrderItem.quantity * newPurchaseOrderItem.unitPrice;
+    const item = {
+      id: Date.now().toString(),
+      sku: newPurchaseOrderItem.sku,
+      name: newPurchaseOrderItem.name,
+      quantity: parseFloat(newPurchaseOrderItem.quantity),
+      unitPrice: parseFloat(newPurchaseOrderItem.unitPrice),
+      total: total
+    };
+    
+    setPurchaseOrderItems([...purchaseOrderItems, item]);
+    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+  };
+
+  const handleRemovePurchaseOrderItem = (itemId) => {
+    setPurchaseOrderItems(purchaseOrderItems.filter(item => item.id !== itemId));
+  };
+
+  const handleSavePurchaseOrder = async () => {
+    try {
+      if (!formData.supplierId && !formData.supplierName) {
+        alert('Please select a supplier');
+        return;
+      }
+      
+      if (purchaseOrderItems.length === 0) {
+        alert('Please add at least one order item');
+        return;
+      }
+
+      // Calculate totals
+      const subtotal = purchaseOrderItems.reduce((sum, item) => sum + item.total, 0);
+      const tax = formData.tax || 0;
+      const total = subtotal + tax;
+
+      // Get default warehouse location for receiving
+      const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
+      const toLocationId = formData.toLocationId || (mainWarehouse ? mainWarehouse.id : null);
+
+      const orderData = {
+        supplierId: formData.supplierId || '',
+        supplierName: formData.supplierName || '',
+        status: 'received', // Purchase orders are automatically marked as received
+        priority: formData.priority || 'normal',
+        orderDate: formData.orderDate || new Date().toISOString(),
+        expectedDate: formData.expectedDate || null,
+        toLocationId: toLocationId,
+        subtotal: subtotal,
+        tax: tax,
+        total: total,
+        items: purchaseOrderItems.map(item => ({
+          sku: item.sku,
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total
+        })),
+        notes: formData.notes || '',
+        internalNotes: formData.internalNotes || ''
+      };
+
+      const response = await safeCallAPI('createPurchaseOrder', orderData);
+      
+      if (response?.data?.purchaseOrder) {
+        const createdOrder = response.data.purchaseOrder;
+        const orderNumber = createdOrder.orderNumber || createdOrder.id;
+        
+        // Create stock movements for each item (receipt - items being purchased/received)
+        if (purchaseOrderItems && purchaseOrderItems.length > 0) {
+          console.log('📦 Creating stock movements for purchase order:', {
+            orderNumber: orderNumber,
+            itemsCount: purchaseOrderItems.length,
+            items: purchaseOrderItems
+          });
+          
+          try {
+            // Get default warehouse location (main warehouse)
+            const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
+            const defaultLocationId = mainWarehouse ? mainWarehouse.id : '';
+            const defaultLocationName = mainWarehouse ? mainWarehouse.name : 'Main Warehouse';
+            
+            // Create a stock movement for each item in the purchase order
+            for (const orderItem of purchaseOrderItems) {
+              if (!orderItem.sku || orderItem.quantity <= 0) {
+                console.warn('⚠️ Skipping invalid order item:', orderItem);
+                continue;
+              }
+
+              // Use the unit price as unit cost for purchased items
+              const unitCost = orderItem.unitPrice || 0;
+
+              const movementData = {
+                type: 'receipt', // Stock being received/purchased
+                sku: orderItem.sku,
+                itemName: orderItem.name || '',
+                quantity: parseFloat(orderItem.quantity),
+                unitCost: unitCost ? parseFloat(unitCost) : undefined,
+                fromLocation: '', // Empty as this is a receipt from supplier
+                toLocation: String(defaultLocationId || ''), // Location where stock is received into (convert to string)
+                reference: `Purchase Order ${orderNumber}`,
+                performedBy: user?.name || 'System',
+                notes: `Stock received from supplier: ${formData.supplierName || 'N/A'} - Purchase Order ${orderNumber}`,
+                date: new Date().toISOString()
+              };
+
+              console.log('📝 Creating stock movement:', movementData);
+
+              // Try to create stock movement via API
+              if (window.DatabaseAPI?.createStockMovement) {
+                try {
+                  const movementResponse = await safeCallAPI('createStockMovement', movementData);
+                  console.log(`✅ Stock movement created successfully for ${orderItem.name}:`, movementResponse);
+                } catch (error) {
+                  console.error(`❌ Failed to create stock movement for ${orderItem.name}:`, error);
+                  console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    movementData
+                  });
+                  // Store in localStorage for offline sync
+                  const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+                  cachedMovements.push({
+                    ...movementData,
+                    id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    synced: false
+                  });
+                  localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                  console.log(`📦 Stock movement saved to localStorage for later sync: ${orderItem.name}`);
+                }
+              } else {
+                // Offline mode - store in localStorage for later sync
+                const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+                cachedMovements.push({
+                  ...movementData,
+                  id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                  synced: false
+                });
+                localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
+                console.log(`📦 Stock movement queued for sync (offline mode): ${orderItem.name}`);
+              }
+            }
+            console.log('✅ Stock movement creation process completed');
+          } catch (error) {
+            console.error('❌ Error creating stock movements:', error);
+            console.error('Error stack:', error.stack);
+            // Don't block save - just warn
+            console.warn('⚠️ Purchase order will be saved but stock movements may not have been recorded');
+          }
+        } else {
+          console.log('ℹ️ No items in purchase order to create stock movements for');
+        }
+
+        const updatedOrders = [...purchaseOrders, { ...createdOrder, id: createdOrder.id }];
+        setPurchaseOrders(updatedOrders);
+        localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
+        alert('Purchase order created successfully! Stock movements have been recorded.');
+      } else {
+        alert('Purchase order created but response data incomplete. Please refresh to verify.');
+      }
+
+      setShowModal(false);
+      setFormData({});
+      setPurchaseOrderItems([]);
+    } catch (error) {
+      console.error('❌ Error saving purchase order:', error);
+      alert(`Failed to save purchase order: ${error.message}`);
     }
   };
 
@@ -2611,6 +2904,14 @@ const Manufacturing = () => {
   };
 
   const renderModal = () => {
+    console.log('🔵 renderModal called:', { modalType, showModal, selectedItem: !!selectedItem });
+    
+    // Debug: Check if modal should be visible
+    if (!showModal) {
+      console.warn('⚠️ renderModal called but showModal is false');
+      return null;
+    }
+    
     if (modalType === 'add_item' || modalType === 'edit_item') {
       return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -4886,6 +5187,7 @@ const Manufacturing = () => {
 
     // ADD SALES ORDER
     if (modalType === 'add_sales') {
+      console.log('🔵 Rendering add_sales modal');
       // Calculate totals from items
       const subtotal = salesOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
       const tax = formData.tax || 0;
@@ -4905,9 +5207,9 @@ const Manufacturing = () => {
             </div>
             <div className="p-4">
               <div className="space-y-4">
-                {/* Client Selection */}
+                {/* Client Selection - Sale to Client */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sale to Client *</label>
                   <select
                     value={formData.clientId || ''}
                     onChange={(e) => {
@@ -4919,12 +5221,14 @@ const Manufacturing = () => {
                       });
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
                   >
                     <option value="">Select a client...</option>
                     {clients.map(client => (
                       <option key={client.id} value={client.id}>{client.name}</option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">This sales order will be sold to the selected client</p>
                 </div>
 
                 {/* Order Details */}
@@ -4947,21 +5251,6 @@ const Manufacturing = () => {
                       onChange={(e) => setFormData({ ...formData, requiredDate: e.target.value })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                    <select
-                      value={formData.status || 'draft'}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="draft">Draft</option>
-                      <option value="confirmed">Confirmed</option>
-                      <option value="in_production">In Production</option>
-                      <option value="completed">Completed</option>
-                      <option value="shipped">Shipped</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
@@ -5182,6 +5471,293 @@ const Manufacturing = () => {
       );
     }
 
+    // ADD PURCHASE ORDER
+    if (modalType === 'add_purchase') {
+      console.log('🔵 Rendering add_purchase modal');
+      // Calculate totals from items
+      const subtotal = purchaseOrderItems.reduce((sum, item) => sum + (item.total || 0), 0);
+      const tax = formData.tax || 0;
+      const total = subtotal + tax;
+
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">New Purchase Order</h2>
+              <button
+                onClick={() => { setShowModal(false); setSelectedItem(null); setFormData({}); setPurchaseOrderItems([]); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="space-y-4">
+                {/* Supplier Selection - Purchase from Supplier */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Purchase from Supplier *</label>
+                  <select
+                    value={formData.supplierId || ''}
+                    onChange={(e) => {
+                      const selectedSupplier = suppliers.find(s => s.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        supplierId: e.target.value,
+                        supplierName: selectedSupplier ? selectedSupplier.name : ''
+                      });
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="">Select a supplier...</option>
+                    {suppliers.map(supplier => (
+                      <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">This purchase order will be purchased from the selected supplier</p>
+                </div>
+
+                {/* Order Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Order Date *</label>
+                    <input
+                      type="date"
+                      value={formData.orderDate || ''}
+                      onChange={(e) => setFormData({ ...formData, orderDate: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Expected Date</label>
+                    <input
+                      type="date"
+                      value={formData.expectedDate || ''}
+                      onChange={(e) => setFormData({ ...formData, expectedDate: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <select
+                      value={formData.priority || 'normal'}
+                      onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs text-blue-700">
+                    <i className="fas fa-info-circle mr-1"></i>
+                    <strong>Note:</strong> Purchase orders are automatically marked as "received" when created, and stock movements will be recorded to update your inventory.
+                  </p>
+                </div>
+
+                {/* Order Items Section */}
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Order Items</h3>
+                  
+                  {/* Add Item Form */}
+                  <div className="grid grid-cols-12 gap-2 mb-3">
+                    <div className="col-span-4">
+                      <select
+                        value={newPurchaseOrderItem.sku}
+                        onChange={(e) => {
+                          const sku = e.target.value;
+                          const invItem = inventory.find(item => item.sku === sku || item.id === sku);
+                          setNewPurchaseOrderItem({
+                            ...newPurchaseOrderItem,
+                            sku: sku,
+                            name: invItem ? invItem.name : newPurchaseOrderItem.name
+                          });
+                        }}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select from inventory</option>
+                        {inventory.map(item => (
+                          <option key={item.id || item.sku} value={item.sku || item.id}>
+                            {item.name} ({item.sku || item.id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-4">
+                      <input
+                        type="text"
+                        value={newPurchaseOrderItem.name}
+                        onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, name: e.target.value })}
+                        placeholder="Item Name *"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        value={newPurchaseOrderItem.quantity || ''}
+                        onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, quantity: parseFloat(e.target.value) || 0 })}
+                        placeholder="Qty"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <button
+                        type="button"
+                        onClick={handleAddPurchaseOrderItem}
+                        className="w-full px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                      >
+                        <i className="fas fa-plus"></i>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={newPurchaseOrderItem.unitPrice || ''}
+                      onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, unitPrice: parseFloat(e.target.value) || 0 })}
+                      placeholder="Unit Price *"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddPurchaseOrderItem}
+                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+                    >
+                      <i className="fas fa-plus mr-1"></i> Add Item
+                    </button>
+                  </div>
+
+                  {/* Items List */}
+                  {purchaseOrderItems.length > 0 && (
+                    <div className="space-y-2">
+                      {purchaseOrderItems.map(item => (
+                        <div key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">{item.name}</p>
+                            <p className="text-xs text-gray-600">SKU: {item.sku} • Qty: {item.quantity} • R {item.unitPrice.toFixed(2)} each</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <p className="text-sm font-semibold text-blue-600">R {item.total.toFixed(2)}</p>
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePurchaseOrderItem(item.id)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Remove"
+                            >
+                              <i className="fas fa-times"></i>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Totals */}
+                {purchaseOrderItems.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Subtotal:</p>
+                        <p className="text-lg font-bold text-gray-900">R {subtotal.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <label className="block text-gray-600 mb-1">Tax (R)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={formData.tax || ''}
+                          onChange={(e) => setFormData({ ...formData, tax: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Total:</p>
+                        <p className="text-lg font-bold text-blue-600">R {total.toFixed(2)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Receiving Location */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Receiving Location</h3>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse/Location *</label>
+                    <select
+                      value={formData.toLocationId || ''}
+                      onChange={(e) => setFormData({ ...formData, toLocationId: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                    >
+                      <option value="">Select receiving location...</option>
+                      {stockLocations.filter(loc => loc.status === 'active').map(location => (
+                        <option key={location.id} value={location.id}>
+                          {location.name} ({location.code})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Where the purchased items will be received and stored</p>
+                  </div>
+                </div>
+
+                {/* Notes */}
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-3">Notes</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Order Notes</label>
+                      <textarea
+                        value={formData.notes || ''}
+                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Notes for supplier"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Internal Notes</label>
+                      <textarea
+                        value={formData.internalNotes || ''}
+                        onChange={(e) => setFormData({ ...formData, internalNotes: e.target.value })}
+                        rows={2}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Internal notes"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button
+                onClick={() => { setShowModal(false); setFormData({}); setPurchaseOrderItems([]); }}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSavePurchaseOrder}
+                className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Create Purchase Order
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -5386,6 +5962,41 @@ const Manufacturing = () => {
         <div className="bg-white p-3 rounded-lg border border-gray-200">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-900">Purchase Orders</h3>
+            <div className="flex items-center gap-2">
+              {/* Debug button - remove after testing */}
+              <button
+                onClick={() => {
+                  alert('Button click works! Function type: ' + typeof openAddPurchaseOrderModal);
+                  console.log('Direct test - openAddPurchaseOrderModal:', openAddPurchaseOrderModal);
+                  console.log('Direct test - typeof:', typeof openAddPurchaseOrderModal);
+                }}
+                className="px-2 py-1 text-xs bg-yellow-500 text-white rounded"
+                title="Test button"
+              >
+                TEST
+              </button>
+              <button
+                onClick={() => {
+                  console.log('🔵 Purchase Order button clicked');
+                  console.log('🔵 openAddPurchaseOrderModal available:', typeof openAddPurchaseOrderModal);
+                  try {
+                    if (typeof openAddPurchaseOrderModal === 'function') {
+                      openAddPurchaseOrderModal();
+                    } else {
+                      console.error('❌ openAddPurchaseOrderModal is not a function!');
+                      alert('Error: Purchase order function not available. Please refresh the page.');
+                    }
+                  } catch (error) {
+                    console.error('❌ Error opening purchase order modal:', error);
+                    alert('Error opening purchase order form: ' + error.message);
+                  }
+                }}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+              >
+                <i className="fas fa-plus text-xs"></i>
+                New Purchase Order
+              </button>
+            </div>
           </div>
         </div>
 
@@ -5395,7 +6006,17 @@ const Manufacturing = () => {
             <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
               <i className="fas fa-file-invoice-dollar text-4xl mb-4 text-gray-300"></i>
               <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
-              <p className="text-xs text-gray-500">Purchase orders will appear here when created</p>
+              <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
+                        <button
+                          onClick={() => {
+                            console.log('🔵 Purchase Order button clicked (empty state)');
+                            openAddPurchaseOrderModal();
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 mx-auto"
+                        >
+                          <i className="fas fa-plus text-xs"></i>
+                          Create Purchase Order
+                        </button>
             </div>
           ) : (
             purchaseOrders.map(order => {
@@ -5494,7 +6115,17 @@ const Manufacturing = () => {
                       <div className="flex flex-col items-center justify-center">
                         <i className="fas fa-file-invoice-dollar text-4xl mb-4 text-gray-300"></i>
                         <p className="text-sm font-medium text-gray-700 mb-2">No purchase orders found</p>
-                        <p className="text-xs text-gray-500">Purchase orders will appear here when created</p>
+                        <p className="text-xs text-gray-500 mb-4">Create your first purchase order to get started</p>
+                        <button
+                          onClick={() => {
+                            console.log('🔵 Purchase Order button clicked (table empty state)');
+                            openAddPurchaseOrderModal();
+                          }}
+                          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                        >
+                          <i className="fas fa-plus text-xs"></i>
+                          Create Purchase Order
+                        </button>
                       </div>
                     </td>
                   </tr>
