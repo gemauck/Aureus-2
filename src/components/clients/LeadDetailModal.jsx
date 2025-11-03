@@ -854,12 +854,40 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         alert(`Google Calendar Error: ${error}`);
     };
 
-    const handleAddComment = () => {
+    const handleAddComment = async () => {
         if (!newComment.trim()) return;
         
         try {
             // Get current user info
             const currentUser = window.storage?.getUserInfo?.() || { name: 'System', email: 'system', id: 'system' };
+            
+            // Process @mentions if MentionHelper is available
+            if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
+                try {
+                    // Fetch all users for mention matching
+                    const token = window.storage?.getToken?.();
+                    if (token && window.DatabaseAPI?.getUsers) {
+                        const usersResponse = await window.DatabaseAPI.getUsers();
+                        const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+                        
+                        const contextTitle = `Lead: ${formData.name || formData.companyName || 'Unknown Lead'}`;
+                        const contextLink = `#/leads/${formData.id}`;
+                        
+                        // Process mentions
+                        await window.MentionHelper.processMentions(
+                            newComment,
+                            contextTitle,
+                            contextLink,
+                            currentUser.name || currentUser.email || 'Unknown',
+                            allUsers
+                        );
+                        console.log('✅ @Mention notifications processed for lead comment');
+                    }
+                } catch (error) {
+                    console.error('❌ Error processing @mentions:', error);
+                    // Don't fail the comment if mention processing fails
+                }
+            }
             
             const commentId = Date.now();
             const updatedComments = [...(Array.isArray(formData.comments) ? formData.comments : []), {

@@ -671,19 +671,19 @@ const ClientsDatabaseFirst = () => {
                             </button>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {filteredLeads.map(lead => (
                                 <div 
                                     key={lead.id}
                                     onClick={() => handleOpenLead(lead)}
-                                    className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-xl p-6 cursor-pointer transition-all duration-200 hover:shadow-lg`}
+                                    className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-700' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-4 cursor-pointer transition-all duration-200 hover:shadow-md`}
                                 >
-                                    <div className="flex items-start justify-between mb-4">
+                                    <div className="flex items-start justify-between mb-3">
                                         <div className="flex-1">
-                                            <h3 className={`font-semibold text-lg ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-1`}>
+                                            <h3 className={`font-semibold text-base ${isDark ? 'text-gray-100' : 'text-gray-900'} mb-1`}>
                                                 {lead.name}
                                             </h3>
-                                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                                 {lead.industry}
                                             </p>
                                         </div>
@@ -697,17 +697,11 @@ const ClientsDatabaseFirst = () => {
                                         </span>
                                     </div>
                                     
-                                    <div className="space-y-2 text-sm">
+                                    <div className="space-y-1.5 text-xs">
                                         <div className="flex justify-between">
                                             <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Value:</span>
                                             <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                                 R{lead.value?.toLocaleString() || 0}
-                                            </span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className={`${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Contacts:</span>
-                                            <span className={`font-medium ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                                {lead.contacts?.length || 0}
                                             </span>
                                         </div>
                                         <div className="flex justify-between">

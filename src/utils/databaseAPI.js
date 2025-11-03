@@ -274,8 +274,10 @@ const DatabaseAPI = {
                     }
 
                     if (response.status === 401) {
-                        // Avoid logging out for pure permission denials (like /users) – just throw
-                        const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin');
+                        // Avoid logging out for pure permission denials or notification endpoints
+                        // /users, /admin = permission issues
+                        // /notifications = notification polling, shouldn't redirect
+                        const permissionLikely = endpoint.startsWith('/users') || endpoint.startsWith('/admin') || endpoint.startsWith('/notifications');
                         if (!permissionLikely) {
                             if (window.storage?.removeToken) window.storage.removeToken();
                             if (window.storage?.removeUser) window.storage.removeUser();
@@ -906,6 +908,54 @@ const DatabaseAPI = {
         return response;
     },
 
+    // SALES ORDERS
+    async getSalesOrders() {
+        console.log('📡 Fetching sales orders from database...');
+        const raw = await this.makeRequest('/sales-orders');
+        const normalized = {
+            data: {
+                salesOrders: Array.isArray(raw?.data?.salesOrders)
+                    ? raw.data.salesOrders
+                    : Array.isArray(raw?.salesOrders)
+                        ? raw.salesOrders
+                        : Array.isArray(raw?.data)
+                            ? raw.data
+                            : []
+            }
+        };
+        console.log('✅ Sales orders fetched from database:', normalized.data.salesOrders.length);
+        return normalized;
+    },
+
+    async createSalesOrder(orderData) {
+        console.log('📡 Creating sales order in database...');
+        const response = await this.makeRequest('/sales-orders', {
+            method: 'POST',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Sales order created in database');
+        return response;
+    },
+
+    async updateSalesOrder(id, orderData) {
+        console.log(`📡 Updating sales order ${id} in database...`);
+        const response = await this.makeRequest(`/sales-orders/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(orderData)
+        });
+        console.log('✅ Sales order updated in database');
+        return response;
+    },
+
+    async deleteSalesOrder(id) {
+        console.log(`📡 Deleting sales order ${id} from database...`);
+        const response = await this.makeRequest(`/sales-orders/${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Sales order deleted from database');
+        return response;
+    },
+
     // MANUFACTURING OPERATIONS - STOCK MOVEMENTS
     async getStockMovements() {
         console.log('📡 Fetching stock movements from database...');
@@ -1092,6 +1142,49 @@ const DatabaseAPI = {
         return response;
     },
 
+    // STAR CLIENT/LEAD
+    async starClient(clientId) {
+        console.log(`⭐ Starring client/lead ${clientId}...`);
+        const response = await this.makeRequest(`/starred-clients/${clientId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Client/lead starred');
+        // Clear cache for clients and leads to refresh starred status
+        this._responseCache.delete('GET:/clients');
+        this._responseCache.delete('GET:/leads');
+        return response;
+    },
+
+    async unstarClient(clientId) {
+        console.log(`⭐ Unstarring client/lead ${clientId}...`);
+        const response = await this.makeRequest(`/starred-clients/${clientId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Client/lead unstarred');
+        // Clear cache for clients and leads to refresh starred status
+        this._responseCache.delete('GET:/clients');
+        this._responseCache.delete('GET:/leads');
+        return response;
+    },
+
+    async toggleStarClient(clientId) {
+        console.log(`⭐ Toggling star for client/lead ${clientId}...`);
+        const response = await this.makeRequest(`/starred-clients/${clientId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Star toggled');
+        // Clear cache for clients and leads to refresh starred status
+        this._responseCache.delete('GET:/clients');
+        this._responseCache.delete('GET:/leads');
+        return response;
+    },
+
+    async getStarredClients() {
+        console.log('⭐ Fetching starred clients/leads...');
+        const response = await this.makeRequest('/starred-clients');
+        return response;
+    },
+
     // HEALTH CHECK
     async healthCheck() {
         console.log('📡 Checking database health...');
@@ -1145,6 +1238,12 @@ if (window.api) {
     window.api.getClientAnalytics = DatabaseAPI.getClientAnalytics.bind(DatabaseAPI);
     window.api.getLeadAnalytics = DatabaseAPI.getLeadAnalytics.bind(DatabaseAPI);
     window.api.getRevenueAnalytics = DatabaseAPI.getRevenueAnalytics.bind(DatabaseAPI);
+    
+    // Starred clients API methods
+    window.api.starClient = DatabaseAPI.starClient.bind(DatabaseAPI);
+    window.api.unstarClient = DatabaseAPI.unstarClient.bind(DatabaseAPI);
+    window.api.toggleStarClient = DatabaseAPI.toggleStarClient.bind(DatabaseAPI);
+    window.api.getStarredClients = DatabaseAPI.getStarredClients.bind(DatabaseAPI);
     
     // Opportunities API methods
     window.api.getOpportunities = DatabaseAPI.getOpportunities.bind(DatabaseAPI);

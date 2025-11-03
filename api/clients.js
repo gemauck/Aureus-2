@@ -67,6 +67,8 @@ async function handler(req, res) {
       try {
         console.log('📋 GET /api/clients - Starting optimized query...')
         
+        const userId = req.user?.sub
+        
         // Try query with type filter first, fallback to all clients if type column doesn't exist
         let rawClients
         try {
@@ -80,7 +82,12 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
+              },
+              starredBy: userId ? {
+                where: {
+                  userId
+                }
+              } : false
             },
             orderBy: {
               createdAt: 'desc'
@@ -95,7 +102,12 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
+              },
+              starredBy: userId ? {
+                where: {
+                  userId
+                }
+              } : false
             },
             orderBy: {
               createdAt: 'desc'
@@ -110,8 +122,13 @@ async function handler(req, res) {
         
         console.log(`✅ Found ${clients.length} clients (filtered in database)`)
         
-        // Parse JSON fields before returning
-        const parsedClients = clients.map(parseClientJsonFields)
+        // Parse JSON fields before returning and add starred status
+        const parsedClients = clients.map(client => {
+          const parsed = parseClientJsonFields(client)
+          // Check if current user has starred this client
+          parsed.isStarred = userId && client.starredBy && client.starredBy.length > 0
+          return parsed
+        })
         console.log(`✅ Returning ${parsedClients.length} parsed clients`)
         
         return ok(res, { clients: parsedClients })

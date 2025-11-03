@@ -699,27 +699,18 @@ const Clients = React.memo(() => {
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenLead(lead)}
-                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-xl p-4 border transition-all duration-300 cursor-move group ${
+                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-lg p-2.5 border transition-all duration-300 cursor-move group ${
                                                 isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
                                             } ${
-                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-lg hover:-translate-y-1'
+                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-md hover:-translate-y-0.5'
                                             }`}
                                         >
-                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                            <div className="flex items-start justify-between gap-2 mb-2">
                                                 <div className="flex-1">
-                                                    <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-1 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
+                                                    <h4 className={`font-semibold text-xs ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-0.5 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
                                                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.industry}</p>
                                                 </div>
-                                                <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-600' : 'bg-gray-100'}`}>
-                                                    <i className="fas fa-user text-xs text-gray-500"></i>
-                                                </div>
-                                                <div className="flex-1">
-                                                    <p className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>{lead.contacts?.[0]?.name || 'No contact'}</p>
-                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || 'No email'}</p>
-                                                </div>
+                                                <span className="px-2 py-0.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.status}</span>

@@ -103,25 +103,26 @@ const NotificationCenter = () => {
     const loadNotifications = async () => {
         try {
             setLoading(true);
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                console.warn('⚠️ NotificationCenter: No token available');
+            
+            // Use DatabaseAPI.makeRequest() which handles authentication and token refresh automatically
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest is not available');
                 consecutiveFailuresRef.current++;
-                // Pause polling after 3 consecutive failures
                 if (consecutiveFailuresRef.current >= 3) {
                     isPollingPausedRef.current = true;
-                    console.warn('⏸️ NotificationCenter: Pausing polling due to authentication failures');
                 }
                 return;
             }
             
-            const response = await fetchWithRefresh('/api/notifications');
-            
-            if (response.ok) {
-                const data = await response.json();
-                const responseData = data.data || data;
-                setNotifications(responseData.notifications || []);
-                setUnreadCount(responseData.unreadCount || 0);
+            try {
+                const response = await window.DatabaseAPI.makeRequest('/notifications', {
+                    method: 'GET'
+                });
+                
+                // DatabaseAPI.makeRequest returns { data: {...} } structure
+                const responseData = response?.data || response;
+                setNotifications(responseData?.notifications || []);
+                setUnreadCount(responseData?.unreadCount || 0);
                 
                 // Reset failure counter on success
                 if (consecutiveFailuresRef.current > 0) {
@@ -132,18 +133,22 @@ const NotificationCenter = () => {
                         console.log('✅ NotificationCenter: Resuming polling after successful authentication');
                     }
                 }
-            } else if (response.status === 401) {
-                consecutiveFailuresRef.current++;
-                // Pause polling after 3 consecutive 401 errors
-                if (consecutiveFailuresRef.current >= 3) {
-                    isPollingPausedRef.current = true;
-                    console.warn('⏸️ NotificationCenter: Pausing polling due to consecutive 401 errors. Token may be invalid.');
+            } catch (error) {
+                // DatabaseAPI.makeRequest throws errors for failed requests
+                const errorMessage = error.message || error.toString() || '';
+                if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Authentication expired')) {
+                    consecutiveFailuresRef.current++;
+                    // Pause polling after 3 consecutive 401 errors
+                    if (consecutiveFailuresRef.current >= 3) {
+                        isPollingPausedRef.current = true;
+                        console.warn('⏸️ NotificationCenter: Pausing polling due to consecutive 401 errors. Token may be invalid.');
+                    } else {
+                        console.warn(`⚠️ NotificationCenter: Unauthorized (${consecutiveFailuresRef.current}/3 failures)`);
+                    }
                 } else {
-                    console.warn(`⚠️ NotificationCenter: Unauthorized (${consecutiveFailuresRef.current}/3 failures)`);
+                    // For other errors, don't increment failure counter (might be temporary network issues)
+                    console.warn(`⚠️ NotificationCenter: Failed to load:`, errorMessage);
                 }
-            } else {
-                // For other errors, don't increment failure counter (might be temporary network issues)
-                console.warn(`⚠️ NotificationCenter: Failed to load (${response.status})`);
             }
         } catch (error) {
             console.error('❌ Error loading notifications:', error);
@@ -160,17 +165,16 @@ const NotificationCenter = () => {
     
     const markAsRead = async (notificationIds) => {
         try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                return;
+            }
             
-            const response = await fetchWithRefresh('/api/notifications', {
+            await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'PATCH',
                 body: JSON.stringify({ read: true, notificationIds })
             });
             
-            if (response.ok) {
-                loadNotifications(); // Reload to update counts
-            }
+            loadNotifications(); // Reload to update counts
         } catch (error) {
             console.error('Error marking as read:', error);
         }
@@ -178,17 +182,16 @@ const NotificationCenter = () => {
     
     const deleteNotification = async (notificationIds) => {
         try {
-            const token = window.storage?.getToken?.();
-            if (!token) return;
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                return;
+            }
             
-            const response = await fetchWithRefresh('/api/notifications', {
+            await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'DELETE',
                 body: JSON.stringify({ notificationIds })
             });
             
-            if (response.ok) {
-                loadNotifications();
-            }
+            loadNotifications();
         } catch (error) {
             console.error('Error deleting notification:', error);
         }

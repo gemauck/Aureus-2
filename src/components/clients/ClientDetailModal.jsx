@@ -1056,7 +1056,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setNewNoteAttachments((newNoteAttachments || []).filter(a => a.id !== id));
     };
 
-    const handleAddComment = () => {
+    const handleAddComment = async () => {
         if (!newComment.trim()) return;
         
         // Get current user info
@@ -1066,6 +1066,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             email: user?.email || 'system',
             id: user?.id || 'system'
         };
+        
+        // Process @mentions if MentionHelper is available
+        if (window.MentionHelper && window.MentionHelper.hasMentions(newComment)) {
+            try {
+                // Fetch all users for mention matching
+                const token = window.storage?.getToken?.();
+                if (token && window.DatabaseAPI?.getUsers) {
+                    const usersResponse = await window.DatabaseAPI.getUsers();
+                    const allUsers = usersResponse?.data?.users || usersResponse?.data?.data?.users || [];
+                    
+                    const contextTitle = `Client: ${formData.name || 'Unknown Client'}`;
+                    const contextLink = `#/clients/${formData.id}`;
+                    
+                    // Process mentions
+                    await window.MentionHelper.processMentions(
+                        newComment,
+                        contextTitle,
+                        contextLink,
+                        currentUser.name || currentUser.email || 'Unknown',
+                        allUsers
+                    );
+                    console.log('✅ @Mention notifications processed for client comment');
+                }
+            } catch (error) {
+                console.error('❌ Error processing @mentions:', error);
+                // Don't fail the comment if mention processing fails
+            }
+        }
         
         const updatedComments = [...(formData.comments || []), {
             id: Date.now(),
@@ -1591,15 +1619,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} ${isFullPage ? 'w-full h-full rounded-none' : 'rounded-lg w-full max-w-5xl max-h-[95vh] sm:max-h-[90vh]'} overflow-hidden flex flex-col`}>
                     {/* Header */}
                     <div className={`flex justify-between items-center px-3 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                        <div className="min-w-0 flex-1">
-                            <h2 className={`text-lg sm:text-xl font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                {client ? formData.name : 'Add New Client'}
-                            </h2>
+                        <div className="min-w-0 flex-1 flex items-center gap-2">
                             {client && (
-                                <p className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-0.5 truncate`}>
-                                    {formData.industry} • {formData.status}
-                                </p>
+                                <button
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        const currentStarred = client.isStarred || false;
+                                        try {
+                                            if (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function') {
+                                                await window.DatabaseAPI.toggleStarClient(client.id);
+                                                // Update local state
+                                                if (onUpdate) {
+                                                    onUpdate({ ...client, isStarred: !currentStarred });
+                                                }
+                                            }
+                                        } catch (error) {
+                                            console.error('❌ Failed to toggle star:', error);
+                                        }
+                                    }}
+                                    className={`flex-shrink-0 transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                    title={client.isStarred ? 'Unstar this client' : 'Star this client'}
+                                >
+                                    <i className={`fas fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                </button>
                             )}
+                            <div className="min-w-0 flex-1">
+                                <h2 className={`text-lg sm:text-xl font-semibold truncate ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    {client ? formData.name : 'Add New Client'}
+                                </h2>
+                                {client && (
+                                    <p className={`text-xs sm:text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'} mt-0.5 truncate`}>
+                                        {formData.industry} • {formData.status}
+                                    </p>
+                                )}
+                            </div>
                         </div>
                         {!isFullPage && (
                             <button 

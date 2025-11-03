@@ -1,4 +1,5 @@
 // @mention helper utilities
+// Version: 2025-11-03-v2 (with enhanced token refresh debugging)
 const MentionHelper = {
     /**
      * Parse @mentions from text content
@@ -73,10 +74,15 @@ const MentionHelper = {
      * @returns {Promise} - API response
      */
     async createMentionNotification(mentionedUserId, mentionedByName, contextTitle, contextLink, commentText) {
+        // Version check - this log confirms new code is loaded
+        console.log('🔔 MentionHelper v3: Creating notification for user:', mentionedUserId);
+        console.log('🔔 Using DatabaseAPI.makeRequest() with built-in token refresh');
+        
         try {
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                console.error('❌ No auth token available for creating mention notification');
+            // Use DatabaseAPI.makeRequest() which handles token refresh automatically
+            // This is the same method used by all other successful API calls (projects, clients, etc.)
+            if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                console.error('❌ DatabaseAPI.makeRequest is not available');
                 return null;
             }
             
@@ -85,17 +91,12 @@ const MentionHelper = {
                 ? commentText.substring(0, 100) + '...' 
                 : commentText;
             
-            // Use proper API base URL like other components
-            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
-            const fullUrl = `${apiBase}/api/notifications`;
-            
-            const requestOptions = {
+            // Use DatabaseAPI.makeRequest() which automatically handles:
+            // - Token extraction from storage
+            // - Token refresh on 401 errors
+            // - Proper error handling
+            const response = await window.DatabaseAPI.makeRequest('/notifications', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
-                credentials: 'include',
                 body: JSON.stringify({
                     userId: mentionedUserId,
                     type: 'mention',
@@ -108,47 +109,23 @@ const MentionHelper = {
                         fullComment: commentText
                     }
                 })
-            };
+            });
             
-            let response = await fetch(fullUrl, requestOptions);
-            
-            // If 401, try to refresh token and retry once
-            if (!response.ok && response.status === 401) {
-                try {
-                    const refreshUrl = `${apiBase}/api/auth/refresh`;
-                    const refreshRes = await fetch(refreshUrl, { 
-                        method: 'POST', 
-                        credentials: 'include', 
-                        headers: { 'Content-Type': 'application/json' } 
-                    });
-                    
-                    if (refreshRes.ok) {
-                        const text = await refreshRes.text();
-                        const refreshData = text ? JSON.parse(text) : {};
-                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
-                        
-                        if (newToken && window.storage?.setToken) {
-                            window.storage.setToken(newToken);
-                            requestOptions.headers['Authorization'] = `Bearer ${newToken}`;
-                            response = await fetch(fullUrl, requestOptions);
-                        }
-                    }
-                } catch (refreshError) {
-                    console.error('❌ Token refresh failed:', refreshError);
-                }
-            }
-            
-            if (response.ok) {
-                const data = await response.json();
+            // DatabaseAPI.makeRequest returns { data: {...} } structure
+            if (response && (response.data || response)) {
                 console.log(`✅ Mention notification created for user ${mentionedUserId}`);
-                return data;
+                return response.data || response;
             } else {
-                const error = await response.text();
-                console.error('❌ Failed to create mention notification:', error);
+                console.error('❌ Unexpected response structure from DatabaseAPI:', response);
                 return null;
             }
         } catch (error) {
             console.error('❌ Error creating mention notification:', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                status: error.status,
+                code: error.code
+            });
             return null;
         }
     },

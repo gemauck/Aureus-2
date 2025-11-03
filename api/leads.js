@@ -129,6 +129,8 @@ async function handler(req, res) {
           }
         }
         
+        const userId = req.user?.sub
+        
         // Include tags for list view - needed for Tags column
         let leads = []
         try {
@@ -140,7 +142,12 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
+              },
+              starredBy: userId ? {
+                where: {
+                  userId
+                }
+              } : false
             },
             orderBy: { createdAt: 'desc' } 
           })
@@ -162,7 +169,12 @@ async function handler(req, res) {
                   include: {
                     tag: true
                   }
-                }
+                },
+                starredBy: userId ? {
+                  where: {
+                    userId
+                  }
+                } : false
               },
               orderBy: { createdAt: 'desc' }
             })
@@ -191,6 +203,8 @@ async function handler(req, res) {
         // Parse JSON fields (services, contacts, etc.) and extract tags
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
+          // Check if current user has starred this lead
+          parsed.isStarred = userId && lead.starredBy && lead.starredBy.length > 0;
           return parsed;
         });
         

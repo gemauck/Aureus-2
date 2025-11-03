@@ -27,6 +27,7 @@ const Manufacturing = () => {
   const [inventory, setInventory] = useState([]);
   const [boms, setBoms] = useState([]);
   const [productionOrders, setProductionOrders] = useState([]);
+  const [salesOrders, setSalesOrders] = useState([]);
   const [movements, setMovements] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
@@ -55,6 +56,7 @@ const Manufacturing = () => {
         const cachedInventory = JSON.parse(localStorage.getItem('manufacturing_inventory') || '[]');
         const cachedBOMs = JSON.parse(localStorage.getItem('manufacturing_boms') || '[]');
         const cachedProductionOrders = JSON.parse(localStorage.getItem('manufacturing_production_orders') || '[]');
+        const cachedSalesOrders = JSON.parse(localStorage.getItem('manufacturing_sales_orders') || '[]');
         const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
         const cachedSuppliers = JSON.parse(localStorage.getItem('manufacturing_suppliers') || '[]');
 
@@ -69,6 +71,10 @@ const Manufacturing = () => {
         if (cachedProductionOrders.length > 0) {
           setProductionOrders(cachedProductionOrders);
           console.log('⚡ Manufacturing: Loaded production orders from cache:', cachedProductionOrders.length);
+        }
+        if (cachedSalesOrders.length > 0) {
+          setSalesOrders(cachedSalesOrders);
+          console.log('⚡ Manufacturing: Loaded sales orders from cache:', cachedSalesOrders.length);
         }
         if (cachedMovements.length > 0) {
           setMovements(cachedMovements);
@@ -198,6 +204,25 @@ const Manufacturing = () => {
               .catch(error => {
                 console.error('Error loading production orders:', error);
                 return { type: 'productionOrders', error };
+              })
+          );
+        }
+
+        // Sales Orders
+        if (typeof window.DatabaseAPI.getSalesOrders === 'function') {
+          apiCalls.push(
+            window.DatabaseAPI.getSalesOrders()
+              .then(ordersResponse => {
+                const ordersData = ordersResponse?.data?.salesOrders || [];
+                const processed = ordersData.map(order => ({ ...order, id: order.id }));
+                setSalesOrders(processed);
+                localStorage.setItem('manufacturing_sales_orders', JSON.stringify(processed));
+                console.log('✅ Manufacturing: Sales orders synced:', processed.length);
+                return { type: 'salesOrders', data: processed };
+              })
+              .catch(error => {
+                console.error('Error loading sales orders:', error);
+                return { type: 'salesOrders', error };
               })
           );
         }
@@ -1559,13 +1584,13 @@ const Manufacturing = () => {
       thumbnail: '',
       category: '',
       type: 'component',
-      quantity: 0,
-      inProductionQuantity: 0,
-      completedQuantity: 0,
+      quantity: undefined,
+      inProductionQuantity: undefined,
+      completedQuantity: undefined,
       unit: 'pcs',
-      reorderPoint: 0,
-      reorderQty: 0,
-      unitCost: 0,
+      reorderPoint: undefined,
+      reorderQty: undefined,
+      unitCost: undefined,
       supplier: '',
       status: 'in_stock' // Will be auto-calculated by backend
     });
@@ -1889,6 +1914,20 @@ const Manufacturing = () => {
       } catch (error) {
         console.error('Error deleting production order:', error);
         alert('Failed to delete production order. Please try again.');
+      }
+    }
+  };
+
+  const handleDeleteSalesOrder = async (orderId) => {
+    if (confirm('Are you sure you want to delete this sales order? This action cannot be undone.')) {
+      try {
+        await safeCallAPI('deleteSalesOrder', orderId);
+        const updatedOrders = salesOrders.filter(order => order.id !== orderId);
+        setSalesOrders(updatedOrders);
+        localStorage.setItem('manufacturing_sales_orders', JSON.stringify(updatedOrders));
+      } catch (error) {
+        console.error('Error deleting sales order:', error);
+        alert('Failed to delete sales order. Please try again.');
       }
     }
   };
@@ -2707,8 +2746,8 @@ const Manufacturing = () => {
                     <input
                       type="number"
                       min="0"
-                      value={formData.quantity || 0}
-                      onChange={(e) => setFormData({ ...formData, quantity: parseFloat(e.target.value) || 0 })}
+                      value={formData.quantity === undefined || formData.quantity === null ? '' : formData.quantity}
+                      onChange={(e) => setFormData({ ...formData, quantity: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                       className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       placeholder="Initial stock quantity"
                     />
@@ -2751,8 +2790,8 @@ const Manufacturing = () => {
                         <input
                           type="number"
                           min="0"
-                          value={formData.inProductionQuantity || 0}
-                          onChange={(e) => setFormData({ ...formData, inProductionQuantity: parseFloat(e.target.value) || 0 })}
+                          value={formData.inProductionQuantity === undefined || formData.inProductionQuantity === null ? '' : formData.inProductionQuantity}
+                          onChange={(e) => setFormData({ ...formData, inProductionQuantity: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Units currently in production"
                         />
@@ -2774,8 +2813,8 @@ const Manufacturing = () => {
                         <input
                           type="number"
                           min="0"
-                          value={formData.completedQuantity || 0}
-                          onChange={(e) => setFormData({ ...formData, completedQuantity: parseFloat(e.target.value) || 0 })}
+                          value={formData.completedQuantity === undefined || formData.completedQuantity === null ? '' : formData.completedQuantity}
+                          onChange={(e) => setFormData({ ...formData, completedQuantity: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
                           className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Units completed and ready"
                         />
@@ -4407,6 +4446,173 @@ const Manufacturing = () => {
     return null;
   };
 
+  const SalesOrdersView = () => {
+    const formatDate = (date) => {
+      if (!date) return '-';
+      if (typeof date === 'string') return date.split('T')[0];
+      return new Date(date).toISOString().split('T')[0];
+    };
+
+    return (
+      <div className="space-y-3">
+        {/* Controls */}
+        <div className="bg-white p-3 rounded-lg border border-gray-200">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900">Sales Orders</h3>
+          </div>
+        </div>
+
+        {/* Mobile Card View - Shows on mobile devices */}
+        <div className="table-mobile space-y-3">
+          {salesOrders.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+              <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
+              <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
+              <p className="text-xs text-gray-500">Sales orders will appear here when created</p>
+            </div>
+          ) : (
+            salesOrders.map(order => {
+              const orderItems = typeof order.items === 'string' ? JSON.parse(order.items || '[]') : (order.items || []);
+              return (
+                <div key={order.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2 mb-2">
+                        <h3 className="text-base font-semibold text-gray-900">{order.orderNumber}</h3>
+                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize flex-shrink-0 ${getStatusColor(order.status)}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-1">Client: {order.clientName || '-'}</p>
+                      <p className="text-xs text-gray-500">Items: {orderItems.length}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mb-3 pt-3 border-t border-gray-200">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Priority</div>
+                      <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize ${
+                        order.priority === 'high' ? 'text-red-600 bg-red-50' : 
+                        order.priority === 'normal' ? 'text-blue-600 bg-blue-50' : 
+                        'text-gray-600 bg-gray-50'
+                      }`}>
+                        {order.priority}
+                      </span>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Total</div>
+                      <div className="text-lg font-bold text-blue-600">{formatCurrency(order.total || 0)}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 gap-2 mb-3 pt-3 border-t border-gray-200 text-sm">
+                    <div>
+                      <span className="text-gray-500">Order Date:</span>
+                      <span className="ml-2 text-gray-900">{formatDate(order.orderDate)}</span>
+                    </div>
+                    {order.requiredDate && (
+                      <div>
+                        <span className="text-gray-500">Required:</span>
+                        <span className="ml-2 text-gray-900">{formatDate(order.requiredDate)}</span>
+                      </div>
+                    )}
+                    {order.shippedDate && (
+                      <div>
+                        <span className="text-gray-500">Shipped:</span>
+                        <span className="ml-2 text-green-600">{formatDate(order.shippedDate)}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-3 border-t border-gray-200">
+                    <button
+                      onClick={() => { setSelectedItem(order); setModalType('view_sales'); setShowModal(true); }}
+                      className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
+                    >
+                      <i className="fas fa-eye mr-1"></i> View
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSalesOrder(order.id)}
+                      className="px-3 py-2 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 font-medium"
+                    >
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="table-responsive bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Order #</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Client</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Order Date</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Required Date</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {salesOrders.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="px-3 py-12 text-center">
+                      <div className="flex flex-col items-center justify-center">
+                        <i className="fas fa-shopping-cart text-4xl mb-4 text-gray-300"></i>
+                        <p className="text-sm font-medium text-gray-700 mb-2">No sales orders found</p>
+                        <p className="text-xs text-gray-500">Sales orders will appear here when created</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  salesOrders.map(order => (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{order.orderNumber}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{order.clientName || '-'}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(order.status)}`}>
+                          {order.status.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.orderDate)}</td>
+                      <td className="px-3 py-2 text-sm text-gray-900">{formatDate(order.requiredDate)}</td>
+                      <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">{formatCurrency(order.total || 0)}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => { setSelectedItem(order); setModalType('view_sales'); setShowModal(true); }}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                            title="View"
+                          >
+                            <i className="fas fa-eye"></i>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteSalesOrder(order.id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium"
+                            title="Delete"
+                          >
+                            <i className="fas fa-trash"></i>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const SuppliersView = () => {
     const filteredSuppliers = suppliers.filter(supplier => {
       const matchesSearch = supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
@@ -4712,6 +4918,7 @@ const Manufacturing = () => {
             { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
             { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
             { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
+            { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
             { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
             { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
             { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
@@ -4739,6 +4946,7 @@ const Manufacturing = () => {
         {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
+        {activeTab === 'sales' && <SalesOrdersView />}
         {activeTab === 'movements' && <MovementsView />}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'jobcards' && window.JobCards && (

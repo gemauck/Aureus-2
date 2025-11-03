@@ -8,9 +8,11 @@ import { sendNotificationEmail } from './_lib/email.js'
 import { parseJsonBody } from './_lib/body.js'
 
 async function handler(req, res) {
-    const userId = req.user?.id;
+    // JWT payload uses 'sub' for user ID, not 'id'
+    const userId = req.user?.sub || req.user?.id;
     
     if (!userId) {
+        console.error('❌ Notifications: No user ID found in token. req.user =', req.user);
         return unauthorized(res, 'Authentication required');
     }
 
@@ -99,24 +101,45 @@ async function handler(req, res) {
             });
             
             if (!settings) {
-                // Create default settings
+                // Create default settings (all in-app notifications enabled by default)
                 settings = await prisma.notificationSetting.create({
                     data: { userId: targetUserId }
                 });
             }
             
-            // Create notification
-            const notification = await prisma.notification.create({
-                data: {
-                    userId: targetUserId,
-                    type,
-                    title,
-                    message,
-                    link: link || '',
-                    metadata: metadata ? JSON.stringify(metadata) : '{}',
-                    read: false
-                }
-            });
+            // Check if user wants in-app notifications for this type
+            let shouldCreateInAppNotification = false;
+            if (type === 'mention' && settings.inAppMentions) {
+                shouldCreateInAppNotification = true;
+            } else if (type === 'comment' && settings.inAppComments) {
+                shouldCreateInAppNotification = true;
+            } else if (type === 'task' && settings.inAppTasks) {
+                shouldCreateInAppNotification = true;
+            } else if (type === 'invoice' && settings.inAppInvoices) {
+                shouldCreateInAppNotification = true;
+            } else if (type === 'system' && settings.inAppSystem) {
+                shouldCreateInAppNotification = true;
+            }
+            
+            let notification = null;
+            
+            // Only create in-app notification if user has enabled it for this type
+            if (shouldCreateInAppNotification) {
+                notification = await prisma.notification.create({
+                    data: {
+                        userId: targetUserId,
+                        type,
+                        title,
+                        message,
+                        link: link || '',
+                        metadata: metadata ? JSON.stringify(metadata) : '{}',
+                        read: false
+                    }
+                });
+                console.log(`✅ In-app notification created for user ${targetUserId} (type: ${type})`);
+            } else {
+                console.log(`⏭️ Skipping in-app notification for user ${targetUserId} (type: ${type}) - preference disabled`);
+            }
             
             // Determine if email should be sent based on type and user settings
             let shouldSendEmail = false;
@@ -154,11 +177,11 @@ async function handler(req, res) {
                     if (emailError.stack) {
                         console.error('❌ Email notification error stack:', emailError.stack);
                     }
-                    // Don't fail the request if email fails - notification is still created
+                    // Don't fail the request if email fails
                 }
             }
             
-            return ok(res, { notification });
+            return ok(res, { notification, created: !!notification });
         } catch (error) {
             console.error('Create notification error:', error);
             return serverError(res, 'Failed to create notification', error.message);

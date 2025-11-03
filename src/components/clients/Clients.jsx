@@ -247,6 +247,7 @@ const Clients = React.memo(() => {
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
     const [filterServices, setFilterServices] = useState([]); // Array of selected services
+    const [showStarredOnly, setShowStarredOnly] = useState(false); // Filter to show only starred clients/leads
     const [refreshKey, setRefreshKey] = useState(0);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
@@ -1733,7 +1734,10 @@ const Clients = React.memo(() => {
         const matchesServices = filterServices.length === 0 || 
             services.some(service => filterServices.includes(service));
         
-        return matchesSearch && matchesIndustry && matchesStatus && matchesServices;
+        // Check if starred filter is applied
+        const matchesStarred = !showStarredOnly || client.isStarred === true;
+        
+        return matchesSearch && matchesIndustry && matchesStatus && matchesServices && matchesStarred;
     });
 
     // Sort the filtered clients
@@ -1749,7 +1753,10 @@ const Clients = React.memo(() => {
         // Status is hardcoded as 'active' for all leads, so status filter doesn't apply
         const matchesStatus = true;
         
-        return matchesSearch && matchesIndustry && matchesStatus;
+        // Check if starred filter is applied
+        const matchesStarred = !showStarredOnly || lead.isStarred === true;
+        
+        return matchesSearch && matchesIndustry && matchesStatus && matchesStarred;
     });
 
     // Sort the filtered leads (default to alphabetical by name)
@@ -1785,7 +1792,7 @@ const Clients = React.memo(() => {
     useEffect(() => {
         setClientsPage(1);
         setLeadsPage(1);
-    }, [searchTerm, filterIndustry, filterStatus, filterServices, sortField, sortDirection, leadSortField, leadSortDirection]);
+    }, [searchTerm, filterIndustry, filterStatus, filterServices, showStarredOnly, sortField, sortDirection, leadSortField, leadSortDirection]);
 
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
@@ -1799,6 +1806,42 @@ const Clients = React.memo(() => {
         setSelectedLead(lead);
         setSelectedClient(null);
         setViewMode('lead-detail'); // Open in full detail view like clients
+    };
+
+    // Handle star toggle for clients/leads
+    const handleToggleStar = async (e, clientOrLead, isLead = false) => {
+        e.stopPropagation(); // Prevent opening the detail modal
+        
+        const clientId = clientOrLead.id;
+        const currentStarred = clientOrLead.isStarred || false;
+        
+        try {
+            if (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function') {
+                await window.DatabaseAPI.toggleStarClient(clientId);
+                
+                // Update local state optimistically
+                if (isLead) {
+                    setLeads(prevLeads => 
+                        prevLeads.map(l => 
+                            l.id === clientId ? { ...l, isStarred: !currentStarred } : l
+                        )
+                    );
+                } else {
+                    setClients(prevClients => 
+                        prevClients.map(c => 
+                            c.id === clientId ? { ...c, isStarred: !currentStarred } : c
+                        )
+                    );
+                }
+                
+                console.log(`⭐ Client/lead ${currentStarred ? 'unstarred' : 'starred'}`);
+            } else {
+                console.error('❌ Star API not available');
+            }
+        } catch (error) {
+            console.error('❌ Failed to toggle star:', error);
+            alert('Failed to update star. Please try again.');
+        }
     };
 
     const handleNavigateToProject = (projectId) => {
@@ -2131,27 +2174,18 @@ const Clients = React.memo(() => {
                                             onDragStart={() => handleDragStart(lead, 'lead')}
                                             onDragEnd={handleDragEnd}
                                             onClick={() => handleOpenLead(lead)}
-                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-xl p-3 border transition-all duration-300 cursor-move group ${
+                                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-white hover:bg-gray-50'} rounded-lg p-2.5 border transition-all duration-300 cursor-move group ${
                                                 isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'
                                             } ${
-                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-lg hover:-translate-y-1'
+                                                draggedItem?.id === lead.id ? 'opacity-50 transform scale-95' : 'hover:shadow-md hover:-translate-y-0.5'
                                             }`}
                                         >
-                                            <div className="flex items-start justify-between gap-3 mb-3">
+                                            <div className="flex items-start justify-between gap-2 mb-2">
                                                 <div className="flex-1">
-                                                    <h4 className={`font-semibold text-sm ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-1 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
+                                                    <h4 className={`font-semibold text-xs ${isDark ? 'text-gray-100' : 'text-gray-900'} line-clamp-2 mb-0.5 ${isDark ? 'group-hover:text-primary-400' : 'group-hover:text-primary-600'} transition-colors`}>{lead.name}</h4>
                                                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.industry}</p>
                                             </div>
-                                                <span className="px-3 py-1 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 mb-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? 'bg-gray-600' : 'bg-gray-100'}`}>
-                                                    <i className="fas fa-user text-xs text-gray-500"></i>
-                                                </div>
-                                                <div className="flex-1">
-                                                    {/* Contact removed from leads display */}
-                                                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.contacts?.[0]?.email || 'No email'}</p>
-                                                </div>
+                                                <span className="px-2 py-0.5 bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs rounded-full font-medium shrink-0 shadow-sm">LEAD</span>
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{lead.status}</span>
@@ -2274,6 +2308,13 @@ const Clients = React.memo(() => {
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={(e) => handleToggleStar(e, client, false)}
+                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                                title={client.isStarred ? 'Unstar this client' : 'Star this client'}
+                                            >
+                                                <i className={`fas fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                            </button>
                                             {client.thumbnail ? (
                                                 <img src={client.thumbnail} alt={client.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
                                             ) : (
@@ -2473,6 +2514,13 @@ const Clients = React.memo(() => {
                                 >
                                     <td className="px-6 py-4 whitespace-nowrap">
                                         <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={(e) => handleToggleStar(e, lead, true)}
+                                                className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
+                                                title={lead.isStarred ? 'Unstar this lead' : 'Star this lead'}
+                                            >
+                                                <i className={`fas fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-600' : 'text-gray-300'}`}></i>
+                                            </button>
                                             {lead.thumbnail ? (
                                                 <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
                                             ) : (
@@ -2938,10 +2986,26 @@ const Clients = React.memo(() => {
                                 />
                             </div>
                         )}
+                        <div className="flex items-center">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={showStarredOnly}
+                                    onChange={(e) => setShowStarredOnly(e.target.checked)}
+                                    className={`w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                                        isDark ? 'bg-gray-700 border-gray-600' : ''
+                                    }`}
+                                />
+                                <span className={`text-sm ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                    <i className="fas fa-star text-yellow-500 mr-1"></i>
+                                    Starred Only
+                                </span>
+                            </label>
+                        </div>
                     </div>
                     
                     {/* Modern Search Results Counter */}
-                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode !== 'leads' && filterServices.length > 0)) && (
+                    {(searchTerm || filterIndustry !== 'All Industries' || filterStatus !== 'All Status' || (viewMode !== 'leads' && filterServices.length > 0) || showStarredOnly) && (
                         <div className="mt-4 pt-4 border-t border-gray-200">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
