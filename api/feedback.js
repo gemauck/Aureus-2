@@ -112,6 +112,19 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
         console.log(`✅ Feedback email sent successfully to ${admin.email}:`, result.messageId)
         successCount++
         return { success: true, email: admin.email }
+      } catch (emailError) {
+        console.error(`❌ Failed to send feedback email to ${admin.email}:`, emailError.message)
+        console.error('❌ Feedback email error details:', {
+          message: emailError.message,
+          code: emailError.code,
+          response: emailError.response,
+          to: admin.email
+        })
+        if (emailError.stack) {
+          console.error('❌ Feedback email error stack:', emailError.stack)
+        }
+        failureCount++
+        return { success: false, email: admin.email, error: emailError.message }
       } catch (err) {
         console.error(`❌ Failed to send feedback notification to ${admin.email}:`, err.message)
         console.error(`❌ Error details:`, {

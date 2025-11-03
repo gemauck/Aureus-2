@@ -193,6 +193,14 @@ const UserManagement = () => {
         const emailSent = debug?.emailSent;
         const emailError = debug?.emailError;
         const emailConfig = debug?.emailConfig;
+        
+        // Determine if there's an actual error vs just missing config
+        const hasActualError = emailError && emailError !== null && emailError !== '';
+        const hasConfig = emailConfig && (
+            emailConfig.SMTP_HOST !== 'NOT_SET' || 
+            emailConfig.SMTP_USER !== 'NOT_SET' || 
+            emailConfig.SENDGRID_API_KEY !== 'NOT_SET'
+        );
 
         const modal = document.createElement('div');
         modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
@@ -200,7 +208,7 @@ const UserManagement = () => {
             <div class="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
                 <div class="flex items-center justify-between mb-4">
                     <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-                        <i class="fas fa-envelope ${emailSent ? 'text-green-500' : 'text-yellow-500'} mr-2"></i>
+                        <i class="fas fa-envelope ${emailSent ? 'text-green-500' : (hasActualError ? 'text-red-500' : 'text-yellow-500')} mr-2"></i>
                         Invitation ${emailSent ? 'Sent' : 'Created'}
                     </h3>
                     <button class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" onclick="this.closest('.fixed').remove()">
@@ -218,6 +226,29 @@ const UserManagement = () => {
                                 </p>
                             </div>
                         </div>
+                    ` : hasActualError ? `
+                        <div class="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg p-4 mb-4">
+                            <div class="flex items-start">
+                                <i class="fas fa-times-circle text-red-500 mr-2 mt-1"></i>
+                                <div class="flex-1">
+                                    <p class="text-red-800 dark:text-red-200 text-sm font-medium mb-2">
+                                        ❌ Email Failed to Send
+                                    </p>
+                                    <p class="text-red-700 dark:text-red-300 text-xs mb-2">
+                                        <strong>Error:</strong> ${emailError}
+                                    </p>
+                                    <div class="bg-red-100 dark:bg-red-800 rounded p-2 mt-2">
+                                        <p class="text-red-800 dark:text-red-200 text-xs font-medium mb-1">Possible causes:</p>
+                                        <ul class="text-red-700 dark:text-red-300 text-xs list-disc list-inside space-y-1">
+                                            <li>Invalid email configuration (check server logs)</li>
+                                            <li>SendGrid API key invalid or expired</li>
+                                            <li>Network connectivity issues</li>
+                                            <li>Email service temporarily unavailable</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     ` : `
                         <div class="bg-yellow-50 dark:bg-yellow-900 border border-yellow-200 dark:border-yellow-700 rounded-lg p-4 mb-4">
                             <div class="flex items-start">
@@ -227,7 +258,7 @@ const UserManagement = () => {
                                         ⚠️ Invitation created but email not sent
                                     </p>
                                     <p class="text-yellow-700 dark:text-yellow-300 text-xs">
-                                        ${emailError || 'Email configuration not available in local development mode.'}
+                                        ${hasConfig ? 'Email configuration is set, but email sending failed. Check server logs for details.' : 'Email configuration not available. Please configure SMTP settings in your .env file.'}
                                     </p>
                                 </div>
                             </div>

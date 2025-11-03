@@ -142,8 +142,19 @@ async function handler(req, res) {
                     );
                     console.log(`✅ Email notification sent to ${targetUser.email}`);
                 } catch (emailError) {
-                    console.error('❌ Failed to send email notification:', emailError);
-                    // Don't fail the request if email fails
+                    console.error('❌ Failed to send email notification:', emailError.message);
+                    console.error('❌ Email notification error details:', {
+                        message: emailError.message,
+                        code: emailError.code,
+                        response: emailError.response,
+                        to: targetUser.email,
+                        subject: title
+                    });
+                    // Log full error for debugging
+                    if (emailError.stack) {
+                        console.error('❌ Email notification error stack:', emailError.stack);
+                    }
+                    // Don't fail the request if email fails - notification is still created
                 }
             }
             

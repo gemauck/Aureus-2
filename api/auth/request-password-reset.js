@@ -38,11 +38,21 @@ async function handler(req, res) {
     const appUrl = process.env.APP_URL || 'http://localhost:3001'
     const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`
 
-    // Try send email, but don't reveal errors to client
+    // Try send email, but don't reveal errors to client (for security - don't reveal if user exists)
     try {
       await sendPasswordResetEmail({ email: user.email, name: user.name || user.email, resetLink })
+      console.log('✅ Password reset email sent successfully to:', user.email)
     } catch (e) {
-      console.warn('⚠️ Password reset email send failed; continuing gracefully:', e.message)
+      console.error('❌ Password reset email send failed:', e.message)
+      console.error('❌ Password reset email error details:', {
+        message: e.message,
+        code: e.code,
+        response: e.response
+      })
+      // Log full error for debugging but still return success to avoid user enumeration
+      if (e.stack) {
+        console.error('❌ Password reset email error stack:', e.stack)
+      }
     }
 
     return genericResponse()

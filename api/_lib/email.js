@@ -204,9 +204,7 @@ function checkEmailConfiguration() {
     const pass = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
     
     if (!user || !pass) {
-        throw new Error('Email configuration incomplete. Either:\n' +
-                       '  - Set SENDGRID_API_KEY (or SMTP_PASS with SendGrid key starting with SG.), OR\n' +
-                       '  - Set SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD)');
+        throw new Error('Email configuration incomplete. Either:\n  - Set SENDGRID_API_KEY (or SMTP_PASS with SendGrid key starting with SG.), OR\n  - Set SMTP_USER and SMTP_PASS (or GMAIL_USER and GMAIL_APP_PASSWORD)');
     }
     
     return true;
@@ -296,25 +294,38 @@ export const sendInvitationEmail = async (invitationData) => {
         `
     };
 
+    // Check configuration (warn but don't block)
+    let configWarning = null;
     try {
-        // Check configuration before attempting to send
         checkEmailConfiguration();
-        
+    } catch (configError) {
+        configWarning = configError.message;
+        console.warn('⚠️ Email configuration check warning:', configWarning);
+        console.warn('⚠️ Will attempt to send anyway - actual send attempt will provide better error details');
+    }
+    
+    try {
         const emailTransporter = getTransporter();
-        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        
+        // Get SendGrid API key - check multiple sources
+        const sendGridKey = process.env.SENDGRID_API_KEY || 
+                           (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
+                           (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
         console.log('📧 Sending email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject,
-            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP'
+            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP',
+            hasSendGridKey: !!sendGridKey,
+            configWarning: configWarning
         });
         
         // Use SendGrid HTTP API if configured
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
             mailOptions.fromName = 'Abcotronics';
-            result = await sendViaSendGridAPI(mailOptions, apiKey);
+            result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else {
             result = await emailTransporter.sendMail(mailOptions);
         }
@@ -336,10 +347,16 @@ export const sendInvitationEmail = async (invitationData) => {
             errorMessage = 'Email authentication failed. Please check your SMTP username and password (app password for Gmail).';
         } else if (error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT') {
             errorMessage = 'Email connection failed. Please check your network connection and SMTP server settings.';
-        } else if (error.message.includes('configuration incomplete')) {
-            errorMessage = error.message;
         } else if (error.message.includes('SendGrid API error')) {
-            errorMessage = error.message;
+            // Extract SendGrid-specific errors
+            if (error.message.includes('verified')) {
+                errorMessage = 'SendGrid sender email not verified. Please verify your sender email in SendGrid dashboard.';
+            } else {
+                errorMessage = error.message;
+            }
+        } else if (configWarning && error.message.includes('sendMail')) {
+            // If config check warned and send failed, combine messages
+            errorMessage = `${configWarning}. Additionally: ${error.message}`;
         }
         
         throw new Error(`Failed to send invitation email: ${errorMessage}`);
@@ -380,11 +397,16 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
     try {
         checkEmailConfiguration();
         const emailTransporter = getTransporter();
-        const apiKey = process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
+        
+        // Get SendGrid API key - check multiple sources
+        const sendGridKey = process.env.SENDGRID_API_KEY || 
+                           (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
+                           (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
+        
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && apiKey && apiKey.startsWith('SG.')) {
+        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
             mailOptions.fromName = 'Abcotronics';
-            result = await sendViaSendGridAPI(mailOptions, apiKey);
+            result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else {
             result = await emailTransporter.sendMail(mailOptions);
         }
@@ -431,31 +453,23 @@ export const sendNotificationEmail = async (to, subject, message) => {
         checkEmailConfiguration();
         
         const emailTransporter = getTransporter();
-        // Check for SendGrid API key in multiple locations
-        const sendGridKey = process.env.SENDGRID_API_KEY || 
-                          (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null) ||
-                          (emailTransporter.apiKey ? emailTransporter.apiKey : null);
-        const apiKey = sendGridKey || process.env.SMTP_PASS || process.env.GMAIL_APP_PASSWORD;
         
-        // Determine if we should use SendGrid HTTP API
-        const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-        const shouldUseSendGrid = useSendGridHTTP || 
-                                emailTransporter.useHTTP || 
-                                (host === 'smtp.sendgrid.net' && apiKey && apiKey.startsWith('SG.')) ||
-                                process.env.SENDGRID_API_KEY;
+        // Get SendGrid API key - check multiple sources
+        const sendGridKey = process.env.SENDGRID_API_KEY || 
+                           (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
+                           (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
         console.log('📧 Sending notification email with options:', {
             from: mailOptions.from,
             to: mailOptions.to,
             subject: mailOptions.subject,
-            method: shouldUseSendGrid ? 'SendGrid HTTP API' : 'SMTP',
-            host: host,
+            method: useSendGridHTTP ? 'SendGrid HTTP API' : 'SMTP',
             hasSendGridKey: !!sendGridKey
         });
         
         // Use SendGrid HTTP API if configured
         let result;
-        if (shouldUseSendGrid && sendGridKey) {
+        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
             mailOptions.fromName = 'Abcotronics';
             // Extract email from "Name <email>" format if needed
             const fromEmail = mailOptions.from.includes('<') 

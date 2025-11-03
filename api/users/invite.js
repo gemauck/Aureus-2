@@ -123,6 +123,7 @@ async function handler(req, res) {
         // Send invitation email
         let emailSent = false
         let emailError = null
+        let emailErrorDetails = null
         
         try {
             console.log('📧 Attempting to send invitation email...')
@@ -137,7 +138,17 @@ async function handler(req, res) {
             console.log('✅ Invitation email sent successfully:', emailResult.messageId)
         } catch (emailErr) {
             emailError = emailErr
+            emailErrorDetails = {
+                message: emailErr.message || 'Unknown error',
+                code: emailErr.code || null,
+                response: emailErr.response || null
+            }
             console.error('❌ Failed to send invitation email:', emailErr.message)
+            console.error('❌ Email error details:', emailErrorDetails)
+            // Log full error for debugging
+            if (emailErr.stack) {
+                console.error('❌ Email error stack:', emailErr.stack)
+            }
         }
         
         console.log('📧 Email config check:', {
@@ -145,7 +156,9 @@ async function handler(req, res) {
             SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
             SMTP_USER: process.env.SMTP_USER ? '***' : 'NOT_SET',
             SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
-            EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET'
+            SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
+            EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET',
+            hasConfig: !!(process.env.SENDGRID_API_KEY || (process.env.SMTP_USER && process.env.SMTP_PASS))
         })
 
         console.log('🎉 Invitation process completed successfully')
@@ -174,11 +187,13 @@ async function handler(req, res) {
             debug: {
                 emailSent,
                 emailError: emailError ? emailError.message : null,
+                emailErrorDetails: emailErrorDetails,
                 emailConfig: {
                     SMTP_HOST: process.env.SMTP_HOST || 'NOT_SET',
                     SMTP_PORT: process.env.SMTP_PORT || 'NOT_SET',
                     SMTP_USER: process.env.SMTP_USER ? 'SET' : 'NOT_SET',
                     SMTP_PASS: process.env.SMTP_PASS ? 'SET' : 'NOT_SET',
+                    SENDGRID_API_KEY: process.env.SENDGRID_API_KEY ? 'SET' : 'NOT_SET',
                     EMAIL_FROM: process.env.EMAIL_FROM || 'NOT_SET'
                 },
                 timestamp: new Date().toISOString()

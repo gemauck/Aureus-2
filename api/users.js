@@ -273,16 +273,77 @@ async function handler(req, res) {
                 return badRequest(res, 'Cannot delete your own account')
             }
 
-            // Delete user
-            await prisma.user.delete({
+            // Check if user exists
+            const userToDelete = await prisma.user.findUnique({
                 where: { id: userId }
             })
 
+            if (!userToDelete) {
+                return badRequest(res, 'User not found')
+            }
+
+            // Check for critical dependencies before deletion (count all, not just first)
+            const [ownedClientsCount, ownedProjectsCount, tasksCount] = await Promise.all([
+                prisma.client.count({ where: { ownerId: userId } }),
+                prisma.project.count({ where: { ownerId: userId } }),
+                prisma.task.count({ where: { assigneeId: userId } })
+            ])
+
+            if (ownedClientsCount > 0 || ownedProjectsCount > 0 || tasksCount > 0) {
+                const issues = []
+                if (ownedClientsCount > 0) issues.push(`${ownedClientsCount} client(s)`)
+                if (ownedProjectsCount > 0) issues.push(`${ownedProjectsCount} project(s)`)
+                if (tasksCount > 0) issues.push(`${tasksCount} task(s)`)
+                
+                return badRequest(res, `Cannot delete user: They are associated with ${issues.join(', ')}. Please reassign these items first.`)
+            }
+
+            // Delete user and related records in a transaction
+            await prisma.$transaction(async (tx) => {
+                // Delete memberships
+                await tx.membership.deleteMany({
+                    where: { userId: userId }
+                })
+
+                // Delete related records that can be safely cascaded
+                await tx.passwordReset.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.calendarNote.deleteMany({
+                    where: { userId: userId }
+                })
+                
+                await tx.session.deleteMany({
+                    where: { userId: userId }
+                })
+
+                // Finally delete the user
+                await tx.user.delete({
+                    where: { id: userId }
+                })
+            })
+
+            console.log(`✅ User deleted successfully: ${userId}`)
             return ok(res, { success: true, message: 'User deleted successfully' })
 
         } catch (error) {
-            console.error('Delete user error:', error)
-            return serverError(res, 'Failed to delete user', error.message)
+            console.error('❌ Delete user error:', error)
+            console.error('❌ Error details:', {
+                message: error.message,
+                code: error.code,
+                meta: error.meta
+            })
+            
+            // Provide more specific error messages
+            let errorMessage = error.message
+            if (error.code === 'P2003') {
+                errorMessage = 'Cannot delete user: They are still referenced in other records. Please reassign or remove those references first.'
+            } else if (error.code === 'P2025') {
+                errorMessage = 'User not found'
+            }
+            
+            return serverError(res, 'Failed to delete user', errorMessage)
         }
     }
 
