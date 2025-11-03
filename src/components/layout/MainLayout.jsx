@@ -227,6 +227,52 @@ const MainLayout = () => {
         };
     }, [clientsComponentReady]);
     
+    // NotificationCenter component - use state to re-check when component becomes available
+    const [notificationCenterReady, setNotificationCenterReady] = React.useState(false);
+    
+    React.useEffect(() => {
+        // Check if NotificationCenter component is available
+        const checkNotificationCenter = () => {
+            const NotificationCenterComponent = window.NotificationCenter;
+            const isValidComponent = NotificationCenterComponent && typeof NotificationCenterComponent === 'function';
+            if (isValidComponent) {
+                if (!notificationCenterReady) {
+                    console.log('✅ MainLayout: NotificationCenter component became available');
+                    setNotificationCenterReady(true);
+                }
+                return true;
+            }
+            return false;
+        };
+        
+        // Check immediately
+        if (checkNotificationCenter()) {
+            return; // Component already available, no need to poll
+        }
+        
+        // Re-check periodically until component is available
+        const interval = setInterval(() => {
+            if (!notificationCenterReady) {
+                checkNotificationCenter();
+            } else {
+                clearInterval(interval);
+            }
+        }, 200);
+        
+        // Cleanup after 10 seconds to avoid infinite checking
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!notificationCenterReady) {
+                console.warn('⚠️ MainLayout: NotificationCenter component did not load within 10 seconds');
+            }
+        }, 10000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [notificationCenterReady]);
+    
     // Select Clients component based on mobile detection
     const Clients = React.useMemo(() => {
         // On mobile, use optimized mobile component if available
@@ -617,7 +663,7 @@ const MainLayout = () => {
                         {isMobile && (
                             <div className="flex items-center space-x-1 sm:space-x-2 mr-1 sm:mr-3 flex-shrink-0">
                                 {/* Notification Center */}
-                                {window.NotificationCenter ? (
+                                {notificationCenterReady && window.NotificationCenter ? (
                                     <window.NotificationCenter />
                                 ) : null}
                                 
@@ -721,7 +767,7 @@ const MainLayout = () => {
                     {!isMobile && (
                         <div className="flex items-center space-x-2 flex-shrink-0">
                             {/* Notification Center */}
-                            {window.NotificationCenter ? (
+                            {notificationCenterReady && window.NotificationCenter ? (
                                 <window.NotificationCenter />
                             ) : null}
                             

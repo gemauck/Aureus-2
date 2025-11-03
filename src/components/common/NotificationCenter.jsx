@@ -34,10 +34,19 @@ const NotificationCenter = () => {
         try {
             setLoading(true);
             const token = window.storage?.getToken?.();
-            if (!token) return;
+            if (!token) {
+                console.warn('⚠️ NotificationCenter: No token available');
+                return;
+            }
             
-            const response = await fetch('/api/notifications', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            // Use proper API base URL like other components
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/notifications`, {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
             });
             
             if (response.ok) {
@@ -45,9 +54,14 @@ const NotificationCenter = () => {
                 const responseData = data.data || data;
                 setNotifications(responseData.notifications || []);
                 setUnreadCount(responseData.unreadCount || 0);
+            } else if (response.status === 401) {
+                console.warn('⚠️ NotificationCenter: Unauthorized - token may be invalid');
+                // Don't set error state, just silently fail
+            } else {
+                console.warn(`⚠️ NotificationCenter: Failed to load (${response.status})`);
             }
         } catch (error) {
-            console.error('Error loading notifications:', error);
+            console.error('❌ Error loading notifications:', error);
         } finally {
             setLoading(false);
         }
@@ -58,12 +72,14 @@ const NotificationCenter = () => {
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch('/api/notifications', {
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/notifications`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify({ read: true, notificationIds })
             });
             
@@ -80,12 +96,14 @@ const NotificationCenter = () => {
             const token = window.storage?.getToken?.();
             if (!token) return;
             
-            const response = await fetch('/api/notifications', {
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/notifications`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify({ notificationIds })
             });
             
@@ -275,5 +293,6 @@ const NotificationCenter = () => {
 // Make available globally
 if (typeof window !== 'undefined') {
     window.NotificationCenter = NotificationCenter;
+    console.log('🔔 NotificationCenter component loaded and registered');
 }
 
