@@ -386,10 +386,158 @@ const ManagementMeetingNotes = () => {
                                     </div>
                                 </div>
 
+                                {/* Attendees */}
+                                {meeting.attendees && meeting.attendees.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-users mr-1 text-blue-600 dark:text-blue-400"></i>
+                                            Attendees
+                                        </h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {meeting.attendees.map((attendee, idx) => (
+                                                <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs dark:bg-blue-900 dark:text-blue-300">
+                                                    {attendee}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Agenda Items */}
+                                {meeting.agendaItems && meeting.agendaItems.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-list-ul mr-1 text-green-600 dark:text-green-400"></i>
+                                            Agenda
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.agendaItems.map((item, idx) => (
+                                                <div key={item.id || idx} className="flex items-center gap-2 p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                                    <span className="flex-1 font-medium dark:text-slate-100">{item.topic}</span>
+                                                    {item.presenter && <span className="text-gray-600 dark:text-slate-400">{item.presenter}</span>}
+                                                    {item.timeAllocated && <span className="text-gray-500 dark:text-slate-500">{item.timeAllocated}</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Discussion Points */}
+                                {meeting.discussionPoints && meeting.discussionPoints.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-comments mr-1 text-purple-600 dark:text-purple-400"></i>
+                                            Discussion Points
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.discussionPoints.map((point, idx) => (
+                                                <div key={point.id || idx} className="p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                                    <span className="dark:text-slate-100">• {point.point}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Decisions */}
+                                {meeting.decisions && meeting.decisions.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-gavel mr-1 text-orange-600 dark:text-orange-400"></i>
+                                            Decisions
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.decisions.map((decision, idx) => (
+                                                <div key={decision.id || idx} className="p-2 bg-orange-50 rounded text-xs dark:bg-orange-900/30">
+                                                    <span className="dark:text-slate-100">✓ {decision.decision}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Action Items */}
+                                {meeting.actionItems && meeting.actionItems.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-tasks mr-1 text-indigo-600 dark:text-indigo-400"></i>
+                                            Action Items
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.actionItems.map((item, idx) => (
+                                                <div key={item.id || idx} className="p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="flex-1 dark:text-slate-100">{item.item}</span>
+                                                        {item.owner && <span className="text-gray-600 dark:text-slate-400">{item.owner}</span>}
+                                                        {item.dueDate && <span className="text-gray-500 dark:text-slate-500">{new Date(item.dueDate).toLocaleDateString('en-ZA')}</span>}
+                                                        <span className={`px-2 py-0.5 rounded text-xs ${
+                                                            item.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                                            item.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                                                            item.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                            'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200'
+                                                        }`}>
+                                                            {item.priority}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* KPIs */}
+                                {meeting.kpis && meeting.kpis.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-chart-line mr-1 text-teal-600 dark:text-teal-400"></i>
+                                            KPIs & Metrics
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.kpis.map((kpi, idx) => (
+                                                <div key={kpi.id || idx} className="p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="flex-1 font-medium dark:text-slate-100">{kpi.metric}</span>
+                                                        <span className="text-gray-600 dark:text-slate-400">{kpi.value} / {kpi.target}</span>
+                                                        <span className={`px-2 py-0.5 rounded text-xs ${
+                                                            kpi.status === 'exceeded' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                                            kpi.status === 'on_track' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                                                            kpi.status === 'at_risk' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                            'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                                        }`}>
+                                                            {kpi.status.replace('_', ' ')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Follow-ups */}
+                                {meeting.followUps && meeting.followUps.length > 0 && (
+                                    <div className="mb-4">
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">
+                                            <i className="fas fa-redo mr-1 text-pink-600 dark:text-pink-400"></i>
+                                            Follow-ups
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {meeting.followUps.map((followUp, idx) => (
+                                                <div key={followUp.id || idx} className="p-2 bg-gray-50 rounded text-xs dark:bg-slate-700">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="flex-1 dark:text-slate-100">{followUp.item}</span>
+                                                        {followUp.owner && <span className="text-gray-600 dark:text-slate-400">{followUp.owner}</span>}
+                                                        {followUp.dueDate && <span className="text-gray-500 dark:text-slate-500">{new Date(followUp.dueDate).toLocaleDateString('en-ZA')}</span>}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Meeting Notes */}
                                 {meeting.notes && (
                                     <div className="mb-4 p-3 bg-gray-50 rounded-lg dark:bg-slate-700">
-                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">Meeting Notes</h4>
+                                        <h4 className="text-xs font-semibold text-gray-700 mb-2 dark:text-slate-300">General Notes</h4>
                                         <p className="text-sm text-gray-600 whitespace-pre-wrap dark:text-slate-400">{meeting.notes}</p>
                                     </div>
                                 )}

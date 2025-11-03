@@ -16,6 +16,22 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
     const [showTaskForm, setShowTaskForm] = useState(false);
     const [showGoalForm, setShowGoalForm] = useState(false);
     const [users, setUsers] = useState([]);
+    
+    // Structured meeting fields (spreadsheet-like)
+    const [attendees, setAttendees] = useState([]);
+    const [agendaItems, setAgendaItems] = useState([]);
+    const [discussionPoints, setDiscussionPoints] = useState([]);
+    const [decisions, setDecisions] = useState([]);
+    const [actionItems, setActionItems] = useState([]);
+    const [kpis, setKpis] = useState([]);
+    const [followUps, setFollowUps] = useState([]);
+    const [newAttendee, setNewAttendee] = useState('');
+    const [newAgendaItem, setNewAgendaItem] = useState({ topic: '', presenter: '', timeAllocated: '' });
+    const [newDiscussionPoint, setNewDiscussionPoint] = useState('');
+    const [newDecision, setNewDecision] = useState('');
+    const [newActionItem, setNewActionItem] = useState({ item: '', owner: '', dueDate: '', priority: 'medium' });
+    const [newKpi, setNewKpi] = useState({ metric: '', value: '', target: '', status: 'on_track' });
+    const [newFollowUp, setNewFollowUp] = useState({ item: '', owner: '', dueDate: '' });
 
     // Load users for assignee dropdown
     useEffect(() => {
@@ -40,6 +56,13 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
                 setNotes(meeting.notes || '');
                 setTasks(Array.isArray(meeting.tasks) ? meeting.tasks : []);
                 setGoals(Array.isArray(meeting.goals) ? meeting.goals : []);
+                setAttendees(Array.isArray(meeting.attendees) ? meeting.attendees : []);
+                setAgendaItems(Array.isArray(meeting.agendaItems) ? meeting.agendaItems : []);
+                setDiscussionPoints(Array.isArray(meeting.discussionPoints) ? meeting.discussionPoints : []);
+                setDecisions(Array.isArray(meeting.decisions) ? meeting.decisions : []);
+                setActionItems(Array.isArray(meeting.actionItems) ? meeting.actionItems : []);
+                setKpis(Array.isArray(meeting.kpis) ? meeting.kpis : []);
+                setFollowUps(Array.isArray(meeting.followUps) ? meeting.followUps : []);
             } else {
                 // New meeting - default to today
                 const today = new Date();
@@ -48,9 +71,23 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
                 setNotes('');
                 setTasks([]);
                 setGoals([]);
+                setAttendees([]);
+                setAgendaItems([]);
+                setDiscussionPoints([]);
+                setDecisions([]);
+                setActionItems([]);
+                setKpis([]);
+                setFollowUps([]);
             }
             setNewTask({ title: '', assignee: '', dueDate: '', status: 'pending' });
             setNewGoal({ title: '', progress: 0, status: 'pending' });
+            setNewAttendee('');
+            setNewAgendaItem({ topic: '', presenter: '', timeAllocated: '' });
+            setNewDiscussionPoint('');
+            setNewDecision('');
+            setNewActionItem({ item: '', owner: '', dueDate: '', priority: 'medium' });
+            setNewKpi({ metric: '', value: '', target: '', status: 'on_track' });
+            setNewFollowUp({ item: '', owner: '', dueDate: '' });
             setShowTaskForm(false);
             setShowGoalForm(false);
         }
@@ -98,6 +135,84 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
         setGoals(goals.map(g => g.id === goalId ? { ...g, ...updates } : g));
     };
 
+    // Handlers for structured fields
+    const handleAddAttendee = () => {
+        if (newAttendee.trim() && !attendees.includes(newAttendee.trim())) {
+            setAttendees([...attendees, newAttendee.trim()]);
+            setNewAttendee('');
+        }
+    };
+
+    const handleRemoveAttendee = (attendee) => {
+        setAttendees(attendees.filter(a => a !== attendee));
+    };
+
+    const handleAddAgendaItem = () => {
+        if (newAgendaItem.topic.trim()) {
+            setAgendaItems([...agendaItems, { id: `agenda_${Date.now()}`, ...newAgendaItem }]);
+            setNewAgendaItem({ topic: '', presenter: '', timeAllocated: '' });
+        }
+    };
+
+    const handleRemoveAgendaItem = (id) => {
+        setAgendaItems(agendaItems.filter(a => a.id !== id));
+    };
+
+    const handleAddDiscussionPoint = () => {
+        if (newDiscussionPoint.trim()) {
+            setDiscussionPoints([...discussionPoints, { id: `disc_${Date.now()}`, point: newDiscussionPoint.trim() }]);
+            setNewDiscussionPoint('');
+        }
+    };
+
+    const handleRemoveDiscussionPoint = (id) => {
+        setDiscussionPoints(discussionPoints.filter(d => d.id !== id));
+    };
+
+    const handleAddDecision = () => {
+        if (newDecision.trim()) {
+            setDecisions([...decisions, { id: `decision_${Date.now()}`, decision: newDecision.trim() }]);
+            setNewDecision('');
+        }
+    };
+
+    const handleRemoveDecision = (id) => {
+        setDecisions(decisions.filter(d => d.id !== id));
+    };
+
+    const handleAddActionItem = () => {
+        if (newActionItem.item.trim()) {
+            setActionItems([...actionItems, { id: `action_${Date.now()}`, ...newActionItem }]);
+            setNewActionItem({ item: '', owner: '', dueDate: '', priority: 'medium' });
+        }
+    };
+
+    const handleRemoveActionItem = (id) => {
+        setActionItems(actionItems.filter(a => a.id !== id));
+    };
+
+    const handleAddKpi = () => {
+        if (newKpi.metric.trim()) {
+            setKpis([...kpis, { id: `kpi_${Date.now()}`, ...newKpi }]);
+            setNewKpi({ metric: '', value: '', target: '', status: 'on_track' });
+        }
+    };
+
+    const handleRemoveKpi = (id) => {
+        setKpis(kpis.filter(k => k.id !== id));
+    };
+
+    const handleAddFollowUp = () => {
+        if (newFollowUp.item.trim()) {
+            setFollowUps([...followUps, { id: `followup_${Date.now()}`, ...newFollowUp }]);
+            setNewFollowUp({ item: '', owner: '', dueDate: '' });
+        }
+    };
+
+    const handleRemoveFollowUp = (id) => {
+        setFollowUps(followUps.filter(f => f.id !== id));
+    };
+
     const handleSubmit = (e) => {
         e.preventDefault();
         
@@ -113,6 +228,13 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
             notes,
             tasks,
             goals,
+            attendees,
+            agendaItems,
+            discussionPoints,
+            decisions,
+            actionItems,
+            kpis,
+            followUps,
             createdBy: user?.name || user?.email || 'Unknown',
             updatedBy: user?.name || user?.email || 'Unknown'
         };
@@ -124,7 +246,7 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
+            <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10 dark:bg-slate-800 dark:border-slate-700">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">
                         {meeting ? 'Edit Meeting' : 'New Management Meeting'}
@@ -168,16 +290,410 @@ const ManagementMeetingModal = ({ isOpen, onClose, meeting, onSave }) => {
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1.5 dark:text-slate-300">
-                                Meeting Notes
+                                General Notes
                             </label>
                             <textarea
                                 value={notes}
                                 onChange={(e) => setNotes(e.target.value)}
-                                placeholder="Add meeting agenda, discussion points, decisions, etc."
-                                rows={5}
+                                placeholder="Additional notes, observations, or comments..."
+                                rows={3}
                                 className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
                             />
                         </div>
+                    </div>
+
+                    {/* Attendees Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-users mr-1.5 text-blue-600 dark:text-blue-400"></i>
+                            Attendees ({attendees.length})
+                        </h4>
+                        <div className="flex gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newAttendee}
+                                onChange={(e) => setNewAttendee(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddAttendee())}
+                                placeholder="Add attendee name"
+                                className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddAttendee}
+                                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {attendees.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {attendees.map((attendee, idx) => (
+                                    <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs dark:bg-blue-900 dark:text-blue-300">
+                                        {attendee}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveAttendee(attendee)}
+                                            className="text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                                        >
+                                            <i className="fas fa-times text-xs"></i>
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Agenda Items Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-list-ul mr-1.5 text-green-600 dark:text-green-400"></i>
+                            Agenda Items ({agendaItems.length})
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newAgendaItem.topic}
+                                onChange={(e) => setNewAgendaItem({ ...newAgendaItem, topic: e.target.value })}
+                                placeholder="Topic"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <input
+                                type="text"
+                                value={newAgendaItem.presenter}
+                                onChange={(e) => setNewAgendaItem({ ...newAgendaItem, presenter: e.target.value })}
+                                placeholder="Presenter"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <input
+                                type="text"
+                                value={newAgendaItem.timeAllocated}
+                                onChange={(e) => setNewAgendaItem({ ...newAgendaItem, timeAllocated: e.target.value })}
+                                placeholder="Time (e.g., 15 min)"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddAgendaItem}
+                                className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {agendaItems.length > 0 && (
+                            <div className="space-y-2">
+                                {agendaItems.map((item) => (
+                                    <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <div className="flex-1 grid grid-cols-3 gap-2 text-xs">
+                                            <span className="font-medium dark:text-slate-100">{item.topic}</span>
+                                            <span className="text-gray-600 dark:text-slate-400">{item.presenter}</span>
+                                            <span className="text-gray-500 dark:text-slate-500">{item.timeAllocated}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveAgendaItem(item.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Discussion Points Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-comments mr-1.5 text-purple-600 dark:text-purple-400"></i>
+                            Discussion Points ({discussionPoints.length})
+                        </h4>
+                        <div className="flex gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newDiscussionPoint}
+                                onChange={(e) => setNewDiscussionPoint(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDiscussionPoint())}
+                                placeholder="Add discussion point"
+                                className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddDiscussionPoint}
+                                className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {discussionPoints.length > 0 && (
+                            <div className="space-y-2">
+                                {discussionPoints.map((point) => (
+                                    <div key={point.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <span className="flex-1 text-xs dark:text-slate-100">{point.point}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveDiscussionPoint(point.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Decisions Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-gavel mr-1.5 text-orange-600 dark:text-orange-400"></i>
+                            Decisions ({decisions.length})
+                        </h4>
+                        <div className="flex gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newDecision}
+                                onChange={(e) => setNewDecision(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDecision())}
+                                placeholder="Add decision made"
+                                className="flex-1 px-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddDecision}
+                                className="px-3 py-1.5 text-xs bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {decisions.length > 0 && (
+                            <div className="space-y-2">
+                                {decisions.map((decision) => (
+                                    <div key={decision.id} className="flex items-start gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <span className="flex-1 text-xs dark:text-slate-100">{decision.decision}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveDecision(decision.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Action Items Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-tasks mr-1.5 text-indigo-600 dark:text-indigo-400"></i>
+                            Action Items ({actionItems.length})
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newActionItem.item}
+                                onChange={(e) => setNewActionItem({ ...newActionItem, item: e.target.value })}
+                                placeholder="Action item"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <select
+                                value={newActionItem.owner}
+                                onChange={(e) => setNewActionItem({ ...newActionItem, owner: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            >
+                                <option value="">Owner</option>
+                                {users.map(u => (
+                                    <option key={u.id} value={u.name || u.email}>{u.name || u.email}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="date"
+                                value={newActionItem.dueDate}
+                                onChange={(e) => setNewActionItem({ ...newActionItem, dueDate: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <select
+                                value={newActionItem.priority}
+                                onChange={(e) => setNewActionItem({ ...newActionItem, priority: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                                <option value="urgent">Urgent</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={handleAddActionItem}
+                                className="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {actionItems.length > 0 && (
+                            <div className="space-y-2">
+                                {actionItems.map((item) => (
+                                    <div key={item.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <div className="flex-1 grid grid-cols-4 gap-2 text-xs">
+                                            <span className="font-medium dark:text-slate-100">{item.item}</span>
+                                            <span className="text-gray-600 dark:text-slate-400">{item.owner}</span>
+                                            <span className="text-gray-500 dark:text-slate-500">{item.dueDate ? new Date(item.dueDate).toLocaleDateString('en-ZA') : 'No date'}</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs ${
+                                                item.priority === 'urgent' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                                item.priority === 'high' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                                                item.priority === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200'
+                                            }`}>
+                                                {item.priority}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveActionItem(item.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* KPIs Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-chart-line mr-1.5 text-teal-600 dark:text-teal-400"></i>
+                            KPIs & Metrics ({kpis.length})
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newKpi.metric}
+                                onChange={(e) => setNewKpi({ ...newKpi, metric: e.target.value })}
+                                placeholder="Metric name"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <input
+                                type="text"
+                                value={newKpi.value}
+                                onChange={(e) => setNewKpi({ ...newKpi, value: e.target.value })}
+                                placeholder="Current value"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <input
+                                type="text"
+                                value={newKpi.target}
+                                onChange={(e) => setNewKpi({ ...newKpi, target: e.target.value })}
+                                placeholder="Target"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <select
+                                value={newKpi.status}
+                                onChange={(e) => setNewKpi({ ...newKpi, status: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            >
+                                <option value="on_track">On Track</option>
+                                <option value="at_risk">At Risk</option>
+                                <option value="off_track">Off Track</option>
+                                <option value="exceeded">Exceeded</option>
+                            </select>
+                            <button
+                                type="button"
+                                onClick={handleAddKpi}
+                                className="px-3 py-1.5 text-xs bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {kpis.length > 0 && (
+                            <div className="space-y-2">
+                                {kpis.map((kpi) => (
+                                    <div key={kpi.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <div className="flex-1 grid grid-cols-4 gap-2 text-xs">
+                                            <span className="font-medium dark:text-slate-100">{kpi.metric}</span>
+                                            <span className="text-gray-600 dark:text-slate-400">{kpi.value} / {kpi.target}</span>
+                                            <span className={`px-2 py-0.5 rounded text-xs ${
+                                                kpi.status === 'exceeded' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                                                kpi.status === 'on_track' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
+                                                kpi.status === 'at_risk' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                                'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                            }`}>
+                                                {kpi.status.replace('_', ' ')}
+                                            </span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveKpi(kpi.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Follow-ups Section */}
+                    <div className="border-t border-gray-200 pt-4 dark:border-slate-700">
+                        <h4 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">
+                            <i className="fas fa-redo mr-1.5 text-pink-600 dark:text-pink-400"></i>
+                            Follow-ups ({followUps.length})
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
+                            <input
+                                type="text"
+                                value={newFollowUp.item}
+                                onChange={(e) => setNewFollowUp({ ...newFollowUp, item: e.target.value })}
+                                placeholder="Follow-up item"
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <select
+                                value={newFollowUp.owner}
+                                onChange={(e) => setNewFollowUp({ ...newFollowUp, owner: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            >
+                                <option value="">Owner</option>
+                                {users.map(u => (
+                                    <option key={u.id} value={u.name || u.email}>{u.name || u.email}</option>
+                                ))}
+                            </select>
+                            <input
+                                type="date"
+                                value={newFollowUp.dueDate}
+                                onChange={(e) => setNewFollowUp({ ...newFollowUp, dueDate: e.target.value })}
+                                className="px-2 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100"
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAddFollowUp}
+                                className="px-3 py-1.5 text-xs bg-pink-600 text-white rounded-lg hover:bg-pink-700 transition"
+                            >
+                                <i className="fas fa-plus mr-1"></i>Add
+                            </button>
+                        </div>
+                        {followUps.length > 0 && (
+                            <div className="space-y-2">
+                                {followUps.map((followUp) => (
+                                    <div key={followUp.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded dark:bg-slate-700">
+                                        <div className="flex-1 grid grid-cols-3 gap-2 text-xs">
+                                            <span className="font-medium dark:text-slate-100">{followUp.item}</span>
+                                            <span className="text-gray-600 dark:text-slate-400">{followUp.owner}</span>
+                                            <span className="text-gray-500 dark:text-slate-500">{followUp.dueDate ? new Date(followUp.dueDate).toLocaleDateString('en-ZA') : 'No date'}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveFollowUp(followUp.id)}
+                                            className="p-1 text-red-600 hover:text-red-700 transition"
+                                        >
+                                            <i className="fas fa-trash text-xs"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Tasks Section */}
