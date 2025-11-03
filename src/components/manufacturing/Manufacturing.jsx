@@ -7,8 +7,6 @@ const { useState, useEffect, useCallback } = React;
 const { useAuth } = window;
 
 const Manufacturing = () => {
-  console.log('🏭 Manufacturing component rendering/updating');
-  
   // Safety check for useAuth
   if (!window.useAuth) {
     console.error('❌ Manufacturing: useAuth is not available');

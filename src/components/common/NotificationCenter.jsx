@@ -8,14 +8,33 @@ const NotificationCenter = () => {
     const [loading, setLoading] = useState(false);
     const dropdownRef = useRef(null);
     const { isDark } = window.useTheme();
+    const consecutiveFailuresRef = useRef(0);
+    const pollingIntervalRef = useRef(null);
+    const isPollingPausedRef = useRef(false);
     
     useEffect(() => {
         loadNotifications();
         
         // Poll for new notifications every 30 seconds
-        const interval = setInterval(loadNotifications, 30000);
+        // Only poll if we haven't paused due to auth failures
+        const startPolling = () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+            pollingIntervalRef.current = setInterval(() => {
+                if (!isPollingPausedRef.current) {
+                    loadNotifications();
+                }
+            }, 30000);
+        };
         
-        return () => clearInterval(interval);
+        startPolling();
+        
+        return () => {
+            if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+            }
+        };
     }, []);
     
     // Close dropdown when clicking outside
@@ -87,6 +106,12 @@ const NotificationCenter = () => {
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.warn('⚠️ NotificationCenter: No token available');
+                consecutiveFailuresRef.current++;
+                // Pause polling after 3 consecutive failures
+                if (consecutiveFailuresRef.current >= 3) {
+                    isPollingPausedRef.current = true;
+                    console.warn('⏸️ NotificationCenter: Pausing polling due to authentication failures');
+                }
                 return;
             }
             
@@ -97,14 +122,37 @@ const NotificationCenter = () => {
                 const responseData = data.data || data;
                 setNotifications(responseData.notifications || []);
                 setUnreadCount(responseData.unreadCount || 0);
+                
+                // Reset failure counter on success
+                if (consecutiveFailuresRef.current > 0) {
+                    consecutiveFailuresRef.current = 0;
+                    // Resume polling if it was paused
+                    if (isPollingPausedRef.current) {
+                        isPollingPausedRef.current = false;
+                        console.log('✅ NotificationCenter: Resuming polling after successful authentication');
+                    }
+                }
             } else if (response.status === 401) {
-                console.warn('⚠️ NotificationCenter: Unauthorized - token may be invalid');
-                // Don't set error state, just silently fail
+                consecutiveFailuresRef.current++;
+                // Pause polling after 3 consecutive 401 errors
+                if (consecutiveFailuresRef.current >= 3) {
+                    isPollingPausedRef.current = true;
+                    console.warn('⏸️ NotificationCenter: Pausing polling due to consecutive 401 errors. Token may be invalid.');
+                } else {
+                    console.warn(`⚠️ NotificationCenter: Unauthorized (${consecutiveFailuresRef.current}/3 failures)`);
+                }
             } else {
+                // For other errors, don't increment failure counter (might be temporary network issues)
                 console.warn(`⚠️ NotificationCenter: Failed to load (${response.status})`);
             }
         } catch (error) {
             console.error('❌ Error loading notifications:', error);
+            consecutiveFailuresRef.current++;
+            // Pause polling after 5 total failures (including network errors)
+            if (consecutiveFailuresRef.current >= 5) {
+                isPollingPausedRef.current = true;
+                console.warn('⏸️ NotificationCenter: Pausing polling due to repeated errors');
+            }
         } finally {
             setLoading(false);
         }
@@ -201,8 +249,13 @@ const NotificationCenter = () => {
             <button
                 onClick={() => {
                     setIsOpen(!isOpen);
-                    // Reload notifications when opening dropdown
+                    // Reload notifications when opening dropdown and resume polling if paused
                     if (!isOpen) {
+                        // Force resume polling when user opens dropdown
+                        if (isPollingPausedRef.current) {
+                            isPollingPausedRef.current = false;
+                            consecutiveFailuresRef.current = 0;
+                        }
                         loadNotifications();
                     }
                 }}
