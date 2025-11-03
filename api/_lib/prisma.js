@@ -14,6 +14,7 @@ if (!global.__prisma) {
       errorFormat: 'pretty'
     })
     console.log('✅ Prisma client initialized')
+    console.log(`🔗 DATABASE_URL: ${process.env.DATABASE_URL.substring(0, 50)}${process.env.DATABASE_URL.length > 50 ? '...' : ''}`)
   } catch (error) {
     console.error('❌ Failed to create Prisma client:', error)
     throw error
