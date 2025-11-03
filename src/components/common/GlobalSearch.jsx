@@ -59,7 +59,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
             
             if (response.ok) {
                 const data = await response.json();
-                setResults(data.results || []);
+                setResults(data.data?.results || []);
             } else {
                 setResults([]);
             }
@@ -127,7 +127,7 @@ const GlobalSearch = ({ isMobile = false, isDark = false }) => {
     };
     
     return (
-        <div className="relative" ref={searchRef}>
+        <div className="relative">
             {/* Search Input */}
             <div className={`relative ${isMobile ? 'block' : 'hidden lg:block'}`}>
                 <input
