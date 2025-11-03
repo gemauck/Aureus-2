@@ -2344,6 +2344,19 @@ const Manufacturing = () => {
               }
             }
             console.log('✅ Stock movement creation process completed');
+            
+            // Refresh inventory to show updated quantities
+            if (window.DatabaseAPI && window.DatabaseAPI.getInventory) {
+              try {
+                const invResponse = await window.DatabaseAPI.getInventory();
+                const invData = invResponse?.data?.inventory || [];
+                setInventory(invData);
+                localStorage.setItem('manufacturing_inventory', JSON.stringify(invData));
+                console.log('✅ Inventory refreshed after purchase order');
+              } catch (invError) {
+                console.error('❌ Failed to refresh inventory:', invError);
+              }
+            }
           } catch (error) {
             console.error('❌ Error creating stock movements:', error);
             console.error('Error stack:', error.stack);
