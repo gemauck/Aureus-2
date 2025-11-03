@@ -326,8 +326,12 @@ export const sendInvitationEmail = async (invitationData) => {
         if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
-        } else {
+        } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
+            // Only try SMTP if we have a valid transporter
             result = await emailTransporter.sendMail(mailOptions);
+        } else {
+            // No valid email configuration
+            throw new Error('No email transporter available. Please configure SENDGRID_API_KEY or SMTP settings.');
         }
         
         console.log('✅ Invitation email sent successfully:', result.messageId);
