@@ -490,8 +490,9 @@ export const sendNotificationEmail = async (to, subject, message) => {
         });
         
         // Use SendGrid HTTP API if configured
+        // Priority: SendGrid API key takes precedence over SMTP
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
+        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
             mailOptions.fromName = 'Abcotronics';
             // Extract email from "Name <email>" format if needed
             const fromEmail = mailOptions.from.includes('<') 
