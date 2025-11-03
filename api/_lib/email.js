@@ -425,8 +425,10 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
                            (emailTransporter.apiKey && emailTransporter.apiKey.startsWith('SG.') ? emailTransporter.apiKey : null) ||
                            (process.env.SMTP_PASS && process.env.SMTP_PASS.startsWith('SG.') ? process.env.SMTP_PASS : null);
         
+        // Use SendGrid HTTP API if configured
+        // Priority: SendGrid API key takes precedence over SMTP
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
+        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else {
