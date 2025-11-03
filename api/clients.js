@@ -111,7 +111,8 @@ async function handler(req, res) {
           console.log(`🔍 Raw query returned ${rawClients.length} clients`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
-          console.warn('⚠️ Type filter failed, trying without filter:', typeError.message)
+          console.error('❌ Type filter failed, trying without filter:', typeError.message)
+          console.error('❌ Type error stack:', typeError.stack)
           
           // Verify userId exists before using it in relation
           let validUserId = null
