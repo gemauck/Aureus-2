@@ -2519,7 +2519,7 @@ const Clients = React.memo(() => {
                                                 className={`flex-shrink-0 w-5 h-5 flex items-center justify-center transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
                                                 title={lead.isStarred ? 'Unstar this lead' : 'Star this lead'}
                                             >
-                                                <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
+                                                <i className={`${lead.isStarred ? 'fas' : 'far'} fa-star ${lead.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-300' : 'text-gray-300'}`}></i>
                                             </button>
                                             {lead.thumbnail ? (
                                                 <img src={lead.thumbnail} alt={lead.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />

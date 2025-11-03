@@ -1640,7 +1640,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     className={`flex-shrink-0 transition-colors ${isDark ? 'hover:text-yellow-400' : 'hover:text-yellow-600'}`}
                                     title={client.isStarred ? 'Unstar this client' : 'Star this client'}
                                 >
-                                    <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-white' : 'text-gray-300'}`}></i>
+                                    <i className={`${client.isStarred ? 'fas' : 'far'} fa-star ${client.isStarred ? 'text-yellow-500' : isDark ? 'text-gray-300' : 'text-gray-300'}`}></i>
                                 </button>
                             )}
                             <div className="min-w-0 flex-1">

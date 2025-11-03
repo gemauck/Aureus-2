@@ -608,3 +608,23 @@ html:not(.dark) input[type="search"]:not([style*="color"]):not([style*="backgrou
 html:not(.dark) select:not([style*="color"]):not([style*="background"]) {
     color: #111827 !important;
 }
+
+/* Star icon visibility in dark mode */
+.dark .far.fa-star {
+    color: #e5e7eb !important; /* Light gray - clearly visible */
+    opacity: 1 !important;
+}
+
+.dark .fas.fa-star {
+    color: #eab308 !important; /* Bright yellow - clearly visible */
+    opacity: 1 !important;
+}
+
+/* Ensure starred stars are bright yellow in dark mode */
+.dark button:hover .far.fa-star {
+    color: #fbbf24 !important; /* Slightly brighter on hover */
+}
+
+.dark button:hover .fas.fa-star {
+    color: #facc15 !important; /* Brighter yellow on hover */
+}
