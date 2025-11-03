@@ -334,8 +334,9 @@ export const sendInvitationEmail = async (invitationData) => {
         });
         
         // Use SendGrid HTTP API if configured
+        // Priority: SendGrid API key takes precedence over SMTP
         let result;
-        if (useSendGridHTTP && emailTransporter.useHTTP && sendGridKey) {
+        if (sendGridKey && (useSendGridHTTP || emailTransporter.useHTTP)) {
             mailOptions.fromName = 'Abcotronics';
             result = await sendViaSendGridAPI(mailOptions, sendGridKey);
         } else if (emailTransporter && typeof emailTransporter.sendMail === 'function') {
