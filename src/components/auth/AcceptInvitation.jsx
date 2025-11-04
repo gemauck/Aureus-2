@@ -44,7 +44,8 @@ const AcceptInvitation = () => {
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({ error: { message: `Server error: ${response.status}` } }));
-                throw new Error(errorData.error?.message || `Failed to validate invitation (${response.status})`);
+                const errorMessage = errorData.error?.details || errorData.error?.message || `Failed to validate invitation (${response.status})`;
+                throw new Error(errorMessage);
             }
             
             const result = await response.json();
@@ -56,10 +57,13 @@ const AcceptInvitation = () => {
                 setInvitation(invitationData);
                 setName(invitationData.name || '');
             } else {
-                setError(result.error?.message || result.data?.error?.message || 'Invalid or expired invitation link');
+                const errorMsg = result.error?.details || result.error?.message || result.data?.error?.message || 'Invalid or expired invitation link';
+                setError(errorMsg);
             }
         } catch (err) {
-            setError('Failed to validate invitation. Please check your connection.');
+            // Use the actual error message from the server if available
+            const errorMessage = err.message || 'Failed to validate invitation. Please check your connection.';
+            setError(errorMessage);
             console.error('Validation error:', err);
         } finally {
             setLoading(false);
