@@ -73,26 +73,35 @@ function toHandlerPath(urlPath) {
     candidates.push(singleFile)
   }
   
-  // IMPORTANT: Check base file for multi-part paths BEFORE dynamic routes
-  // This handles cases like /api/jobcards/:id where jobcards.js handles all routes
-  if (parts.length > 1) {
-    const baseFile = path.join(apiDir, `${parts[0]}.js`)
-    if (fs.existsSync(baseFile)) {
-      candidates.push(baseFile)
-    }
-  }
-  
-  // Dynamic route matches LAST (e.g., /api/clients/123 -> api/clients/[id].js)
-  // Only checked after exact matches fail
+  // IMPORTANT: Check dynamic routes BEFORE base file for multi-part paths
+  // This ensures /api/users/:id matches api/users/[id].js, not api/users.js
   if (parts.length === 2) {
     const dynamicFile = path.join(apiDir, parts[0], '[id].js')
-    candidates.push(dynamicFile)
+    if (fs.existsSync(dynamicFile)) {
+      candidates.push(dynamicFile)
+    }
   }
   
   // Nested dynamic routes (e.g., /api/clients/123/rss-subscription -> api/clients/[id]/rss-subscription.js)
   if (parts.length === 3) {
     const nestedDynamicFile = path.join(apiDir, parts[0], '[id]', `${parts[2]}.js`)
-    candidates.push(nestedDynamicFile)
+    if (fs.existsSync(nestedDynamicFile)) {
+      candidates.push(nestedDynamicFile)
+    }
+  }
+  
+  // IMPORTANT: Check base file for multi-part paths AFTER dynamic routes
+  // This handles cases like /api/jobcards/:id where jobcards.js handles all routes
+  // But only if no dynamic route was found
+  if (parts.length > 1) {
+    const baseFile = path.join(apiDir, `${parts[0]}.js`)
+    if (fs.existsSync(baseFile)) {
+      // Only add base file if dynamic route doesn't exist
+      const dynamicExists = parts.length === 2 && fs.existsSync(path.join(apiDir, parts[0], '[id].js'))
+      if (!dynamicExists) {
+        candidates.push(baseFile)
+      }
+    }
   }
   
   for (const candidate of candidates) {
