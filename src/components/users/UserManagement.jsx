@@ -109,12 +109,33 @@ const UserManagement = () => {
                 setUsers(usersList);
                 setInvitations(invitationsList);
             } else {
-                console.error('❌ Failed to load users, status:', response.status);
+                // Suppress error logs for database connection errors and server errors (500, 502, 503, 504)
+                const isServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                 const errorText = await response.text();
-                console.error('Error response:', errorText);
+                const isDatabaseError = errorText.includes('DATABASE_CONNECTION_ERROR') ||
+                                       errorText.includes('Database connection failed') ||
+                                       errorText.includes('unreachable');
+                
+                if (!isDatabaseError && !isServerError) {
+                    console.error('❌ Failed to load users, status:', response.status);
+                    console.error('Error response:', errorText);
+                }
             }
         } catch (error) {
-            console.error('❌ Error loading users:', error);
+            // Suppress error logs for database connection errors and server errors
+            const errorMessage = error?.message || String(error);
+            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                  errorMessage.includes('unreachable') ||
+                                  errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('ETIMEDOUT');
+            const isServerError = errorMessage.includes('500') || 
+                                 errorMessage.includes('502') || 
+                                 errorMessage.includes('503') || 
+                                 errorMessage.includes('504');
+            
+            if (!isDatabaseError && !isServerError) {
+                console.error('❌ Error loading users:', error);
+            }
         } finally {
             setLoading(false);
         }

@@ -286,13 +286,17 @@ const DatabaseAPI = {
                         // ignore parse failures
                     }
 
-                    // Check if this is a retry-able server error (502, 503, 504)
-                    const isRetryableServerError = response.status === 502 || response.status === 503 || response.status === 504;
+                    // Check if this is a retry-able server error (500, 502, 503, 504)
+                    // 500 errors are often temporary server issues and should be retried
+                    const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
                     if (isRetryableServerError && attempt < maxRetries) {
-                        // Retry on 502/503/504 with exponential backoff
+                        // Retry on 500/502/503/504 with exponential backoff
                         const delay = baseDelay * Math.pow(2, attempt);
-                        console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+                        // Only log warning on first attempt to reduce noise
+                        if (attempt === 0) {
+                            console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+                        }
                         await new Promise(resolve => setTimeout(resolve, delay));
                         continue; // Retry the request
                     }
@@ -321,6 +325,14 @@ const DatabaseAPI = {
                         // Suppress database connection error logs - they're expected when DB is unreachable
                         // The error is still thrown for proper error handling, just not logged
                         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
+                    }
+                    
+                    // Handle 500 errors gracefully - suppress console errors for expected server failures
+                    if (response.status === 500) {
+                        // Suppress console.error for 500 errors - they're handled by retry logic
+                        // Include "500" in the error message so catch block can recognize it as server error
+                        const errorMessage = serverErrorMessage || 'Server error 500: The server encountered an error processing your request.';
+                        throw new Error(errorMessage);
                     }
                     
                     // For other errors, use the server's error message if available
@@ -356,8 +368,8 @@ const DatabaseAPI = {
             } catch (error) {
                 lastError = error;
                 
-                // Check if error message indicates a 502/503/504 that we should retry
-                const isServerError = error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
+                // Check if error message indicates a 500/502/503/504 that we should retry
+                const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
                 
                 // Only retry on network errors or server errors (502/503/504), not on other HTTP errors or auth errors
                 const isNetwork = this.isNetworkError(error);
@@ -380,11 +392,13 @@ const DatabaseAPI = {
                                               errorMessage.includes('ECONNREFUSED') ||
                                               errorMessage.includes('ETIMEDOUT');
                         
-                        // Only log non-database errors (database errors are expected when DB is down)
-                        if (!isDatabaseError) {
+                        // Only log non-database errors and non-server errors (server errors are expected when backend is down)
+                        // Suppress console.error for server errors (500, 502, 503, 504) to reduce noise
+                        if (!isDatabaseError && !isServerError) {
                             console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
                         }
                         if (isServerError) {
+                            // Suppress error logs for server errors - they're expected when backend has issues
                             throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
                         } else {
                             throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
@@ -397,8 +411,9 @@ const DatabaseAPI = {
                                               errorMessage.includes('ECONNREFUSED') ||
                                               errorMessage.includes('ETIMEDOUT');
                         
-                        // Only log non-database errors (database errors are expected when DB is down)
-                        if (!isDatabaseError) {
+                        // Suppress error logs for server errors and database errors
+                        const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
+                        if (!isDatabaseError && !isServerError) {
                             console.error(`❌ Database API request failed (${endpoint}):`, error);
                         }
                         throw error;

@@ -93,6 +93,13 @@ async function request(path, options = {}) {
         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
       }
       
+      // Handle 500 errors gracefully - suppress console errors for expected server failures
+      if (res.status === 500) {
+        // Include "500" in the error message so catch block can recognize it as server error
+        const serverErrorMessage = errorMessage || 'Server error 500: The server encountered an error processing your request.';
+        throw new Error(serverErrorMessage);
+      }
+      
       // For heartbeat endpoint, suppress "Invalid method" errors (they're expected if server hasn't updated)
       if (path === '/users/heartbeat' && errorMessage?.includes('Invalid method')) {
         return null; // Silently ignore heartbeat method errors
@@ -103,15 +110,19 @@ async function request(path, options = {}) {
 
     return data
   } catch (error) {
-    // Check if it's a database connection error - suppress logs for these
+    // Check if it's a database connection error or server error (500, 502, 503, 504) - suppress logs for these
     const errorMessage = error?.message || String(error);
     const isDatabaseError = errorMessage.includes('Database connection failed') ||
                           errorMessage.includes('unreachable') ||
                           errorMessage.includes('ECONNREFUSED') ||
                           errorMessage.includes('ETIMEDOUT');
+    const isServerError = errorMessage.includes('500') || 
+                         errorMessage.includes('502') || 
+                         errorMessage.includes('503') || 
+                         errorMessage.includes('504');
     
-    // Only log non-database errors (database errors are expected when DB is down)
-    if (!isDatabaseError) {
+    // Suppress error logs for server errors and database errors (they're expected when backend/DB is down)
+    if (!isDatabaseError && !isServerError) {
       console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
     }
     throw error;

@@ -158,7 +158,20 @@ const NotificationCenter = () => {
                 throw error;
             }
         } catch (error) {
-            console.error('❌ Error loading notifications:', error);
+            // Suppress error logs for database connection errors and server errors (500, 502, 503, 504)
+            const errorMessage = error?.message || String(error);
+            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                  errorMessage.includes('unreachable') ||
+                                  errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('ETIMEDOUT');
+            const isServerError = errorMessage.includes('500') || 
+                                 errorMessage.includes('502') || 
+                                 errorMessage.includes('503') || 
+                                 errorMessage.includes('504');
+            
+            if (!isDatabaseError && !isServerError) {
+                console.error('❌ Error loading notifications:', error);
+            }
             consecutiveFailuresRef.current++;
             // Pause polling after 5 total failures (including network errors)
             if (consecutiveFailuresRef.current >= 5) {

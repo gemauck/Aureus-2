@@ -119,17 +119,51 @@ const Calendar = () => {
                             return true;
                         } else {
                             const errorText = await res.text();
-                            console.warn('Failed to load notes from server:', res.status, errorText);
+                            // Suppress error logs for database connection errors and server errors (500, 502, 503, 504)
+                            const isServerError = res.status === 500 || res.status === 502 || res.status === 503 || res.status === 504;
+                            const isDatabaseError = errorText.includes('DATABASE_CONNECTION_ERROR') ||
+                                                   errorText.includes('Database connection failed') ||
+                                                   errorText.includes('unreachable');
+                            
+                            if (!isDatabaseError && !isServerError) {
+                                console.warn('Failed to load notes from server:', res.status, errorText);
+                            }
                             return false;
                         }
                     } catch (error) {
-                        console.error('Error fetching notes from server:', error);
+                        // Suppress error logs for database connection errors and server errors
+                        const errorMessage = error?.message || String(error);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable') ||
+                                              errorMessage.includes('ECONNREFUSED') ||
+                                              errorMessage.includes('ETIMEDOUT');
+                        const isServerError = errorMessage.includes('500') || 
+                                             errorMessage.includes('502') || 
+                                             errorMessage.includes('503') || 
+                                             errorMessage.includes('504');
+                        
+                        if (!isDatabaseError && !isServerError) {
+                            console.error('Error fetching notes from server:', error);
+                        }
                         return false;
                     }
                 }
                 return false;
             } catch (error) {
-                console.error('Error loading notes:', error);
+                // Suppress error logs for database connection errors and server errors
+                const errorMessage = error?.message || String(error);
+                const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                      errorMessage.includes('unreachable') ||
+                                      errorMessage.includes('ECONNREFUSED') ||
+                                      errorMessage.includes('ETIMEDOUT');
+                const isServerError = errorMessage.includes('500') || 
+                                     errorMessage.includes('502') || 
+                                     errorMessage.includes('503') || 
+                                     errorMessage.includes('504');
+                
+                if (!isDatabaseError && !isServerError) {
+                    console.error('Error loading notes:', error);
+                }
                 return false;
             }
         };

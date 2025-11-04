@@ -540,7 +540,20 @@ const Clients = React.memo(() => {
             
             setProjects(normalizedProjects);
         } catch (error) {
-            console.error('❌ Failed to load projects in Clients component:', error);
+            // Suppress error logs for database connection errors and server errors (500, 502, 503, 504)
+            const errorMessage = error?.message || String(error);
+            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                  errorMessage.includes('unreachable') ||
+                                  errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('ETIMEDOUT');
+            const isServerError = errorMessage.includes('500') || 
+                                 errorMessage.includes('502') || 
+                                 errorMessage.includes('503') || 
+                                 errorMessage.includes('504');
+            
+            if (!isDatabaseError && !isServerError) {
+                console.error('❌ Failed to load projects in Clients component:', error);
+            }
             // Don't set projects to empty array on error - keep existing if any
         }
     };
