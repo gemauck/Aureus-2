@@ -118,13 +118,23 @@ export async function checkForDuplicates(data, excludeId = null) {
       return null
     }
 
-    // Query all clients and leads (since a lead might duplicate a client and vice versa)
-    const allRecords = await prisma.client.findMany({
-      where: {
-        ...excludeCondition,
-        OR: whereConditions.length > 0 ? whereConditions : undefined
-      }
-    })
+    // Query records - if we need to check emails/phones, query all records
+    // Otherwise, use optimized query with OR conditions for name/website
+    let allRecords
+    if (emails.length > 0 || phones.length > 0) {
+      // Need to check all records for email/phone matches since we can't query JSON arrays efficiently
+      allRecords = await prisma.client.findMany({
+        where: excludeCondition
+      })
+    } else {
+      // Optimized query for name/website only
+      allRecords = await prisma.client.findMany({
+        where: {
+          ...excludeCondition,
+          OR: whereConditions.length > 0 ? whereConditions : undefined
+        }
+      })
+    }
 
     // Check for matches
     const matches = []
@@ -138,9 +148,11 @@ export async function checkForDuplicates(data, excludeId = null) {
 
       const matchReasons = []
 
-      // Check name similarity (exact match or very similar)
-      if (name && recordName && recordName === name) {
-        matchReasons.push('name')
+      // Check name similarity (exact match first)
+      if (name && recordName) {
+        if (recordName === name) {
+          matchReasons.push('name')
+        }
       }
 
       // Check website match
@@ -175,11 +187,14 @@ export async function checkForDuplicates(data, excludeId = null) {
       }
     }
 
-    // Also check for similar names (fuzzy match)
+    // Also check for similar names (fuzzy match) if no exact matches found
     if (name && matches.length === 0) {
-      const similarRecords = await prisma.client.findMany({
-        where: excludeCondition
-      })
+      // Only query if we haven't already queried all records
+      const similarRecords = (emails.length > 0 || phones.length > 0) 
+        ? allRecords 
+        : await prisma.client.findMany({
+            where: excludeCondition
+          })
 
       for (const record of similarRecords) {
         const recordName = normalizeString(record.name)
@@ -187,15 +202,21 @@ export async function checkForDuplicates(data, excludeId = null) {
         // Check for very similar names (e.g., "ABC Corp" vs "ABC Corporation")
         if (recordName && recordName !== name) {
           // Calculate similarity (simple check for substring match or high similarity)
-          const nameWords = name.split(/\s+/)
-          const recordWords = recordName.split(/\s+/)
+          const nameWords = name.split(/\s+/).filter(w => w.length > 2)
+          const recordWords = recordName.split(/\s+/).filter(w => w.length > 2)
+          
+          if (nameWords.length === 0 || recordWords.length === 0) continue
           
           // If major words match, consider it potentially duplicate
           const matchingWords = nameWords.filter(word => 
             word.length > 3 && recordWords.some(rw => rw.includes(word) || word.includes(rw))
           )
           
-          if (matchingWords.length >= Math.min(nameWords.length, recordWords.length) * 0.7) {
+          // Require at least 70% word match or exact substring match
+          const similarityThreshold = Math.min(nameWords.length, recordWords.length) * 0.7
+          if (matchingWords.length >= similarityThreshold || 
+              (name.length > 5 && recordName.includes(name)) ||
+              (recordName.length > 5 && name.includes(recordName))) {
             matches.push({
               id: record.id,
               name: record.name,
