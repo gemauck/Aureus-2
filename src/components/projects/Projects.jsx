@@ -365,40 +365,58 @@ const Projects = () => {
         console.log('📥 Loading ProjectDetail from:', projectDetailPath);
         
         try {
+            // First, try to fetch and validate the file
+            const response = await fetch(projectDetailPath);
+            if (!response.ok) {
+                throw new Error(`ProjectDetail not found: ${response.status} ${response.statusText}`);
+            }
+            
+            const text = await response.text();
+            
+            // Validate it's JavaScript (not HTML 404 page)
+            if (text.trim().startsWith('<') || text.trim().startsWith('<!DOCTYPE')) {
+                throw new Error('ProjectDetail appears to be HTML (404 page?)');
+            }
+            
             const script = document.createElement('script');
-            script.src = projectDetailPath;
             script.type = 'text/javascript';
             script.async = false; // Load synchronously to ensure it executes
             
+            // Create blob URL from validated JavaScript content
+            const blob = new Blob([text], { type: 'application/javascript' });
+            const blobUrl = URL.createObjectURL(blob);
+            script.src = blobUrl;
+            
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => {
+                    URL.revokeObjectURL(blobUrl);
                     reject(new Error('ProjectDetail load timeout after 5 seconds'));
                 }, 5000);
                 
-                script.onload = () => {
-                    console.log('✅ ProjectDetail script loaded, checking registration...');
-                    // Wait for the script to execute and register
-                    let attempts = 0;
-                    const checkInterval = setInterval(() => {
-                        attempts++;
-                        if (window.ProjectDetail) {
-                            console.log('✅ ProjectDetail registered successfully');
-                            clearTimeout(timeout);
-                            clearInterval(checkInterval);
-                            setProjectDetailAvailable(true);
-                            resolve(true);
-                        } else if (attempts >= 20) {
-                            clearTimeout(timeout);
-                            clearInterval(checkInterval);
-                            reject(new Error('ProjectDetail not registered after script load (waited 2s)'));
-                        }
-                    }, 100);
-                };
+                let attempts = 0;
+                const checkInterval = setInterval(() => {
+                    attempts++;
+                    if (window.ProjectDetail) {
+                        console.log('✅ ProjectDetail registered successfully');
+                        clearTimeout(timeout);
+                        clearInterval(checkInterval);
+                        URL.revokeObjectURL(blobUrl);
+                        setProjectDetailAvailable(true);
+                        resolve(true);
+                    } else if (attempts >= 50) {
+                        clearTimeout(timeout);
+                        clearInterval(checkInterval);
+                        URL.revokeObjectURL(blobUrl);
+                        reject(new Error('ProjectDetail not registered after script load (waited 5s)'));
+                    }
+                }, 100);
                 
                 script.onerror = (error) => {
+                    URL.revokeObjectURL(blobUrl);
                     clearTimeout(timeout);
-                    console.error('❌ Failed to load ProjectDetail script:', error);
-                    reject(new Error(`Failed to load ProjectDetail script: ${error.message || 'Unknown error'}`));
+                    clearInterval(checkInterval);
+                    console.error('❌ Failed to execute ProjectDetail script:', error);
+                    reject(new Error(`Failed to execute ProjectDetail script: ${error.message || 'Unknown error'}`));
                 };
                 
                 document.head.appendChild(script);
