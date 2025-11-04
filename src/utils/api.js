@@ -88,7 +88,8 @@ async function request(path, options = {}) {
       
       // Handle database connection errors with user-friendly messages
       if (errorCode === 'DATABASE_CONNECTION_ERROR' || errorMessage?.includes('Database connection failed') || errorMessage?.includes('unreachable')) {
-        console.error(`🔌 Database connection error on ${path}:`, errorDetails || errorMessage);
+        // Suppress database connection error logs - they're expected when DB is unreachable
+        // The error is still thrown for proper error handling, just not logged
         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
       }
       
@@ -102,7 +103,17 @@ async function request(path, options = {}) {
 
     return data
   } catch (error) {
-    console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
+    // Check if it's a database connection error - suppress logs for these
+    const errorMessage = error?.message || String(error);
+    const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                          errorMessage.includes('unreachable') ||
+                          errorMessage.includes('ECONNREFUSED') ||
+                          errorMessage.includes('ETIMEDOUT');
+    
+    // Only log non-database errors (database errors are expected when DB is down)
+    if (!isDatabaseError) {
+      console.error('❌ Fetch Error:', { path, error: error.message, stack: error.stack });
+    }
     throw error;
   }
 }
@@ -183,14 +194,19 @@ const api = {
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam
-      // Don't log 401/500/400 errors as they're expected when auth is in flux or server hasn't updated
-      if (error.message && 
-          !error.message.includes('401') && 
-          !error.message.includes('500') && 
-          !error.message.includes('400') &&
-          !error.message.includes('Invalid method') &&
-          !error.message.includes('Failed to update')) {
-        console.warn('Heartbeat failed:', error.message)
+      // Don't log 401/500/400 errors or database errors as they're expected when auth is in flux or server hasn't updated or DB is down
+      const errorMessage = error.message || '';
+      const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                            errorMessage.includes('unreachable');
+      
+      if (errorMessage && 
+          !errorMessage.includes('401') && 
+          !errorMessage.includes('500') && 
+          !errorMessage.includes('400') &&
+          !errorMessage.includes('Invalid method') &&
+          !errorMessage.includes('Failed to update') &&
+          !isDatabaseError) {
+        console.warn('Heartbeat failed:', errorMessage)
       }
       return null
     }

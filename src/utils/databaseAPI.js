@@ -318,7 +318,8 @@ const DatabaseAPI = {
                     // Handle database connection errors with user-friendly messages
                     if (serverError && serverError.code === 'DATABASE_CONNECTION_ERROR') {
                         const errorMsg = serverError.details || serverError.message || 'Database connection failed';
-                        console.error(`🔌 Database connection error on ${endpoint}:`, errorMsg);
+                        // Suppress database connection error logs - they're expected when DB is unreachable
+                        // The error is still thrown for proper error handling, just not logged
                         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
                     }
                     
@@ -372,14 +373,34 @@ const DatabaseAPI = {
                 } else {
                     // Don't retry - log and throw
                     if ((isNetwork || isServerError) && attempt === maxRetries) {
-                        console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
+                        // Check if it's a database connection error - suppress logs for these
+                        const errorMessage = error?.message || String(error);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable') ||
+                                              errorMessage.includes('ECONNREFUSED') ||
+                                              errorMessage.includes('ETIMEDOUT');
+                        
+                        // Only log non-database errors (database errors are expected when DB is down)
+                        if (!isDatabaseError) {
+                            console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
+                        }
                         if (isServerError) {
                             throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
                         } else {
                             throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
                         }
                     } else {
-                        console.error(`❌ Database API request failed (${endpoint}):`, error);
+                        // Check if it's a database connection error - suppress logs for these
+                        const errorMessage = error?.message || String(error);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable') ||
+                                              errorMessage.includes('ECONNREFUSED') ||
+                                              errorMessage.includes('ETIMEDOUT');
+                        
+                        // Only log non-database errors (database errors are expected when DB is down)
+                        if (!isDatabaseError) {
+                            console.error(`❌ Database API request failed (${endpoint}):`, error);
+                        }
                         throw error;
                     }
                 }
