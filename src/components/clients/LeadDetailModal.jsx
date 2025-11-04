@@ -58,6 +58,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
+        
+        // Debug: Log when proposals change
+        if (formData.proposals && Array.isArray(formData.proposals)) {
+            console.log('📋 formData.proposals updated:', {
+                count: formData.proposals.length,
+                ids: formData.proposals.map(p => p?.id || 'no-id'),
+                titles: formData.proposals.map(p => p?.title || p?.name || 'no-title')
+            });
+        }
     }, [formData]);
     
     // Update tab when initialTab prop changes
@@ -126,9 +135,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             const currentProposals = currentFormData.proposals || [];
             const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
             
+            console.log('🔄 Same lead reloaded - checking proposals:', {
+                currentProposalsCount: currentProposals.length,
+                leadProposalsCount: leadProposals.length,
+                currentProposalIds: currentProposals.map(p => p.id),
+                leadProposalIds: leadProposals.map(p => p.id),
+                isSavingProposals: isSavingProposalsRef.current,
+                isCreatingProposal: isCreatingProposalRef.current,
+                hasLastSavedData: !!lastSavedDataRef.current
+            });
+            
             // If we just saved proposals, always preserve them
             if (isSavingProposalsRef.current || (lastSavedDataRef.current && lastSavedDataRef.current.proposals)) {
                 const savedProposals = lastSavedDataRef.current?.proposals || currentProposals;
+                console.log('✅ Preserving saved proposals:', {
+                    count: savedProposals.length,
+                    ids: savedProposals.map(p => p.id)
+                });
                 setFormData(prev => ({
                     ...prev,
                     proposals: (Array.isArray(savedProposals) && savedProposals.length > 0) ? savedProposals : leadProposals
@@ -146,6 +169,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 
                 // Only update if formData still matches our last save (meaning user hasn't made new changes)
                 if (currentStatus === lastSavedStatus && currentStage === lastSavedStage) {
+                    console.log('✅ Status/stage unchanged, merging proposals carefully');
                     setFormData(prev => ({
                         ...prev,
                         status: lead.status,
@@ -155,6 +179,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                     }));
                 } else {
                     // User has made changes - preserve all local state including proposals
+                    console.log('⚠️ Status/stage changed, preserving all local proposals');
                     setFormData(prev => ({
                         ...prev,
                         // Keep current proposals to prevent loss
@@ -163,6 +188,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 }
             } else {
                 // No last saved data - preserve proposals from current state
+                console.log('⚠️ No last saved data, preserving current proposals');
                 setFormData(prev => ({
                     ...prev,
                     proposals: (Array.isArray(prev.proposals) && prev.proposals.length > 0) ? prev.proposals : leadProposals
@@ -2498,6 +2524,28 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <i className="fas fa-file-contract text-4xl mb-3"></i>
                                         <p className="text-sm">No proposals created yet</p>
                                         <p className="text-xs mt-1">Click "Create New Proposal" to start the approval workflow</p>
+                                        {/* Debug info */}
+                                        {process.env.NODE_ENV === 'development' && (
+                                            <div className="mt-4 text-xs text-gray-400">
+                                                <p>Debug: proposals = {JSON.stringify(formData.proposals)}</p>
+                                                <p>formDataRef proposals count: {formDataRef.current?.proposals?.length || 0}</p>
+                                                <button 
+                                                    onClick={() => {
+                                                        console.log('🔍 Manual Debug Check:', {
+                                                            formDataProposals: formData.proposals,
+                                                            formDataRefProposals: formDataRef.current?.proposals,
+                                                            lastSavedProposals: lastSavedDataRef.current?.proposals,
+                                                            isSavingProposals: isSavingProposalsRef.current,
+                                                            isCreatingProposal: isCreatingProposalRef.current,
+                                                            leadProposals: typeof lead?.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || [])
+                                                        });
+                                                    }}
+                                                    className="mt-2 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs"
+                                                >
+                                                    Debug Proposals
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
