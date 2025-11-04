@@ -172,6 +172,32 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
                         console.log('📝 Server notes keys:', Object.keys(serverNotes));
                         
+                        // CRITICAL: Don't overwrite if there's unsaved content in editor
+                        const dateString = formatDateString(currentDate);
+                        const editorContent = editorRef.current?.innerHTML || '';
+                        const hasUnsavedChanges = editorContent && editorContent.trim().length > 0;
+                        
+                        // Check if we're currently editing and have unsaved changes
+                        if (!showListView && currentDate && hasUnsavedChanges) {
+                            const lastSaved = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
+                            // If editor has different content than last saved, don't overwrite
+                            if (editorContent !== lastSaved) {
+                                console.log('⚠️ Skipping server sync - unsaved changes in editor', {
+                                    editorLength: editorContent.length,
+                                    lastSavedLength: lastSaved.length,
+                                    dateString
+                                });
+                                // Still update other dates, just not the current one
+                                const mergedNotes = { ...localNotes, ...serverNotes };
+                                // Preserve current editor content
+                                mergedNotes[dateString] = editorContent;
+                                setNotes(mergedNotes);
+                                localStorage.setItem(notesKey, JSON.stringify(mergedNotes));
+                                setIsLoading(false);
+                                return;
+                            }
+                        }
+                        
                         // Merge server notes (server takes priority)
                         const mergedNotes = { ...localNotes, ...serverNotes };
                         setNotes(mergedNotes);
@@ -181,18 +207,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         
                         // Load current note if editing specific date - ONLY if we don't have newer content
                         if (!showListView && currentDate) {
-                            const dateString = formatDateString(currentDate);
                             const serverNote = serverNotes[dateString] || '';
                             const currentNoteContent = currentNoteHtml || currentNote;
                             
                             console.log('📝 Comparing notes for date:', dateString, {
                                 serverLength: serverNote.length,
                                 currentLength: currentNoteContent.length,
+                                editorLength: editorContent.length,
                                 areEqual: serverNote === currentNoteContent
                             });
                             
                             // Only update if server note exists and is different from current, or if current is empty
-                            const editorContent = editorRef.current?.innerHTML || '';
                             const shouldUpdate = serverNote && serverNote.length > 0 && 
                                 (serverNote !== currentNoteContent || !currentNoteContent || currentNoteContent.length === 0) &&
                                 (serverNote !== editorContent || !editorContent || editorContent.trim().length === 0);
@@ -709,16 +734,34 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
                             if (serverNotes[dateString] === noteContent) {
                                 console.log('✅ Server verification: Note found on server with matching content');
+                                // Update notes state with server data to ensure sync
+                                setNotes(prev => ({ ...prev, [dateString]: noteContent }));
                             } else if (serverNotes[dateString]) {
                                 console.warn('⚠️ Server verification: Note found but content differs');
+                                console.warn('   Expected:', noteContent.substring(0, 50));
+                                console.warn('   Got:', serverNotes[dateString].substring(0, 50));
+                                // Retry save if content differs
+                                console.log('🔄 Retrying save due to content mismatch...');
+                                setTimeout(() => {
+                                    saveNote().catch(err => console.error('Retry save error:', err));
+                                }, 500);
                             } else {
                                 console.error('❌ Server verification: Note not found on server!');
+                                console.error('   Date:', dateString);
+                                console.error('   Server notes keys:', Object.keys(serverNotes));
+                                // Retry save if note not found
+                                console.log('🔄 Retrying save - note not found on server...');
+                                setTimeout(() => {
+                                    saveNote().catch(err => console.error('Retry save error:', err));
+                                }, 1000);
                             }
+                        } else {
+                            console.error('❌ Verification request failed:', verifyRes.status);
                         }
                     } catch (verifyError) {
                         console.error('Error verifying save on server:', verifyError);
                     }
-                }, 1000);
+                }, 2000); // Increased delay to 2 seconds to ensure database write completes
                 
                 // Clear handwriting canvas after saving
                 if (showHandwriting && canvasRef.current) {
