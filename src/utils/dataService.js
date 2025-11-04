@@ -45,7 +45,12 @@
 
     function safeStorageCall(obj, methodName, fallback = []) {
         const fn = obj && obj[methodName];
-        return typeof fn === 'function' ? fn.call(obj) : fallback;
+        if (typeof fn !== 'function') {
+            return fallback;
+        }
+        const result = fn.call(obj);
+        // Ensure we always return an array, never null or undefined
+        return Array.isArray(result) ? result : fallback;
     }
 
     const dataService = {

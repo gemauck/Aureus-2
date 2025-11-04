@@ -156,7 +156,19 @@ const DashboardLive = () => {
 
             // Update with fresh API data when available
             Promise.allSettled(syncPromises).then((results) => {
-            const [clientsRes, leadsRes, projectsRes, timeEntriesRes, usersRes] = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+                // Map results to handle both fulfilled and rejected promises
+                const mappedResults = results.map(r => r.status === 'fulfilled' ? r.value : { data: [] });
+                
+                // Get the role to determine if users promise was added
+                const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
+                const isAdmin = role === 'admin';
+                
+                // Extract responses - usersRes might not exist if user is not admin
+                const clientsRes = mappedResults[0] || { data: [] };
+                const leadsRes = mappedResults[1] || { data: [] };
+                const projectsRes = mappedResults[2] || { data: [] };
+                const timeEntriesRes = mappedResults[3] || { data: [] };
+                const usersRes = isAdmin && mappedResults[4] ? mappedResults[4] : { data: [] };
 
                 // Get clients from clients API
                 const clients = Array.isArray(clientsRes.data?.clients) ? clientsRes.data.clients.filter(c => c.type === 'client' || !c.type) : cachedClients;
@@ -181,8 +193,8 @@ const DashboardLive = () => {
                 const projects = Array.isArray(projectsRes.data?.projects) ? projectsRes.data.projects : 
                                 Array.isArray(projectsRes.data) ? projectsRes.data : cachedProjects;
                 const timeEntries = Array.isArray(timeEntriesRes.data) ? timeEntriesRes.data : cachedTimeEntries;
-                const users = Array.isArray(usersRes.data?.users) ? usersRes.data.users : 
-                             Array.isArray(usersRes.data) ? usersRes.data : cachedUsers;
+                const users = Array.isArray(usersRes?.data?.users) ? usersRes.data.users : 
+                             Array.isArray(usersRes?.data) ? usersRes.data : cachedUsers;
 
                 // Recalculate stats with fresh data
                 const freshThisMonthEntries = timeEntries.filter(entry => {
@@ -292,7 +304,7 @@ const DashboardLive = () => {
         return () => {
             window.LiveDataSync.unsubscribe(subscriptionId);
         };
-    }, []);
+    }, [calculateStats]);
 
     // Wait for Calendar to be available and force re-render when found
     React.useEffect(() => {

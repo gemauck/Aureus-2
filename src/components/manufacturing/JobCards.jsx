@@ -134,6 +134,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           setJobCards(enhancedCards);
           setIsLoading(false);
         }
+      } else {
+        // Force refresh mode - clear localStorage first to prevent stale data
+        console.log('🔄 Force refresh: Clearing localStorage cache');
+        localStorage.removeItem('manufacturing_jobcards');
       }
 
       // Then try to sync from API if online
@@ -1030,34 +1034,41 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         try {
           console.log('🗑️ Deleting job card from database:', id);
           
-          // Optimistically remove from state and localStorage immediately
-          const updatedJobCards = jobCards.filter(jc => jc.id !== id);
-          setJobCards(updatedJobCards);
-          localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-          console.log('✅ Job card removed optimistically from state and localStorage');
-          
-          // Now perform the actual API delete
+          // DELETE FROM API FIRST - wait for confirmation
           await window.DatabaseAPI.deleteJobCard(id);
           console.log('✅ Job card deleted from database successfully');
           
           // Clear API cache to ensure fresh data on next load
           if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
             window.DatabaseAPI._responseCache.delete('GET:/jobcards');
+            window.DatabaseAPI._responseCache.delete(`GET:/jobcards/${id}`);
             console.log('🗑️ Cleared job cards cache in DatabaseAPI');
           }
           
-          // Reload from API to ensure sync (but don't wait for it - UI already updated)
-          // Use a small delay to ensure server delete completes
+          // NOW remove from local state and localStorage after successful API delete
+          const updatedJobCards = jobCards.filter(jc => jc.id !== id);
+          setJobCards(updatedJobCards);
+          localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+          console.log('✅ Job card removed from local state after successful API delete');
+          
+          // Reload from API to ensure sync and get fresh data
+          // Use a delay to ensure server has processed the delete
           setTimeout(async () => {
             if (loadJobCardsRef.current) {
-              console.log('🔄 Syncing job cards from API after delete...');
+              console.log('🔄 Reloading job cards from API after delete to ensure sync...');
               try {
-                await loadJobCardsRef.current(true); // Force refresh
+                // Clear localStorage BEFORE reloading to prevent stale data
+                localStorage.removeItem('manufacturing_jobcards');
+                console.log('🗑️ Cleared localStorage before reload');
+                
+                await loadJobCardsRef.current(true); // Force refresh, bypass cache
+                console.log('✅ Job cards reloaded from API after delete');
               } catch (syncError) {
-                console.warn('⚠️ Failed to sync after delete, but item already removed:', syncError);
+                console.warn('⚠️ Failed to reload after delete:', syncError);
+                // Don't show error to user - item already deleted from UI
               }
             }
-          }, 200);
+          }, 500); // Increased delay to ensure server processes delete
           
           alert('Job card deleted successfully!');
           return; // Exit early after successful API delete

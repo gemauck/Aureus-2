@@ -611,13 +611,24 @@
                         if (window.Manufacturing) {
                             console.log('✅ Manufacturing component loaded after delay');
                         } else {
-                            console.warn('⚠️ Manufacturing not loaded after 5 seconds - check for errors');
+                            // Only warn if scripts finished AND component still not registered after 5 more seconds
+                            const scriptsAfterDelay = Array.from(document.querySelectorAll('script[src*="Manufacturing"]'));
+                            const stillLoadingAfterDelay = scriptsAfterDelay.some(s => !s.complete || s.readyState === 'loading');
+                            if (!stillLoadingAfterDelay && scriptsAfterDelay.length > 0) {
+                                console.warn('⚠️ Manufacturing not loaded after delay - check for errors');
+                            }
                         }
                     }, 2000);
-                } else {
+                } else if (scripts.length > 0) {
                     // Scripts finished but component not registered - might be an error
-                    console.warn('⚠️ Manufacturing scripts loaded but component not registered - check for JS errors');
+                    // But give it a bit more time since component registration can happen asynchronously
+                    setTimeout(() => {
+                        if (!window.Manufacturing) {
+                            console.warn('⚠️ Manufacturing scripts loaded but component not registered - check for JS errors');
+                        }
+                    }, 1000);
                 }
+                // If no scripts found, component might be lazy-loaded later, so don't warn
             } else {
                 console.log('✅ Manufacturing component available:', typeof window.Manufacturing);
             }

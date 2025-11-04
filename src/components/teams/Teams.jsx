@@ -157,11 +157,25 @@ const Teams = () => {
             try {
                 console.log('🔄 Teams: Loading data from data service');
                 
+                // Safely call dataService methods with better error handling
+                const getSafeData = async (method) => {
+                    try {
+                        if (!window.dataService || typeof window.dataService[method] !== 'function') {
+                            return [];
+                        }
+                        const result = await window.dataService[method]();
+                        return Array.isArray(result) ? result : [];
+                    } catch (err) {
+                        console.warn(`⚠️ Teams: Error loading ${method}:`, err);
+                        return [];
+                    }
+                };
+                
                 const [savedDocuments, savedWorkflows, savedChecklists, savedNotices] = await Promise.all([
-                    window.dataService?.getTeamDocuments?.() || Promise.resolve([]),
-                    window.dataService?.getTeamWorkflows?.() || Promise.resolve([]),
-                    window.dataService?.getTeamChecklists?.() || Promise.resolve([]),
-                    window.dataService?.getTeamNotices?.() || Promise.resolve([])
+                    getSafeData('getTeamDocuments'),
+                    getSafeData('getTeamWorkflows'),
+                    getSafeData('getTeamChecklists'),
+                    getSafeData('getTeamNotices')
                 ]);
                 
                 // Ensure all values are arrays, even if they returned null/undefined
@@ -170,7 +184,18 @@ const Teams = () => {
                 const checklists = Array.isArray(savedChecklists) ? savedChecklists : [];
                 const notices = Array.isArray(savedNotices) ? savedNotices : [];
                 
-                const savedExecutions = JSON.parse(localStorage.getItem('abcotronics_workflow_executions') || '[]');
+                // Safely parse workflow executions
+                let savedExecutions = [];
+                try {
+                    const executionsStr = localStorage.getItem('abcotronics_workflow_executions');
+                    if (executionsStr) {
+                        const parsed = JSON.parse(executionsStr);
+                        savedExecutions = Array.isArray(parsed) ? parsed : [];
+                    }
+                } catch (parseError) {
+                    console.warn('⚠️ Teams: Error parsing workflow executions:', parseError);
+                    savedExecutions = [];
+                }
 
                 console.log('✅ Teams: Data loaded successfully', {
                     documents: documents.length,
@@ -184,7 +209,7 @@ const Teams = () => {
                 setWorkflows(workflows);
                 setChecklists(checklists);
                 setNotices(notices);
-                setWorkflowExecutions(Array.isArray(savedExecutions) ? savedExecutions : []);
+                setWorkflowExecutions(savedExecutions);
                 
                 // Delay rendering significantly to prevent renderer crash
                 setTimeout(() => setIsReady(true), 500);
