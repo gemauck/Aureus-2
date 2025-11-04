@@ -1381,10 +1381,18 @@ const Clients = React.memo(() => {
                             sites: safeParseJSON(savedLead.sites, []),
                             contracts: safeParseJSON(savedLead.contracts, []),
                             billingTerms: safeParseJSON(savedLead.billingTerms, {}),
-                            proposals: safeParseJSON(savedLead.proposals, [])
+                            // CRITICAL: Preserve proposals from leadFormData (what we just sent) instead of API response
+                            // API response might have stale or missing proposals
+                            proposals: safeParseJSON(leadFormData.proposals || savedLead.proposals, [])
                         };
                         
                         console.log('✅ Parsed saved lead - stage:', savedLead.stage, 'status:', savedLead.status);
+                        console.log('📋 Proposals preserved:', {
+                            fromFormData: Array.isArray(leadFormData.proposals) ? leadFormData.proposals.length : 0,
+                            fromAPI: Array.isArray(savedLead.proposals) ? savedLead.proposals.length : 0,
+                            final: Array.isArray(savedLead.proposals) ? savedLead.proposals.length : 0,
+                            proposalIds: savedLead.proposals.map(p => p?.id)
+                        });
                         
                         // CRITICAL: Use the API response to update state, not optimistic updates
                         // This ensures we're synced with the database
