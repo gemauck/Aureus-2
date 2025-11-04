@@ -294,41 +294,51 @@ const DashboardLive = () => {
         };
     }, []);
 
-    // Wait for Calendar to be available
+    // Wait for Calendar to be available and force re-render when found
     React.useEffect(() => {
+        let mounted = true;
+        
         const checkCalendar = () => {
             if (window.Calendar && typeof window.Calendar === 'function') {
-                setCalendarReady(true);
+                if (mounted) {
+                    setCalendarReady(true);
+                }
                 return true;
             }
             return false;
         };
         
+        // Listen for calendar ready event
+        const handleCalendarReady = () => {
+            if (mounted) {
+                checkCalendar();
+            }
+        };
+        
+        window.addEventListener('calendarComponentReady', handleCalendarReady);
+        
         // Check immediately
-        if (checkCalendar()) {
-            return;
-        }
+        checkCalendar();
         
         // Retry periodically until Calendar is available
         const interval = setInterval(() => {
-            if (checkCalendar()) {
-                clearInterval(interval);
+            if (mounted) {
+                checkCalendar();
             }
         }, 100);
         
         // Stop checking after 10 seconds
         const timeout = setTimeout(() => {
             clearInterval(interval);
-            if (!calendarReady) {
-                console.warn('⚠️ Calendar component not loaded after 10 seconds');
-            }
         }, 10000);
         
         return () => {
+            mounted = false;
             clearInterval(interval);
             clearTimeout(timeout);
+            window.removeEventListener('calendarComponentReady', handleCalendarReady);
         };
-    }, [calendarReady]);
+    }, []); // Only run once on mount
 
     // Calculate stats helper
     const calculateStats = useCallback((data) => {
@@ -467,21 +477,23 @@ const DashboardLive = () => {
         );
     }
 
-        // Get Calendar component (may be lazy loaded)
-        const Calendar = window.Calendar || (() => (
-            <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} p-4`}>
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading calendar...</p>
-                </div>
-            </div>
-        ));
+        // Get Calendar component - always check window.Calendar directly for latest value
+        const CalendarComponent = window.Calendar;
         
         return (
         <div className="space-y-4">
-            {/* Calendar Widget */}
+            {/* Calendar Widget - Always render, Calendar will appear when ready */}
             <div className="flex justify-start">
-                <Calendar />
+                {CalendarComponent && typeof CalendarComponent === 'function' ? (
+                    <CalendarComponent />
+                ) : (
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4 min-w-[280px]`}>
+                        <div className="text-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading calendar...</p>
+                        </div>
+                    </div>
+                )}
             </div>
             
             {/* Other dashboard items coming soon */}

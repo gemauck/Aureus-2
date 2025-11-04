@@ -32,15 +32,22 @@ const DashboardSimple = () => {
         return () => clearTimeout(timer);
     }, []);
     
-    // Get Calendar component (may be lazy loaded)
-    const Calendar = window.Calendar || (() => (
-        <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} p-4`}>
-            <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading calendar...</p>
+    // Get Calendar component (may be lazy loaded) - use useMemo to re-evaluate when window.Calendar becomes available
+    const Calendar = React.useMemo(() => {
+        // Check window.Calendar directly to ensure we get the latest value
+        if (window.Calendar && typeof window.Calendar === 'function') {
+            return window.Calendar;
+        }
+        // Fallback loading component
+        return () => (
+            <div className={`${isDark ? 'bg-gray-800' : 'bg-white'} rounded-lg border ${isDark ? 'border-gray-700' : 'border-gray-200'} p-4`}>
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading calendar...</p>
+                </div>
             </div>
-        </div>
-    ));
+        );
+    }, [calendarReady, isDark]); // Re-evaluate when calendarReady changes or theme changes
 
     return (
         <div className="space-y-4">

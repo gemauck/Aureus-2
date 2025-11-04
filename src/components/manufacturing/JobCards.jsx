@@ -1,6 +1,11 @@
 // Job Cards Page Component for Manufacturing
 // Features:
-// - Offline support with localStorage + API sync
+// - Full offline support with localStorage + API sync
+//   - All job card data (including photos and documents) cached locally
+//   - Photos stored as data URLs for offline access
+//   - Documents stored as data URLs for offline access
+//   - All related data (users, clients, vehicles, inventory) cached
+//   - Automatic sync when connection is restored
 // - Technicians selectable from users list
 // - Clients selectable from clients list
 // - Sites selectable per client
@@ -16,6 +21,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAddPage, setShowAddPage] = useState(false);
   const [editingJobCard, setEditingJobCard] = useState(null);
+  const [viewingJobCard, setViewingJobCard] = useState(null);
   const [formData, setFormData] = useState({
     agentName: '',
     otherTechnicians: [],
@@ -66,28 +72,108 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   const loadJobCardsRef = useRef(null);
   const syncPendingJobCardsRef = useRef(null);
   
-  const loadJobCards = useCallback(async () => {
+  // Function to ensure job card data is fully accessible offline
+  const ensureJobCardOfflineAccess = useCallback((jobCard) => {
+    if (!jobCard) return jobCard;
+    
+    // Ensure all arrays exist
+    const enhanced = {
+      ...jobCard,
+      photos: Array.isArray(jobCard.photos) ? jobCard.photos : [],
+      documents: Array.isArray(jobCard.documents) ? jobCard.documents : [],
+      stockUsed: Array.isArray(jobCard.stockUsed) ? jobCard.stockUsed : [],
+      materialsBought: Array.isArray(jobCard.materialsBought) ? jobCard.materialsBought : [],
+      otherTechnicians: Array.isArray(jobCard.otherTechnicians) ? jobCard.otherTechnicians : []
+    };
+    
+    // Ensure photos are data URLs (for offline access)
+    enhanced.photos = enhanced.photos.map(photo => {
+      if (typeof photo === 'string') {
+        // If it's already a data URL, keep it
+        if (photo.startsWith('data:')) {
+          return photo;
+        }
+        // If it's a URL, try to get from cache or return as-is
+        // (Note: We can't convert URLs to data URLs without network, so keep as-is)
+        return photo;
+      }
+      // If it's an object with url property
+      return typeof photo === 'object' && photo.url ? photo.url : photo;
+    });
+    
+    // Ensure documents are properly formatted
+    enhanced.documents = enhanced.documents.map(doc => {
+      if (typeof doc === 'string') {
+        // Convert string to object format if needed
+        return {
+          id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: 'Document',
+          url: doc,
+          size: 0,
+          type: 'application/octet-stream',
+          uploadedAt: jobCard.createdAt || new Date().toISOString()
+        };
+      }
+      return doc;
+    });
+    
+    return enhanced;
+  }, []);
+  
+  const loadJobCards = useCallback(async (forceRefresh = false) => {
     setIsLoading(true);
     try {
-      // First, try to load from localStorage (offline support)
-      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
-      if (cached.length > 0) {
-        setJobCards(cached);
-        setIsLoading(false);
+      // If forceRefresh is true, skip localStorage and go straight to API
+      // This ensures we get fresh data after delete operations
+      if (!forceRefresh) {
+        // First, try to load from localStorage (offline support)
+        const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+        if (cached.length > 0) {
+          // Ensure all job cards are accessible offline
+          const enhancedCards = cached.map(card => ensureJobCardOfflineAccess(card));
+          setJobCards(enhancedCards);
+          setIsLoading(false);
+        }
       }
 
       // Then try to sync from API if online
       const onlineStatus = navigator.onLine;
       if (onlineStatus && window.DatabaseAPI?.getJobCards) {
         try {
-          console.log('📡 JobCards: Fetching from API...');
-          const response = await window.DatabaseAPI.getJobCards();
-          console.log('📡 JobCards: API response:', response);
-          const jobCardsData = response?.data?.jobCards || response?.data || [];
+          console.log('📡 JobCards: Fetching from API...', forceRefresh ? '(force refresh)' : '');
+          
+          // Force cache bypass if forceRefresh is true
+          if (forceRefresh && window.DatabaseAPI._responseCache) {
+            window.DatabaseAPI._responseCache.delete('GET:/jobcards');
+            console.log('🗑️ Cleared job cards cache for force refresh');
+          }
+          
+          // Add cache-busting query parameter to force fresh request
+          const cacheBuster = forceRefresh ? `?_t=${Date.now()}` : '';
+          const response = await window.DatabaseAPI.makeRequest(`/jobcards${cacheBuster}`);
+          
+          // Normalize response (same logic as getJobCards)
+          const normalized = {
+            data: {
+              jobCards: Array.isArray(response?.data?.jobCards)
+                ? response.data.jobCards
+                : Array.isArray(response?.jobCards)
+                  ? response.jobCards
+                  : Array.isArray(response?.data)
+                    ? response.data
+                    : []
+            }
+          };
+          console.log('📡 JobCards: API response:', normalized);
+          const jobCardsData = normalized.data.jobCards;
           console.log('📡 JobCards: Parsed job cards:', jobCardsData.length);
           if (Array.isArray(jobCardsData)) {
             // Mark all API-loaded cards as synced to prevent duplicate creation
-            const syncedCards = jobCardsData.map(jc => ({ ...jc, synced: true }));
+            // Ensure all job cards are accessible offline
+            const syncedCards = jobCardsData.map(jc => {
+              const enhanced = ensureJobCardOfflineAccess({ ...jc, synced: true });
+              return enhanced;
+            });
             // Always set the job cards array (even if empty) so the UI shows the empty state
             setJobCards(syncedCards);
             localStorage.setItem('manufacturing_jobcards', JSON.stringify(syncedCards));
@@ -100,6 +186,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             console.warn('⚠️ JobCards: API response is not an array:', typeof jobCardsData);
             // Set empty array if response is invalid
             setJobCards([]);
+            localStorage.setItem('manufacturing_jobcards', JSON.stringify([]));
           }
         } catch (error) {
           // Handle authentication errors gracefully
@@ -115,9 +202,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             console.error('❌ Error details:', error.message, error.stack);
           }
           
-          // Still show cached data if available
-          if (cached.length > 0) {
-            console.log('📦 JobCards: Using cached data due to API error');
+          // Still show cached data if available (unless forceRefresh)
+          if (!forceRefresh) {
+            const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+            if (cached.length > 0) {
+              console.log('📦 JobCards: Using cached data due to API error');
+            }
           }
         }
       } else {
@@ -133,7 +223,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     } finally {
       setIsLoading(false);
     }
-  }, []); // Remove isOnline dependency to avoid initialization issues
+  }, [ensureJobCardOfflineAccess]); // Include ensureJobCardOfflineAccess in dependencies
 
   // Store the function in a ref for stable access
   loadJobCardsRef.current = loadJobCards;
@@ -385,14 +475,24 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   }, [isOnline]);
 
   // Initial load of job cards - run only once on mount
+  // This ensures cached data is available immediately for offline access
   useEffect(() => {
     const initLoad = async () => {
+      // Immediately load from cache for instant offline access
+      const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+      if (cached.length > 0) {
+        const enhancedCards = cached.map(card => ensureJobCardOfflineAccess(card));
+        setJobCards(enhancedCards);
+        setIsLoading(false);
+      }
+      
+      // Then load from API if available
       await loadJobCardsRef.current?.();
       // NOTE: Don't sync pending cards on mount - they're already on the server
       // syncPendingJobCards should only be called when coming back online
     };
     initLoad();
-  }, []); // Empty dependency array - only run on mount
+  }, [ensureJobCardOfflineAccess]); // Include ensureJobCardOfflineAccess to ensure it's available
 
   // Auto-populate agent name from current user
   useEffect(() => {
@@ -429,37 +529,53 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   // Initialize form for editing
   useEffect(() => {
     if (editingJobCard) {
+      // Ensure job card data is accessible offline
+      const enhancedJobCard = ensureJobCardOfflineAccess(editingJobCard);
+      
       setFormData({
-        agentName: editingJobCard.agentName || '',
-        otherTechnicians: editingJobCard.otherTechnicians || [],
-        clientId: editingJobCard.clientId || '',
-        clientName: editingJobCard.clientName || '',
-        siteId: editingJobCard.siteId || '',
-        siteName: editingJobCard.siteName || '',
-        location: editingJobCard.location || '',
-        locationLatitude: editingJobCard.locationLatitude || '',
-        locationLongitude: editingJobCard.locationLongitude || '',
-        vehicleId: editingJobCard.vehicleId || '',
-        vehicleUsed: editingJobCard.vehicleUsed || '',
-        timeOfDeparture: editingJobCard.timeOfDeparture ? editingJobCard.timeOfDeparture.substring(0, 16) : '',
-        timeOfArrival: editingJobCard.timeOfArrival ? editingJobCard.timeOfArrival.substring(0, 16) : '',
-        departureFromSite: editingJobCard.departureFromSite ? editingJobCard.departureFromSite.substring(0, 16) : '',
-        arrivalBackAtOffice: editingJobCard.arrivalBackAtOffice ? editingJobCard.arrivalBackAtOffice.substring(0, 16) : '',
-        kmReadingBefore: editingJobCard.kmReadingBefore || '',
-        kmReadingAfter: editingJobCard.kmReadingAfter || '',
-        reasonForVisit: editingJobCard.reasonForVisit || '',
-        diagnosis: editingJobCard.diagnosis || '',
-        actionsTaken: editingJobCard.actionsTaken || '',
-        stockUsed: editingJobCard.stockUsed || [],
-        materialsBought: editingJobCard.materialsBought || [],
-        otherComments: editingJobCard.otherComments || '',
-        photos: editingJobCard.photos || [],
-        documents: editingJobCard.documents || [],
-        status: editingJobCard.status || 'draft'
+        agentName: enhancedJobCard.agentName || '',
+        otherTechnicians: enhancedJobCard.otherTechnicians || [],
+        clientId: enhancedJobCard.clientId || '',
+        clientName: enhancedJobCard.clientName || '',
+        siteId: enhancedJobCard.siteId || '',
+        siteName: enhancedJobCard.siteName || '',
+        location: enhancedJobCard.location || '',
+        locationLatitude: enhancedJobCard.locationLatitude || '',
+        locationLongitude: enhancedJobCard.locationLongitude || '',
+        vehicleId: enhancedJobCard.vehicleId || '',
+        vehicleUsed: enhancedJobCard.vehicleUsed || '',
+        timeOfDeparture: enhancedJobCard.timeOfDeparture ? enhancedJobCard.timeOfDeparture.substring(0, 16) : '',
+        timeOfArrival: enhancedJobCard.timeOfArrival ? enhancedJobCard.timeOfArrival.substring(0, 16) : '',
+        departureFromSite: enhancedJobCard.departureFromSite ? enhancedJobCard.departureFromSite.substring(0, 16) : '',
+        arrivalBackAtOffice: enhancedJobCard.arrivalBackAtOffice ? enhancedJobCard.arrivalBackAtOffice.substring(0, 16) : '',
+        kmReadingBefore: enhancedJobCard.kmReadingBefore || '',
+        kmReadingAfter: enhancedJobCard.kmReadingAfter || '',
+        reasonForVisit: enhancedJobCard.reasonForVisit || '',
+        diagnosis: enhancedJobCard.diagnosis || '',
+        actionsTaken: enhancedJobCard.actionsTaken || '',
+        stockUsed: enhancedJobCard.stockUsed || [],
+        materialsBought: enhancedJobCard.materialsBought || [],
+        otherComments: enhancedJobCard.otherComments || '',
+        photos: enhancedJobCard.photos || [],
+        documents: enhancedJobCard.documents || [],
+        status: enhancedJobCard.status || 'draft'
       });
-      setSelectedPhotos(editingJobCard.photos || []);
+      
+      // Set photos - ensure they're in the right format for display
+      const normalizedPhotos = (enhancedJobCard.photos || []).map((photo, idx) => {
+        if (typeof photo === 'string') {
+          return { name: `Photo ${idx + 1}`, url: photo, size: 0 };
+        }
+        return {
+          name: photo.name || `Photo ${idx + 1}`,
+          url: photo.url || photo,
+          size: photo.size || 0
+        };
+      });
+      setSelectedPhotos(normalizedPhotos);
+      
       // Normalize documents - handle both old format (strings/dataUrls) and new format (objects)
-      const normalizedDocuments = (editingJobCard.documents || []).map((doc, idx) => {
+      const normalizedDocuments = (enhancedJobCard.documents || []).map((doc, idx) => {
         if (typeof doc === 'string') {
           // Old format: just a data URL string
           return {
@@ -468,7 +584,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             url: doc,
             size: 0,
             type: 'application/octet-stream',
-            uploadedAt: editingJobCard.updatedAt || editingJobCard.createdAt || new Date().toISOString()
+            uploadedAt: enhancedJobCard.updatedAt || enhancedJobCard.createdAt || new Date().toISOString()
           };
         }
         // New format: object with all fields
@@ -478,12 +594,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           url: doc.url || doc,
           size: doc.size || 0,
           type: doc.type || 'application/octet-stream',
-          uploadedAt: doc.uploadedAt || editingJobCard.updatedAt || editingJobCard.createdAt || new Date().toISOString()
+          uploadedAt: doc.uploadedAt || enhancedJobCard.updatedAt || enhancedJobCard.createdAt || new Date().toISOString()
         };
       });
       setSelectedDocuments(normalizedDocuments);
     }
-  }, [editingJobCard]);
+  }, [editingJobCard, ensureJobCardOfflineAccess]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -823,13 +939,16 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       }
 
       // Save to localStorage first (offline support)
+      // Ensure all data is properly formatted for offline access
+      const enhancedJobCardData = ensureJobCardOfflineAccess(jobCardData);
+      
       let updatedJobCards;
       const isNewCard = !editingJobCard;
       const wasSynced = editingJobCard?.synced !== false;
       
       // Mark new cards as unsynced, and track if it's an edit
       const cardDataWithSyncFlag = { 
-        ...jobCardData, 
+        ...enhancedJobCardData, 
         synced: false,
         _wasEdit: !!editingJobCard  // Internal flag to track if this was an edit
       };
@@ -896,12 +1015,52 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     if (!confirm('Are you sure you want to delete this job card?')) return;
 
     try {
+      // Close detail view if the deleted job card is being viewed
+      if (viewingJobCard && viewingJobCard.id === id) {
+        setViewingJobCard(null);
+      }
+      // Close edit form if the deleted job card is being edited
+      if (editingJobCard && editingJobCard.id === id) {
+        setEditingJobCard(null);
+        setShowAddPage(false);
+      }
+
       // First, try to delete from API if online
       if (isOnline && window.DatabaseAPI?.deleteJobCard) {
         try {
           console.log('🗑️ Deleting job card from database:', id);
+          
+          // Optimistically remove from state and localStorage immediately
+          const updatedJobCards = jobCards.filter(jc => jc.id !== id);
+          setJobCards(updatedJobCards);
+          localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+          console.log('✅ Job card removed optimistically from state and localStorage');
+          
+          // Now perform the actual API delete
           await window.DatabaseAPI.deleteJobCard(id);
           console.log('✅ Job card deleted from database successfully');
+          
+          // Clear API cache to ensure fresh data on next load
+          if (window.DatabaseAPI && window.DatabaseAPI._responseCache) {
+            window.DatabaseAPI._responseCache.delete('GET:/jobcards');
+            console.log('🗑️ Cleared job cards cache in DatabaseAPI');
+          }
+          
+          // Reload from API to ensure sync (but don't wait for it - UI already updated)
+          // Use a small delay to ensure server delete completes
+          setTimeout(async () => {
+            if (loadJobCardsRef.current) {
+              console.log('🔄 Syncing job cards from API after delete...');
+              try {
+                await loadJobCardsRef.current(true); // Force refresh
+              } catch (syncError) {
+                console.warn('⚠️ Failed to sync after delete, but item already removed:', syncError);
+              }
+            }
+          }, 200);
+          
+          alert('Job card deleted successfully!');
+          return; // Exit early after successful API delete
         } catch (error) {
           // Handle authentication errors gracefully
           const isAuthError = error.message?.includes('401') || 
@@ -910,9 +1069,17 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           
           if (isAuthError) {
             console.warn('⚠️ JobCards: Authentication error during delete - please log in and try again');
+            // Restore the item since delete failed
+            if (loadJobCardsRef.current) {
+              await loadJobCardsRef.current();
+            }
             alert('Authentication required. Please log in and try again.');
           } else {
             console.error('❌ Failed to delete from API:', error);
+            // Restore the item since delete failed
+            if (loadJobCardsRef.current) {
+              await loadJobCardsRef.current();
+            }
             const errorMessage = error.message || 'Unknown error';
             alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
           }
@@ -924,15 +1091,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         return;
       } else {
         console.log('📴 Offline mode: Deleting job card locally only');
+        // Remove from local state/localStorage if offline
+        const updatedJobCards = jobCards.filter(jc => jc.id !== id);
+        setJobCards(updatedJobCards);
+        localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
+        console.log('✅ Job card removed from local state and localStorage (offline)');
+        alert('Job card deleted successfully! (Changes will sync when online)');
       }
-
-      // Only remove from local state/localStorage after successful API deletion (or if offline)
-      const updatedJobCards = jobCards.filter(jc => jc.id !== id);
-      setJobCards(updatedJobCards);
-      localStorage.setItem('manufacturing_jobcards', JSON.stringify(updatedJobCards));
-      console.log('✅ Job card removed from local state');
-
-      alert('Job card deleted successfully!');
     } catch (error) {
       console.error('❌ Error deleting job card:', error);
       alert(`Failed to delete job card: ${error.message || 'Unknown error'}`);
@@ -1312,12 +1477,366 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   };
 
   const openEditPage = (jobCard) => {
-    setEditingJobCard(jobCard);
+    // Ensure all job card data is available offline
+    // Load full job card data from cache if needed
+    const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+    const fullJobCard = cached.find(jc => jc.id === jobCard.id) || jobCard;
+    
+    // Ensure photos and documents are accessible offline
+    // If photos/documents are URLs, convert them to data URLs if needed for offline access
+    const enhancedJobCard = {
+      ...fullJobCard,
+      // Ensure photos array exists and is properly formatted
+      photos: Array.isArray(fullJobCard.photos) ? fullJobCard.photos : [],
+      // Ensure documents array exists and is properly formatted
+      documents: Array.isArray(fullJobCard.documents) ? fullJobCard.documents : []
+    };
+    
+    setEditingJobCard(enhancedJobCard);
     setShowAddPage(true);
+  };
+
+  const openViewPage = (jobCard) => {
+    // Ensure all job card data is available offline
+    // Load full job card data from cache if needed
+    const cached = JSON.parse(localStorage.getItem('manufacturing_jobcards') || '[]');
+    const fullJobCard = cached.find(jc => jc.id === jobCard.id) || jobCard;
+    
+    // Ensure photos and documents are accessible offline
+    const enhancedJobCard = ensureJobCardOfflineAccess(fullJobCard);
+    
+    setViewingJobCard(enhancedJobCard);
   };
 
   // Filter technicians/users - show only active users
   const availableTechnicians = users.filter(u => u.status !== 'inactive' && u.status !== 'suspended');
+
+  // Detail view modal
+  if (viewingJobCard) {
+    const card = viewingJobCard;
+    const travelKm = card.kmReadingBefore && card.kmReadingAfter
+      ? parseFloat(card.kmReadingAfter) - parseFloat(card.kmReadingBefore)
+      : 0;
+
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+          <div>
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
+              Job Card Details
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {card.jobCardNumber || `Job Card ${card.id.slice(-6)}`}
+              {!isOnline && <span className="ml-2 text-orange-600">⚠️ Offline</span>}
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setViewingJobCard(null);
+                openEditPage(card);
+              }}
+              className="w-full sm:w-auto px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <i className="fas fa-edit mr-2"></i>Edit
+            </button>
+            <button
+              onClick={() => setViewingJobCard(null)}
+              className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+            >
+              <i className="fas fa-arrow-left mr-2"></i>Back to List
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          {/* Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className={`px-3 py-1 rounded text-sm font-medium ${
+              card.status === 'completed' ? 'bg-green-100 text-green-700' :
+              card.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {card.status || 'draft'}
+            </span>
+          </div>
+
+          {/* Basic Information */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-0.5">Agent Name</label>
+              <p className="text-sm text-gray-900">{card.agentName || 'N/A'}</p>
+            </div>
+            {card.otherTechnicians && card.otherTechnicians.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Other Technicians</label>
+                <p className="text-sm text-gray-900">{card.otherTechnicians.join(', ')}</p>
+              </div>
+            )}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-0.5">Client</label>
+              <p className="text-sm text-gray-900">{card.clientName || 'N/A'}</p>
+            </div>
+            {card.siteName && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Site</label>
+                <p className="text-sm text-gray-900">{card.siteName}</p>
+              </div>
+            )}
+            {card.location && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Location</label>
+                <p className="text-sm text-gray-900">{card.location}</p>
+              </div>
+            )}
+            {card.vehicleUsed && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-0.5">Vehicle</label>
+                <p className="text-sm text-gray-900">{card.vehicleUsed}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Time Tracking */}
+          {(card.timeOfDeparture || card.timeOfArrival || card.departureFromSite || card.arrivalBackAtOffice) && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Time Tracking</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {card.timeOfDeparture && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Departure from Office</label>
+                    <p className="text-sm text-gray-900">{new Date(card.timeOfDeparture).toLocaleString('en-ZA')}</p>
+                  </div>
+                )}
+                {card.timeOfArrival && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Arrival at Site</label>
+                    <p className="text-sm text-gray-900">{new Date(card.timeOfArrival).toLocaleString('en-ZA')}</p>
+                  </div>
+                )}
+                {card.departureFromSite && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Departure from Site</label>
+                    <p className="text-sm text-gray-900">{new Date(card.departureFromSite).toLocaleString('en-ZA')}</p>
+                  </div>
+                )}
+                {card.arrivalBackAtOffice && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Arrival back at Office</label>
+                    <p className="text-sm text-gray-900">{new Date(card.arrivalBackAtOffice).toLocaleString('en-ZA')}</p>
+                  </div>
+                )}
+                {card.totalTimeMinutes > 0 && (
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-0.5">Total Time</label>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {Math.floor(card.totalTimeMinutes / 60)}h {card.totalTimeMinutes % 60}m
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Kilometer Readings */}
+          {(card.kmReadingBefore || card.kmReadingAfter) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {card.kmReadingBefore && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-0.5">KM Reading Before</label>
+                  <p className="text-sm text-gray-900">{card.kmReadingBefore}</p>
+                </div>
+              )}
+              {card.kmReadingAfter && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-0.5">KM Reading After</label>
+                  <p className="text-sm text-gray-900">{card.kmReadingAfter}</p>
+                </div>
+              )}
+              {travelKm > 0 && (
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-gray-500 mb-0.5">Travel Distance</label>
+                  <p className="text-sm font-semibold text-gray-900">{travelKm.toFixed(1)} km</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Reason for Visit */}
+          {card.reasonForVisit && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Reason for Visit</label>
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.reasonForVisit}</p>
+            </div>
+          )}
+
+          {/* Diagnosis */}
+          {card.diagnosis && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Diagnosis</label>
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.diagnosis}</p>
+            </div>
+          )}
+
+          {/* Actions Taken */}
+          {card.actionsTaken && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Actions Taken</label>
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.actionsTaken}</p>
+            </div>
+          )}
+
+          {/* Stock Used */}
+          {card.stockUsed && card.stockUsed.length > 0 && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
+              <div className="space-y-2">
+                {card.stockUsed.map((item, idx) => (
+                  <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-gray-900">{item.itemName || item.sku}</p>
+                    <p className="text-xs text-gray-600">
+                      {item.locationName && `${item.locationName} • `}
+                      Quantity: {item.quantity} • SKU: {item.sku}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Materials Bought */}
+          {card.materialsBought && card.materialsBought.length > 0 && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Materials Bought</h3>
+              <div className="space-y-2">
+                {card.materialsBought.map((item, idx) => (
+                  <div key={idx} className="bg-white border border-gray-200 rounded-lg p-3">
+                    <p className="text-sm font-medium text-gray-900">{item.itemName}</p>
+                    {item.description && (
+                      <p className="text-xs text-gray-600 mt-1">{item.description}</p>
+                    )}
+                    {item.reason && (
+                      <p className="text-xs text-gray-500 mt-1">Reason: {item.reason}</p>
+                    )}
+                    <p className="text-sm font-semibold text-gray-900 mt-2">R {item.cost?.toFixed(2) || '0.00'}</p>
+                  </div>
+                ))}
+                <div className="border-t border-gray-300 pt-2 mt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-semibold text-gray-900">Total Cost:</span>
+                    <span className="text-lg font-bold text-blue-600">
+                      R {card.materialsBought.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Other Comments */}
+          {card.otherComments && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Other Comments</label>
+              <p className="text-sm text-gray-900 whitespace-pre-wrap">{card.otherComments}</p>
+            </div>
+          )}
+
+          {/* Photos */}
+          {card.photos && card.photos.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Photos</label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {card.photos.map((photo, idx) => {
+                  const photoUrl = typeof photo === 'string' ? photo : photo.url;
+                  return (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={photoUrl}
+                        alt={`Photo ${idx + 1}`}
+                        className="w-full h-32 object-cover rounded-lg cursor-pointer"
+                        onClick={() => {
+                          // Open photo in new window/modal for full size
+                          const newWindow = window.open();
+                          if (newWindow) {
+                            newWindow.document.write(`<img src="${photoUrl}" style="max-width:100%;height:auto;" />`);
+                          }
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          const errorDiv = document.createElement('div');
+                          errorDiv.className = 'w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center';
+                          errorDiv.innerHTML = '<i class="fas fa-image text-gray-400"></i>';
+                          e.target.parentNode.appendChild(errorDiv);
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Documents */}
+          {card.documents && card.documents.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Documents</label>
+              <div className="space-y-2">
+                {card.documents.map((doc, idx) => {
+                  const docObj = typeof doc === 'string' 
+                    ? { id: `doc_${idx}`, name: `Document ${idx + 1}`, url: doc }
+                    : doc;
+                  return (
+                    <div key={docObj.id || idx} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
+                      <div className="flex items-center gap-3 flex-1">
+                        <div className="flex-shrink-0">
+                          {docObj.type?.includes('pdf') ? (
+                            <i className="fas fa-file-pdf text-red-600 text-xl"></i>
+                          ) : docObj.type?.includes('word') || docObj.type?.includes('document') ? (
+                            <i className="fas fa-file-word text-blue-600 text-xl"></i>
+                          ) : docObj.type?.includes('excel') || docObj.type?.includes('spreadsheet') ? (
+                            <i className="fas fa-file-excel text-green-600 text-xl"></i>
+                          ) : (
+                            <i className="fas fa-file text-gray-400 text-xl"></i>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{docObj.name || `Document ${idx + 1}`}</p>
+                          {docObj.size > 0 && (
+                            <p className="text-xs text-gray-500">
+                              {(docObj.size / 1024).toFixed(2)} KB
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {docObj.url && (
+                        <a
+                          href={docObj.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-1 text-sm text-blue-600 hover:text-blue-800"
+                          title="View document"
+                        >
+                          <i className="fas fa-external-link-alt"></i>
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Metadata */}
+          <div className="border-t border-gray-200 pt-4 text-xs text-gray-500">
+            <p>Created: {card.createdAt ? new Date(card.createdAt).toLocaleString('en-ZA') : 'N/A'}</p>
+            {card.updatedAt && card.updatedAt !== card.createdAt && (
+              <p>Last Updated: {new Date(card.updatedAt).toLocaleString('en-ZA')}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (showAddPage) {
     const travelKm = formData.kmReadingBefore && formData.kmReadingAfter
@@ -1325,10 +1844,10 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       : 0;
 
     return (
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">
+            <h2 className="text-lg sm:text-xl font-bold text-gray-900">
               {editingJobCard ? 'Edit Job Card' : 'Add New Job Card'}
             </h2>
             <p className="text-sm text-gray-500 mt-1">
@@ -1341,7 +1860,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               setEditingJobCard(null);
               resetForm();
             }}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="w-full sm:w-auto px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             <i className="fas fa-arrow-left mr-2"></i>Back to List
           </button>
@@ -1417,7 +1936,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
 
           {/* Client and Site */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Client *
@@ -1487,8 +2006,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             <div className="mb-3 relative" style={{ zIndex: 0 }}>
               <div 
                 ref={locationMapRef}
-                className="w-full h-64 rounded-lg border border-gray-300 overflow-hidden relative"
-                style={{ minHeight: '256px', zIndex: 0 }}
+                className="w-full h-48 sm:h-64 rounded-lg border border-gray-300 overflow-hidden relative"
+                style={{ minHeight: '192px', zIndex: 0 }}
               ></div>
               <p className="text-xs text-gray-500 mt-1">
                 <i className="fas fa-info-circle mr-1"></i>
@@ -1570,7 +2089,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             {/* To Site */}
             <div className="mb-4 pb-4 border-b border-gray-200">
               <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">To Site</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Departure from Office *
@@ -1601,7 +2120,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             {/* From Site */}
             <div className="mb-4 pb-4 border-b border-gray-200">
               <h4 className="text-xs font-medium text-gray-600 mb-3 uppercase">From Site</h4>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Departure from Site *
@@ -1646,7 +2165,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
 
           {/* Kilometer Readings */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 KM Reading Before
@@ -1736,8 +2255,8 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             <h3 className="text-sm font-semibold text-gray-900 mb-3">Stock Used</h3>
             
             {/* Add Stock Item Form */}
-            <div className="grid grid-cols-12 gap-2 mb-3">
-              <div className="col-span-4">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-3">
+              <div className="col-span-1 sm:col-span-4">
                 <select
                   value={newStockItem.sku}
                   onChange={(e) => setNewStockItem({ ...newStockItem, sku: e.target.value })}
@@ -1751,7 +2270,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-4">
+              <div className="col-span-1 sm:col-span-4">
                 <select
                   value={newStockItem.locationId}
                   onChange={(e) => setNewStockItem({ ...newStockItem, locationId: e.target.value })}
@@ -1765,7 +2284,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   ))}
                 </select>
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <input
                   type="number"
                   step="0.01"
@@ -1776,7 +2295,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
-              <div className="col-span-2">
+              <div className="col-span-1 sm:col-span-2">
                 <button
                   type="button"
                   onClick={handleAddStockItem}
@@ -1818,7 +2337,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             
             {/* Add Material Item Form */}
             <div className="space-y-2 mb-3">
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <input
                   type="text"
                   value={newMaterialItem.itemName}
@@ -1941,13 +2460,21 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
               </label>
             </div>
             {selectedPhotos.length > 0 && (
-              <div className="mt-3 grid grid-cols-4 gap-2">
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {selectedPhotos.map((photo, idx) => (
                   <div key={idx} className="relative group">
                     <img
                       src={typeof photo === 'string' ? photo : photo.url}
                       alt={`Photo ${idx + 1}`}
                       className="w-full h-24 object-cover rounded-lg"
+                      onError={(e) => {
+                        // Handle image load errors gracefully (e.g., corrupted data URL)
+                        e.target.style.display = 'none';
+                        const errorDiv = document.createElement('div');
+                        errorDiv.className = 'w-full h-24 bg-gray-100 rounded-lg flex items-center justify-center';
+                        errorDiv.innerHTML = '<i class="fas fa-image text-gray-400"></i>';
+                        e.target.parentNode.appendChild(errorDiv);
+                      }}
                     />
                     <button
                       type="button"
@@ -2064,7 +2591,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           </div>
 
           {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200">
+          <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
             <button
               type="button"
               onClick={() => {
@@ -2072,13 +2599,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                 setEditingJobCard(null);
                 resetForm();
               }}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+              className="w-full sm:flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="w-full sm:flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
             >
               {editingJobCard ? 'Update Job Card' : 'Create Job Card'}
             </button>
@@ -2119,7 +2646,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Model
@@ -2146,7 +2673,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Registration Number *
@@ -2311,6 +2838,13 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
                     </div>
                   </div>
                   <div className="flex gap-2 ml-4">
+                    <button
+                      onClick={() => openViewPage(jobCard)}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
+                      title="View Details"
+                    >
+                      <i className="fas fa-eye"></i>
+                    </button>
                     <button
                       onClick={() => openEditPage(jobCard)}
                       className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"

@@ -10,12 +10,20 @@ const AuthContext = createContext();
 const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
+    const isRefreshingRef = React.useRef(false);
 
     const refreshUser = useCallback(async () => {
+        // Prevent multiple simultaneous refresh calls
+        if (isRefreshingRef.current) {
+            console.log('🔄 refreshUser: Already refreshing, skipping duplicate call');
+            return null;
+        }
+        
+        isRefreshingRef.current = true;
         try {
             if (!window.storage || !window.storage.getToken) {
                 console.error('🚨 refreshUser: No storage or getToken available');
-                return;
+                return null;
             }
             
             const token = window.storage.getToken();
@@ -53,6 +61,8 @@ const AuthProvider = ({ children }) => {
                 setUser(storedUser);
                 return storedUser;
             }
+        } finally {
+            isRefreshingRef.current = false;
         }
         return null;
     }, []);
@@ -215,14 +225,27 @@ const AuthProvider = ({ children }) => {
         };
     }, [user]);
 
-    // Listen for user data updates
+    // Listen for user data updates with debouncing to prevent rapid-fire refreshes
     useEffect(() => {
+        let debounceTimer = null;
+        
         const handleUserUpdate = () => {
-            refreshUser();
+            // Debounce: only refresh if no refresh happened in the last 500ms
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            debounceTimer = setTimeout(() => {
+                refreshUser();
+            }, 500);
         };
 
         window.addEventListener('userDataUpdated', handleUserUpdate);
-        return () => window.removeEventListener('userDataUpdated', handleUserUpdate);
+        return () => {
+            window.removeEventListener('userDataUpdated', handleUserUpdate);
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+        };
     }, [refreshUser]);
 
     const login = async (email, password) => {

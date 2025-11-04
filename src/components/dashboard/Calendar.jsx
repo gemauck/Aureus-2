@@ -8,7 +8,24 @@ const Calendar = () => {
     const [showDailyNotes, setShowDailyNotes] = useState(false);
     const [dailyNotesDate, setDailyNotesDate] = useState(null);
     const [notes, setNotes] = useState({}); // { '2024-01-15': 'note text' }
-    const { isDark } = window.useTheme();
+    
+    // Use theme hook properly - it must be called unconditionally
+    let themeResult = { isDark: false };
+    try {
+        if (window.useTheme && typeof window.useTheme === 'function') {
+            themeResult = window.useTheme();
+        }
+    } catch (error) {
+        // Fallback: check localStorage
+        try {
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            themeResult.isDark = storedTheme === 'dark' || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        } catch (e) {
+            themeResult.isDark = false;
+        }
+    }
+    const isDark = themeResult?.isDark || false;
+    
     const [isSaving, setIsSaving] = useState(false); // Prevent refresh during save
     
     // Load notes (load ALL notes, not just current month) - localStorage first for instant display, then sync from server
@@ -533,7 +550,7 @@ const Calendar = () => {
     
     return (
         <>
-            {/* Daily Notes Full-Page View */}
+            {/* Daily Notes Full-Page View - Only show when explicitly opened */}
             {showDailyNotes && (
                 <>
                     {dailyNotesLoaded && DailyNotes ? (
@@ -584,8 +601,9 @@ const Calendar = () => {
                 </>
             )}
             
-            {!showDailyNotes && (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`}>
+            {/* Calendar Widget - Always render unless DailyNotes is open */}
+            {!showDailyNotes ? (
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`} style={{ display: 'block', visibility: 'visible' }}>
                     <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center space-x-2">
                             <button
@@ -678,7 +696,7 @@ const Calendar = () => {
                     })}
                 </div>
             </div>
-            )}
+            ) : null}
         </>
     );
 };
@@ -776,11 +794,17 @@ const DayNotesModal = ({ date, dateString, initialNote, onSave, onClose, isDark 
     );
 };
 
-// Make available globally
-try {
+// Make available globally - ensure it's always registered
+if (typeof window !== 'undefined') {
     window.Calendar = Calendar;
-    console.log('✅ Calendar component registered on window.Calendar', typeof window.Calendar);
-} catch (error) {
-    console.error('❌ Calendar component registration failed:', error);
+    
+    // Dispatch event to notify that Calendar is ready
+    if (typeof window.dispatchEvent === 'function') {
+        try {
+            window.dispatchEvent(new CustomEvent('calendarComponentReady'));
+        } catch (e) {
+            // Ignore event errors
+        }
+    }
 }
 

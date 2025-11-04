@@ -458,10 +458,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     const renderProgressCell = (project, month, field, rowBgColor = '#ffffff') => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
+            const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f3f4f6';
             return React.createElement('td', {
                 key: (project?.id || 'unknown') + '-' + String(month) + '-' + String(field),
                 style: {
-                    backgroundColor: rowBgColor,
+                    backgroundColor: defaultBgColor,
                     border: '1px solid #d1d5db'
                 },
                 className: 'px-2 py-1 text-xs'
@@ -520,10 +521,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         };
         
         // Spreadsheet-style cell with borders
+        // Use more visible alternate color
+        const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f3f4f6';
         const cellStyle = {
             padding: '4px 6px',
             border: '1px solid #d1d5db',
-            backgroundColor: isWorking ? '#f0f9ff' : rowBgColor,
+            backgroundColor: isWorking ? '#f0f9ff' : defaultBgColor,
             minHeight: field === 'comments' ? '60px' : '32px',
             verticalAlign: 'top'
         };
@@ -633,12 +636,21 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         ) : null,
         // Working Months Info - aligned with PROJECT column
         React.createElement('div', { 
-            className: 'flex items-center gap-2 mb-2',
-            style: { paddingLeft: '1px' }
+            className: 'mb-2',
+            style: { 
+                paddingLeft: '1px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+            }
         },
             React.createElement('button', {
                 className: 'px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors',
-                style: { minWidth: '280px', textAlign: 'left' }
+                style: { 
+                    width: '280px',
+                    textAlign: 'left',
+                    flexShrink: 0
+                }
             }, 'Working Months'),
             React.createElement('span', { 
                 className: 'text-xs text-gray-600'
@@ -648,7 +660,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         React.createElement('div', { ref: tableRef, className: 'overflow-x-auto bg-white border border-gray-300 shadow-sm' },
             React.createElement('table', { 
                 className: 'w-full text-left border-collapse',
-                style: { borderSpacing: 0 }
+                style: { borderSpacing: 0, tableLayout: 'fixed' }
             },
                 React.createElement('thead', { className: 'bg-gray-100 border-b-2 border-gray-400' },
                     // First row: Month headers
@@ -791,9 +803,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return null;
                         }
                         
-                        // Alternate row colors
+                        // Alternate row colors - more visible
                         const isEvenRow = rowIndex % 2 === 0;
-                        const rowBgColor = isEvenRow ? '#ffffff' : '#f9fafb';
+                        const rowBgColor = isEvenRow ? '#ffffff' : '#f3f4f6';
                         
                         return React.createElement('tr', { 
                             key: String(project.id),
@@ -801,7 +813,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 borderBottom: '1px solid #d1d5db',
                                 backgroundColor: rowBgColor
                             },
-                            className: 'hover:bg-gray-50'
+                            onMouseEnter: (e) => {
+                                e.currentTarget.style.backgroundColor = '#f9fafb';
+                            },
+                            onMouseLeave: (e) => {
+                                e.currentTarget.style.backgroundColor = rowBgColor;
+                            }
                         },
                             React.createElement('td', { 
                                 style: {

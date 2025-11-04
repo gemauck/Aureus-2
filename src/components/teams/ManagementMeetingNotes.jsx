@@ -34,16 +34,26 @@ const ManagementMeetingNotes = () => {
         const loadMeetingNotes = async () => {
             try {
                 console.log('📥 ManagementMeetingNotes: Loading meeting notes...');
-                const dataService = window.dataService;
+                
+                // Wait for dataService to be available
+                let dataService = window.dataService;
+                let attempts = 0;
+                while (!dataService && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    dataService = window.dataService;
+                    attempts++;
+                }
+                
                 if (!dataService || typeof dataService.getManagementMeetingNotes !== 'function') {
-                    console.error('❌ ManagementMeetingNotes: dataService not available');
+                    console.error('❌ ManagementMeetingNotes: dataService not available after waiting');
                     setMeetingNotes([]);
                     setIsReady(true);
                     return;
                 }
+                
                 const savedNotes = await dataService.getManagementMeetingNotes();
-                const notes = Array.isArray(savedNotes) ? savedNotes : [];
-                console.log('✅ ManagementMeetingNotes: Loaded', notes.length, 'month(s)');
+                const notes = Array.isArray(savedNotes) ? savedNotes : (savedNotes ? [savedNotes] : []);
+                console.log('✅ ManagementMeetingNotes: Loaded', notes.length, 'month(s)', notes);
                 setMeetingNotes(notes);
                 setIsReady(true);
             } catch (error) {

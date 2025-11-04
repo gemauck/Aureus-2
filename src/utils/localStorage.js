@@ -276,10 +276,12 @@ const storage = {
     getManagementMeetingNotes: () => {
         try {
             const notes = localStorage.getItem('abcotronics_management_meeting_notes');
-            return notes ? JSON.parse(notes) : null;
+            if (!notes) return [];
+            const parsed = JSON.parse(notes);
+            return Array.isArray(parsed) ? parsed : [];
         } catch (e) {
             console.error('Error loading management meeting notes:', e);
-            return null;
+            return [];
         }
     },
     

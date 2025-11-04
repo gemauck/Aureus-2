@@ -49,10 +49,8 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                         };
                         setProfile(updatedProfile);
                         
-                        // Update storage silently (don't trigger global refresh during load)
-                        if (window.storage && window.storage.setUser) {
-                            window.storage.setUser(user);
-                        }
+                        // Don't update storage during load - only update local profile state
+                        // Storage updates should only happen on explicit saves to prevent refresh loops
                     }
                     return;
                 } catch (apiError) {
@@ -89,10 +87,8 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                     };
                     setProfile(updatedProfile);
                     
-                    // Update storage silently (don't trigger global refresh during load)
-                    if (window.storage && window.storage.setUser) {
-                        window.storage.setUser(user);
-                    }
+                    // Don't update storage during load - only update local profile state
+                    // Storage updates should only happen on explicit saves to prevent refresh loops
                 }
             } else {
                 console.error('Failed to load profile:', response.status, response.statusText);
