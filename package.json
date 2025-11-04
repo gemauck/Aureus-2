@@ -13,7 +13,7 @@
     "build": "npm run build:jsx && npm run build:css && npx prisma generate",
     "build:jsx": "node build-jsx.js",
     "build:css": "npx tailwindcss -i ./src/styles/main.css -o ./dist/styles.css --minify",
-    "railway-build": "npm run build:css && npx prisma generate && echo 'Railway build completed'",
+    "railway-build": "npm run build:jsx && npm run build:css && npx prisma generate && echo 'Railway build completed'",
     "railway-start": "./deploy-railway-fixes.sh",
     "postinstall": "npx prisma generate",
     "deploy": "./deploy-production.sh"
