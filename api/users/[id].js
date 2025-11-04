@@ -7,8 +7,11 @@ import { withLogging } from '../_lib/logger.js'
 
 async function handler(req, res) {
     // Extract user ID from URL (strip query parameters)
-    const urlPath = req.url.split('?')[0].split('#')[0]
-    const userId = urlPath.split('/').pop()
+    // Prefer req.params.id if available (from explicit route mapping), otherwise extract from URL
+    const userId = req.params?.id || (() => {
+        const urlPath = req.url.split('?')[0].split('#')[0]
+        return urlPath.split('/').pop()
+    })()
 
     if (req.method === 'GET') {
         try {

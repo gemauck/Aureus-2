@@ -13,8 +13,30 @@ class ErrorBoundary extends Component {
     }
 
     componentDidCatch(error, errorInfo) {
-        // Log error details
-        console.error('ErrorBoundary caught an error:', error, errorInfo);
+        // Enhanced error logging with detailed information
+        const errorDetails = {
+            message: error?.message || 'Unknown error',
+            name: error?.name || 'Error',
+            stack: error?.stack || 'No stack trace',
+            componentStack: errorInfo?.componentStack || 'No component stack',
+            errorString: error?.toString() || String(error),
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            url: window.location.href
+        };
+        
+        console.error('🚨 ErrorBoundary caught an error:', errorDetails);
+        console.error('Error object:', error);
+        console.error('Error info:', errorInfo);
+        
+        // Log to console in a structured way for easier debugging
+        if (error?.stack) {
+            console.error('Error stack:', error.stack);
+        }
+        if (errorInfo?.componentStack) {
+            console.error('Component stack:', errorInfo.componentStack);
+        }
+        
         this.setState({
             error: error,
             errorInfo: errorInfo
@@ -59,15 +81,31 @@ class ErrorBoundary extends Component {
                             </button>
                         </div>
 
-                        {typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'development' && this.state.error && (
+                        {(this.state.error || this.state.errorInfo) && (
                             <details className="mt-4">
                                 <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-                                    Error Details (Development)
+                                    Error Details
                                 </summary>
                                 <div className="mt-2 p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
                                     <pre className="text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                                        {this.state.error && this.state.error.toString()}
-                                        {this.state.errorInfo.componentStack}
+                                        {this.state.error && (
+                                            <>
+                                                <div className="font-bold mb-2">Error:</div>
+                                                <div>{this.state.error.toString()}</div>
+                                                {this.state.error.stack && (
+                                                    <>
+                                                        <div className="font-bold mt-2 mb-2">Stack Trace:</div>
+                                                        <div>{this.state.error.stack}</div>
+                                                    </>
+                                                )}
+                                            </>
+                                        )}
+                                        {this.state.errorInfo?.componentStack && (
+                                            <>
+                                                <div className="font-bold mt-2 mb-2">Component Stack:</div>
+                                                <div>{this.state.errorInfo.componentStack}</div>
+                                            </>
+                                        )}
                                     </pre>
                                 </div>
                             </details>

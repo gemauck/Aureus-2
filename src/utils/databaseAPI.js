@@ -13,9 +13,9 @@ const DatabaseAPI = {
     // Request deduplication: prevent multiple concurrent requests to the same endpoint
     _pendingRequests: new Map(),
     
-    // Short-term cache for recent responses (2 seconds TTL)
+    // Short-term cache for recent responses (5 seconds TTL - increased to reduce redundant calls)
     _responseCache: new Map(),
-    _cacheTTL: 2000, // 2 seconds
+    _cacheTTL: 5000, // 5 seconds - increased from 2s to reduce excessive API calls
     
     // Clear old cache entries periodically
     _cleanCache() {

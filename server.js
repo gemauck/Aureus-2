@@ -508,6 +508,38 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for users list operations (GET, POST /api/users)
+app.all('/api/users', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user operations with ID (GET, PUT, DELETE /api/users/[id])
+app.all('/api/users/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', '[id].js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    // Attach user ID to req.params for the handler
+    req.params = req.params || {}
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Users [id] API error:', e)
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for individual opportunity operations (GET, PUT, DELETE /api/opportunities/[id])
 // This route is handled by the dynamic route resolution below
 

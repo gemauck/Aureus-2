@@ -298,6 +298,44 @@
         window.define.amd = false;
     </script>
     
+    <!-- Global Error Handlers -->
+    <script>
+        // Global unhandled promise rejection handler
+        window.addEventListener('unhandledrejection', function(event) {
+            console.error('🚨 Unhandled Promise Rejection:', {
+                reason: event.reason,
+                promise: event.promise,
+                error: event.reason instanceof Error ? {
+                    message: event.reason.message,
+                    stack: event.reason.stack,
+                    name: event.reason.name
+                } : event.reason,
+                timestamp: new Date().toISOString()
+            });
+            
+            // Prevent the default browser error console output
+            event.preventDefault();
+            
+            // Optionally send to error tracking service
+            // Example: window.errorTracker?.log(event.reason);
+        });
+        
+        // Global error handler for JavaScript errors
+        window.addEventListener('error', function(event) {
+            console.error('🚨 Global Error:', {
+                message: event.message,
+                filename: event.filename,
+                lineno: event.lineno,
+                colno: event.colno,
+                error: event.error,
+                stack: event.error?.stack,
+                timestamp: new Date().toISOString()
+            });
+        });
+        
+        console.log('✅ Global error handlers registered');
+    </script>
+    
     <!-- Lazy load heavy libraries when needed -->
     <script>
         // Lazy load PDF.js when PDF to Word converter is used

@@ -101,6 +101,11 @@ const NotificationCenter = () => {
     };
     
     const loadNotifications = async () => {
+        // Prevent concurrent requests - if already loading, skip
+        if (loading) {
+            return;
+        }
+        
         try {
             setLoading(true);
             
@@ -135,7 +140,7 @@ const NotificationCenter = () => {
                 }
             } catch (error) {
                 // DatabaseAPI.makeRequest throws errors for failed requests
-                const errorMessage = error.message || error.toString() || '';
+                const errorMessage = error?.message || error?.toString() || 'Unknown error';
                 if (errorMessage.includes('401') || errorMessage.includes('Unauthorized') || errorMessage.includes('Authentication expired')) {
                     consecutiveFailuresRef.current++;
                     // Pause polling after 3 consecutive 401 errors
@@ -149,6 +154,8 @@ const NotificationCenter = () => {
                     // For other errors, don't increment failure counter (might be temporary network issues)
                     console.warn(`⚠️ NotificationCenter: Failed to load:`, errorMessage);
                 }
+                // Re-throw to be caught by outer catch if needed
+                throw error;
             }
         } catch (error) {
             console.error('❌ Error loading notifications:', error);
@@ -166,6 +173,7 @@ const NotificationCenter = () => {
     const markAsRead = async (notificationIds) => {
         try {
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest not available for markAsRead');
                 return;
             }
             
@@ -176,13 +184,15 @@ const NotificationCenter = () => {
             
             loadNotifications(); // Reload to update counts
         } catch (error) {
-            console.error('Error marking as read:', error);
+            console.error('❌ Error marking notifications as read:', error);
+            // Don't throw - this is a non-critical operation
         }
     };
     
     const deleteNotification = async (notificationIds) => {
         try {
             if (!window.DatabaseAPI || typeof window.DatabaseAPI.makeRequest !== 'function') {
+                console.warn('⚠️ NotificationCenter: DatabaseAPI.makeRequest not available for deleteNotification');
                 return;
             }
             
@@ -193,7 +203,8 @@ const NotificationCenter = () => {
             
             loadNotifications();
         } catch (error) {
-            console.error('Error deleting notification:', error);
+            console.error('❌ Error deleting notification:', error);
+            // Don't throw - this is a non-critical operation
         }
     };
     
