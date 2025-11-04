@@ -21,6 +21,20 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
     const [saveStatus, setSaveStatus] = useState('');
+    const [notificationSettings, setNotificationSettings] = useState({
+        emailMentions: true,
+        emailComments: true,
+        emailTasks: false,
+        emailInvoices: true,
+        emailSystem: true,
+        inAppMentions: true,
+        inAppComments: true,
+        inAppTasks: true,
+        inAppInvoices: true,
+        inAppSystem: true
+    });
+    const [notificationLoading, setNotificationLoading] = useState(false);
+    const [notificationSaveStatus, setNotificationSaveStatus] = useState('');
     const { isDark } = window.useTheme();
 
     const tabs = [
@@ -236,21 +250,6 @@ const SettingsModal = ({ isOpen, onClose }) => {
             ))}
         </div>
     );
-
-    const [notificationSettings, setNotificationSettings] = useState({
-        emailMentions: true,
-        emailComments: true,
-        emailTasks: false,
-        emailInvoices: true,
-        emailSystem: true,
-        inAppMentions: true,
-        inAppComments: true,
-        inAppTasks: true,
-        inAppInvoices: true,
-        inAppSystem: true
-    });
-    const [notificationLoading, setNotificationLoading] = useState(false);
-    const [notificationSaveStatus, setNotificationSaveStatus] = useState('');
 
     useEffect(() => {
         if (activeTab === 'notifications' && isOpen) {
@@ -618,35 +617,57 @@ const SettingsModal = ({ isOpen, onClose }) => {
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className={`flex items-center justify-between pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
-                                    <button
-                                        onClick={handleReset}
-                                        className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                                            isDark 
-                                                ? 'text-gray-300 bg-gray-700 border border-gray-600 hover:bg-gray-600' 
-                                                : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        Reset to Default
-                                    </button>
-                                    <button
-                                        onClick={handleSave}
-                                        disabled={isLoading}
-                                        className="px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                                    >
-                                        {isLoading ? (
-                                            <>
-                                                <i className="fas fa-spinner fa-spin mr-2"></i>
-                                                Saving...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <i className="fas fa-save mr-2"></i>
-                                                Save Settings
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                                {activeTab === 'notifications' ? (
+                                    <div className={`flex items-center justify-end pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                        <button
+                                            onClick={handleNotificationSave}
+                                            disabled={notificationLoading}
+                                            className="px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {notificationLoading ? (
+                                                <>
+                                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <i className="fas fa-save mr-2"></i>
+                                                    Save Settings
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className={`flex items-center justify-between pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                                        <button
+                                            onClick={handleReset}
+                                            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                                                isDark 
+                                                    ? 'text-gray-300 bg-gray-700 border border-gray-600 hover:bg-gray-600' 
+                                                    : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            Reset to Default
+                                        </button>
+                                        <button
+                                            onClick={handleSave}
+                                            disabled={isLoading}
+                                            className="px-6 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isLoading ? (
+                                                <>
+                                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                                    Saving...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <i className="fas fa-save mr-2"></i>
+                                                    Save Settings
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>
