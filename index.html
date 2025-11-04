@@ -470,6 +470,7 @@
     </script>
     <!-- Load simple components FIRST for immediate loading -->
     <script defer src="./dist/src/components/common/ErrorBoundary.js"></script>
+    <!-- Load Calendar early (after React loads) so it's available when DashboardSimple renders -->
     <script defer src="./dist/src/components/dashboard/Calendar.js?v=calendar-early-load-1762245300"></script>
     <script defer src="./dist/src/components/dashboard/DashboardSimple.js"></script>
     <script defer src="./dist/src/components/dashboard/DashboardFallback.js"></script>
