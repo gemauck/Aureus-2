@@ -106,6 +106,26 @@ async function handler(req, res) {
         } catch (error) {
             console.error('❌ Get users error:', error)
             console.error('❌ Get users error stack:', error.stack)
+            
+            // Check if it's a connection error - comprehensive list of Prisma error codes
+            const isConnectionError = 
+              error.message?.includes("Can't reach database server") ||
+              error.message?.includes("Can't reach database") ||
+              (error.message?.includes("connection") && (error.message?.includes("timeout") || error.message?.includes("refused") || error.message?.includes("unreachable"))) ||
+              error.code === 'P1001' || // Can't reach database server
+              error.code === 'P1002' || // The database server is not reachable
+              error.code === 'P1008' || // Operations timed out
+              error.code === 'P1017' || // Server has closed the connection
+              error.code === 'ETIMEDOUT' ||
+              error.code === 'ECONNREFUSED' ||
+              error.code === 'ENOTFOUND' ||
+              error.code === 'EAI_AGAIN'
+            
+            if (isConnectionError) {
+              console.error('🔌 Database connection issue detected - server may be unreachable')
+              return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+            }
+            
             return serverError(res, 'Failed to get users', error.message)
         }
     }

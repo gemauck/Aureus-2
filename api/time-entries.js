@@ -31,7 +31,10 @@ async function handler(req, res) {
         console.log('✅ Time entries retrieved successfully:', timeEntries.length)
         return ok(res, timeEntries)
       } catch (dbError) {
-        logDatabaseError(dbError, 'listing time entries')
+        const isConnError = logDatabaseError(dbError, 'listing time entries')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to list time entries', dbError.message)
       }
     }

@@ -65,6 +65,25 @@ async function handler(req, res) {
     } catch (dbError) {
       console.error('❌ Me endpoint: Database query failed:', dbError)
       console.error('❌ Me endpoint: Error stack:', dbError.stack)
+      
+      // Check if it's a connection error
+      const isConnectionError = 
+        dbError.message?.includes("Can't reach database server") ||
+        dbError.message?.includes("Can't reach database") ||
+        (dbError.message?.includes("connection") && (dbError.message?.includes("timeout") || dbError.message?.includes("refused") || dbError.message?.includes("unreachable"))) ||
+        dbError.code === 'P1001' || // Can't reach database server
+        dbError.code === 'P1002' || // The database server is not reachable
+        dbError.code === 'P1008' || // Operations timed out
+        dbError.code === 'P1017' || // Server has closed the connection
+        dbError.code === 'ETIMEDOUT' ||
+        dbError.code === 'ECONNREFUSED' ||
+        dbError.code === 'ENOTFOUND' ||
+        dbError.code === 'EAI_AGAIN'
+      
+      if (isConnectionError) {
+        return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+      }
+      
       throw new Error(`Database query failed: ${dbError.message}`)
     }
 

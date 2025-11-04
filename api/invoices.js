@@ -31,7 +31,10 @@ async function handler(req, res) {
         console.log('✅ Invoices retrieved successfully:', invoices.length)
         return ok(res, invoices)
       } catch (dbError) {
-        logDatabaseError(dbError, 'listing invoices')
+        const isConnError = logDatabaseError(dbError, 'listing invoices')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to list invoices', dbError.message)
       }
     }

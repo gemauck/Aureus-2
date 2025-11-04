@@ -48,7 +48,10 @@ async function handler(req, res) {
                 unreadCount
             });
         } catch (error) {
-            logDatabaseError(error, 'getting notifications');
+            const isConnError = logDatabaseError(error, 'getting notifications');
+            if (isConnError) {
+                return serverError(res, `Database connection failed: ${error.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.');
+            }
             return serverError(res, 'Failed to get notifications', error.message);
         }
     }

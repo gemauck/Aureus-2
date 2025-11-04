@@ -204,7 +204,10 @@ async function handler(req, res) {
         
         return ok(res, { leads: parsedLeads })
       } catch (dbError) {
-        logDatabaseError(dbError, 'listing leads')
+        const isConnError = logDatabaseError(dbError, 'listing leads')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to list leads', dbError.message || 'Unknown database error')
       }
     }

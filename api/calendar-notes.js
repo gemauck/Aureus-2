@@ -99,7 +99,10 @@ async function handler(req, res) {
         
         return ok(res, responseData)
       } catch (dbError) {
-        logDatabaseError(dbError, 'listing calendar notes')
+        const isConnError = logDatabaseError(dbError, 'listing calendar notes')
+        if (isConnError) {
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
+        }
         return serverError(res, 'Failed to list calendar notes', dbError.message)
       }
     }

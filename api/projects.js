@@ -140,14 +140,24 @@ async function handler(req, res) {
           stack: dbError.stack?.substring(0, 500)
         })
         
-        // Check if it's a connection error
-        const isConnectionError = dbError.message?.includes("Can't reach database server") ||
-                                 dbError.code === 'P1001' ||
-                                 dbError.code === 'ETIMEDOUT' ||
-                                 dbError.code === 'ECONNREFUSED'
+        // Check if it's a connection error - comprehensive list of Prisma error codes
+        const isConnectionError = 
+          dbError.message?.includes("Can't reach database server") ||
+          dbError.message?.includes("Can't reach database") ||
+          dbError.message?.includes("connection") && (dbError.message?.includes("timeout") || dbError.message?.includes("refused") || dbError.message?.includes("unreachable")) ||
+          dbError.code === 'P1001' || // Can't reach database server
+          dbError.code === 'P1002' || // The database server is not reachable
+          dbError.code === 'P1008' || // Operations timed out
+          dbError.code === 'P1017' || // Server has closed the connection
+          dbError.code === 'ETIMEDOUT' ||
+          dbError.code === 'ECONNREFUSED' ||
+          dbError.code === 'ENOTFOUND' ||
+          dbError.code === 'EAI_AGAIN'
         
         if (isConnectionError) {
           console.error('🔌 Database connection issue detected - server may be unreachable')
+          // Pass the error message to serverError which will format it as DATABASE_CONNECTION_ERROR
+          return serverError(res, `Database connection failed: ${dbError.message}`, 'The database server is unreachable. Please check your network connection and ensure the database server is running.')
         }
         
         return serverError(res, 'Failed to list projects', dbError.message)

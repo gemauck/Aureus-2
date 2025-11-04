@@ -11,13 +11,16 @@ export function isConnectionError(error) {
   
   return (
     message.includes("can't reach database server") ||
-    message.includes("connection") && (message.includes("refused") || message.includes("timeout")) ||
-    code === 'P1001' || // Prisma connection error
-    code === 'P1002' || // Prisma timeout error
-    code === 'P1008' || // Prisma operations timeout
+    message.includes("can't reach database") ||
+    (message.includes("connection") && (message.includes("refused") || message.includes("timeout") || message.includes("unreachable"))) ||
+    code === 'P1001' || // Prisma: Can't reach database server
+    code === 'P1002' || // Prisma: The database server is not reachable
+    code === 'P1008' || // Prisma: Operations timed out
+    code === 'P1017' || // Prisma: Server has closed the connection
     code === 'ETIMEDOUT' ||
     code === 'ECONNREFUSED' ||
-    code === 'ENOTFOUND'
+    code === 'ENOTFOUND' ||
+    code === 'EAI_AGAIN'
   )
 }
 
