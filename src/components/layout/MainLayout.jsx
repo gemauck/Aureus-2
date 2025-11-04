@@ -353,12 +353,18 @@ const MainLayout = () => {
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
     const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
 
+    // Management Meeting Notes component - check availability
+    const ManagementMeetingNotes = React.useMemo(() => {
+        return window.ManagementMeetingNotes || (() => <div className="text-center py-12 text-gray-500">Management Meeting Notes loading...</div>);
+    }, []);
+
     // Filter menu items based on user role
     const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
         { id: 'clients', label: 'CRM', icon: 'fa-users' },
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
+        { id: 'management-meeting', label: 'Management Meeting', icon: 'fa-clipboard-list', adminOnly: true },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
         { id: 'hr', label: 'HR', icon: 'fa-id-card', adminOnly: true },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
@@ -428,7 +434,7 @@ const MainLayout = () => {
         const userRole = user?.role?.toLowerCase();
         
         // Redirect non-admin users away from admin-only pages
-        if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
+        if ((currentPage === 'users' || currentPage === 'hr' || currentPage === 'management-meeting') && !isAdmin) {
             console.warn(`Access denied: ${currentPage} page requires admin role`);
             navigateToPage('dashboard');
         }
@@ -453,6 +459,20 @@ const MainLayout = () => {
                     return <ErrorBoundary key="projects"><Projects /></ErrorBoundary>;
                 case 'teams': 
                     return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
+                case 'management-meeting':
+                    // Additional check before rendering (in case redirect didn't fire yet)
+                    if (!isAdmin) {
+                        return (
+                            <div key="management-meeting-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                <div className="text-center">
+                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
+                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access Management Meeting Notes.</p>
+                                </div>
+                            </div>
+                        );
+                    }
+                    return <ErrorBoundary key="management-meeting"><ManagementMeetingNotes /></ErrorBoundary>;
                 case 'users': 
                     // Additional check before rendering (in case redirect didn't fire yet)
                     if (!isAdmin) {
@@ -514,7 +534,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary, ManagementMeetingNotes, isAdmin]);
 
     // Expose currentPage globally for feedback widgets
     React.useEffect(() => {

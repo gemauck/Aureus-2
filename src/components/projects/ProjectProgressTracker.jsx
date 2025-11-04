@@ -455,12 +455,16 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     };
     
     // Render progress cell - editable input fields
-    const renderProgressCell = (project, month, field) => {
+    const renderProgressCell = (project, month, field, rowBgColor = '#ffffff') => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
             return React.createElement('td', {
                 key: (project?.id || 'unknown') + '-' + String(month) + '-' + String(field),
-                className: 'px-2 py-1 text-xs border-l border-gray-100'
+                style: {
+                    backgroundColor: rowBgColor,
+                    border: '1px solid #d1d5db'
+                },
+                className: 'px-2 py-1 text-xs'
             }, React.createElement('span', { className: 'text-gray-400 text-[10px]' }, '-'));
         }
         
@@ -519,7 +523,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         const cellStyle = {
             padding: '4px 6px',
             border: '1px solid #d1d5db',
-            backgroundColor: isWorking ? '#f0f9ff' : '#ffffff',
+            backgroundColor: isWorking ? '#f0f9ff' : rowBgColor,
             minHeight: field === 'comments' ? '60px' : '32px',
             verticalAlign: 'top'
         };
@@ -627,6 +631,19 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 className: 'mt-2 px-3 py-1.5 bg-red-600 text-white rounded text-xs'
             }, 'Reload')
         ) : null,
+        // Working Months Info - aligned with PROJECT column
+        React.createElement('div', { 
+            className: 'flex items-center gap-2 mb-2',
+            style: { paddingLeft: '1px' }
+        },
+            React.createElement('button', {
+                className: 'px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors',
+                style: { minWidth: '280px', textAlign: 'left' }
+            }, 'Working Months'),
+            React.createElement('span', { 
+                className: 'text-xs text-gray-600'
+            }, 'Highlighted columns show current focus months (2 months in arrears).')
+        ),
         // Table - Spreadsheet style
         React.createElement('div', { ref: tableRef, className: 'overflow-x-auto bg-white border border-gray-300 shadow-sm' },
             React.createElement('table', { 
@@ -647,7 +664,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 borderRight: '2px solid #6b7280',
                                 position: 'sticky',
                                 left: 0,
-                                zIndex: 10
+                                zIndex: 10,
+                                minWidth: '280px',
+                                width: '280px'
                             },
                             className: 'text-left sticky left-0 z-10'
                         }, 'Project'),
@@ -765,17 +784,22 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                         React.createElement('span', { className: 'text-xs text-gray-400' }, 'Projects may be missing required fields')
                                     )
                         )
-                    ) : (Array.isArray(safeProjects) && safeProjects.length > 0 ? safeProjects.map(project => {
+                    ) : (Array.isArray(safeProjects) && safeProjects.length > 0 ? safeProjects.map((project, rowIndex) => {
                         // Double-check project is valid before rendering
                         if (!project || !project.id) {
                             console.warn('⚠️ ProjectProgressTracker: Invalid project in map:', project);
                             return null;
                         }
                         
+                        // Alternate row colors
+                        const isEvenRow = rowIndex % 2 === 0;
+                        const rowBgColor = isEvenRow ? '#ffffff' : '#f9fafb';
+                        
                         return React.createElement('tr', { 
                             key: String(project.id),
                             style: {
-                                borderBottom: '1px solid #d1d5db'
+                                borderBottom: '1px solid #d1d5db',
+                                backgroundColor: rowBgColor
                             },
                             className: 'hover:bg-gray-50'
                         },
@@ -783,13 +807,14 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 style: {
                                     padding: '8px 10px',
                                     fontSize: '11px',
-                                    backgroundColor: '#ffffff',
+                                    backgroundColor: rowBgColor,
                                     border: '1px solid #d1d5db',
                                     borderRight: '2px solid #6b7280',
                                     position: 'sticky',
                                     left: 0,
                                     zIndex: 9,
-                                    minWidth: '200px'
+                                    minWidth: '280px',
+                                    width: '280px'
                                 },
                                 className: 'sticky left-0 z-10'
                             },
@@ -802,9 +827,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             Array.isArray(months) && months.map(month => {
                                 const safeMonth = String(month || '');
                                 return React.createElement(React.Fragment, { key: safeMonth },
-                                    renderProgressCell(project, safeMonth, 'compliance'),
-                                    renderProgressCell(project, safeMonth, 'data'),
-                                    renderProgressCell(project, safeMonth, 'comments')
+                                    renderProgressCell(project, safeMonth, 'compliance', rowBgColor),
+                                    renderProgressCell(project, safeMonth, 'data', rowBgColor),
+                                    renderProgressCell(project, safeMonth, 'comments', rowBgColor)
                                 );
                             }),
                             React.createElement('td', { 
@@ -813,7 +838,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
                                     borderLeft: '2px solid #6b7280',
-                                    backgroundColor: '#ffffff',
+                                    backgroundColor: rowBgColor,
                                     color: '#4b5563'
                                 }
                             }, String(project.manager || '-')),
@@ -822,7 +847,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     padding: '4px 6px',
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
-                                    backgroundColor: '#ffffff',
+                                    backgroundColor: rowBgColor,
                                     color: '#4b5563'
                                 }
                             }, String(project.type || '-')),
@@ -831,7 +856,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     padding: '4px 6px',
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
-                                    backgroundColor: '#ffffff'
+                                    backgroundColor: rowBgColor
                                 }
                             },
                                 React.createElement('span', {

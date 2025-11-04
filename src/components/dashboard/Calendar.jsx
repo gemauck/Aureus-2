@@ -777,5 +777,10 @@ const DayNotesModal = ({ date, dateString, initialNote, onSave, onClose, isDark 
 };
 
 // Make available globally
-window.Calendar = Calendar;
+try {
+    window.Calendar = Calendar;
+    console.log('✅ Calendar component registered on window.Calendar', typeof window.Calendar);
+} catch (error) {
+    console.error('❌ Calendar component registration failed:', error);
+}
 
