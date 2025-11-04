@@ -794,44 +794,83 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         }
     }, [currentDate, showListView, currentNoteHtml]);
     
-    // Auto-save: Watch for editor content changes directly with interval
+    // Auto-save: Watch for editor content changes directly with interval + MutationObserver
     useEffect(() => {
-        if (!currentDate || showListView) {
+        if (!currentDate || showListView || !editorRef.current) {
             return;
         }
         
         const dateString = formatDateString(currentDate);
+        let lastSavedContent = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
+        let lastCheckedContent = '';
+        let saveInProgress = false;
         
-        // Set up interval to check editor content periodically
-        // This ensures auto-save works even if state updates are blocked
-        const autoSaveInterval = setInterval(() => {
-            // Skip during initialization
-            if (isInitializingRef.current || !editorRef.current) {
+        // Function to check and save if needed
+        const checkAndSave = () => {
+            if (!editorRef.current || saveInProgress) {
                 return;
             }
             
             const editorContent = editorRef.current.innerHTML || '';
             const hasContent = editorContent && editorContent.trim().length > 0;
             
-            if (hasContent) {
-                // Only save if content has actually changed
-                const lastSavedContent = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
-                if (editorContent !== lastSavedContent) {
-                    console.log('💾 Auto-saving note (interval check)...', { contentLength: editorContent.length, dateString });
-                    saveNote().catch(err => console.error('Auto-save error:', err));
-                }
+            // Only save if content has actually changed and it's different from last saved
+            if (hasContent && editorContent !== lastSavedContent && editorContent !== lastCheckedContent) {
+                lastCheckedContent = editorContent;
+                saveInProgress = true;
+                
+                console.log('💾 Auto-saving note (detected change)...', { contentLength: editorContent.length, dateString });
+                saveNote().then(() => {
+                    lastSavedContent = editorContent;
+                    sessionStorage.setItem(`last_saved_note_${dateString}`, editorContent);
+                    saveInProgress = false;
+                }).catch(err => {
+                    console.error('Auto-save error:', err);
+                    saveInProgress = false;
+                });
             }
-        }, 3000); // Check every 3 seconds
+        };
+        
+        // Set up MutationObserver to watch for editor changes
+        const observer = new MutationObserver(() => {
+            // Debounce: wait a bit after mutation before checking
+            setTimeout(checkAndSave, 1000);
+        });
+        
+        // Observe the editor for changes
+        observer.observe(editorRef.current, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: false
+        });
+        
+        // Also set up interval as backup (every 3 seconds)
+        const autoSaveInterval = setInterval(() => {
+            // Don't check during the first 2 seconds (initialization period)
+            const initTime = window._dailyNotesInitTime || 0;
+            if (Date.now() - initTime < 2000) {
+                return;
+            }
+            
+            checkAndSave();
+        }, 3000);
         
         return () => {
+            observer.disconnect();
             clearInterval(autoSaveInterval);
         };
     }, [currentDate, showListView, saveNote]);
     
-    // Also auto-save on state changes (for immediate saves after user input)
+    // Also auto-save on state changes (backup mechanism)
     useEffect(() => {
-        if (!currentDate || showListView || isInitializingRef.current) {
-            // Don't auto-save during initialization
+        if (!currentDate || showListView) {
+            return;
+        }
+        
+        // Skip during the first 2 seconds (initialization period)
+        const initTime = window._dailyNotesInitTime || 0;
+        if (Date.now() - initTime < 2000) {
             return;
         }
         
@@ -851,7 +890,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Set new timeout for auto-save (2 seconds after last change for debouncing)
         saveTimeoutRef.current = setTimeout(() => {
-            console.log('💾 Auto-saving note (state change)...');
+            console.log('💾 Auto-saving note (state change backup)...');
             saveNote().catch(err => console.error('Auto-save error:', err));
         }, 2000);
         
@@ -1085,6 +1124,21 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             console.log('📝 Editor input detected, content length:', html.length);
+            
+            // Trigger immediate auto-save after a short delay (debounced)
+            // This ensures auto-save happens even if MutationObserver doesn't catch it
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+            saveTimeoutRef.current = setTimeout(() => {
+                if (editorRef.current) {
+                    const editorContent = editorRef.current.innerHTML || '';
+                    if (editorContent && editorContent.trim().length > 0) {
+                        console.log('💾 Auto-saving note (from input handler)...');
+                        saveNote().catch(err => console.error('Auto-save error from input handler:', err));
+                    }
+                }
+            }, 2000);
         }
     };
 
