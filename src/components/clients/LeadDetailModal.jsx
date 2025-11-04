@@ -341,6 +341,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
         
         // Use functional update to always get latest proposals
+        let finalFormData = null;
+        
         setFormData(prev => {
             const currentProposals = prev.proposals || [];
             
@@ -375,10 +377,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             const finalProposals = mergedProposals.length > 0 ? mergedProposals : updatedProposals;
             
             const updatedFormData = { ...prev, proposals: finalProposals };
-            
-            // Mark that we're saving proposals to prevent useEffect from resetting
-            isSavingProposalsRef.current = true;
-            lastSavedDataRef.current = updatedFormData;
+            finalFormData = updatedFormData;
             
             console.log('💾 Saving proposals:', {
                 currentCount: currentProposals.length,
@@ -390,30 +389,41 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 isCreatingProposal: isCreatingProposalRef.current
             });
             
-            // Debounce the actual save to prevent rapid repeated saves
-            lastSaveTimeoutRef.current = setTimeout(async () => {
-                if (onSave) {
-                    try {
-                        console.log('📡 Calling onSave with proposals...');
-                        await onSave(updatedFormData, true);
-                        console.log('✅ Proposals saved successfully to API');
-                        // Keep the flag set briefly to prevent immediate reset
-                        setTimeout(() => {
-                            isSavingProposalsRef.current = false;
-                            console.log('🔓 Save guard released');
-                        }, 2000); // Increased to 2 seconds for better stability
-                    } catch (error) {
-                        console.error('❌ Error saving proposals:', error);
-                        isSavingProposalsRef.current = false;
-                    }
-                } else {
-                    console.warn('⚠️ onSave not available');
-                    isSavingProposalsRef.current = false;
-                }
-            }, 500); // Increased debounce to 500ms
-            
             return updatedFormData;
         });
+        
+        // CRITICAL: Wait for state update to complete, then set refs BEFORE calling onSave
+        // This ensures guards are in place before API response comes back
+        await new Promise(resolve => setTimeout(resolve, 50)); // Small delay to ensure state update
+        
+        // Now set the refs and guards BEFORE calling onSave
+        // This prevents useEffect from clearing proposals when API response updates lead prop
+        isSavingProposalsRef.current = true;
+        if (finalFormData) {
+            lastSavedDataRef.current = finalFormData;
+        }
+        
+        // Debounce the actual save to prevent rapid repeated saves
+        lastSaveTimeoutRef.current = setTimeout(async () => {
+            if (onSave && finalFormData) {
+                try {
+                    console.log('📡 Calling onSave with proposals...');
+                    await onSave(finalFormData, true);
+                    console.log('✅ Proposals saved successfully to API');
+                    // Keep the flag set longer to prevent immediate reset when API response comes back
+                    setTimeout(() => {
+                        isSavingProposalsRef.current = false;
+                        console.log('🔓 Save guard released');
+                    }, 3000); // Increased to 3 seconds to ensure API response is processed
+                } catch (error) {
+                    console.error('❌ Error saving proposals:', error);
+                    isSavingProposalsRef.current = false;
+                }
+            } else {
+                console.warn('⚠️ onSave not available or finalFormData missing');
+                isSavingProposalsRef.current = false;
+            }
+        }, 500); // Increased debounce to 500ms
     };
     
     // Helper function to send notifications
