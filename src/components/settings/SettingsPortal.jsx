@@ -110,15 +110,39 @@ const SettingsPortal = ({ isOpen, onClose }) => {
 
     useEffect(() => {
         if (isOpen) {
+            // Initialize from user prop if available (immediate display)
+            if (user && (user.id || user.email)) {
+                setProfile({
+                    name: user.name || '',
+                    email: user.email || '',
+                    phone: user.phone || '',
+                    department: user.department || '',
+                    jobTitle: user.jobTitle || ''
+                });
+            }
+            
             // Always load fresh data from server when modal opens
-            if (user && user.id) {
+            const userId = user?.id || user?.sub;
+            if (userId) {
+                console.log('🔧 SettingsPortal: Loading profile for user:', userId);
                 loadProfile();
             } else {
                 // If user isn't loaded yet, wait a bit and try again
+                console.log('⚠️ SettingsPortal: User not available, checking storage...');
                 const timer = setTimeout(() => {
                     const storedUser = window.storage?.getUser?.();
-                    if (storedUser && storedUser.id) {
+                    if (storedUser && (storedUser.id || storedUser.email)) {
+                        console.log('🔧 SettingsPortal: Found user in storage, loading profile');
+                        setProfile({
+                            name: storedUser.name || '',
+                            email: storedUser.email || '',
+                            phone: storedUser.phone || '',
+                            department: storedUser.department || '',
+                            jobTitle: storedUser.jobTitle || ''
+                        });
                         loadProfile();
+                    } else {
+                        console.error('❌ SettingsPortal: No user found in storage');
                     }
                 }, 100);
                 return () => clearTimeout(timer);
@@ -142,7 +166,12 @@ const SettingsPortal = ({ isOpen, onClose }) => {
         setSaveStatus('Saving...');
         
         try {
-            if (!user || !user.id) {
+            // Get user ID from user prop or storage
+            const currentUser = user || window.storage?.getUser?.();
+            const userId = currentUser?.id || currentUser?.sub;
+            
+            if (!userId) {
+                console.error('❌ SettingsPortal: No user ID available', { user, storageUser: window.storage?.getUser?.() });
                 setSaveStatus('User information not available');
                 setIsLoading(false);
                 return;
@@ -155,11 +184,11 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                 return;
             }
 
-            console.log('💾 Saving profile:', profile);
+            console.log('💾 Saving profile:', profile, 'for user:', userId);
             
             // Use DatabaseAPI if available for consistent error handling
             const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
-            const response = await fetch(`${apiBase}/api/users/${user.id}`, {
+            const response = await fetch(`${apiBase}/api/users/${userId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -282,7 +311,17 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                 return;
             }
 
-            console.log('🔐 Changing password for user:', user?.id);
+            // Get user ID from user prop or storage
+            const currentUser = user || window.storage?.getUser?.();
+            const userId = currentUser?.id || currentUser?.sub;
+            
+            if (!userId) {
+                setSaveStatus('User information not available');
+                setIsLoading(false);
+                return;
+            }
+            
+            console.log('🔐 Changing password for user:', userId);
             const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
             const response = await fetch(`${apiBase}/api/users/change-password`, {
                 method: 'POST',
