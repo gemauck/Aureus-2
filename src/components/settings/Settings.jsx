@@ -25,7 +25,6 @@ const Settings = () => {
 
     const tabs = [
         { id: 'general', label: 'General', icon: 'fa-cog' },
-        { id: 'notifications', label: 'Notifications', icon: 'fa-bell' },
         { id: 'security', label: 'Security', icon: 'fa-shield-alt' },
         { id: 'integrations', label: 'Integrations', icon: 'fa-plug' },
         { id: 'data', label: 'Data Management', icon: 'fa-database' }
@@ -183,17 +182,7 @@ const Settings = () => {
         </div>
     );
 
-    const renderNotificationsSettings = () => (
-        <div className="space-y-6">
-            {window.NotificationSettings ? (
-                <window.NotificationSettings />
-            ) : (
-                <div className="text-center py-12">
-                    <p className="text-gray-500">Notification settings are managed separately.</p>
-                </div>
-            )}
-        </div>
-    );
+
 
     const renderSecuritySettings = () => (
         <div className="space-y-6">
@@ -344,12 +333,6 @@ const Settings = () => {
         switch (activeTab) {
             case 'general':
                 return renderGeneralSettings();
-            case 'notifications':
-                // Use new NotificationSettings component if available
-                if (window.NotificationSettings) {
-                    return <window.NotificationSettings />;
-                }
-                return renderNotificationsSettings();
             case 'security':
                 return renderSecuritySettings();
             case 'integrations':
