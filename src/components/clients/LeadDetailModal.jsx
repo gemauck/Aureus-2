@@ -131,11 +131,12 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             setFormData(parsedLead);
         } else if (lead && currentFormData.id === lead.id) {
             // Same lead reloaded - Merge only fields that aren't being actively edited
-            // CRITICAL: Preserve proposals from current formData to prevent loss
+            // CRITICAL: ALWAYS preserve proposals from current formData - NEVER overwrite from lead prop
+            // The lead prop might have stale or incomplete proposals from API responses
             const currentProposals = currentFormData.proposals || [];
             const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
             
-            console.log('🔄 Same lead reloaded - checking proposals:', {
+            console.log('🔄 Same lead reloaded - ALWAYS preserving proposals:', {
                 currentProposalsCount: currentProposals.length,
                 leadProposalsCount: leadProposals.length,
                 currentProposalIds: currentProposals.map(p => p.id),
@@ -145,55 +146,34 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 hasLastSavedData: !!lastSavedDataRef.current
             });
             
-            // If we just saved proposals, always preserve them
-            if (isSavingProposalsRef.current || (lastSavedDataRef.current && lastSavedDataRef.current.proposals)) {
-                const savedProposals = lastSavedDataRef.current?.proposals || currentProposals;
-                console.log('✅ Preserving saved proposals:', {
-                    count: savedProposals.length,
-                    ids: savedProposals.map(p => p.id)
-                });
-                setFormData(prev => ({
-                    ...prev,
-                    proposals: (Array.isArray(savedProposals) && savedProposals.length > 0) ? savedProposals : leadProposals
-                }));
-                return; // Don't process further updates while saving
-            }
+            // CRITICAL: If we have proposals in formData (even if empty), NEVER overwrite from lead prop
+            // This prevents API responses from clearing proposals that were just created
+            // Only use lead.proposals if formData has NO proposals at all (initial load)
+            const proposalsToUse = (Array.isArray(currentProposals) && currentProposals.length > 0) 
+                ? currentProposals 
+                : (lastSavedDataRef.current?.proposals && Array.isArray(lastSavedDataRef.current.proposals) && lastSavedDataRef.current.proposals.length > 0)
+                    ? lastSavedDataRef.current.proposals
+                    : leadProposals;
             
-            // Use the last saved data as reference
-            if (lastSavedDataRef.current) {
-                // If the current formData matches what we last saved, we can safely update from the API
-                const currentStatus = currentFormData.status;
-                const currentStage = currentFormData.stage;
-                const lastSavedStatus = lastSavedDataRef.current.status;
-                const lastSavedStage = lastSavedDataRef.current.stage;
-                
-                // Only update if formData still matches our last save (meaning user hasn't made new changes)
-                if (currentStatus === lastSavedStatus && currentStage === lastSavedStage) {
-                    console.log('✅ Status/stage unchanged, merging proposals carefully');
-                    setFormData(prev => ({
-                        ...prev,
-                        status: lead.status,
-                        stage: lead.stage,
-                        // Preserve proposals - use current if they exist, otherwise use lead's
-                        proposals: (Array.isArray(currentProposals) && currentProposals.length > 0) ? currentProposals : leadProposals
-                    }));
-                } else {
-                    // User has made changes - preserve all local state including proposals
-                    console.log('⚠️ Status/stage changed, preserving all local proposals');
-                    setFormData(prev => ({
-                        ...prev,
-                        // Keep current proposals to prevent loss
-                        proposals: (Array.isArray(prev.proposals) && prev.proposals.length > 0) ? prev.proposals : leadProposals
-                    }));
-                }
-            } else {
-                // No last saved data - preserve proposals from current state
-                console.log('⚠️ No last saved data, preserving current proposals');
-                setFormData(prev => ({
-                    ...prev,
-                    proposals: (Array.isArray(prev.proposals) && prev.proposals.length > 0) ? prev.proposals : leadProposals
-                }));
-            }
+            console.log('✅ Using proposals:', {
+                source: (Array.isArray(currentProposals) && currentProposals.length > 0) ? 'currentFormData' 
+                    : (lastSavedDataRef.current?.proposals?.length > 0) ? 'lastSavedData' 
+                    : 'leadProp',
+                count: proposalsToUse.length,
+                ids: proposalsToUse.map(p => p.id)
+            });
+            
+            // Update other fields from lead prop, but ALWAYS preserve proposals from formData
+            setFormData(prev => ({
+                ...prev,
+                // Update other fields that might have changed externally
+                status: lead.status || prev.status,
+                stage: lead.stage || prev.stage,
+                // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
+                proposals: proposalsToUse
+            }));
+            
+            return; // Don't process further updates
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lead?.id]); // Only re-run when lead ID changes, not when lead properties change
