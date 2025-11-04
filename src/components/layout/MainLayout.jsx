@@ -155,7 +155,8 @@ const MainLayout = () => {
 
     // Get components from window - use useMemo to re-check on each render in case components load lazily
     const Dashboard = React.useMemo(() => {
-        return window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
+        // Temporarily prioritize DashboardSimple to avoid calculateStats error from cached DashboardLive
+        return window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.DashboardLive || window.Dashboard || (() => <div className="text-center py-12 text-gray-500">Dashboard loading...</div>);
     }, []); // Only compute once, components should be available by render time
     
     const ErrorBoundary = React.useMemo(() => {
