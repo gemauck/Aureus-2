@@ -164,8 +164,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             });
             
             // Update other fields from lead prop, but ALWAYS preserve proposals from formData
-            setFormData(prev => ({
-                ...prev,
+                    setFormData(prev => ({
+                        ...prev,
                 // Update other fields that might have changed externally
                 status: lead.status || prev.status,
                 stage: lead.stage || prev.stage,
@@ -282,6 +282,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const [stageCommentInput, setStageCommentInput] = useState({});
     const [isCreatingProposal, setIsCreatingProposal] = useState(false); // UI state for button disabled state
     const lastSaveTimeoutRef = useRef(null); // Debounce saves
+    // @mention tagging state
+    const [mentionState, setMentionState] = useState({}); // { [stageKey]: { show: false, query: '', position: 0 } }
+    const mentionInputRefs = useRef({}); // Track textarea refs for @mention positioning
     
     // Load users for assignment
     useEffect(() => {
@@ -2703,14 +2706,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            if (confirm('Delete this proposal?')) {
-                                                                const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
+                                                            if (confirm(`Are you sure you want to delete "${proposal.title || proposal.name}"? This action cannot be undone.`)) {
+                                                                setFormData(prev => {
+                                                                    const updatedProposals = (prev.proposals || []).filter(p => p.id !== proposal.id);
                                                                     saveProposals(updatedProposals);
+                                                                    return { ...prev, proposals: updatedProposals };
+                                                                });
                                                             }
                                                         }}
-                                                        className="text-red-600 hover:text-red-700"
+                                                        className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Delete Proposal"
                                                     >
-                                                        <i className="fas fa-trash"></i>
+                                                        <i className="fas fa-trash mr-1"></i>Delete
                                                     </button>
                                                 </div>
 
@@ -2813,26 +2820,147 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                         <div className="text-xs font-medium text-gray-700 mb-2">Comments:</div>
                                                                                         <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
                                                                                             {Array.isArray(stage.comments) && stage.comments.length > 0 ? (
-                                                                                                stage.comments.map((comment, commentIdx) => (
-                                                                                                    <div key={commentIdx} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                                                                                                        <div className="font-medium text-gray-700">{comment.author || 'Unknown'}</div>
-                                                                                                        <div className="mt-1">{comment.text}</div>
-                                                                                                        <div className="text-[10px] text-gray-400 mt-1">
-                                                                                                            {new Date(comment.timestamp).toLocaleString()}
+                                                                                                stage.comments.map((comment, commentIdx) => {
+                                                                                                    // Parse @mentions in comment text
+                                                                                                    const renderCommentText = (text) => {
+                                                                                                        if (!text) return '';
+                                                                                                        const parts = text.split(/(@\w+)/g);
+                                                                                                        return parts.map((part, idx) => {
+                                                                                                            if (part.startsWith('@')) {
+                                                                                                                const mentionName = part.substring(1);
+                                                                                                                const mentionedUser = allUsers.find(u => 
+                                                                                                                    (u.name && u.name.toLowerCase() === mentionName.toLowerCase()) ||
+                                                                                                                    (u.email && u.email.toLowerCase() === mentionName.toLowerCase())
+                                                                                                                );
+                                                                                                                return (
+                                                                                                                    <span key={idx} className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                                                                                                                        <i className="fas fa-at mr-1"></i>{mentionName}
+                                                                                                                    </span>
+                                                                                                                );
+                                                                                                            }
+                                                                                                            return <span key={idx}>{part}</span>;
+                                                                                                        });
+                                                                                                    };
+                                                                                                    
+                                                                                                    return (
+                                                                                                        <div key={commentIdx} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                                                                                            <div className="font-medium text-gray-700">{comment.author || 'Unknown'}</div>
+                                                                                                            <div className="mt-1">{renderCommentText(comment.text)}</div>
+                                                                                                            <div className="text-[10px] text-gray-400 mt-1">
+                                                                                                                {new Date(comment.timestamp).toLocaleString()}
+                                                                                                            </div>
                                                                                                         </div>
-                                                                                                    </div>
-                                                                                                ))
+                                                                                                    );
+                                                                                                })
                                                                                             ) : (
                                                                                                 <div className="text-xs text-gray-400 italic">No comments yet</div>
                                                                                             )}
                                                                                         </div>
-                                                                                        <textarea
-                                                                                            value={stageCommentInput[stageKey] || ''}
-                                                                                            onChange={(e) => setStageCommentInput({ ...stageCommentInput, [stageKey]: e.target.value })}
-                                                                                            placeholder="Add a comment..."
-                                                                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
-                                                                                            rows="2"
-                                                                                        />
+                                                                                        <div className="relative">
+                                                                                            <textarea
+                                                                                                ref={(el) => { if (el) mentionInputRefs.current[stageKey] = el; }}
+                                                                                                value={stageCommentInput[stageKey] || ''}
+                                                                                                onChange={(e) => {
+                                                                                                    const value = e.target.value;
+                                                                                                    const cursorPos = e.target.selectionStart;
+                                                                                                    const textBeforeCursor = value.substring(0, cursorPos);
+                                                                                                    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+                                                                                                    
+                                                                                                    // Check if we're typing an @mention
+                                                                                                    if (lastAtIndex !== -1) {
+                                                                                                        const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+                                                                                                        // Only show mention dropdown if there's no space after @
+                                                                                                        if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
+                                                                                                            const query = textAfterAt.toLowerCase();
+                                                                                                            setMentionState({
+                                                                                                                ...mentionState,
+                                                                                                                [stageKey]: {
+                                                                                                                    show: true,
+                                                                                                                    query: query,
+                                                                                                                    position: lastAtIndex
+                                                                                                                }
+                                                                                                            });
+                                                                                                        } else {
+                                                                                                            setMentionState({
+                                                                                                                ...mentionState,
+                                                                                                                [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                            });
+                                                                                                        }
+                                                                                                    } else {
+                                                                                                        setMentionState({
+                                                                                                            ...mentionState,
+                                                                                                            [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                        });
+                                                                                                    }
+                                                                                                    
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: value });
+                                                                                                }}
+                                                                                                onBlur={() => {
+                                                                                                    // Delay hiding mention dropdown to allow clicking on it
+                                                                                                    setTimeout(() => {
+                                                                                                        setMentionState(prev => ({
+                                                                                                            ...prev,
+                                                                                                            [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                        }));
+                                                                                                    }, 200);
+                                                                                                }}
+                                                                                                placeholder="Add a comment... (use @ to mention users)"
+                                                                                                className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
+                                                                                                rows="2"
+                                                                                            />
+                                                                                            {/* @mention dropdown */}
+                                                                                            {mentionState[stageKey]?.show && (
+                                                                                                <div className="absolute z-50 mt-1 w-48 bg-white border border-gray-300 rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                                                                                                    {allUsers.filter(u => {
+                                                                                                        const query = mentionState[stageKey]?.query || '';
+                                                                                                        if (!query) return true;
+                                                                                                        const name = (u.name || '').toLowerCase();
+                                                                                                        const email = (u.email || '').toLowerCase();
+                                                                                                        return name.includes(query) || email.includes(query);
+                                                                                                    }).slice(0, 5).map(user => (
+                                                                                                        <button
+                                                                                                            key={user.id}
+                                                                                                            type="button"
+                                                                                                            onClick={() => {
+                                                                                                                const currentValue = stageCommentInput[stageKey] || '';
+                                                                                                                const mentionPos = mentionState[stageKey]?.position || 0;
+                                                                                                                const textBefore = currentValue.substring(0, mentionPos);
+                                                                                                                const textAfter = currentValue.substring(mentionPos + 1 + (mentionState[stageKey]?.query?.length || 0));
+                                                                                                                const mentionText = `@${user.name || user.email}`;
+                                                                                                                const newValue = textBefore + mentionText + ' ' + textAfter;
+                                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: newValue });
+                                                                                                                setMentionState({
+                                                                                                                    ...mentionState,
+                                                                                                                    [stageKey]: { show: false, query: '', position: 0 }
+                                                                                                                });
+                                                                                                                // Focus back on textarea
+                                                                                                                setTimeout(() => {
+                                                                                                                    const textarea = mentionInputRefs.current[stageKey];
+                                                                                                                    if (textarea) {
+                                                                                                                        textarea.focus();
+                                                                                                                        const newPos = textBefore.length + mentionText.length + 1;
+                                                                                                                        textarea.setSelectionRange(newPos, newPos);
+                                                                                                                    }
+                                                                                                                }, 0);
+                                                                                                            }}
+                                                                                                            className="w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center gap-2"
+                                                                                                        >
+                                                                                                            <i className="fas fa-user text-gray-400"></i>
+                                                                                                            <span>{user.name || user.email}</span>
+                                                                                                        </button>
+                                                                                                    ))}
+                                                                                                    {allUsers.filter(u => {
+                                                                                                        const query = mentionState[stageKey]?.query || '';
+                                                                                                        if (!query) return true;
+                                                                                                        const name = (u.name || '').toLowerCase();
+                                                                                                        const email = (u.email || '').toLowerCase();
+                                                                                                        return name.includes(query) || email.includes(query);
+                                                                                                    }).length === 0 && (
+                                                                                                        <div className="px-3 py-2 text-xs text-gray-400">No users found</div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={() => {
@@ -2989,29 +3117,143 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                         </button>
                                                                                     </>
                                                                             )}
+                                                                            {/* Status display and update controls */}
                                                                             {stage.status === 'approved' && (
-                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
-                                                                                    <i className="fas fa-check mr-1"></i>Approved
-                                                                                </span>
+                                                                                <div className="flex flex-col gap-1">
+                                                                                    <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                        <i className="fas fa-check mr-1"></i>Approved
+                                                                                    </span>
+                                                                                    {(currentUser.role === 'admin' || stage.approvedBy === currentUser.name || stage.approvedBy === currentUser.email) && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                const reason = prompt('Please provide a reason for changing to rejected:');
+                                                                                                if (reason !== null && reason.trim()) {
+                                                                                                    let updater = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                    const updaterId = currentUserId;
+                                                                                                    
+                                                                                                    const commentText = stageCommentInput[stageKey] || '';
+                                                                                                    const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                    if (commentText.trim()) {
+                                                                                                        updatedComments.push({
+                                                                                                            id: Date.now(),
+                                                                                                            text: commentText.trim(),
+                                                                                                            author: updater,
+                                                                                                            authorId: updaterId,
+                                                                                                            timestamp: new Date().toISOString()
+                                                                                                        });
+                                                                                                    }
+                                                                                                    
+                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                        idx === stageIndex ? { 
+                                                                                                            ...s, 
+                                                                                                            status: 'rejected',
+                                                                                                            comments: updatedComments,
+                                                                                                            rejectedBy: updater,
+                                                                                                            rejectedAt: new Date().toISOString(),
+                                                                                                            rejectedReason: reason.trim(),
+                                                                                                            approvedBy: null,
+                                                                                                            approvedAt: null
+                                                                                                        } : s
+                                                                                                    );
+                                                                                                    
+                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                    );
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                    await saveProposals(updatedProposals);
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                                                            title="Change to Rejected"
+                                                                                        >
+                                                                                            <i className="fas fa-times mr-1"></i>Reject
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
                                                                             )}
-                                                                                {stage.status === 'rejected' && (
+                                                                            {stage.status === 'rejected' && (
+                                                                                <div className="flex flex-col gap-1">
                                                                                     <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
                                                                                         <i className="fas fa-times mr-1"></i>Rejected
-                                                                                </span>
+                                                                                    </span>
+                                                                                    {(currentUser.role === 'admin' || stage.rejectedBy === currentUser.name || stage.rejectedBy === currentUser.email) && (
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                const commentText = stageCommentInput[stageKey] || '';
+                                                                                                let updater = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                const updaterId = currentUserId;
+                                                                                                
+                                                                                                const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                if (commentText.trim()) {
+                                                                                                    updatedComments.push({
+                                                                                                        id: Date.now(),
+                                                                                                        text: commentText.trim(),
+                                                                                                        author: updater,
+                                                                                                        authorId: updaterId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    });
+                                                                                                }
+                                                                                                
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                    if (idx === stageIndex) {
+                                                                                                        return { 
+                                                                                                            ...s, 
+                                                                                                            status: 'approved', 
+                                                                                                            comments: updatedComments,
+                                                                                                            approvedBy: updater,
+                                                                                                            approvedAt: new Date().toISOString(),
+                                                                                                            rejectedBy: null,
+                                                                                                            rejectedAt: null,
+                                                                                                            rejectedReason: ''
+                                                                                                        };
+                                                                                                    } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                        return { ...s, status: 'in-progress' };
+                                                                                                    }
+                                                                                                    return s;
+                                                                                                });
+                                                                                                
+                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                );
+                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify assigned users of next stage
+                                                                                                if (stageIndex + 1 < proposal.stages.length) {
+                                                                                                    const nextStage = updatedStages[stageIndex + 1];
+                                                                                                    if (nextStage.assigneeId) {
+                                                                                                        await sendNotification(
+                                                                                                            nextStage.assigneeId,
+                                                                                                            `Proposal Stage Ready: ${proposal.title || proposal.name}`,
+                                                                                                            `Stage "${nextStage.name}" is now ready for your review.`,
+                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        );
+                                                                                                    }
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                            title="Change to Approved"
+                                                                                        >
+                                                                                            <i className="fas fa-check mr-1"></i>Approve
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
                                                                             )}
                                                                             {stage.status === 'in-progress' && (
                                                                                 <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
                                                                                     <i className="fas fa-clock mr-1"></i>In Progress
                                                                                 </span>
                                                                             )}
-                                                                                {stage.status === 'pending' && !canApprove && (
-                                                                                    <button
-                                                                                        type="button"
-                                                                                        onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
-                                                                                        className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-                                                                                    >
-                                                                                        <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
-                                                                                    </button>
+                                                                            {stage.status === 'pending' && !canApprove && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
+                                                                                    className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                                                                >
+                                                                                    <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
+                                                                                </button>
                                                                             )}
                                                                         </div>
                                                                     </div>
