@@ -340,44 +340,80 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             clearTimeout(lastSaveTimeoutRef.current);
         }
         
-        const updatedFormData = { ...formData, proposals: updatedProposals };
-        
-        // IMMEDIATELY update formData so proposal appears in UI right away
-        setFormData(updatedFormData);
-        
-        // Mark that we're saving proposals to prevent useEffect from resetting
-        isSavingProposalsRef.current = true;
-        lastSavedDataRef.current = updatedFormData;
-        
-        console.log('💾 Saving proposals:', {
-            count: updatedProposals.length,
-            ids: updatedProposals.map(p => p.id),
-            isCreatingProposal: isCreatingProposalRef.current,
-            formDataProposalsCount: formData.proposals?.length || 0,
-            updatedProposalsCount: updatedProposals.length
-        });
-        
-        // Debounce the actual save to prevent rapid repeated saves
-        lastSaveTimeoutRef.current = setTimeout(async () => {
-            if (onSave) {
-                try {
-                    console.log('📡 Calling onSave with proposals...');
-                    await onSave(updatedFormData, true);
-                    console.log('✅ Proposals saved successfully to API');
-                    // Keep the flag set briefly to prevent immediate reset
-                    setTimeout(() => {
+        // Use functional update to always get latest proposals
+        setFormData(prev => {
+            const currentProposals = prev.proposals || [];
+            
+            // Merge with updatedProposals, ensuring we don't lose any
+            // Use updatedProposals as source of truth but merge with current to catch any missing ones
+            const allProposalIds = new Set();
+            const mergedProposals = [];
+            
+            // Add all current proposals first
+            currentProposals.forEach(p => {
+                if (p.id && !allProposalIds.has(p.id)) {
+                    allProposalIds.add(p.id);
+                    mergedProposals.push(p);
+                }
+            });
+            
+            // Add all updated proposals (will overwrite duplicates by ID)
+            updatedProposals.forEach(p => {
+                if (p.id) {
+                    const existingIndex = mergedProposals.findIndex(mp => mp.id === p.id);
+                    if (existingIndex >= 0) {
+                        // Update existing
+                        mergedProposals[existingIndex] = p;
+                    } else {
+                        // Add new
+                        mergedProposals.push(p);
+                        allProposalIds.add(p.id);
+                    }
+                }
+            });
+            
+            const finalProposals = mergedProposals.length > 0 ? mergedProposals : updatedProposals;
+            
+            const updatedFormData = { ...prev, proposals: finalProposals };
+            
+            // Mark that we're saving proposals to prevent useEffect from resetting
+            isSavingProposalsRef.current = true;
+            lastSavedDataRef.current = updatedFormData;
+            
+            console.log('💾 Saving proposals:', {
+                currentCount: currentProposals.length,
+                updatedCount: updatedProposals.length,
+                mergedCount: finalProposals.length,
+                currentIds: currentProposals.map(p => p.id),
+                updatedIds: updatedProposals.map(p => p.id),
+                finalIds: finalProposals.map(p => p.id),
+                isCreatingProposal: isCreatingProposalRef.current
+            });
+            
+            // Debounce the actual save to prevent rapid repeated saves
+            lastSaveTimeoutRef.current = setTimeout(async () => {
+                if (onSave) {
+                    try {
+                        console.log('📡 Calling onSave with proposals...');
+                        await onSave(updatedFormData, true);
+                        console.log('✅ Proposals saved successfully to API');
+                        // Keep the flag set briefly to prevent immediate reset
+                        setTimeout(() => {
+                            isSavingProposalsRef.current = false;
+                            console.log('🔓 Save guard released');
+                        }, 2000); // Increased to 2 seconds for better stability
+                    } catch (error) {
+                        console.error('❌ Error saving proposals:', error);
                         isSavingProposalsRef.current = false;
-                        console.log('🔓 Save guard released');
-                    }, 2000); // Increased to 2 seconds for better stability
-                } catch (error) {
-                    console.error('❌ Error saving proposals:', error);
+                    }
+                } else {
+                    console.warn('⚠️ onSave not available');
                     isSavingProposalsRef.current = false;
                 }
-            } else {
-                console.warn('⚠️ onSave not available');
-                isSavingProposalsRef.current = false;
-            }
-        }, 500); // Increased debounce to 500ms
+            }, 500); // Increased debounce to 500ms
+            
+            return updatedFormData;
+        });
     };
     
     // Helper function to send notifications
@@ -2446,15 +2482,36 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             };
                                             
                                             // Check if proposal already exists (prevent duplicates)
-                                            // Use both formData and formDataRef to catch duplicates during re-renders
-                                            const currentFormData = formDataRef.current || formData;
-                                            const existingProposals = currentFormData.proposals || [];
+                                            // Use functional update pattern to get latest proposals
+                                            const checkProposals = () => {
+                                                // Use formDataRef for most up-to-date data
+                                                const refData = formDataRef.current;
+                                                const stateData = formData;
+                                                
+                                                // Get proposals from both sources
+                                                const refProposals = refData?.proposals || [];
+                                                const stateProposals = stateData?.proposals || [];
+                                                
+                                                // Merge them by ID (ref takes precedence if both exist)
+                                                const allProposalsMap = new Map();
+                                                stateProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                refProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                
+                                                return Array.from(allProposalsMap.values());
+                                            };
+                                            
+                                            const existingProposals = checkProposals();
                                             
                                             console.log('🔍 Checking for duplicates:', {
                                                 proposalId,
                                                 existingCount: existingProposals.length,
                                                 existingIds: existingProposals.map(p => p.id),
-                                                formDataProposalsCount: formData.proposals?.length || 0
+                                                formDataProposalsCount: formData.proposals?.length || 0,
+                                                formDataRefProposalsCount: formDataRef.current?.proposals?.length || 0
                                             });
                                             
                                             // Check by ID first (most reliable) - this should always be unique
@@ -2497,8 +2554,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             console.log('✅ No duplicate found, proceeding with creation');
                                             
                                             console.log('✅ Adding proposal to state:', proposalId);
+                                            // Use functional update to merge with existing proposals properly
                                             const updatedProposals = [...existingProposals, newProposal];
-                                            console.log('📝 Updated proposals count:', updatedProposals.length);
+                                            console.log('📝 Updated proposals count:', updatedProposals.length, 'IDs:', updatedProposals.map(p => p.id));
                                             saveProposals(updatedProposals);
                                             
                                             // Reset flags after a delay (longer to ensure save completes)
@@ -2938,8 +2996,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                 {stage.status === 'rejected' && (
                                                                                     <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
                                                                                         <i className="fas fa-times mr-1"></i>Rejected
-                                                                                    </span>
-                                                                                )}
+                                                                                </span>
+                                                                            )}
                                                                             {stage.status === 'in-progress' && (
                                                                                 <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
                                                                                     <i className="fas fa-clock mr-1"></i>In Progress
@@ -2953,7 +3011,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                     >
                                                                                         <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
                                                                                     </button>
-                                                                                )}
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </div>
