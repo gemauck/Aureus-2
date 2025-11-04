@@ -293,8 +293,9 @@ const DatabaseAPI = {
                     if (isRetryableServerError && attempt < maxRetries) {
                         // Retry on 500/502/503/504 with exponential backoff
                         const delay = baseDelay * Math.pow(2, attempt);
-                        // Only log warning on first attempt to reduce noise
-                        if (attempt === 0) {
+                        // Suppress warnings for 500 errors (expected when backend has issues)
+                        // Only log warnings for 502/503/504 (gateway/proxy errors)
+                        if (attempt === 0 && response.status !== 500) {
                             console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
                         }
                         await new Promise(resolve => setTimeout(resolve, delay));
