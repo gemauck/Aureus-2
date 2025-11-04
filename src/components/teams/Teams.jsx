@@ -105,6 +105,9 @@ const Teams = () => {
     const [executingWorkflow, setExecutingWorkflow] = useState(null);
     const [viewingDocument, setViewingDocument] = useState(null);
 
+    // State to track ManagementMeetingNotes availability
+    const [managementMeetingNotesAvailable, setManagementMeetingNotesAvailable] = useState(false);
+
     // Check modal components on mount only
     useEffect(() => {
         console.log('🔍 Teams: Checking modal components...');
@@ -113,6 +116,39 @@ const Teams = () => {
         console.log('  - ChecklistModal:', typeof window.ChecklistModal);
         console.log('  - NoticeModal:', typeof window.NoticeModal);
         console.log('  - WorkflowExecutionModal:', typeof window.WorkflowExecutionModal);
+        console.log('  - ManagementMeetingNotes:', typeof window.ManagementMeetingNotes);
+    }, []);
+
+    // Wait for ManagementMeetingNotes component to load
+    useEffect(() => {
+        const checkForManagementMeetingNotes = () => {
+            if (window.ManagementMeetingNotes) {
+                console.log('✅ Teams: ManagementMeetingNotes component now available');
+                setManagementMeetingNotesAvailable(true);
+                return true;
+            }
+            return false;
+        };
+
+        // Check immediately
+        if (checkForManagementMeetingNotes()) {
+            return;
+        }
+
+        // Poll for the component (components load asynchronously)
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max wait
+        const interval = setInterval(() => {
+            attempts++;
+            if (checkForManagementMeetingNotes() || attempts >= maxAttempts) {
+                clearInterval(interval);
+                if (attempts >= maxAttempts) {
+                    console.warn('⚠️ Teams: ManagementMeetingNotes component not found after waiting');
+                }
+            }
+        }, 100);
+
+        return () => clearInterval(interval);
     }, []);
 
     // Load data from data service
@@ -1011,11 +1047,55 @@ const Teams = () => {
                             </div>
                         )}
 
-                        {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && ManagementMeetingNotes && (
-                            <div>
-                                <ManagementMeetingNotes />
-                            </div>
-                        )}
+                        {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && (() => {
+                            const ComponentToRender = window.ManagementMeetingNotes || ManagementMeetingNotes;
+                            
+                            console.log('🔍 Teams: Rendering meeting-notes tab', {
+                                activeTab,
+                                selectedTeamId: selectedTeam?.id,
+                                ManagementMeetingNotesAvailable: !!ManagementMeetingNotes,
+                                windowManagementMeetingNotes: !!window.ManagementMeetingNotes,
+                                ComponentToRender: !!ComponentToRender,
+                                managementMeetingNotesAvailable
+                            });
+                            
+                            if (!ComponentToRender) {
+                                // Show loading state while waiting for component
+                                if (managementMeetingNotesAvailable) {
+                                    // Component was available but disappeared (shouldn't happen)
+                                    return (
+                                        <div className="text-center py-12">
+                                            <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                            <p className="text-sm text-gray-500 dark:text-slate-400 mb-2">
+                                                Meeting Notes component not available
+                                            </p>
+                                            <p className="text-xs text-gray-400 dark:text-slate-500">
+                                                Please refresh the page to load the component.
+                                            </p>
+                                        </div>
+                                    );
+                                } else {
+                                    // Still loading
+                                    return (
+                                        <div className="text-center py-12">
+                                            <i className="fas fa-spinner fa-spin text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                                            <p className="text-sm text-gray-500 dark:text-slate-400 mb-2">
+                                                Loading Meeting Notes component...
+                                            </p>
+                                            <p className="text-xs text-gray-400 dark:text-slate-500">
+                                                Please wait while the component loads.
+                                            </p>
+                                        </div>
+                                    );
+                                }
+                            }
+                            
+                            return (
+                                <div>
+                                    <ComponentToRender />
+                                </div>
+                            );
+                        })()}
 
                     </div>
                 </div>
