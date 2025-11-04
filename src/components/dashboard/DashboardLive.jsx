@@ -34,46 +34,6 @@ const DashboardLive = () => {
     const [userName, setUserName] = useState('User');
     const [calendarReady, setCalendarReady] = useState(false);
 
-    // Calculate stats helper - MUST be declared before use in useEffect or loadDashboardData
-    const calculateStats = useCallback((data) => {
-        const now = new Date();
-        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-        const timeEntriesArray = Array.isArray(data.timeEntries) ? data.timeEntries : [];
-        
-        const thisMonthEntries = timeEntriesArray.filter(entry => {
-            const entryDate = new Date(entry.date);
-            return entryDate >= thisMonth;
-        });
-        const lastMonthEntries = timeEntriesArray.filter(entry => {
-            const entryDate = new Date(entry.date);
-            return entryDate >= lastMonth && entryDate < thisMonth;
-        });
-
-        const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-        const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-
-        // Ensure all data is arrays for safety
-        const clientsArray = Array.isArray(data.clients) ? data.clients : [];
-        const leadsArray = Array.isArray(data.leads) ? data.leads : [];
-        const projectsArray = Array.isArray(data.projects) ? data.projects : [];
-        
-        const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
-        const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
-
-        return {
-            totalClients: clientsArray.length,
-            totalLeads: leadsArray.length,
-            totalProjects: projectsArray.length,
-            activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-            hoursThisMonth: hoursThisMonth,
-            hoursLastMonth: hoursLastMonth,
-            pipelineValue: pipelineValue,
-            weightedPipeline: weightedPipeline
-        };
-    }, []);
-
     // Optimized real-time data loading with immediate localStorage display
     const loadDashboardData = useCallback(async (showLoading = true) => {
         console.log('🔄 DashboardLive: Starting optimized data load...');
