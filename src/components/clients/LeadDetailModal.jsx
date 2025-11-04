@@ -115,6 +115,10 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             setFormData(parsedLead);
         } else if (lead && currentFormData.id === lead.id) {
             // Same lead reloaded - Merge only fields that aren't being actively edited
+            // CRITICAL: Preserve proposals from current formData to prevent loss
+            const currentProposals = currentFormData.proposals || [];
+            const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
+            
             // Use the last saved data as reference
             if (lastSavedDataRef.current) {
                 // If the current formData matches what we last saved, we can safely update from the API
@@ -128,9 +132,24 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                     setFormData(prev => ({
                         ...prev,
                         status: lead.status,
-                        stage: lead.stage
+                        stage: lead.stage,
+                        // Preserve proposals - use current if they exist, otherwise use lead's
+                        proposals: (Array.isArray(currentProposals) && currentProposals.length > 0) ? currentProposals : leadProposals
+                    }));
+                } else {
+                    // User has made changes - preserve all local state including proposals
+                    setFormData(prev => ({
+                        ...prev,
+                        // Keep current proposals to prevent loss
+                        proposals: (Array.isArray(prev.proposals) && prev.proposals.length > 0) ? prev.proposals : leadProposals
                     }));
                 }
+            } else {
+                // No last saved data - preserve proposals from current state
+                setFormData(prev => ({
+                    ...prev,
+                    proposals: (Array.isArray(prev.proposals) && prev.proposals.length > 0) ? prev.proposals : leadProposals
+                }));
             }
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
