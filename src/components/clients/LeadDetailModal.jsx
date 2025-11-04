@@ -52,6 +52,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const formDataRef = useRef(null);
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
+    const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     
     // Initialize formDataRef after formData is declared
     useEffect(() => {
@@ -68,8 +69,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
     // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
-        // Don't reset formData if we're in the middle of auto-saving OR just finished
-        if (isAutoSavingRef.current) {
+        // Don't reset formData if we're in the middle of auto-saving OR saving proposals
+        if (isAutoSavingRef.current || isSavingProposalsRef.current) {
             return;
         }
         
@@ -118,6 +119,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             // CRITICAL: Preserve proposals from current formData to prevent loss
             const currentProposals = currentFormData.proposals || [];
             const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
+            
+            // If we just saved proposals, always preserve them
+            if (isSavingProposalsRef.current || (lastSavedDataRef.current && lastSavedDataRef.current.proposals)) {
+                const savedProposals = lastSavedDataRef.current?.proposals || currentProposals;
+                setFormData(prev => ({
+                    ...prev,
+                    proposals: (Array.isArray(savedProposals) && savedProposals.length > 0) ? savedProposals : leadProposals
+                }));
+                return; // Don't process further updates while saving
+            }
             
             // Use the last saved data as reference
             if (lastSavedDataRef.current) {
@@ -285,8 +296,24 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const saveProposals = async (updatedProposals) => {
         const updatedFormData = { ...formData, proposals: updatedProposals };
         setFormData(updatedFormData);
+        
+        // Mark that we're saving proposals to prevent useEffect from resetting
+        isSavingProposalsRef.current = true;
+        lastSavedDataRef.current = updatedFormData;
+        
         if (onSave) {
-            await onSave(updatedFormData, true);
+            try {
+                await onSave(updatedFormData, true);
+                // Keep the flag set briefly to prevent immediate reset
+                setTimeout(() => {
+                    isSavingProposalsRef.current = false;
+                }, 500);
+            } catch (error) {
+                console.error('Error saving proposals:', error);
+                isSavingProposalsRef.current = false;
+            }
+        } else {
+            isSavingProposalsRef.current = false;
         }
     };
     
