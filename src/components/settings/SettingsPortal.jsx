@@ -33,6 +33,36 @@ const SettingsPortal = ({ isOpen, onClose }) => {
     const loadProfile = useCallback(async () => {
         try {
             setIsLoading(true);
+            
+            // Use DatabaseAPI if available, otherwise fallback to direct fetch
+            if (window.DatabaseAPI?.makeRequest) {
+                try {
+                    const data = await window.DatabaseAPI.makeRequest('/me');
+                    const user = data?.data?.user || data?.user;
+                    if (user) {
+                        const updatedProfile = {
+                            name: user.name || '',
+                            email: user.email || '',
+                            phone: user.phone || '',
+                            department: user.department || '',
+                            jobTitle: user.jobTitle || ''
+                        };
+                        setProfile(updatedProfile);
+                        
+                        // Also update storage with fresh data
+                        if (window.storage && window.storage.setUser) {
+                            window.storage.setUser(user);
+                        }
+                        // Notify auth context to refresh
+                        window.dispatchEvent(new CustomEvent('userDataUpdated'));
+                    }
+                    return;
+                } catch (apiError) {
+                    console.error('DatabaseAPI error, falling back to direct fetch:', apiError);
+                }
+            }
+            
+            // Fallback to direct fetch
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.warn('No authentication token available');
@@ -40,27 +70,30 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                 return;
             }
 
-            const response = await fetch('/api/me', {
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/me`, {
                 headers: {
                     'Authorization': `Bearer ${token}`
-                }
+                },
+                credentials: 'include'
             });
             
             if (response.ok) {
                 const data = await response.json();
-                if (data.user) {
+                const user = data?.data?.user || data?.user;
+                if (user) {
                     const updatedProfile = {
-                        name: data.user.name || '',
-                        email: data.user.email || '',
-                        phone: data.user.phone || '',
-                        department: data.user.department || '',
-                        jobTitle: data.user.jobTitle || ''
+                        name: user.name || '',
+                        email: user.email || '',
+                        phone: user.phone || '',
+                        department: user.department || '',
+                        jobTitle: user.jobTitle || ''
                     };
                     setProfile(updatedProfile);
                     
                     // Also update storage with fresh data
                     if (window.storage && window.storage.setUser) {
-                        window.storage.setUser(data.user);
+                        window.storage.setUser(user);
                     }
                     // Notify auth context to refresh
                     window.dispatchEvent(new CustomEvent('userDataUpdated'));
@@ -123,12 +156,16 @@ const SettingsPortal = ({ isOpen, onClose }) => {
             }
 
             console.log('💾 Saving profile:', profile);
-            const response = await fetch(`/api/users/${user.id}`, {
+            
+            // Use DatabaseAPI if available for consistent error handling
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/users/${user.id}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify(profile)
             });
 
@@ -149,10 +186,12 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                 
                 // Reload fresh user data from server
                 try {
-                    const meResponse = await fetch('/api/me', {
+                    const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+                    const meResponse = await fetch(`${apiBase}/api/me`, {
                         headers: {
                             'Authorization': `Bearer ${token}`
-                        }
+                        },
+                        credentials: 'include'
                     });
                     
                     if (meResponse.ok) {
@@ -244,12 +283,14 @@ const SettingsPortal = ({ isOpen, onClose }) => {
             }
 
             console.log('🔐 Changing password for user:', user?.id);
-            const response = await fetch('/api/users/change-password', {
+            const apiBase = window.DatabaseAPI?.API_BASE || window.location.origin;
+            const response = await fetch(`${apiBase}/api/users/change-password`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
+                credentials: 'include',
                 body: JSON.stringify({
                     currentPassword: passwordForm.currentPassword.trim(),
                     newPassword: passwordForm.newPassword.trim()
