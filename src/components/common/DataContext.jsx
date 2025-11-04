@@ -264,25 +264,50 @@ const DataProvider = ({ children }) => {
                     return;
                 }
 
-                // Load essential data in parallel - catch individual errors to prevent unhandled rejections
-                await Promise.allSettled([
+                // Load essential data in parallel with timeout - ensure we always complete even if DB is down
+                const loadPromise = Promise.allSettled([
                     fetchData('clients').catch(err => {
-                        console.error('❌ Error fetching clients:', err);
+                        const errorMessage = err?.message || String(err);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable');
+                        if (!isDatabaseError) {
+                            console.error('❌ Error fetching clients:', err);
+                        }
                         return null;
                     }),
                     fetchData('leads').catch(err => {
-                        console.error('❌ Error fetching leads:', err);
+                        const errorMessage = err?.message || String(err);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable');
+                        if (!isDatabaseError) {
+                            console.error('❌ Error fetching leads:', err);
+                        }
                         return null;
                     }),
                     fetchData('projects').catch(err => {
-                        console.error('❌ Error fetching projects:', err);
+                        const errorMessage = err?.message || String(err);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable');
+                        if (!isDatabaseError) {
+                            console.error('❌ Error fetching projects:', err);
+                        }
                         return null;
                     }),
                     fetchData('users').catch(err => {
-                        console.error('❌ Error fetching users:', err);
+                        const errorMessage = err?.message || String(err);
+                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                              errorMessage.includes('unreachable');
+                        if (!isDatabaseError) {
+                            console.error('❌ Error fetching users:', err);
+                        }
                         return null;
                     }),
                 ]);
+                
+                // Add timeout to ensure we always complete loading (max 10 seconds)
+                const timeoutPromise = new Promise(resolve => setTimeout(resolve, 10000));
+                
+                await Promise.race([loadPromise, timeoutPromise]);
                 
             } catch (error) {
                 console.error('❌ Initial load error:', error);
