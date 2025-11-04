@@ -2821,22 +2821,26 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                         <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
                                                                                             {Array.isArray(stage.comments) && stage.comments.length > 0 ? (
                                                                                                 stage.comments.map((comment, commentIdx) => {
-                                                                                                    // Parse @mentions in comment text
+                                                                                                    // Parse @mentions in comment text (handles @username or @email)
                                                                                                     const renderCommentText = (text) => {
                                                                                                         if (!text) return '';
-                                                                                                        const parts = text.split(/(@\w+)/g);
+                                                                                                        // Match @ followed by word characters, spaces, dots, or hyphens (for names/emails)
+                                                                                                        const parts = text.split(/(@[\w\s.@-]+)/g);
                                                                                                         return parts.map((part, idx) => {
                                                                                                             if (part.startsWith('@')) {
-                                                                                                                const mentionName = part.substring(1);
-                                                                                                                const mentionedUser = allUsers.find(u => 
-                                                                                                                    (u.name && u.name.toLowerCase() === mentionName.toLowerCase()) ||
-                                                                                                                    (u.email && u.email.toLowerCase() === mentionName.toLowerCase())
-                                                                                                                );
-                                                                                                                return (
-                                                                                                                    <span key={idx} className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                                                                                                                        <i className="fas fa-at mr-1"></i>{mentionName}
-                                                                                                                    </span>
-                                                                                                                );
+                                                                                                                // Remove trailing spaces and @ if present
+                                                                                                                const mentionName = part.substring(1).trim().replace(/@+$/, '');
+                                                                                                                if (mentionName) {
+                                                                                                                    const mentionedUser = allUsers.find(u => 
+                                                                                                                        (u.name && u.name.toLowerCase() === mentionName.toLowerCase()) ||
+                                                                                                                        (u.email && u.email.toLowerCase() === mentionName.toLowerCase())
+                                                                                                                    );
+                                                                                                                    return (
+                                                                                                                        <span key={idx} className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium mx-0.5">
+                                                                                                                            <i className="fas fa-at mr-1"></i>{mentionName}
+                                                                                                                        </span>
+                                                                                                                    );
+                                                                                                                }
                                                                                                             }
                                                                                                             return <span key={idx}>{part}</span>;
                                                                                                         });
@@ -2869,9 +2873,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                     // Check if we're typing an @mention
                                                                                                     if (lastAtIndex !== -1) {
                                                                                                         const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
-                                                                                                        // Only show mention dropdown if there's no space after @
-                                                                                                        if (!textAfterAt.includes(' ') && !textAfterAt.includes('\n')) {
-                                                                                                            const query = textAfterAt.toLowerCase();
+                                                                                                        // Check if there's a space or newline after @ (end of mention)
+                                                                                                        const spaceIndex = textAfterAt.indexOf(' ');
+                                                                                                        const newlineIndex = textAfterAt.indexOf('\n');
+                                                                                                        const endIndex = Math.min(
+                                                                                                            spaceIndex === -1 ? textAfterAt.length : spaceIndex,
+                                                                                                            newlineIndex === -1 ? textAfterAt.length : newlineIndex
+                                                                                                        );
+                                                                                                        
+                                                                                                        if (endIndex > 0) {
+                                                                                                            const query = textAfterAt.substring(0, endIndex).toLowerCase();
                                                                                                             setMentionState({
                                                                                                                 ...mentionState,
                                                                                                                 [stageKey]: {
