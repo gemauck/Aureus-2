@@ -140,6 +140,7 @@ const prismaProxy = new Proxy(prismaGlobal, {
     // Only wrap Prisma model objects (notification, calendarNote, user, etc.)
     // Skip Prisma internal methods and properties
     if (typeof value === 'object' && value !== null && 
+        typeof prop === 'string' &&
         !prop.startsWith('$') && 
         !prop.startsWith('_') &&
         prop !== 'constructor' &&
