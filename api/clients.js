@@ -4,6 +4,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 
 // Helper function to parse JSON fields from database responses
 // PERFORMANCE: Optimized JSON parsing - only parse what's needed
@@ -208,6 +209,18 @@ async function handler(req, res) {
       const body = req.body || {}
       if (!body.name) return badRequest(res, 'name required')
 
+      // Check for duplicate clients/leads before creating
+      try {
+        const duplicateCheck = await checkForDuplicates(body)
+        if (duplicateCheck && duplicateCheck.isDuplicate) {
+          const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
+          return badRequest(res, errorMessage)
+        }
+      } catch (dupError) {
+        console.error('⚠️ Duplicate check failed, proceeding with creation:', dupError.message)
+        // Don't block creation if duplicate check fails
+      }
+
       // Ensure type and services columns exist in database
       try {
         await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN IF NOT EXISTS "type" TEXT`
@@ -327,6 +340,18 @@ async function handler(req, res) {
         const existing = await prisma.client.findUnique({ where: { id } })
         if (existing && existing.type === 'lead') {
           return badRequest(res, 'Cannot update lead through clients endpoint')
+        }
+        
+        // Check for duplicate clients/leads before updating (exclude current record)
+        try {
+          const duplicateCheck = await checkForDuplicates(body, id)
+          if (duplicateCheck && duplicateCheck.isDuplicate) {
+            const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
+            return badRequest(res, errorMessage)
+          }
+        } catch (dupError) {
+          console.error('⚠️ Duplicate check failed, proceeding with update:', dupError.message)
+          // Don't block update if duplicate check fails
         }
         
         const updateData = {

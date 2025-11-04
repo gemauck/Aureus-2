@@ -6,6 +6,7 @@ import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { logDatabaseError } from './_lib/dbErrorHandler.js'
+import { checkForDuplicates, formatDuplicateError } from './_lib/duplicateValidation.js'
 
 // Helper function to parse JSON fields from database responses
 function parseClientJsonFields(client) {
@@ -225,6 +226,19 @@ async function handler(req, res) {
         return badRequest(res, 'name required')
       }
 
+      // Check for duplicate clients/leads before creating
+      try {
+        const duplicateCheck = await checkForDuplicates(body)
+        if (duplicateCheck && duplicateCheck.isDuplicate) {
+          const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
+          console.log('❌ Duplicate lead detected:', errorMessage)
+          return badRequest(res, errorMessage)
+        }
+      } catch (dupError) {
+        console.error('⚠️ Duplicate check failed, proceeding with creation:', dupError.message)
+        // Don't block creation if duplicate check fails
+      }
+
       // Build notes with additional fields that don't exist in schema
       let notes = body.notes || '';
       if (body.source) notes += `\nSource: ${body.source}`;
@@ -342,6 +356,19 @@ async function handler(req, res) {
       }
       if (req.method === 'PUT' || req.method === 'PATCH') {
         const body = req.body || {}
+        
+        // Check for duplicate clients/leads before updating (exclude current record)
+        try {
+          const duplicateCheck = await checkForDuplicates(body, id)
+          if (duplicateCheck && duplicateCheck.isDuplicate) {
+            const errorMessage = formatDuplicateError(duplicateCheck) || duplicateCheck.message
+            console.log('❌ Duplicate lead detected on update:', errorMessage)
+            return badRequest(res, errorMessage)
+          }
+        } catch (dupError) {
+          console.error('⚠️ Duplicate check failed, proceeding with update:', dupError.message)
+          // Don't block update if duplicate check fails
+        }
         
         // Build notes with additional fields that don't exist in schema (if provided)
         let notes = body.notes || '';
