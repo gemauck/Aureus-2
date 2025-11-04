@@ -479,13 +479,12 @@ const UserManagement = () => {
             const token = window.storage?.getToken?.();
             console.log('🗑️ Deleting user:', userId);
             
-            const response = await fetch('/api/users', {
+            const response = await fetch(`/api/users/${userId}`, {
                 method: 'DELETE',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
-                },
-                body: JSON.stringify({ userId })
+                }
             });
 
             const data = await response.json();

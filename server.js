@@ -73,6 +73,15 @@ function toHandlerPath(urlPath) {
     candidates.push(singleFile)
   }
   
+  // IMPORTANT: Check base file for multi-part paths BEFORE dynamic routes
+  // This handles cases like /api/jobcards/:id where jobcards.js handles all routes
+  if (parts.length > 1) {
+    const baseFile = path.join(apiDir, `${parts[0]}.js`)
+    if (fs.existsSync(baseFile)) {
+      candidates.push(baseFile)
+    }
+  }
+  
   // Dynamic route matches LAST (e.g., /api/clients/123 -> api/clients/[id].js)
   // Only checked after exact matches fail
   if (parts.length === 2) {

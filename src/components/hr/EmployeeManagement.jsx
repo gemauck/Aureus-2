@@ -114,13 +114,12 @@ const EmployeeManagement = () => {
                 console.log('🗑️ Deleting employee (user) via API:', id);
                 const token = window.storage?.getToken?.();
                 
-                const response = await fetch('/api/users', {
+                const response = await fetch(`/api/users/${id}`, {
                     method: 'DELETE',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${token}`
-                    },
-                    body: JSON.stringify({ userId: id })
+                    }
                 });
                 
                 if (response.ok) {
