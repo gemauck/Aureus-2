@@ -667,7 +667,8 @@
         
         // Set up components for immediate loading
         // Use original components with full functionality
-        window.Dashboard = window.DashboardLive || window.DashboardDatabaseFirst || window.DashboardSimple || window.DashboardFallback;
+        // Temporarily prioritize DashboardSimple to avoid cached DashboardLive errors
+        window.Dashboard = window.DashboardSimple || window.DashboardFallback || window.DashboardDatabaseFirst || window.DashboardLive || window.DashboardFallback;
         
         // 🚀 FORCE USE ONLY Clients.jsx (has Pipeline opportunity fixes)
         // Wait for Clients to load before checking (deferred check)
