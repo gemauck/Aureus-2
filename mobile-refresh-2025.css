@@ -891,7 +891,73 @@
 }
 
 /* ============================================
-   21. EXTREME SMALL SCREENS (< 375px)
+   21. SMALL MOBILE SCREENS (< 766px) - CRITICAL VISIBILITY
+   ============================================ */
+@media (max-width: 766px) {
+  /* Ensure root element is visible */
+  #root {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-height: 100vh !important;
+    position: relative !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Ensure body doesn't hide content */
+  body {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    position: relative !important;
+  }
+  
+  /* Ensure main content is visible */
+  main {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* Ensure root children are visible but preserve their layout */
+  #root > * {
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* Prevent any element from being positioned off-screen */
+  * {
+    max-width: 100vw !important;
+  }
+  
+  /* Ensure flex containers don't hide content */
+  .flex {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Ensure grid containers don't hide content */
+  .grid {
+    display: grid !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ============================================
+   22. EXTREME SMALL SCREENS (< 375px)
    ============================================ */
 @media (max-width: 375px) {
   header {
@@ -923,7 +989,7 @@
 }
 
 /* ============================================
-   22. DARK MODE ENHANCEMENTS
+   23. DARK MODE ENHANCEMENTS
    ============================================ */
 .dark {
   /* Better dark mode colors */
@@ -949,7 +1015,7 @@
 }
 
 /* ============================================
-   23. PRINT STYLES
+   24. PRINT STYLES
    ============================================ */
 @media print {
   header,
@@ -973,7 +1039,7 @@
 }
 
 /* ============================================
-   24. CRITICAL FIXES - MUST BE LAST
+   25. CRITICAL FIXES - MUST BE LAST
    ============================================ */
 @media (max-width: 1024px) {
   /* Remove any fixed widths that break mobile */
@@ -988,29 +1054,41 @@
     min-width: 0 !important;
   }
   
-  /* Prevent any absolute positioning from breaking layout */
-  [class*="absolute"]:not(.tooltip):not([class*="dropdown"]) {
-    position: relative !important;
-  }
-  
   /* Force all images to be responsive */
   img {
     max-width: 100% !important;
     height: auto !important;
   }
   
-  /* Ensure no element has horizontal margin that breaks layout */
-  * {
-    margin-left: auto !important;
-    margin-right: auto !important;
+  /* Ensure #root and main content are visible and properly sized */
+  #root {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 100vh !important;
+    position: relative !important;
+    overflow-x: hidden !important;
   }
   
-  /* Reset specific margins that need to be preserved */
-  nav *,
-  header *,
-  .flex > *,
-  .grid > * {
-    margin-left: initial !important;
-    margin-right: initial !important;
+  #root > * {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Ensure main content area is visible */
+  main {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    position: relative !important;
+  }
+  
+  /* Only center specific container elements, not everything */
+  .container,
+  [class*="max-w-"]:not([class*="dropdown"]):not([class*="menu"]) {
+    margin-left: auto !important;
+    margin-right: auto !important;
   }
 }
