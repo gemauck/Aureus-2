@@ -661,17 +661,27 @@
     
     <!-- App Entry Point - Load AFTER setup -->
     <link rel="preload" href="./dist/src/App.js" as="script">
-    <script defer src="./dist/src/App.js"></script>
+    <script defer src="./dist/src/App.js?v=app-loading-fix-1762245300"></script>
     <script>
-        // Verify App loaded after a delay
-        setTimeout(() => {
-            if (!window.App) {
-                console.error('❌ CRITICAL: App component not loaded after 2 seconds');
-                console.error('Check browser console for JavaScript errors');
-            } else {
+        // Verify App loaded with retry mechanism (handles network delays)
+        let appCheckAttempts = 0;
+        const maxAppCheckAttempts = 20; // 10 seconds total (20 * 500ms)
+        function checkAppLoaded() {
+            appCheckAttempts++;
+            if (window.App) {
                 console.log('✅ App component loaded');
+                return true;
             }
-        }, 2000);
+            if (appCheckAttempts >= maxAppCheckAttempts) {
+                console.warn('⚠️ App component not loaded after 10 seconds - checking for network errors');
+                console.warn('If you see network errors above, the server may be experiencing connectivity issues');
+                console.warn('The fast-loader will continue trying to mount the app...');
+                return false;
+            }
+            setTimeout(checkAppLoaded, 500);
+            return false;
+        }
+        setTimeout(checkAppLoaded, 1000); // Start checking after 1 second
     </script>
     
     
