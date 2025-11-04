@@ -16,7 +16,8 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
     const componentFiles = [
         // Defer heavier or non-critical modules until after first paint
         // Dashboard variants
-        './src/components/dashboard/Calendar.jsx',
+        // Calendar.jsx is loaded early in index.html - DO NOT load here to avoid conflicts
+        // './src/components/dashboard/Calendar.jsx',
         './src/components/daily-notes/DailyNotes.jsx',
         './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
