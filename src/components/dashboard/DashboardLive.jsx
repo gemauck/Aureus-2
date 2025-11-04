@@ -1,4 +1,5 @@
 // Live Dashboard Component - Connected to Real Mechanisms
+// Version: 2025-11-04-fix-tdz-calculateStats-order
 const { useState, useEffect, useCallback } = React;
 const SectionCommentWidget = window.SectionCommentWidget;
 
