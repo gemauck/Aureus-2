@@ -96,25 +96,18 @@ const TaskDetailModal = ({
         fetchUsers();
     }, []);
 
-    // Auto-scroll to last comment when comments tab is opened
+    // Auto-scroll to last comment when comments tab is opened or comments change
     useEffect(() => {
         if (activeTab === 'comments' && commentsContainerRef.current && comments.length > 0) {
             // Small delay to ensure DOM is ready
             setTimeout(() => {
-                // Scroll the parent scrollable container to show the last comment
-                if (leftContentRef.current) {
-                    // Find the last comment element
-                    const lastComment = commentsContainerRef.current.lastElementChild;
-                    if (lastComment) {
-                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                    } else {
-                        // Fallback: scroll container to bottom
-                        leftContentRef.current.scrollTop = leftContentRef.current.scrollHeight;
-                    }
+                if (commentsContainerRef.current) {
+                    // Scroll to bottom to show the last comment
+                    commentsContainerRef.current.scrollTop = commentsContainerRef.current.scrollHeight;
                 }
-            }, 150);
+            }, 100);
         }
-    }, [activeTab, comments.length]); // Re-scroll when tab changes or comments update
+    }, [activeTab, comments.length, comments]); // Re-scroll when tab changes, comments count changes, or comments array updates
 
     // Close mention suggestions when clicking outside
     useEffect(() => {
@@ -972,7 +965,7 @@ const TaskDetailModal = ({
                                 </div>
 
                                 {/* Comments List */}
-                                <div ref={commentsContainerRef} className="space-y-2">
+                                <div ref={commentsContainerRef} className="space-y-2 max-h-96 overflow-y-auto pr-2">
                                     {comments.length === 0 ? (
                                         <div className="text-center py-6 text-gray-500">
                                             <i className="fas fa-comments text-3xl mb-1.5"></i>

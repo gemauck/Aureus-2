@@ -971,8 +971,11 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
                         onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Unassigned</option>
-                        <option>Gareth Mauck</option>
-                        <option>David Buttemer</option>
+                        {users.map(user => (
+                            <option key={user.id} value={user.name || user.email}>
+                                {user.name || user.email}
+                            </option>
+                        ))}
                     </select>
                 );
             } else if (field === 'dueDate') {
