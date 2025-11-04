@@ -134,7 +134,6 @@
         // Account & Settings
         'components/account/Account.jsx',
         'components/settings/Settings.jsx',
-        'components/settings/SettingsPortal.jsx',
         
         // Layout
         'components/layout/MainLayout.jsx',

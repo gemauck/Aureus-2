@@ -126,7 +126,7 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
         // Account & Settings
         './src/components/account/Account.jsx',
         './src/components/settings/Settings.jsx',
-        // NotificationSettings and SettingsPortal moved to early load in index.html
+        // NotificationSettings moved to early load in index.html
         
         // Feedback widgets
         './src/components/feedback/FeedbackWidget.jsx',

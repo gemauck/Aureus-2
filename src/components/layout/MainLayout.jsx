@@ -73,7 +73,6 @@ const MainLayout = () => {
     
     const [showThemeMenu, setShowThemeMenu] = useState(false);
     const [showPasswordChangeModal, setShowPasswordChangeModal] = useState(false);
-    const [showSettingsPortal, setShowSettingsPortal] = useState(false);
     const { user, logout } = window.useAuth();
     const { theme, toggleTheme, toggleSystemPreference, isFollowingSystem, systemPreference, isDark } = window.useTheme();
     
@@ -684,19 +683,6 @@ const MainLayout = () => {
                                     <window.NotificationCenter />
                                 ) : null}
                                 
-                                {/* Settings Button */}
-                                <button 
-                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1.5 sm:p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] md:min-w-[44px] md:min-h-[44px] flex items-center justify-center`}
-                                    title="Settings"
-                                    onClick={() => {
-                                        console.log('🔧 Settings button clicked');
-                                        console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
-                                        setShowSettingsPortal(true);
-                                    }}
-                                >
-                                    <i className="fas fa-cog text-xs sm:text-sm"></i>
-                                </button>
-                                
                                 {/* Theme Selector Dropdown */}
                                 <div className="relative theme-selector">
                                     <button 
@@ -788,19 +774,6 @@ const MainLayout = () => {
                                 <window.NotificationCenter />
                             ) : null}
                             
-                            {/* Settings Button */}
-                            <button 
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
-                                title="Settings"
-                                onClick={() => {
-                                    console.log('🔧 Settings button clicked');
-                                    console.log('🔧 window.SettingsPortal:', typeof window.SettingsPortal);
-                                    setShowSettingsPortal(true);
-                                }}
-                            >
-                                <i className="fas fa-cog text-sm"></i>
-                            </button>
-                            
                             {/* Theme Selector Dropdown */}
                             <div className="relative theme-selector">
                                 <button 
@@ -876,11 +849,6 @@ const MainLayout = () => {
                 
                 {/* Password Change Modal */}
                 {PasswordChangeModal && showPasswordChangeModal ? <PasswordChangeModal /> : null}
-                
-                {/* Settings Portal */}
-                {window.SettingsPortal && showSettingsPortal ? (
-                    <window.SettingsPortal isOpen={showSettingsPortal} onClose={() => setShowSettingsPortal(false)} />
-                ) : showSettingsPortal && !window.SettingsPortal ? console.log('⚠️ SettingsPortal not loaded yet') : null}
             </div>
         </div>
     );

@@ -86,14 +86,51 @@ async function handler(req, res) {
             assignedTo: true,
             description: true,
             createdAt: true,
-            updatedAt: true
-            // Exclude large JSON fields: tasksList, taskLists, customFieldDefinitions, 
+            updatedAt: true,
+            tasksList: true, // Include to count tasks stored in JSON
+            _count: {
+              select: {
+                tasks: true
+              }
+            }
+            // Exclude other large JSON fields: taskLists, customFieldDefinitions, 
             // documents, comments, activityLog, team, documentSections
           },
           orderBy: { createdAt: 'desc' } 
         })
-        console.log('✅ Projects retrieved successfully:', projects.length)
-        return ok(res, { projects })
+        
+        // Calculate tasksCount from both tasks relation and tasksList JSON
+        const projectsWithTaskCount = projects.map(project => {
+          let tasksCount = project._count?.tasks || 0;
+          
+          // Also count tasks from tasksList JSON if available (fallback for legacy data)
+          if (project.tasksList) {
+            try {
+              const tasksList = typeof project.tasksList === 'string' 
+                ? JSON.parse(project.tasksList || '[]') 
+                : (project.tasksList || []);
+              
+              if (Array.isArray(tasksList) && tasksList.length > 0) {
+                // Use the larger count (either from relation or JSON)
+                tasksCount = Math.max(tasksCount, tasksList.length);
+              }
+            } catch (e) {
+              // If parsing fails, just use the relation count
+              console.warn('Failed to parse tasksList for project', project.id, e);
+            }
+          }
+          
+          // Remove tasksList from response to keep it lean (we only needed it for counting)
+          const { tasksList, ...projectWithoutTasksList } = project;
+          
+          return {
+            ...projectWithoutTasksList,
+            tasksCount
+          };
+        })
+        
+        console.log('✅ Projects retrieved successfully:', projectsWithTaskCount.length)
+        return ok(res, { projects: projectsWithTaskCount })
       } catch (dbError) {
         console.error('❌ Database error listing projects:', {
           message: dbError.message,
