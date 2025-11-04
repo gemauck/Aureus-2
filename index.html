@@ -493,26 +493,15 @@
         
     </script>
     
-    <!-- Manufacturing - Load early since it's a main menu item (not lazy) -->
-    <script defer src="./dist/src/components/manufacturing/locations/StockLocations.js"></script>
-    <script defer src="./dist/src/components/manufacturing/StockTransactions.js"></script>
-    <script defer src="./dist/src/components/manufacturing/JobCards.js"></script>
-    <script defer src="./dist/src/components/manufacturing/Manufacturing.js"></script>
-    <!-- Public Job Card Form - Accessible without login -->
+    <!-- Manufacturing - MOVED to lazy loading (heavy components) -->
+    <!-- Public Job Card Form - Accessible without login (keep this for public access) -->
     <script defer src="./dist/src/components/manufacturing/JobCardFormPublic.js"></script>
     
-    <!-- HR - Load early since it's a main menu item (not lazy) -->
-    <script defer src="./dist/src/components/hr/EmployeeManagement.js"></script>
-    <script defer src="./dist/src/components/hr/LeaveManagement.js"></script>
-    <script defer src="./dist/src/components/hr/LeaveBalance.js"></script>
-    <script defer src="./dist/src/components/hr/Attendance.js"></script>
-    <script defer src="./dist/src/components/hr/QuickBooksPayrollSync.js"></script>
-    <script defer src="./dist/src/components/hr/Payroll.js"></script>
-    <script defer src="./dist/src/components/hr/HR.js"></script>
+    <!-- HR - MOVED to lazy loading (heavy components) -->
     
     <!-- Clients - Load early since it's a main menu item and critical (not lazy) -->
     <script defer src="./dist/src/components/clients/ClientDetailModal.js?v=simple-fix-1762241059"></script>
-    <script defer src="./dist/src/components/clients/LeadDetailModal.js"></script>
+    <script defer src="./dist/src/components/clients/LeadDetailModal.js?v=formdata-fix-v12-final-tdz-1762245300"></script>
     <script defer src="./dist/src/components/clients/Clients.js"></script>
     
     <!-- Heavier components moved to lazy loader for faster first paint -->
@@ -527,12 +516,7 @@
     
     <!-- Manufacturing moved to lazy -->
     
-    <!-- Tools - Load tool components before Tools.jsx (loaded early for main menu) -->
-    <script defer src="./dist/src/components/tools/TankSizeCalculator.js?v=1008"></script>
-    <script defer src="./dist/src/components/tools/UnitConverter.js?v=1008"></script>
-    <script defer src="./dist/src/components/tools/PDFToWordConverter.js?v=1008"></script>
-    <script defer src="./dist/src/components/tools/HandwritingToWord.js?v=1008"></script>
-    <script defer src="./dist/src/components/tools/Tools.js?v=1008"></script>
+    <!-- Tools - MOVED to lazy loading (heavy components) -->
     
     <!-- HR moved to lazy -->
     
@@ -545,22 +529,12 @@
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>
     
-    <!-- Load ProjectDetail and dependencies early (needed for project viewing) -->
-    <!-- ProjectDetail dependencies must load before ProjectDetail -->
-    <script defer src="./dist/src/components/projects/CustomFieldModal.js"></script>
-    <script defer src="./dist/src/components/projects/TaskDetailModal.js"></script>
-    <script defer src="./dist/src/components/projects/ListModal.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectModal.js"></script>
-    <script defer src="./dist/src/components/projects/KanbanView.js"></script>
-    <script defer src="./dist/src/components/projects/CommentsPopup.js"></script>
-    <script defer src="./dist/src/components/projects/DocumentCollectionModal.js"></script>
-    <script defer src="./dist/src/components/projects/MonthlyDocumentCollectionTracker.js"></script>
-    <script defer src="./dist/src/components/projects/ProjectDetail.js"></script>
+    <!-- Projects - MOVED to lazy loading (heavy components) -->
     
     <!-- Optional integrations moved to lazy -->
     
     <!-- Lazy Load Non-Critical Components -->
-    <script defer src="./lazy-load-components.js?v=1010"></script>
+    <script defer src="./lazy-load-components.js?v=1017-clients-blocked"></script>
     
     <!-- Mobile Detection and Responsive Component Loading -->
     <script>

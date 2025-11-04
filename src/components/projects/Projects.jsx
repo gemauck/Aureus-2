@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 const ProjectModal = window.ProjectModal;
 const ProjectDetail = window.ProjectDetail;
@@ -30,6 +30,7 @@ const Projects = () => {
     const [viewingProject, setViewingProject] = useState(null);
     const [showProgressTracker, setShowProgressTracker] = useState(false);
     const [draggedProject, setDraggedProject] = useState(null);
+    const mouseDownRef = useRef(null);
     const [selectedClient, setSelectedClient] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('all');
@@ -1399,9 +1400,19 @@ const Projects = () => {
                                 <div 
                                     key={project.id}
                                     draggable
+                                    onMouseDown={(e) => {
+                                        // Store mouse position to detect if this was a click or drag
+                                        mouseDownRef.current = { 
+                                            x: e.clientX, 
+                                            y: e.clientY,
+                                            time: Date.now()
+                                        };
+                                    }}
                                     onDragStart={(e) => {
                                         setDraggedProject(index);
                                         e.dataTransfer.effectAllowed = 'move';
+                                        // Clear mouse down since we're dragging
+                                        mouseDownRef.current = null;
                                     }}
                                     onDragOver={(e) => {
                                         e.preventDefault();
@@ -1424,9 +1435,39 @@ const Projects = () => {
                                         });
                                         setProjects(updatedProjects);
                                         setDraggedProject(null);
+                                        mouseDownRef.current = null;
                                     }}
-                                    onDragEnd={() => setDraggedProject(null)}
-                                    onClick={() => handleViewProject(project)}
+                                    onDragEnd={() => {
+                                        setDraggedProject(null);
+                                        // Clear after a short delay to allow onClick to check draggedProject
+                                        setTimeout(() => {
+                                            mouseDownRef.current = null;
+                                        }, 100);
+                                    }}
+                                    onClick={(e) => {
+                                        // Only handle click if we didn't drag
+                                        // If draggedProject is set, we just finished a drag, so ignore click
+                                        if (draggedProject !== null) {
+                                            return;
+                                        }
+                                        
+                                        // Check if mouse moved significantly (indicates drag, not click)
+                                        if (mouseDownRef.current) {
+                                            const deltaX = Math.abs(e.clientX - mouseDownRef.current.x);
+                                            const deltaY = Math.abs(e.clientY - mouseDownRef.current.y);
+                                            const deltaTime = Date.now() - mouseDownRef.current.time;
+                                            
+                                            // If mouse moved more than 5px or took longer than 200ms, it was likely a drag attempt
+                                            if (deltaX > 5 || deltaY > 5 || deltaTime > 200) {
+                                                mouseDownRef.current = null;
+                                                return;
+                                            }
+                                        }
+                                        
+                                        // It's a click - open the project
+                                        handleViewProject(project);
+                                        mouseDownRef.current = null;
+                                    }}
                                     className="bg-white rounded-lg border border-gray-200 hover:border-primary-300 hover:shadow-md transition-all p-4 cursor-pointer"
                                 >
                                     <div className="flex justify-between items-start mb-3">

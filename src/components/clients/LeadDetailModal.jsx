@@ -1,8 +1,62 @@
 // Get React hooks from window
+// FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
 const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
+    
+    // CRITICAL: Initialize formData FIRST with a safe default, before any other hooks or refs
+    // This prevents "Cannot access 'formData' before initialization" errors
+    // FIXED: formData now declared before all useEffect hooks that reference it
+    // Create default object first to ensure it's always defined
+    const defaultFormData = {
+        name: '',
+        industry: '',
+        status: 'active',
+        source: 'Website',
+        stage: 'Awareness',
+        value: 0,
+        notes: '',
+        contacts: [],
+        followUps: [],
+        projectIds: [],
+        comments: [],
+        activityLog: [],
+        proposals: [],
+        firstContactDate: new Date().toISOString().split('T')[0],
+        thumbnail: '',
+        id: null // Ensure id exists even if null
+    };
+    
+    const [formData, setFormData] = useState(() => {
+        // Parse JSON strings to arrays/objects if needed
+        const parsedLead = lead ? {
+            ...lead,
+            // Ensure stage and status are ALWAYS present with defaults
+            stage: lead.stage || 'Awareness',
+            status: 'active', // Status is hardcoded as 'active'
+            contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+            followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+            projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+            comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+            activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+            thumbnail: lead.thumbnail || ''
+        } : defaultFormData;
+        
+        return parsedLead;
+    });
+    
+    // Use ref to track latest formData for auto-save
+    const formDataRef = useRef(null);
+    const isAutoSavingRef = useRef(false);
+    const lastSavedDataRef = useRef(null); // Track last saved state
+    
+    // Initialize formDataRef after formData is declared
+    useEffect(() => {
+        formDataRef.current = formData;
+    }, [formData]);
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -10,15 +64,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     }, [initialTab]);
     
     // Update formData when lead prop changes - but only when lead ID changes
+    // NOTE: formData is intentionally NOT in dependency array to prevent loops
+    // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
+    // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
         // Don't reset formData if we're in the middle of auto-saving OR just finished
         if (isAutoSavingRef.current) {
             return;
         }
         
+        // CRITICAL: Only use formDataRef.current or defaultFormData - NEVER access formData directly here
+        // formDataRef.current is updated by a separate useEffect that runs after formData is set
+        // On first render, formDataRef.current may be null, so we use defaultFormData
+        const currentFormData = formDataRef.current || defaultFormData;
+        
         // ONLY initialize formData when switching to a different lead (different ID)
         // Do NOT reinitialize when the same lead is updated
-        if (lead && !formData.id) {
+        if (lead && !currentFormData.id) {
             // First load - initialize formData
             const parsedLead = {
                 ...lead,
@@ -35,7 +97,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 thumbnail: lead.thumbnail || ''
             };
             setFormData(parsedLead);
-        } else if (lead && formData.id && lead.id !== formData.id) {
+        } else if (lead && currentFormData.id && lead.id !== currentFormData.id) {
             // Switching to a different lead - reinitialize
             const parsedLead = {
                 ...lead,
@@ -51,13 +113,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 thumbnail: lead.thumbnail || ''
             };
             setFormData(parsedLead);
-        } else if (lead && formData.id === lead.id) {
+        } else if (lead && currentFormData.id === lead.id) {
             // Same lead reloaded - Merge only fields that aren't being actively edited
             // Use the last saved data as reference
             if (lastSavedDataRef.current) {
                 // If the current formData matches what we last saved, we can safely update from the API
-                const currentStatus = formData.status;
-                const currentStage = formData.stage;
+                const currentStatus = currentFormData.status;
+                const currentStage = currentFormData.stage;
                 const lastSavedStatus = lastSavedDataRef.current.status;
                 const lastSavedStage = lastSavedDataRef.current.stage;
                 
@@ -71,6 +133,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 }
             }
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lead?.id]); // Only re-run when lead ID changes, not when lead properties change
     
     // DISABLED: This was causing status/stage to be overwritten from stale parent data
@@ -97,18 +160,30 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
     };
     
-    // Use ref to track latest formData for auto-save
-    const formDataRef = useRef(null);
-    const isAutoSavingRef = useRef(false);
-    const lastSavedDataRef = useRef(null); // Track last saved state
-    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
     
     // Auto-scroll to last comment when notes tab is opened
+    // CRITICAL FIX: Cannot use formData in dependency array as it causes TDZ error
+    // Track comments length in state to avoid accessing formData directly in dependency array
+    const [commentsLength, setCommentsLength] = useState(0);
+    
+    // Sync comments length state when formData changes
     useEffect(() => {
-        if (activeTab === 'notes' && commentsContainerRef.current && formData.comments && Array.isArray(formData.comments) && formData.comments.length > 0) {
+        const currentFormData = formDataRef.current || defaultFormData;
+        const length = (currentFormData.comments && Array.isArray(currentFormData.comments)) 
+            ? currentFormData.comments.length 
+            : 0;
+        if (length !== commentsLength) {
+            setCommentsLength(length);
+        }
+    }); // Run on every render to sync with formDataRef
+    
+    useEffect(() => {
+        // Use formDataRef.current instead of formData directly to avoid TDZ errors
+        const currentFormData = formDataRef.current || defaultFormData;
+        if (activeTab === 'notes' && commentsContainerRef.current && currentFormData.comments && Array.isArray(currentFormData.comments) && currentFormData.comments.length > 0) {
             // Small delay to ensure DOM is ready
             setTimeout(() => {
                 // Scroll the parent scrollable container to show the last comment
@@ -124,49 +199,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 }
             }, 150);
         }
-    }, [activeTab, formData.comments?.length]); // Re-scroll when tab changes or comments update
-    
-    const [formData, setFormData] = useState(() => {
-        // Parse JSON strings to arrays/objects if needed
-        const parsedLead = lead ? {
-            ...lead,
-            // Ensure stage and status are ALWAYS present with defaults
-            stage: lead.stage || 'Awareness',
-            status: 'active', // Status is hardcoded as 'active'
-            contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-            followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-            projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-            comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-            activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-            billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-            proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-            thumbnail: lead.thumbnail || ''
-        } : {
-            name: '',
-            industry: '',
-            status: 'active', // Status is hardcoded as 'active'
-            source: 'Website',
-            stage: 'Awareness',
-            value: 0,
-            notes: '',
-            contacts: [],
-            followUps: [],
-            projectIds: [],
-            comments: [],
-            activityLog: [],
-            proposals: [],
-            firstContactDate: new Date().toISOString().split('T')[0],
-            thumbnail: ''
-        };
-        
-        formDataRef.current = parsedLead;
-        return parsedLead;
-    });
-    
-    // Keep ref in sync with state
-    useEffect(() => {
-        formDataRef.current = formData;
-    }, [formData]);
+    }, [activeTab, commentsLength]); // Use state value instead of formData directly
     
     const [editingContact, setEditingContact] = useState(null);
     const [showContactForm, setShowContactForm] = useState(false);
@@ -422,11 +455,24 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     };
 
     // Load thumbnail preview when formData changes
+    // CRITICAL FIX: Cannot use formData in dependency array as it causes TDZ error
+    // Track thumbnail in state to avoid accessing formData directly in dependency array
+    const [thumbnailValue, setThumbnailValue] = useState('');
+    
+    // Sync thumbnail state when formData changes
     useEffect(() => {
-        if (formData.thumbnail) {
-            setThumbnailPreview(formData.thumbnail);
+        const currentFormData = formDataRef.current || defaultFormData;
+        const thumbnail = currentFormData.thumbnail || '';
+        if (thumbnail !== thumbnailValue) {
+            setThumbnailValue(thumbnail);
         }
-    }, [formData.thumbnail]);
+    }); // Run on every render to sync with formDataRef
+    
+    useEffect(() => {
+        if (thumbnailValue) {
+            setThumbnailPreview(thumbnailValue);
+        }
+    }, [thumbnailValue]);
 
     const handleAddTagFromInput = () => {
         const raw = (newNoteTagsInput || '').trim();
@@ -2812,3 +2858,4 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
 
 // Make available globally
 window.LeadDetailModal = LeadDetailModal;
+console.log('✅ LeadDetailModal component registered on window.LeadDetailModal');

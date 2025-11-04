@@ -1,7 +1,18 @@
 // Lazy loading script to defer non-critical component loading
+// VERSION: 1017-clients-blocked - Removed Clients.jsx to prevent race condition with LeadDetailModal
+console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
+    
+    // CRITICAL: Filter out LeadDetailModal and ClientDetailModal BEFORE creating componentFiles array
+    // This prevents them from being loaded even if they somehow get into the array
+    const shouldBlockComponent = (path) => {
+        if (typeof path !== 'string') return false;
+        const lowerPath = path.toLowerCase();
+        return lowerPath.includes('leaddetailmodal') || lowerPath.includes('clientdetailmodal');
+    };
+    
     const componentFiles = [
         // Defer heavier or non-critical modules until after first paint
         // Dashboard variants
@@ -12,10 +23,11 @@
         './src/components/dashboard/DashboardEnhanced.jsx',
         
         // Clients and related modals
-        './src/components/clients/ClientDetailModal.jsx',
-        './src/components/clients/LeadDetailModal.jsx',
+        // ClientDetailModal, LeadDetailModal, and Clients.jsx are loaded early in index.html - DO NOT load here to avoid conflicts
+        // './src/components/clients/ClientDetailModal.jsx',
+        // './src/components/clients/LeadDetailModal.jsx',
+        // './src/components/clients/Clients.jsx', // Loaded in index.html BEFORE lazy-loader runs
         './src/components/clients/ClientDetailModalMobile.jsx',
-        './src/components/clients/Clients.jsx',
         './src/components/clients/ClientsSimple.jsx',
         './src/components/clients/ClientsMobile.jsx',
         './src/components/clients/ClientsMobileOptimized.jsx',
@@ -23,7 +35,14 @@
         './src/components/clients/Pipeline.jsx',
         './src/components/clients/PipelineIntegration.js',
         './src/components/clients/ClientNewsFeed.jsx',
-        
+    ].filter(path => {
+        // DOUBLE-CHECK: Filter out blocked components even if they're in the array
+        if (shouldBlockComponent(path)) {
+            console.warn(`🚫 BLOCKED from componentFiles: ${path}`);
+            return false;
+        }
+        return true;
+    }).concat([
         // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail, then Projects
         './src/components/projects/CustomFieldModal.jsx',
         './src/components/projects/TaskDetailModal.jsx',
@@ -63,12 +82,11 @@
         './src/components/users/Users.jsx',
         './src/components/users/UserManagement.jsx',
         
-        // Manufacturing
+        // Manufacturing - MOVED from index.html to lazy loading for better performance
+        './src/components/manufacturing/locations/StockLocations.jsx',
+        './src/components/manufacturing/StockTransactions.jsx',
         './src/components/manufacturing/JobCards.jsx',
-        // Manufacturing - MOVED to index.html for early loading (main menu item)
-        // './src/components/manufacturing/locations/StockLocations.jsx',
-        // './src/components/manufacturing/StockTransactions.jsx',
-        // './src/components/manufacturing/Manufacturing.jsx',
+        './src/components/manufacturing/Manufacturing.jsx',
         
         // Invoicing
         './src/components/invoicing/InvoicingDatabaseFirst.jsx',
@@ -95,14 +113,14 @@
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         
-        // HR - MOVED to index.html for early loading (main menu item)
-        // './src/components/hr/EmployeeManagement.jsx',
-        // './src/components/hr/LeaveManagement.jsx',
-        // './src/components/hr/LeaveBalance.jsx',
-        // './src/components/hr/Attendance.jsx',
-        // './src/components/hr/QuickBooksPayrollSync.jsx',
-        // './src/components/hr/Payroll.jsx',
-        // './src/components/hr/HR.jsx',
+        // HR - MOVED from index.html to lazy loading for better performance
+        './src/components/hr/EmployeeManagement.jsx',
+        './src/components/hr/LeaveManagement.jsx',
+        './src/components/hr/LeaveBalance.jsx',
+        './src/components/hr/Attendance.jsx',
+        './src/components/hr/QuickBooksPayrollSync.jsx',
+        './src/components/hr/Payroll.jsx',
+        './src/components/hr/HR.jsx',
         
         // Account & Settings
         './src/components/account/Account.jsx',
@@ -113,36 +131,56 @@
         './src/components/feedback/FeedbackWidget.jsx',
         './src/components/feedback/SectionCommentWidget.jsx',
         
-        // Tools - MOVED to index.html for early loading (main menu item)
-        // './src/components/tools/TankSizeCalculator.jsx',
-        // './src/components/tools/UnitConverter.jsx',
-        // './src/components/tools/PDFToWordConverter.jsx',
-        // './src/components/tools/HandwritingToWord.jsx',
-        // './src/components/tools/Tools.jsx',
+        // Tools - MOVED from index.html to lazy loading for better performance
+        './src/components/tools/TankSizeCalculator.jsx',
+        './src/components/tools/UnitConverter.jsx',
+        './src/components/tools/PDFToWordConverter.jsx',
+        './src/components/tools/HandwritingToWord.jsx',
+        './src/components/tools/Tools.jsx',
         
         // Utils and integrations
         './src/utils/permissions.js',
         './src/utils/whatsapp.js',
         './src/services/GoogleCalendarService.js',
         './src/components/calendar/GoogleCalendarSync.jsx'
-    ];
+    ].filter(path => {
+        // FINAL CHECK: Filter out blocked components
+        if (shouldBlockComponent(path)) {
+            console.warn(`🚫 BLOCKED from componentFiles: ${path}`);
+            return false;
+        }
+        return true;
+    }));
     
     let loadedComponents = 0;
     
     function loadComponent(src) {
         return new Promise((resolve, reject) => {
+            // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
+            // They are loaded early in index.html and must NOT be overwritten
+            // This prevents the formData initialization error
+            // Use case-insensitive check to catch all variations
+            if (shouldBlockComponent(src)) {
+                console.log(`⏭️ BLOCKED: ${src} must be loaded from index.html only - skipping lazy-loader`);
+                resolve();
+                return;
+            }
+            
             // Convert src/ paths to dist/src/ paths if needed
             // Use absolute path for dist assets to avoid relative path issues on nested routes
             let scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
             
-            // Add cache-busting parameter to force fresh fetch - critical for Clients.js
-            const separator = scriptSrc.includes('?') ? '&' : '?';
-            scriptSrc = scriptSrc + separator + 'v=' + Date.now();
+            // Only add cache-busting in development mode or if explicitly needed
+            // Removing aggressive cache-busting improves performance significantly
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                const separator = scriptSrc.includes('?') ? '&' : '?';
+                scriptSrc = scriptSrc + separator + 'v=' + Date.now();
+            }
             
             // First, fetch the file to validate it's JavaScript before loading as script
             // This prevents HTML (404 pages) from being executed as JavaScript
-            // cache: 'no-store' forces bypass of HTTP cache
-            fetch(scriptSrc, { cache: 'no-store' })
+            // Use default cache policy for better performance (browser will cache)
+            fetch(scriptSrc, { cache: 'default' })
                 .then(response => {
                     if (!response.ok) {
                         // File doesn't exist - skip silently
@@ -209,7 +247,7 @@
                     fetch(scriptSrc, { 
                         method: 'GET',
                         headers: { 'Accept': 'text/plain,application/javascript,*/*' },
-                        cache: 'no-store'
+                        cache: 'default'
                     })
                     .then(response => {
                         if (!response.ok) {
@@ -283,34 +321,52 @@
     }
     
     function startLazyLoading() {
-        // Wait for critical components to be ready
-        setTimeout(() => {
-            // ProjectDetail is now loaded directly in index.html, so skip it here
-            // Load remaining components in small batches
-            const batchSize = 3;
-            let index = 0;
+        // Wait for critical components from index.html to load first
+        // This prevents lazy-loader from overwriting compiled components
+        const waitForCriticalComponents = () => {
+            // Check if critical components are loaded (or wait a bit longer)
+            const maxWait = 3000; // Max 3 seconds
+            const startTime = Date.now();
             
-            function loadBatch() {
-                const batch = componentFiles.slice(index, index + batchSize);
-                if (batch.length === 0) {
-                    return;
-                }
+            const checkInterval = setInterval(() => {
+                const elapsed = Date.now() - startTime;
+                const criticalLoaded = window.LeadDetailModal && window.ClientDetailModal;
                 
-                Promise.all(batch.map(loadComponent)).then(() => {
-                    index += batchSize;
-                    // Use requestIdleCallback if available, otherwise setTimeout
-                    const nextBatchDelay = index < componentFiles.length ? 100 : 0;
+                if (criticalLoaded || elapsed >= maxWait) {
+                    clearInterval(checkInterval);
                     
-                    if (typeof requestIdleCallback !== 'undefined') {
-                        requestIdleCallback(loadBatch, { timeout: 500 });
-                    } else {
-                        setTimeout(loadBatch, nextBatchDelay);
+                    // Now start loading lazy components
+                    // Increased batch size from 3 to 8 for better performance
+                    const batchSize = 8;
+                    let index = 0;
+                    
+                    function loadBatch() {
+                        const batch = componentFiles.slice(index, index + batchSize);
+                        if (batch.length === 0) {
+                            console.log(`✅ Lazy loading complete: ${loadedComponents} components loaded`);
+                            return;
+                        }
+                        
+                        Promise.all(batch.map(loadComponent)).then(() => {
+                            index += batchSize;
+                            // Reduced delay between batches from 100ms to 50ms for faster loading
+                            const nextBatchDelay = index < componentFiles.length ? 50 : 0;
+                            
+                            if (typeof requestIdleCallback !== 'undefined') {
+                                requestIdleCallback(loadBatch, { timeout: 200 });
+                            } else {
+                                setTimeout(loadBatch, nextBatchDelay);
+                            }
+                        });
                     }
-                });
-            }
-            
-            loadBatch();
-        }, 500); // Reduced delay to 500ms for faster loading
+                    
+                    loadBatch();
+                }
+            }, 100); // Check every 100ms
+        };
+        
+        // Start checking after reduced initial delay (500ms -> 200ms)
+        setTimeout(waitForCriticalComponents, 200);
     }
 })();
 

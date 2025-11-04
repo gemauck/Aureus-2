@@ -52,8 +52,9 @@
         
         // Clients
         'components/clients/ClientsSimple.jsx',
-        'components/clients/ClientDetailModal.jsx',
-        'components/clients/LeadDetailModal.jsx',
+        // ClientDetailModal and LeadDetailModal are loaded early in index.html - DO NOT load here to avoid conflicts
+        // 'components/clients/ClientDetailModal.jsx',
+        // 'components/clients/LeadDetailModal.jsx',
         'components/clients/Clients.jsx',
         // 'components/clients/ClientsCached.jsx', // DISABLED: Loads after Clients and overrides pagination
         'components/clients/ClientsDatabaseFirst.jsx',
