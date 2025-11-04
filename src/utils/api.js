@@ -87,9 +87,14 @@ async function request(path, options = {}) {
       const errorDetails = data?.error?.details;
       
       // Handle database connection errors with user-friendly messages
-      if (errorCode === 'DATABASE_CONNECTION_ERROR') {
+      if (errorCode === 'DATABASE_CONNECTION_ERROR' || errorMessage?.includes('Database connection failed') || errorMessage?.includes('unreachable')) {
         console.error(`🔌 Database connection error on ${path}:`, errorDetails || errorMessage);
         throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
+      }
+      
+      // For heartbeat endpoint, suppress "Invalid method" errors (they're expected if server hasn't updated)
+      if (path === '/users/heartbeat' && errorMessage?.includes('Invalid method')) {
+        return null; // Silently ignore heartbeat method errors
       }
       
       throw new Error(errorMessage || `Request failed with status ${res.status}`)
@@ -178,8 +183,13 @@ const api = {
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam
-      // Don't log 401/500 errors as they're expected when auth is in flux
-      if (error.message && !error.message.includes('401') && !error.message.includes('500') && !error.message.includes('Failed to update')) {
+      // Don't log 401/500/400 errors as they're expected when auth is in flux or server hasn't updated
+      if (error.message && 
+          !error.message.includes('401') && 
+          !error.message.includes('500') && 
+          !error.message.includes('400') &&
+          !error.message.includes('Invalid method') &&
+          !error.message.includes('Failed to update')) {
         console.warn('Heartbeat failed:', error.message)
       }
       return null

@@ -300,24 +300,75 @@
     
     <!-- Global Error Handlers -->
     <script>
-        // Global unhandled promise rejection handler
+        // Global unhandled promise rejection handler (v3 - ultra-robust database error detection)
+        // Updated: 2025-11-04 - Enhanced to detect and suppress database connection errors
         window.addEventListener('unhandledrejection', function(event) {
-            console.error('🚨 Unhandled Promise Rejection:', {
-                reason: event.reason,
-                promise: event.promise,
-                error: event.reason instanceof Error ? {
-                    message: event.reason.message,
-                    stack: event.reason.stack,
-                    name: event.reason.name
-                } : event.reason,
-                timestamp: new Date().toISOString()
-            });
-            
-            // Prevent the default browser error console output
-            event.preventDefault();
-            
-            // Optionally send to error tracking service
-            // Example: window.errorTracker?.log(event.reason);
+            try {
+                const error = event.reason;
+                
+                // Extract ALL possible error text sources
+                let allErrorText = '';
+                
+                if (error instanceof Error) {
+                    allErrorText = [
+                        error.message || '',
+                        error.name || '',
+                        error.toString(),
+                        error.stack || ''
+                    ].join(' ').toLowerCase();
+                } else if (typeof error === 'string') {
+                    allErrorText = error.toLowerCase();
+                } else if (error && typeof error === 'object') {
+                    allErrorText = [
+                        error.message || '',
+                        error.error?.message || '',
+                        error.reason?.message || '',
+                        String(error),
+                        JSON.stringify(error).substring(0, 500) // Limit to avoid huge strings
+                    ].join(' ').toLowerCase();
+                } else {
+                    allErrorText = String(error).toLowerCase();
+                }
+                
+                // Check for database connection errors - very broad pattern matching
+                // Match ANY indication of database/connection/server issues
+                const isDatabaseError = 
+                    allErrorText.includes('database connection failed') ||
+                    allErrorText.includes('database server is unreachable') ||
+                    allErrorText.includes('database server') && allErrorText.includes('unreachable') ||
+                    (allErrorText.includes('unreachable') && (allErrorText.includes('database') || allErrorText.includes('server'))) ||
+                    allErrorText.includes('contact support if this issue persists') ||
+                    allErrorText.includes('please contact support') ||
+                    allErrorText.includes('contact support') ||
+                    allErrorText.includes('econnrefused') ||
+                    allErrorText.includes('etimedout') ||
+                    allErrorText.includes('can\'t reach database') ||
+                    allErrorText.includes('cannot reach database') ||
+                    (allErrorText.includes('connection') && allErrorText.includes('failed') && allErrorText.includes('database')) ||
+                    (allErrorText.includes('server') && allErrorText.includes('unreachable'));
+                
+                // Only log non-database errors
+                if (!isDatabaseError) {
+                    console.error('🚨 Unhandled Promise Rejection:', {
+                        reason: error,
+                        promise: event.promise,
+                        error: error instanceof Error ? {
+                            message: error.message,
+                            stack: error.stack,
+                            name: error.name
+                        } : error,
+                        timestamp: new Date().toISOString()
+                    });
+                }
+                // Database errors are silently suppressed - they're expected when DB is down
+                
+                // Prevent default browser error handling
+                event.preventDefault();
+                
+            } catch (handlerError) {
+                // Error handler itself failed - just prevent default
+                event.preventDefault();
+            }
         });
         
         // Global error handler for JavaScript errors

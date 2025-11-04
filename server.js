@@ -286,6 +286,29 @@ app.all('/api/users/invite', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for heartbeat endpoint (ensure it routes correctly)
+app.all('/api/users/heartbeat', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'users', 'heartbeat.js'))
+    if (!handler) {
+      console.error('❌ Heartbeat handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Error in heartbeat handler:', e)
+    // Ensure JSON is returned even on error
+    if (!res.headersSent) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: e.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for invitation endpoints (no auth required)
 app.all('/api/users/invitation-details', async (req, res, next) => {
   try {

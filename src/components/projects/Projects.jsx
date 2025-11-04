@@ -329,6 +329,21 @@ const Projects = () => {
         };
     }, []); // Only run once on initial mount
 
+    // Proactively load ProjectDetail component when Projects component mounts
+    useEffect(() => {
+        // Only load if not already available
+        if (!window.ProjectDetail && !projectDetailAvailable) {
+            console.log('📥 Projects: Proactively loading ProjectDetail component...');
+            // Use a small delay to not block initial render
+            const timer = setTimeout(() => {
+                loadProjectDetail().catch(err => {
+                    console.warn('⚠️ Projects: Failed to proactively load ProjectDetail (will retry when needed):', err.message);
+                });
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, []); // Only run once on mount
+
     // Function to actively load ProjectDetail if not available
     const loadProjectDetail = async () => {
         if (window.ProjectDetail) {
@@ -1223,28 +1238,35 @@ const Projects = () => {
             // Check window.ProjectDetail directly (it may be loaded lazily)
             const ProjectDetailComponent = window.ProjectDetail;
             if (!ProjectDetailComponent) {
-                console.error('ProjectDetail component not found!', {
+                // If not available and we're not already waiting, trigger loading
+                if (!waitingForProjectDetail && !projectDetailAvailable) {
+                    // Trigger load immediately
+                    loadProjectDetail().catch(err => {
+                        console.error('Failed to load ProjectDetail:', err);
+                    });
+                }
+                
+                console.warn('ProjectDetail component not found yet, waiting...', {
                     windowProjectDetail: typeof window.ProjectDetail,
-                    localProjectDetail: typeof ProjectDetail,
                     projectDetailAvailable: projectDetailAvailable,
                     waitingForProjectDetail: waitingForProjectDetail,
                     availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
                 });
                 
                 return (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <h2 className="text-lg font-semibold text-red-800 mb-2">
-                            {waitingForProjectDetail ? 'Loading ProjectDetail...' : 'Error: ProjectDetail component not loaded'}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                        <h2 className="text-lg font-semibold text-blue-800 mb-2">
+                            Loading Project Details...
                         </h2>
-                        <p className="text-sm text-red-600 mb-3">
-                            {waitingForProjectDetail 
-                                ? 'Waiting for ProjectDetail component to load...' 
-                                : 'The ProjectDetail component is not available. It may still be loading. Please wait a moment and try again.'}
+                        <p className="text-sm text-blue-600 mb-4">
+                            Loading the ProjectDetail component. Please wait...
                         </p>
                         <button 
                             onClick={() => setViewingProject(null)}
-                            className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                         >
+                            <i className="fas fa-arrow-left mr-2"></i>
                             Back to Projects
                         </button>
                     </div>

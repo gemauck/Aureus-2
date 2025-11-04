@@ -164,7 +164,18 @@ const DataProvider = ({ children }) => {
             return data;
 
         } catch (error) {
-            console.error(`❌ Error fetching ${key}:`, error);
+            const errorMessage = error?.message || String(error);
+            
+            // Check if it's a database connection error (expected when DB is down)
+            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                  errorMessage.includes('unreachable') ||
+                                  errorMessage.includes('ECONNREFUSED') ||
+                                  errorMessage.includes('ETIMEDOUT');
+            
+            // Only log non-database errors (database errors are expected when DB is down)
+            if (!isDatabaseError) {
+                console.error(`❌ Error fetching ${key}:`, error);
+            }
             
             // Update error state
             setCache(prev => ({
@@ -172,7 +183,7 @@ const DataProvider = ({ children }) => {
                 [key]: {
                     ...prev[key],
                     loading: false,
-                    error: error.message
+                    error: errorMessage
                 }
             }));
 
@@ -253,12 +264,24 @@ const DataProvider = ({ children }) => {
                     return;
                 }
 
-                // Load essential data in parallel
-                await Promise.all([
-                    fetchData('clients'),
-                    fetchData('leads'),
-                    fetchData('projects'),
-                    fetchData('users'),
+                // Load essential data in parallel - catch individual errors to prevent unhandled rejections
+                await Promise.allSettled([
+                    fetchData('clients').catch(err => {
+                        console.error('❌ Error fetching clients:', err);
+                        return null;
+                    }),
+                    fetchData('leads').catch(err => {
+                        console.error('❌ Error fetching leads:', err);
+                        return null;
+                    }),
+                    fetchData('projects').catch(err => {
+                        console.error('❌ Error fetching projects:', err);
+                        return null;
+                    }),
+                    fetchData('users').catch(err => {
+                        console.error('❌ Error fetching users:', err);
+                        return null;
+                    }),
                 ]);
                 
             } catch (error) {

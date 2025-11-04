@@ -117,22 +117,25 @@ class LiveDataSync {
 
             log('🔄 Syncing live data...');
             
-            // Sync core data types
+            // Sync core data types - ensure promises never reject by catching all errors
+            // syncData handles errors internally, but add extra safety layer
             const syncPromises = [
-                this.syncData('clients', () => window.DatabaseAPI.getClients()),
-                this.syncData('leads', () => window.DatabaseAPI.getLeads()),
-                this.syncData('projects', () => window.DatabaseAPI.getProjects()),
-                this.syncData('invoices', () => window.DatabaseAPI.getInvoices()),
-                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries())
+                this.syncData('clients', () => window.DatabaseAPI.getClients()).catch(() => ({ dataType: 'clients', success: false })),
+                this.syncData('leads', () => window.DatabaseAPI.getLeads()).catch(() => ({ dataType: 'leads', success: false })),
+                this.syncData('projects', () => window.DatabaseAPI.getProjects()).catch(() => ({ dataType: 'projects', success: false })),
+                this.syncData('invoices', () => window.DatabaseAPI.getInvoices()).catch(() => ({ dataType: 'invoices', success: false })),
+                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries()).catch(() => ({ dataType: 'timeEntries', success: false }))
             ];
 
             // Only sync users if admin to avoid unnecessary 401s and extra load
             try {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
-                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers()));
+                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers()).catch(() => ({ dataType: 'users', success: false })));
                 }
-            } catch (_) {}
+            } catch (_) {
+                // Ignore role check errors
+            }
 
             const results = await Promise.allSettled(syncPromises);
             
@@ -174,7 +177,17 @@ class LiveDataSync {
             log('✅ Live data sync completed successfully');
 
         } catch (error) {
-            console.error('❌ Live data sync failed:', error);
+            const errorMessage = error.message || String(error);
+            const isNetworkError = errorMessage.includes('Failed to fetch') || 
+                                 errorMessage.includes('NetworkError') ||
+                                 errorMessage.includes('Database connection failed') ||
+                                 errorMessage.includes('unreachable');
+            
+            // Only log non-network errors (network errors are expected when DB is down)
+            if (!isNetworkError) {
+                console.error('❌ Live data sync failed:', error);
+            }
+            
             this.connectionStatus = 'error';
             this.errorCount++;
             
@@ -182,12 +195,12 @@ class LiveDataSync {
             this.notifySubscribers({ 
                 type: 'sync', 
                 status: 'error', 
-                error: error.message,
+                error: errorMessage,
                 errorCount: this.errorCount
             });
             
-            // Stop sync if too many errors
-            if (this.errorCount >= this.maxErrors) {
+            // Stop sync if too many errors (but allow more retries for network errors)
+            if (this.errorCount >= this.maxErrors * (isNetworkError ? 2 : 1)) {
                 console.error('🛑 Too many sync errors, stopping live sync');
                 this.stop();
             }
@@ -198,6 +211,7 @@ class LiveDataSync {
 
     // Sync individual data type with caching
     async syncData(dataType, fetchFunction) {
+        // Wrap entire function to ensure it never throws
         try {
             // Check if we recently synced this data type
             const cacheEntry = this.dataCache.get(dataType);
@@ -218,6 +232,7 @@ class LiveDataSync {
                 return { dataType, data: cacheEntry.data, success: true, cached: true };
             }
             
+            // Call fetchFunction - errors will be caught by outer try-catch
             const response = await fetchFunction();
             
             // Extract the array from the response structure
@@ -270,10 +285,18 @@ class LiveDataSync {
             const log = getLog();
             const errorMessage = error.message || String(error);
             
-            // Check if it's a network error (Failed to fetch)
-            if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-                log(`⚠️ Network error syncing ${dataType} - API may be unavailable`);
+            // Check if it's a network or database connection error
+            const isNetworkError = errorMessage.includes('Failed to fetch') || 
+                                 errorMessage.includes('NetworkError') ||
+                                 errorMessage.includes('Database connection failed') ||
+                                 errorMessage.includes('unreachable') ||
+                                 errorMessage.includes('ECONNREFUSED') ||
+                                 errorMessage.includes('ETIMEDOUT');
+            
+            if (isNetworkError) {
+                log(`⚠️ Network/database error syncing ${dataType} - API may be unavailable`);
             } else {
+                // Only log non-network errors to console (network errors are expected)
                 console.error(`❌ Failed to sync ${dataType}:`, error);
             }
             
