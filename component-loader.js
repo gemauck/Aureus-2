@@ -94,9 +94,8 @@
         'components/teams/ChecklistModal.jsx',
         'components/teams/NoticeModal.jsx',
         'components/teams/WorkflowExecutionModal.jsx',
-        'components/teams/TeamModals.jsx',
-        'components/teams/ManagementMeetingModal.jsx',
         'components/teams/ManagementMeetingNotes.jsx',
+        'components/teams/TeamModals.jsx',
         'components/teams/TeamsEnhanced.jsx',
         'components/teams/Teams.jsx',
         

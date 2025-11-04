@@ -290,13 +290,13 @@
         }
     },
 
-    async getManagementMeetings() {
-        return safeStorageCall(window.storage, 'getManagementMeetings', []);
+    async getManagementMeetingNotes() {
+        return safeStorageCall(window.storage, 'getManagementMeetingNotes', []);
     },
 
-    async setManagementMeetings(meetings) {
-        if (typeof window.storage?.setManagementMeetings === 'function') {
-            window.storage.setManagementMeetings(meetings);
+    async setManagementMeetingNotes(notes) {
+        if (typeof window.storage?.setManagementMeetingNotes === 'function') {
+            window.storage.setManagementMeetingNotes(notes);
         }
     },
 

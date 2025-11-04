@@ -6,6 +6,7 @@ const WorkflowModal = window.WorkflowModal;
 const ChecklistModal = window.ChecklistModal;
 const NoticeModal = window.NoticeModal;
 const WorkflowExecutionModal = window.WorkflowExecutionModal;
+const ManagementMeetingNotes = window.ManagementMeetingNotes;
 
 // Team definitions - defined outside component to avoid recreation on every render
 const TEAMS = [
@@ -483,14 +484,14 @@ const Teams = () => {
                             </button>
                             {selectedTeam?.id === 'management' && (
                                 <button
-                                    onClick={() => setActiveTab('meetings')}
+                                    onClick={() => setActiveTab('meeting-notes')}
                                     className={`px-3 py-1.5 text-xs rounded-lg transition ${
-                                        activeTab === 'meetings'
+                                        activeTab === 'meeting-notes'
                                             ? 'bg-primary-600 text-white'
-                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+											: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
                                     }`}
                                 >
-                                    <i className="fas fa-calendar-check mr-1"></i>
+                                    <i className="fas fa-clipboard-list mr-1"></i>
                                     Meeting Notes
                                 </button>
                             )}
@@ -1010,19 +1011,12 @@ const Teams = () => {
                             </div>
                         )}
 
-                        {activeTab === 'meetings' && selectedTeam?.id === 'management' && (
+                        {activeTab === 'meeting-notes' && selectedTeam?.id === 'management' && ManagementMeetingNotes && (
                             <div>
-                                {window.ManagementMeetingNotes ? (
-                                    <window.ManagementMeetingNotes />
-                                ) : (
-                                    <div className="text-center py-12">
-                                        <i className="fas fa-calendar-alt text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                        <p className="text-sm text-gray-500 dark:text-slate-400">Meeting Notes component loading...</p>
-                                        <p className="text-xs text-gray-400 mt-2 dark:text-slate-500">If this persists, please refresh the page</p>
-                                    </div>
-                                )}
+                                <ManagementMeetingNotes />
                             </div>
                         )}
+
                     </div>
                 </div>
             )}

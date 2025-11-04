@@ -257,21 +257,6 @@ const storage = {
         localStorage.setItem('abcotronics_team_checklists', JSON.stringify(checklists));
     },
 
-    // Management Meeting Notes
-    getManagementMeetings: () => {
-        try {
-            const meetings = localStorage.getItem('abcotronics_management_meetings');
-            return meetings ? JSON.parse(meetings) : null;
-        } catch (e) {
-            console.error('Error loading management meetings:', e);
-            return null;
-        }
-    },
-    
-    setManagementMeetings: (meetings) => {
-        localStorage.setItem('abcotronics_management_meetings', JSON.stringify(meetings));
-    },
-
     // Team Notices
     getTeamNotices: () => {
         try {
@@ -285,6 +270,21 @@ const storage = {
     
     setTeamNotices: (notices) => {
         localStorage.setItem('abcotronics_team_notices', JSON.stringify(notices));
+    },
+
+    // Management Meeting Notes
+    getManagementMeetingNotes: () => {
+        try {
+            const notes = localStorage.getItem('abcotronics_management_meeting_notes');
+            return notes ? JSON.parse(notes) : null;
+        } catch (e) {
+            console.error('Error loading management meeting notes:', e);
+            return null;
+        }
+    },
+    
+    setManagementMeetingNotes: (notes) => {
+        localStorage.setItem('abcotronics_management_meeting_notes', JSON.stringify(notes));
     },
 
     // HR - Employees
