@@ -69,8 +69,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
     // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
-        // Don't reset formData if we're in the middle of auto-saving OR saving proposals
-        if (isAutoSavingRef.current || isSavingProposalsRef.current) {
+        // Don't reset formData if we're in the middle of auto-saving OR saving proposals OR creating a proposal
+        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposal) {
             return;
         }
         
@@ -268,6 +268,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const [editingStageAssignee, setEditingStageAssignee] = useState(null);
     const [showStageComments, setShowStageComments] = useState({});
     const [stageCommentInput, setStageCommentInput] = useState({});
+    const [isCreatingProposal, setIsCreatingProposal] = useState(false); // Prevent duplicate proposal creation
+    const lastSaveTimeoutRef = useRef(null); // Debounce saves
     
     // Load users for assignment
     useEffect(() => {
@@ -290,10 +292,22 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         };
         
         loadUsers();
+        
+        // Cleanup function to clear timeout on unmount
+        return () => {
+            if (lastSaveTimeoutRef.current) {
+                clearTimeout(lastSaveTimeoutRef.current);
+            }
+        };
     }, []);
     
-    // Helper function to save proposals
+    // Helper function to save proposals with debouncing
     const saveProposals = async (updatedProposals) => {
+        // Clear any pending save
+        if (lastSaveTimeoutRef.current) {
+            clearTimeout(lastSaveTimeoutRef.current);
+        }
+        
         const updatedFormData = { ...formData, proposals: updatedProposals };
         setFormData(updatedFormData);
         
@@ -301,20 +315,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         isSavingProposalsRef.current = true;
         lastSavedDataRef.current = updatedFormData;
         
-        if (onSave) {
-            try {
-                await onSave(updatedFormData, true);
-                // Keep the flag set briefly to prevent immediate reset
-                setTimeout(() => {
+        // Debounce the actual save to prevent rapid repeated saves
+        lastSaveTimeoutRef.current = setTimeout(async () => {
+            if (onSave) {
+                try {
+                    await onSave(updatedFormData, true);
+                    // Keep the flag set briefly to prevent immediate reset
+                    setTimeout(() => {
+                        isSavingProposalsRef.current = false;
+                    }, 1000); // Increased to 1 second for better stability
+                } catch (error) {
+                    console.error('Error saving proposals:', error);
                     isSavingProposalsRef.current = false;
-                }, 500);
-            } catch (error) {
-                console.error('Error saving proposals:', error);
+                }
+            } else {
                 isSavingProposalsRef.current = false;
             }
-        } else {
-            isSavingProposalsRef.current = false;
-        }
+        }, 300); // Debounce saves by 300ms
     };
     
     // Helper function to send notifications
@@ -1532,29 +1549,29 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                         setTimeout(async () => {
                                                             try {
                                                                 // Get the latest formData from ref (updated by useEffect)
-                                                                const latest = {...formDataRef.current, stage: newStage};
+                                                        const latest = {...formDataRef.current, stage: newStage};
                                                                 
                                                                 // Explicitly ensure stage is included
                                                                 latest.stage = newStage;
-                                                                
-                                                                // Save this as the last saved state
-                                                                lastSavedDataRef.current = latest;
-                                                                isAutoSavingRef.current = true;
-                                                                
+                                                        
+                                                        // Save this as the last saved state
+                                                        lastSavedDataRef.current = latest;
+                                                        isAutoSavingRef.current = true;
+                                                        
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
                                                                 
                                                                 console.log('✅ Stage saved successfully:', newStage);
-                                                                
-                                                                // Clear the flag after a longer delay to allow API response to propagate
-                                                                setTimeout(() => {
-                                                                    isAutoSavingRef.current = false;
-                                                                }, 3000);
+                                                        
+                                                        // Clear the flag after a longer delay to allow API response to propagate
+                                                        setTimeout(() => {
+                                                            isAutoSavingRef.current = false;
+                                                        }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
                                                                 isAutoSavingRef.current = false;
                                                                 alert('Failed to save stage change. Please try again.');
-                                                            }
+                                                }
                                                         }, 100); // Small delay to ensure state update is processed
                                                     }
                                                     
@@ -2239,9 +2256,17 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
                                     <button
                                         type="button"
+                                        disabled={isCreatingProposal}
                                         onClick={() => {
+                                            if (isCreatingProposal) return; // Prevent double-clicks
+                                            
+                                            setIsCreatingProposal(true);
+                                            
+                                            // Generate a stable ID that won't change on re-renders
+                                            const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                                            
                                             const newProposal = {
-                                                id: Date.now(),
+                                                id: proposalId,
                                                 title: `Proposal for ${formData.name}`,
                                                 name: `Proposal for ${formData.name}`,
                                                 createdDate: new Date().toISOString().split('T')[0],
@@ -2365,13 +2390,49 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     total: 0
                                                 }
                                             };
-                                            const updatedProposals = [...(formData.proposals || []), newProposal];
+                                            
+                                            // Check if proposal already exists (prevent duplicates)
+                                            // Use both formData and formDataRef to catch duplicates during re-renders
+                                            const currentFormData = formDataRef.current || formData;
+                                            const existingProposals = currentFormData.proposals || [];
+                                            
+                                            // Check by ID first (most reliable)
+                                            const proposalExistsById = existingProposals.some(p => p.id === proposalId);
+                                            
+                                            // Also check by title and date (fallback for ID mismatches)
+                                            const proposalExistsByTitle = existingProposals.some(p => 
+                                                p.title === newProposal.title && 
+                                                p.createdDate === newProposal.createdDate &&
+                                                Math.abs(new Date(p.createdDate).getTime() - new Date(newProposal.createdDate).getTime()) < 5000 // Within 5 seconds
+                                            );
+                                            
+                                            if (proposalExistsById || proposalExistsByTitle) {
+                                                console.warn('⚠️ Proposal already exists, skipping creation', {
+                                                    existsById: proposalExistsById,
+                                                    existsByTitle: proposalExistsByTitle,
+                                                    proposalId,
+                                                    existingCount: existingProposals.length
+                                                });
+                                                setIsCreatingProposal(false);
+                                                return;
+                                            }
+                                            
+                                            const updatedProposals = [...existingProposals, newProposal];
                                             saveProposals(updatedProposals);
+                                            
+                                            // Reset flag after a delay
+                                            setTimeout(() => {
+                                                setIsCreatingProposal(false);
+                                            }, 1000);
                                         }}
-                                        className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                                        className={`px-4 py-2 text-sm rounded-lg transition-colors ${
+                                            isCreatingProposal 
+                                                ? 'bg-gray-400 text-white cursor-not-allowed' 
+                                                : 'bg-primary-600 text-white hover:bg-primary-700'
+                                        }`}
                                     >
                                         <i className="fas fa-plus mr-2"></i>
-                                        Create New Proposal
+                                        {isCreatingProposal ? 'Creating...' : 'Create New Proposal'}
                                     </button>
                                 </div>
 
@@ -2388,8 +2449,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             const currentUserId = currentUser.id || currentUser.sub;
                                             
                                             return (
-                                                <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
-                                                    <div className="flex justify-between items-start mb-4">
+                                            <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
+                                                <div className="flex justify-between items-start mb-4">
                                                         <div className="flex-1">
                                                             {editingProposalName === proposal.id ? (
                                                                 <div className="flex items-center gap-2">
@@ -2420,7 +2481,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                     />
                                                                 </div>
                                                             ) : (
-                                                                <div>
+                                                    <div>
                                                                     <h4 
                                                                         className="font-semibold text-gray-900 cursor-pointer hover:text-primary-600"
                                                                         onClick={() => {
@@ -2432,9 +2493,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                         {proposal.title || proposal.name || 'Untitled Proposal'}
                                                                         <i className="fas fa-edit ml-2 text-xs text-gray-400"></i>
                                                                     </h4>
-                                                                    <div className="text-sm text-gray-600 mt-1">
-                                                                        <i className="fas fa-calendar mr-1"></i>
-                                                                        Created: {new Date(proposal.createdDate).toLocaleDateString()}
+                                                        <div className="text-sm text-gray-600 mt-1">
+                                                            <i className="fas fa-calendar mr-1"></i>
+                                                            Created: {new Date(proposal.createdDate).toLocaleDateString()}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -2473,68 +2534,68 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                         </a>
                                                                     )}
                                                                 </div>
-                                                            </div>
                                                         </div>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (confirm('Delete this proposal?')) {
-                                                                    const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
-                                                                    saveProposals(updatedProposals);
-                                                                }
-                                                            }}
-                                                            className="text-red-600 hover:text-red-700"
-                                                        >
-                                                            <i className="fas fa-trash"></i>
-                                                        </button>
                                                     </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            if (confirm('Delete this proposal?')) {
+                                                                const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
+                                                                    saveProposals(updatedProposals);
+                                                            }
+                                                        }}
+                                                        className="text-red-600 hover:text-red-700"
+                                                    >
+                                                        <i className="fas fa-trash"></i>
+                                                    </button>
+                                                </div>
 
-                                                    {/* Workflow Stages */}
-                                                    <div className="space-y-3">
-                                                        <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
-                                                        {proposal.stages.map((stage, stageIndex) => {
+                                                {/* Workflow Stages */}
+                                                <div className="space-y-3">
+                                                    <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
+                                                    {proposal.stages.map((stage, stageIndex) => {
                                                             const previousStage = stageIndex > 0 ? proposal.stages[stageIndex - 1] : null;
-                                                            const canApprove = 
-                                                                (stage.status === 'pending' || stage.status === 'in-progress') &&
+                                                        const canApprove = 
+                                                            (stage.status === 'pending' || stage.status === 'in-progress') &&
                                                                 (stageIndex === 0 || previousStage?.status === 'approved') &&
                                                                 (stage.assigneeId === currentUserId || currentUser.role === 'admin' || !stage.assigneeId);
                                                             const isAssigned = stage.assigneeId === currentUserId;
-                                                            const statusColor = 
-                                                                stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
+                                                        const statusColor = 
+                                                            stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
                                                                 stage.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-300' :
-                                                                stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
-                                                                'bg-gray-100 text-gray-600 border-gray-300';
-                                                            const teamKey = (stage.department || '').toLowerCase();
-                                                            const teamMetaMap = {
-                                                                'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
-                                                                'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
-                                                                'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
-                                                                'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
-                                                                'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
-                                                                'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
-                                                                'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
-                                                                'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
-                                                                'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
-                                                            };
-                                                            const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
+                                                            stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                            'bg-gray-100 text-gray-600 border-gray-300';
+                                                        const teamKey = (stage.department || '').toLowerCase();
+                                                        const teamMetaMap = {
+                                                            'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
+                                                            'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
+                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
+                                                            'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
+                                                            'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
+                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                            'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
+                                                            'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
+                                                        };
+                                                        const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
                                                             const stageKey = `${proposalIndex}-${stageIndex}`;
                                                             const showComments = showStageComments[stageKey] || false;
-                                                            
-                                                            return (
-                                                                <>
-                                                                    <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
-                                                                        <div className="flex justify-between items-start">
-                                                                            <div className="flex-1">
-                                                                                <div className="flex items-center gap-2 mb-1">
-                                                                                    <span className="font-medium text-sm">{stageIndex + 1}.</span>
-                                                                                    <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
-                                                                                </div>
+                                                        
+                                                        return (
+                                                            <>
+                                                                <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
+                                                                    <div className="flex justify-between items-start">
+                                                                        <div className="flex-1">
+                                                                            <div className="flex items-center gap-2 mb-1">
+                                                                                <span className="font-medium text-sm">{stageIndex + 1}.</span>
+                                                                                <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
+                                                                            </div>
                                                                                 <div className="text-xs ml-6 mb-2">
-                                                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
-                                                                                        <i className={`fas ${teamMeta.icon}`}></i>
-                                                                                        {stage.department}
-                                                                                    </span>
-                                                                                </div>
+                                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
+                                                                                    <i className={`fas ${teamMeta.icon}`}></i>
+                                                                                    {stage.department}
+                                                                                </span>
+                                                                            </div>
                                                                                 
                                                                                 {/* Assignee Selection */}
                                                                                 <div className="mb-2">
@@ -2578,8 +2639,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                 {stage.assignee || <span className="text-gray-400 italic">Unassigned</span>}
                                                                                                 <i className="fas fa-edit ml-1 text-xs"></i>
                                                                                             </button>
-                                                                                        </div>
-                                                                                    )}
+                                                                                </div>
+                                                                            )}
                                                                                 </div>
                                                                                 
                                                                                 {/* Comments Section */}
@@ -2638,25 +2699,25 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                 )}
                                                                                 
                                                                                 {/* Status Messages */}
-                                                                                {stage.approvedBy && (
-                                                                                    <div className="mt-2 text-[11px] text-gray-600">
-                                                                                        <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
-                                                                                    </div>
+                                                                            {stage.approvedBy && (
+                                                                                <div className="mt-2 text-[11px] text-gray-600">
+                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
+                                                                                </div>
                                                                                 )}
                                                                                 {stage.rejectedBy && (
                                                                                     <div className="mt-2 text-[11px] text-red-600">
                                                                                         <i className="fas fa-times-circle mr-1"></i>Rejected by {stage.rejectedBy} on {new Date(stage.rejectedAt).toLocaleDateString()}
                                                                                         {stage.rejectedReason && (
                                                                                             <div className="mt-1 text-gray-600">Reason: {stage.rejectedReason}</div>
-                                                                                        )}
-                                                                                    </div>
+                                                                            )}
+                                                                        </div>
                                                                                 )}
                                                                             </div>
                                                                             <div className="flex items-center gap-2 flex-col">
-                                                                                {canApprove && (
+                                                                            {canApprove && (
                                                                                     <>
-                                                                                        <button
-                                                                                            type="button"
+                                                                                <button
+                                                                                    type="button"
                                                                                             onClick={async () => {
                                                                                                 const commentText = stageCommentInput[stageKey] || '';
                                                                                                 let approver = currentUser.name || currentUser.email || 'Unknown';
@@ -2673,8 +2734,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                     });
                                                                                                 }
                                                                                                 
-                                                                                                const updatedStages = proposal.stages.map((s, idx) => {
-                                                                                                    if (idx === stageIndex) {
+                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                if (idx === stageIndex) {
                                                                                                         return { 
                                                                                                             ...s, 
                                                                                                             status: 'approved', 
@@ -2682,15 +2743,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                             approvedBy: approver,
                                                                                                             approvedAt: new Date().toISOString()
                                                                                                         };
-                                                                                                    } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
-                                                                                                        return { ...s, status: 'in-progress' };
-                                                                                                    }
-                                                                                                    return s;
-                                                                                                });
+                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                    return { ...s, status: 'in-progress' };
+                                                                                                }
+                                                                                                return s;
+                                                                                            });
                                                                                                 
-                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
-                                                                                                );
+                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                            );
                                                                                                 setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
                                                                                                 setShowStageComments({ ...showStageComments, [stageKey]: false });
                                                                                                 await saveProposals(updatedProposals);
@@ -2706,12 +2767,12 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                             `#/clients?lead=${lead.id}&tab=proposals`
                                                                                                         );
                                                                                                     }
-                                                                                                }
-                                                                                            }}
-                                                                                            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                                                                        >
+                                                                                        }
+                                                                                    }}
+                                                                                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                >
                                                                                             <i className="fas fa-check mr-1"></i>Approve
-                                                                                        </button>
+                                                                                </button>
                                                                                         <button
                                                                                             type="button"
                                                                                             onClick={async () => {
@@ -2763,22 +2824,22 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                             <i className="fas fa-comment mr-1"></i>{showComments ? 'Hide' : 'Show'} Comments
                                                                                         </button>
                                                                                     </>
-                                                                                )}
-                                                                                {stage.status === 'approved' && (
-                                                                                    <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
-                                                                                        <i className="fas fa-check mr-1"></i>Approved
-                                                                                    </span>
-                                                                                )}
+                                                                            )}
+                                                                            {stage.status === 'approved' && (
+                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                    <i className="fas fa-check mr-1"></i>Approved
+                                                                                </span>
+                                                                            )}
                                                                                 {stage.status === 'rejected' && (
                                                                                     <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
                                                                                         <i className="fas fa-times mr-1"></i>Rejected
                                                                                     </span>
                                                                                 )}
-                                                                                {stage.status === 'in-progress' && (
-                                                                                    <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
-                                                                                        <i className="fas fa-clock mr-1"></i>In Progress
-                                                                                    </span>
-                                                                                )}
+                                                                            {stage.status === 'in-progress' && (
+                                                                                <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
+                                                                                    <i className="fas fa-clock mr-1"></i>In Progress
+                                                                                </span>
+                                                                            )}
                                                                                 {stage.status === 'pending' && !canApprove && (
                                                                                     <button
                                                                                         type="button"
@@ -2788,19 +2849,19 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                         <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
                                                                                     </button>
                                                                                 )}
-                                                                            </div>
                                                                         </div>
                                                                     </div>
-                                                                    {stageIndex < proposal.stages.length - 1 && (
-                                                                        <div className="flex justify-center -my-1">
-                                                                            <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
-                                                                        </div>
-                                                                    )}
-                                                                </>
-                                                            );
-                                                        })}
-                                                    </div>
+                                                                </div>
+                                                                {stageIndex < proposal.stages.length - 1 && (
+                                                                    <div className="flex justify-center -my-1">
+                                                                        <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
+                                                                    </div>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })}
                                                 </div>
+                                            </div>
                                             );
                                         })}
                                     </div>
