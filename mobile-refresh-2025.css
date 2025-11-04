@@ -1088,6 +1088,109 @@
     z-index: 10 !important;
     position: relative !important;
   }
+  
+  /* CRITICAL FIX: Ensure main content container (flex-1) is visible */
+  #root > div.flex > div.flex-1,
+  #root > div:has(main),
+  div.flex > div.flex-1 {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    position: relative !important;
+    z-index: 1 !important;
+    flex: 1 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Ensure main content area wrapper is visible */
+  div.flex-1.overflow-auto,
+  .flex > .flex-1.overflow-auto,
+  div[class*="flex"][class*="flex-1"] {
+    display: flex !important;
+    flex-direction: column !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    position: relative !important;
+    z-index: 1 !important;
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+  
+  /* Ensure header inside main content is visible */
+  header.header-mobile,
+  header.border-b {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    width: 100% !important;
+  }
+  
+  /* Ensure hamburger menu button is visible */
+  button.hamburger-menu-btn,
+  header button[aria-label="Toggle sidebar"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: 51 !important;
+  }
+  
+  /* Ensure all content sections are visible */
+  main,
+  main > *,
+  [class*="content"],
+  [class*="container"]:not(.login-container) {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Preserve flex/grid display for containers that need it */
+  main .flex,
+  [class*="flex"]:not([class*="hidden"]) {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  main .grid,
+  [class*="grid"]:not([class*="hidden"]) {
+    display: grid !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
+  
+  /* Prevent main content elements from being accidentally hidden */
+  main [style*="display: none"]:not([role="dialog"]):not(.modal):not([class*="modal"]) {
+    display: block !important;
+  }
+  
+  main [style*="visibility: hidden"]:not([role="dialog"]):not(.modal):not([class*="modal"]) {
+    visibility: visible !important;
+  }
+  
+  main [style*="opacity: 0"]:not([role="dialog"]):not(.modal):not([class*="modal"]) {
+    opacity: 1 !important;
+  }
+  
+  /* Ensure main content wrapper and its children are never hidden */
+  .flex-1.overflow-auto,
+  .flex-1.overflow-auto > * {
+    visibility: visible !important;
+    opacity: 1 !important;
+  }
 }
 
 /* ============================================

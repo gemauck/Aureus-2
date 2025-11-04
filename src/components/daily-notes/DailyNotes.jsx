@@ -581,30 +581,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 }
             }
             
-            // CRITICAL: Don't save if content is empty and we already have saved content for this date
-            // This prevents overwriting saved notes with empty content during initialization
-            // BUT: If we're not initializing and user explicitly cleared content, allow saving empty
-            if (!noteContent || noteContent.trim().length === 0) {
-                // During initialization, don't save empty content
-                if (isInitializingRef.current) {
-                    console.log('⚠️ Skipping save during initialization - content is empty');
-                    setIsSaving(false);
-                    return;
-                }
-                
-                // If not initializing, check if we have existing content
-                const user = window.storage?.getUser?.();
-                const userId = user?.id || user?.email || 'default';
-                const notesKey = `user_notes_${userId}`;
-                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                const existingNote = savedNotes[dateString] || notes[dateString] || '';
-                
-                // If we have existing content and editor is empty, don't overwrite (user might have just opened)
-                if (existingNote && existingNote.trim().length > 0) {
-                    console.log('⚠️ Preventing save of empty content - existing note found, length:', existingNote.length);
-                    setIsSaving(false);
-                    return;
-                }
+            // Only skip save if content is truly empty AND we're still initializing
+            // After initialization, always save (even empty content if user cleared it)
+            if ((!noteContent || noteContent.trim().length === 0) && isInitializingRef.current) {
+                console.log('⚠️ Skipping save during initialization - content is empty');
+                setIsSaving(false);
+                return;
+            }
+            
+            // If content is empty after initialization, that means user cleared it - save it
+            if (!noteContent) {
+                noteContent = '';
             }
             
             // If handwriting canvas has content, save it as an image in the note
@@ -862,26 +849,39 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Function to check and save if needed
         const checkAndSave = () => {
-            if (!editorRef.current || saveInProgress) {
+            if (!editorRef.current || saveInProgress || isInitializingRef.current) {
+                if (isInitializingRef.current) {
+                    console.log('⏸️ Auto-save check skipped - still initializing');
+                }
                 return;
             }
             
             const editorContent = editorRef.current.innerHTML || '';
-            const hasContent = editorContent && editorContent.trim().length > 0;
             
-            // Only save if content has actually changed and it's different from last saved
-            if (hasContent && editorContent !== lastSavedContent && editorContent !== lastCheckedContent) {
+            // Save if content has changed (even if empty - user might have cleared it)
+            if (editorContent !== lastSavedContent && editorContent !== lastCheckedContent) {
                 lastCheckedContent = editorContent;
                 saveInProgress = true;
                 
-                console.log('💾 Auto-saving note (detected change)...', { contentLength: editorContent.length, dateString });
+                console.log('💾 Auto-saving note (detected change)...', { 
+                    contentLength: editorContent.length, 
+                    dateString,
+                    isEmpty: !editorContent || editorContent.trim().length === 0
+                });
                 saveNote().then(() => {
                     lastSavedContent = editorContent;
                     sessionStorage.setItem(`last_saved_note_${dateString}`, editorContent);
                     saveInProgress = false;
+                    console.log('✅ Auto-save completed successfully');
                 }).catch(err => {
-                    console.error('Auto-save error:', err);
+                    console.error('❌ Auto-save error:', err);
                     saveInProgress = false;
+                });
+            } else {
+                console.log('⏭️ Auto-save check - no changes detected', {
+                    editorLength: editorContent.length,
+                    lastSavedLength: lastSavedContent.length,
+                    areEqual: editorContent === lastSavedContent
                 });
             }
         };
@@ -1177,12 +1177,23 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 clearTimeout(saveTimeoutRef.current);
             }
             saveTimeoutRef.current = setTimeout(() => {
-                if (editorRef.current) {
+                if (editorRef.current && !isInitializingRef.current) {
                     const editorContent = editorRef.current.innerHTML || '';
-                    if (editorContent && editorContent.trim().length > 0) {
-                        console.log('💾 Auto-saving note (from input handler)...', { contentLength: editorContent.length });
-                        saveNote().catch(err => console.error('Auto-save error from input handler:', err));
-                    }
+                    // Always save if there's any change (even empty content after user clears)
+                    console.log('💾 Auto-saving note (from input handler)...', { 
+                        contentLength: editorContent.length,
+                        isEmpty: !editorContent || editorContent.trim().length === 0
+                    });
+                    saveNote().catch(err => {
+                        console.error('❌ Auto-save error from input handler:', err);
+                        // Retry once after 1 second
+                        setTimeout(() => {
+                            console.log('🔄 Retrying auto-save after error...');
+                            saveNote().catch(retryErr => console.error('❌ Retry auto-save failed:', retryErr));
+                        }, 1000);
+                    });
+                } else if (isInitializingRef.current) {
+                    console.log('⏸️ Input handler auto-save skipped - still initializing');
                 }
             }, 1000); // Reduced from 2000ms to 1000ms for faster auto-save
         }
