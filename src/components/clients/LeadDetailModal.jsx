@@ -315,6 +315,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
         
         const updatedFormData = { ...formData, proposals: updatedProposals };
+        
+        // IMMEDIATELY update formData so proposal appears in UI right away
         setFormData(updatedFormData);
         
         // Mark that we're saving proposals to prevent useEffect from resetting
@@ -324,25 +326,29 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         console.log('💾 Saving proposals:', {
             count: updatedProposals.length,
             ids: updatedProposals.map(p => p.id),
-            isCreatingProposal: isCreatingProposalRef.current
+            isCreatingProposal: isCreatingProposalRef.current,
+            formDataProposalsCount: formData.proposals?.length || 0,
+            updatedProposalsCount: updatedProposals.length
         });
         
         // Debounce the actual save to prevent rapid repeated saves
         lastSaveTimeoutRef.current = setTimeout(async () => {
             if (onSave) {
                 try {
+                    console.log('📡 Calling onSave with proposals...');
                     await onSave(updatedFormData, true);
-                    console.log('✅ Proposals saved successfully');
+                    console.log('✅ Proposals saved successfully to API');
                     // Keep the flag set briefly to prevent immediate reset
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
                         console.log('🔓 Save guard released');
                     }, 2000); // Increased to 2 seconds for better stability
                 } catch (error) {
-                    console.error('Error saving proposals:', error);
+                    console.error('❌ Error saving proposals:', error);
                     isSavingProposalsRef.current = false;
                 }
             } else {
+                console.warn('⚠️ onSave not available');
                 isSavingProposalsRef.current = false;
             }
         }, 500); // Increased debounce to 500ms
@@ -2418,30 +2424,55 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             const currentFormData = formDataRef.current || formData;
                                             const existingProposals = currentFormData.proposals || [];
                                             
-                                            // Check by ID first (most reliable)
+                                            console.log('🔍 Checking for duplicates:', {
+                                                proposalId,
+                                                existingCount: existingProposals.length,
+                                                existingIds: existingProposals.map(p => p.id),
+                                                formDataProposalsCount: formData.proposals?.length || 0
+                                            });
+                                            
+                                            // Check by ID first (most reliable) - this should always be unique
                                             const proposalExistsById = existingProposals.some(p => p.id === proposalId);
                                             
-                                            // Also check by title and date (fallback for ID mismatches)
-                                            const proposalExistsByTitle = existingProposals.some(p => 
-                                                p.title === newProposal.title && 
-                                                p.createdDate === newProposal.createdDate &&
-                                                Math.abs(new Date(p.createdDate).getTime() - new Date(newProposal.createdDate).getTime()) < 5000 // Within 5 seconds
+                                            // Only check by title if we're creating within the same second (very rare but possible)
+                                            // Removed the date check since proposals created on the same day should be allowed
+                                            const recentProposals = existingProposals.filter(p => {
+                                                if (!p.id) return false;
+                                                // Check if proposal ID was created in the last 2 seconds
+                                                const pTimestamp = parseInt(p.id.split('-')[1]);
+                                                const currentTimestamp = Date.now();
+                                                return Math.abs(currentTimestamp - pTimestamp) < 2000;
+                                            });
+                                            
+                                            const proposalExistsByTitle = recentProposals.some(p => 
+                                                p.title === newProposal.title
                                             );
                                             
-                                            if (proposalExistsById || proposalExistsByTitle) {
-                                                console.warn('⚠️ Proposal already exists, skipping creation', {
-                                                    existsById: proposalExistsById,
-                                                    existsByTitle: proposalExistsByTitle,
+                                            if (proposalExistsById) {
+                                                console.warn('⚠️ Proposal with same ID already exists, skipping creation', {
                                                     proposalId,
-                                                    existingCount: existingProposals.length
+                                                    existingProposal: existingProposals.find(p => p.id === proposalId)
                                                 });
                                                 isCreatingProposalRef.current = false;
                                                 setIsCreatingProposal(false);
                                                 return;
                                             }
                                             
+                                            // Only block if we have a very recent proposal with the same title (within 2 seconds)
+                                            if (proposalExistsByTitle && recentProposals.length > 0) {
+                                                console.warn('⚠️ Very recent proposal with same title exists, skipping creation', {
+                                                    recentProposals: recentProposals.map(p => ({ id: p.id, title: p.title }))
+                                                });
+                                                isCreatingProposalRef.current = false;
+                                                setIsCreatingProposal(false);
+                                                return;
+                                            }
+                                            
+                                            console.log('✅ No duplicate found, proceeding with creation');
+                                            
                                             console.log('✅ Adding proposal to state:', proposalId);
                                             const updatedProposals = [...existingProposals, newProposal];
+                                            console.log('📝 Updated proposals count:', updatedProposals.length);
                                             saveProposals(updatedProposals);
                                             
                                             // Reset flags after a delay (longer to ensure save completes)
