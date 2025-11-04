@@ -41,10 +41,12 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     materialsBought: [],
     otherComments: '',
     photos: [],
+    documents: [],
     status: 'draft'
   });
   const [technicianInput, setTechnicianInput] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]);
+  const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [availableSites, setAvailableSites] = useState([]);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [inventory, setInventory] = useState([]);
@@ -452,9 +454,34 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
         materialsBought: editingJobCard.materialsBought || [],
         otherComments: editingJobCard.otherComments || '',
         photos: editingJobCard.photos || [],
+        documents: editingJobCard.documents || [],
         status: editingJobCard.status || 'draft'
       });
       setSelectedPhotos(editingJobCard.photos || []);
+      // Normalize documents - handle both old format (strings/dataUrls) and new format (objects)
+      const normalizedDocuments = (editingJobCard.documents || []).map((doc, idx) => {
+        if (typeof doc === 'string') {
+          // Old format: just a data URL string
+          return {
+            id: `doc_${Date.now()}_${idx}`,
+            name: `Document ${idx + 1}`,
+            url: doc,
+            size: 0,
+            type: 'application/octet-stream',
+            uploadedAt: editingJobCard.updatedAt || editingJobCard.createdAt || new Date().toISOString()
+          };
+        }
+        // New format: object with all fields
+        return {
+          id: doc.id || `doc_${Date.now()}_${idx}`,
+          name: doc.name || `Document ${idx + 1}`,
+          url: doc.url || doc,
+          size: doc.size || 0,
+          type: doc.type || 'application/octet-stream',
+          uploadedAt: doc.uploadedAt || editingJobCard.updatedAt || editingJobCard.createdAt || new Date().toISOString()
+        };
+      });
+      setSelectedDocuments(normalizedDocuments);
     }
   }, [editingJobCard]);
 
@@ -503,6 +530,35 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
     const newPhotos = selectedPhotos.filter((_, i) => i !== index);
     setSelectedPhotos(newPhotos);
     setFormData(prev => ({ ...prev, photos: newPhotos.map(p => typeof p === 'string' ? p : p.url) }));
+  };
+
+  const handleDocumentUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      files.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const dataUrl = reader.result;
+          const document = {
+            id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+            name: file.name,
+            url: dataUrl,
+            size: file.size,
+            type: file.type,
+            uploadedAt: new Date().toISOString()
+          };
+          setSelectedDocuments(prev => [...prev, document]);
+          setFormData(prev => ({ ...prev, documents: [...prev.documents, document] }));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const handleRemoveDocument = (id) => {
+    const newDocuments = selectedDocuments.filter(doc => doc.id !== id);
+    setSelectedDocuments(newDocuments);
+    setFormData(prev => ({ ...prev, documents: newDocuments }));
   };
 
   // Stock usage handlers
@@ -919,9 +975,11 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
       materialsBought: [],
       otherComments: '',
       photos: [],
+      documents: [],
       status: 'draft'
     });
     setSelectedPhotos([]);
+    setSelectedDocuments([]);
     setTechnicianInput('');
     setNewStockItem({ sku: '', quantity: 0, locationId: '' });
     setNewMaterialItem({ itemName: '', description: '', reason: '', cost: 0 });
@@ -1426,11 +1484,11 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             </div>
 
             {/* Interactive Map */}
-            <div className="mb-3">
+            <div className="mb-3 relative" style={{ zIndex: 0 }}>
               <div 
                 ref={locationMapRef}
-                className="w-full h-64 rounded-lg border border-gray-300 overflow-hidden"
-                style={{ minHeight: '256px' }}
+                className="w-full h-64 rounded-lg border border-gray-300 overflow-hidden relative"
+                style={{ minHeight: '256px', zIndex: 0 }}
               ></div>
               <p className="text-xs text-gray-500 mt-1">
                 <i className="fas fa-info-circle mr-1"></i>
@@ -1904,6 +1962,90 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             )}
           </div>
 
+          {/* Document Upload */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Documents
+            </label>
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+              <input
+                type="file"
+                id="documentUpload"
+                onChange={handleDocumentUpload}
+                className="hidden"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+                multiple
+              />
+              <label
+                htmlFor="documentUpload"
+                className="cursor-pointer"
+              >
+                <i className="fas fa-file-upload text-3xl text-gray-400 mb-2"></i>
+                <p className="text-sm text-gray-600">
+                  Click to upload documents or drag and drop
+                </p>
+                <p className="text-xs text-gray-500">
+                  PDF, Word, Excel, Text files (Max 10MB each)
+                </p>
+              </label>
+            </div>
+            {selectedDocuments.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {selectedDocuments.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg p-3">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="flex-shrink-0">
+                        {doc.type?.includes('pdf') ? (
+                          <i className="fas fa-file-pdf text-red-600 text-xl"></i>
+                        ) : doc.type?.includes('word') || doc.type?.includes('document') ? (
+                          <i className="fas fa-file-word text-blue-600 text-xl"></i>
+                        ) : doc.type?.includes('excel') || doc.type?.includes('spreadsheet') ? (
+                          <i className="fas fa-file-excel text-green-600 text-xl"></i>
+                        ) : doc.type?.includes('text') || doc.type?.includes('csv') ? (
+                          <i className="fas fa-file-alt text-gray-600 text-xl"></i>
+                        ) : (
+                          <i className="fas fa-file text-gray-400 text-xl"></i>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-900 truncate">{doc.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {(doc.size / 1024).toFixed(2)} KB
+                          {doc.uploadedAt && (
+                            <span className="ml-2">
+                              • {new Date(doc.uploadedAt).toLocaleDateString()}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {doc.url && (
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 text-xs text-blue-600 hover:text-blue-800"
+                          title="View document"
+                        >
+                          <i className="fas fa-eye"></i>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDocument(doc.id)}
+                        className="px-2 py-1 text-xs text-red-600 hover:text-red-800"
+                        title="Remove document"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Status */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1945,7 +2087,7 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
 
         {/* Vehicle Management Modal */}
         {showVehicleModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-gray-900">
