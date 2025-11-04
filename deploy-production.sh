@@ -29,7 +29,7 @@ if [ -n "$(git status --porcelain)" ]; then
     echo ""
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         git add .
-        git commit -m "Fix: Pipeline drag and drop now works on mobile devices - implemented document-level touch handlers"
+        git commit -m "Fix: Add explicit route mapping for /api/users/:id to resolve user deletion 500 error"
         echo "📤 Pushing to git..."
         git push origin main || git push origin master
         echo "✅ Changes committed and pushed"
