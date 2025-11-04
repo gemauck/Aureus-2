@@ -49,12 +49,10 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                         };
                         setProfile(updatedProfile);
                         
-                        // Also update storage with fresh data
+                        // Update storage silently (don't trigger global refresh during load)
                         if (window.storage && window.storage.setUser) {
                             window.storage.setUser(user);
                         }
-                        // Notify auth context to refresh
-                        window.dispatchEvent(new CustomEvent('userDataUpdated'));
                     }
                     return;
                 } catch (apiError) {
@@ -91,12 +89,10 @@ const SettingsPortal = ({ isOpen, onClose }) => {
                     };
                     setProfile(updatedProfile);
                     
-                    // Also update storage with fresh data
+                    // Update storage silently (don't trigger global refresh during load)
                     if (window.storage && window.storage.setUser) {
                         window.storage.setUser(user);
                     }
-                    // Notify auth context to refresh
-                    window.dispatchEvent(new CustomEvent('userDataUpdated'));
                 }
             } else {
                 console.error('Failed to load profile:', response.status, response.statusText);
@@ -108,47 +104,61 @@ const SettingsPortal = ({ isOpen, onClose }) => {
         }
     }, []);
 
+    // Use ref to track if we've loaded profile for this modal open session
+    const hasLoadedRef = React.useRef(false);
+    
     useEffect(() => {
-        if (isOpen) {
-            // Initialize from user prop if available (immediate display)
-            if (user && (user.id || user.email)) {
-                setProfile({
-                    name: user.name || '',
-                    email: user.email || '',
-                    phone: user.phone || '',
-                    department: user.department || '',
-                    jobTitle: user.jobTitle || ''
-                });
-            }
-            
-            // Always load fresh data from server when modal opens
-            const userId = user?.id || user?.sub;
-            if (userId) {
-                console.log('🔧 SettingsPortal: Loading profile for user:', userId);
-                loadProfile();
-            } else {
-                // If user isn't loaded yet, wait a bit and try again
-                console.log('⚠️ SettingsPortal: User not available, checking storage...');
-                const timer = setTimeout(() => {
-                    const storedUser = window.storage?.getUser?.();
-                    if (storedUser && (storedUser.id || storedUser.email)) {
-                        console.log('🔧 SettingsPortal: Found user in storage, loading profile');
-                        setProfile({
-                            name: storedUser.name || '',
-                            email: storedUser.email || '',
-                            phone: storedUser.phone || '',
-                            department: storedUser.department || '',
-                            jobTitle: storedUser.jobTitle || ''
-                        });
-                        loadProfile();
-                    } else {
-                        console.error('❌ SettingsPortal: No user found in storage');
-                    }
-                }, 100);
-                return () => clearTimeout(timer);
-            }
+        // Reset loading flag when modal closes
+        if (!isOpen) {
+            hasLoadedRef.current = false;
+            return;
         }
-    }, [isOpen, user, loadProfile]);
+        
+        // Only load once per modal open session
+        if (hasLoadedRef.current) {
+            return;
+        }
+        
+        // Initialize from user prop if available (immediate display)
+        if (user && (user.id || user.email)) {
+            setProfile({
+                name: user.name || '',
+                email: user.email || '',
+                phone: user.phone || '',
+                department: user.department || '',
+                jobTitle: user.jobTitle || ''
+            });
+        }
+        
+        // Always load fresh data from server when modal opens (only once)
+        const userId = user?.id || user?.sub;
+        if (userId) {
+            console.log('🔧 SettingsPortal: Loading profile for user:', userId);
+            hasLoadedRef.current = true;
+            loadProfile();
+        } else {
+            // If user isn't loaded yet, wait a bit and try again
+            console.log('⚠️ SettingsPortal: User not available, checking storage...');
+            const timer = setTimeout(() => {
+                const storedUser = window.storage?.getUser?.();
+                if (storedUser && (storedUser.id || storedUser.email)) {
+                    console.log('🔧 SettingsPortal: Found user in storage, loading profile');
+                    setProfile({
+                        name: storedUser.name || '',
+                        email: storedUser.email || '',
+                        phone: storedUser.phone || '',
+                        department: storedUser.department || '',
+                        jobTitle: storedUser.jobTitle || ''
+                    });
+                    hasLoadedRef.current = true;
+                    loadProfile();
+                } else {
+                    console.error('❌ SettingsPortal: No user found in storage');
+                }
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [isOpen, loadProfile]); // Removed 'user' from deps to prevent infinite loop
 
     useEffect(() => {
         // Close on Escape key
