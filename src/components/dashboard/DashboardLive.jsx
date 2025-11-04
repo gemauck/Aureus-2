@@ -314,14 +314,51 @@ const DashboardLive = () => {
                         normalizedData = message.data.data[message.dataType] || message.data[message.dataType] || message.data.data;
                     }
                     
-                    setDashboardData(prev => ({
-                        ...prev,
-                        [message.dataType]: normalizedData,
-                        stats: calculateStats({
+                    setDashboardData(prev => {
+                        // Calculate stats inline to avoid dependency issues
+                        const newData = {
                             ...prev,
                             [message.dataType]: normalizedData
-                        })
-                    }));
+                        };
+                        
+                        // Calculate stats
+                        const now = new Date();
+                        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                        const timeEntriesArray = Array.isArray(newData.timeEntries) ? newData.timeEntries : [];
+                        const thisMonthEntries = timeEntriesArray.filter(entry => {
+                            const entryDate = new Date(entry.date);
+                            return entryDate >= thisMonth;
+                        });
+                        const lastMonthEntries = timeEntriesArray.filter(entry => {
+                            const entryDate = new Date(entry.date);
+                            return entryDate >= lastMonth && entryDate < thisMonth;
+                        });
+                        const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+                        const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+                        
+                        const clientsArray = Array.isArray(newData.clients) ? newData.clients : [];
+                        const leadsArray = Array.isArray(newData.leads) ? newData.leads : [];
+                        const projectsArray = Array.isArray(newData.projects) ? newData.projects : [];
+                        const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
+                        const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
+                        
+                        const stats = {
+                            totalClients: clientsArray.length,
+                            totalLeads: leadsArray.length,
+                            totalProjects: projectsArray.length,
+                            activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
+                            hoursThisMonth: hoursThisMonth,
+                            hoursLastMonth: hoursLastMonth,
+                            pipelineValue: pipelineValue,
+                            weightedPipeline: weightedPipeline
+                        };
+                        
+                        return {
+                            ...newData,
+                            stats
+                        };
+                    });
                     setLastUpdated(message.timestamp);
                     break;
                     
