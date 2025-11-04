@@ -1331,7 +1331,8 @@ const Clients = React.memo(() => {
                 if (token && window.api?.updateLead) {
                     try {
                         console.log('🌐 Calling API to update lead:', updatedLead.id);
-                        console.log('🌐 Payload includes - contacts:', Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array', 
+                        console.log('🌐 Payload includes - stage:', updatedLead.stage, '(type:', typeof updatedLead.stage, ')',
+                                   'contacts:', Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array', 
                                    'followUps:', Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 'not array',
                                    'notes length:', updatedLead.notes ? updatedLead.notes.length : 0);
                         
@@ -1370,6 +1371,8 @@ const Clients = React.memo(() => {
                         // Parse JSON fields from database (they come as strings)
                         savedLead = {
                             ...savedLead,
+                            stage: savedLead.stage || updatedLead.stage || 'Awareness', // Ensure stage is preserved
+                            status: savedLead.status || updatedLead.status || 'active', // Ensure status is preserved
                             contacts: safeParseJSON(savedLead.contacts, []),
                             followUps: safeParseJSON(savedLead.followUps, []),
                             projectIds: safeParseJSON(savedLead.projectIds, []),
@@ -1380,6 +1383,8 @@ const Clients = React.memo(() => {
                             billingTerms: safeParseJSON(savedLead.billingTerms, {}),
                             proposals: safeParseJSON(savedLead.proposals, [])
                         };
+                        
+                        console.log('✅ Parsed saved lead - stage:', savedLead.stage, 'status:', savedLead.status);
                         
                         // CRITICAL: Use the API response to update state, not optimistic updates
                         // This ensures we're synced with the database

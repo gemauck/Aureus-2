@@ -231,6 +231,71 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const [showThumbnailPreview, setShowThumbnailPreview] = useState(false);
     const [uploadingThumbnail, setUploadingThumbnail] = useState(false);
     
+    // Proposal workflow state
+    const [allUsers, setAllUsers] = useState([]);
+    const [editingProposalName, setEditingProposalName] = useState(null);
+    const [proposalNameInput, setProposalNameInput] = useState('');
+    const [editingStageAssignee, setEditingStageAssignee] = useState(null);
+    const [showStageComments, setShowStageComments] = useState({});
+    const [stageCommentInput, setStageCommentInput] = useState({});
+    
+    // Load users for assignment
+    useEffect(() => {
+        const loadUsers = async () => {
+            try {
+                const token = window.storage?.getToken?.();
+                if (!token) return;
+                
+                const response = await fetch('/api/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    setAllUsers(data.data?.users || data.users || []);
+                }
+            } catch (error) {
+                console.error('Error loading users:', error);
+            }
+        };
+        
+        loadUsers();
+    }, []);
+    
+    // Helper function to save proposals
+    const saveProposals = async (updatedProposals) => {
+        const updatedFormData = { ...formData, proposals: updatedProposals };
+        setFormData(updatedFormData);
+        if (onSave) {
+            await onSave(updatedFormData, true);
+        }
+    };
+    
+    // Helper function to send notifications
+    const sendNotification = async (userId, title, message, link) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) return;
+            
+            await fetch('/api/notifications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    userId,
+                    type: 'system',
+                    title,
+                    message,
+                    link: link || ''
+                })
+            });
+        } catch (error) {
+            console.error('Error sending notification:', error);
+        }
+    };
+    
     // Tag management state
     const [leadTags, setLeadTags] = useState([]);
     const [allTags, setAllTags] = useState([]);
@@ -1408,31 +1473,47 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         </label>
                                         <select 
                                             value={formData.stage}
-                                            onChange={(e) => {
+                                            onChange={async (e) => {
                                                 const newStage = e.target.value;
                                                 
-                                                // Update state
+                                                // Update state and get the updated formData
                                                 setFormData(prev => {
-                                                    return {...prev, stage: newStage};
+                                                    const updated = {...prev, stage: newStage};
+                                                    
+                                                    // Auto-save immediately with the updated data
+                                                    if (lead && onSave) {
+                                                        // Use setTimeout to ensure state is updated
+                                                        setTimeout(async () => {
+                                                            try {
+                                                                // Get the latest formData from ref (updated by useEffect)
+                                                                const latest = {...formDataRef.current, stage: newStage};
+                                                                
+                                                                // Explicitly ensure stage is included
+                                                                latest.stage = newStage;
+                                                                
+                                                                // Save this as the last saved state
+                                                                lastSavedDataRef.current = latest;
+                                                                isAutoSavingRef.current = true;
+                                                                
+                                                                // Save to API - ensure it's awaited
+                                                                await onSave(latest, true);
+                                                                
+                                                                console.log('✅ Stage saved successfully:', newStage);
+                                                                
+                                                                // Clear the flag after a longer delay to allow API response to propagate
+                                                                setTimeout(() => {
+                                                                    isAutoSavingRef.current = false;
+                                                                }, 3000);
+                                                            } catch (error) {
+                                                                console.error('❌ Error saving stage:', error);
+                                                                isAutoSavingRef.current = false;
+                                                                alert('Failed to save stage change. Please try again.');
+                                                            }
+                                                        }, 100); // Small delay to ensure state update is processed
+                                                    }
+                                                    
+                                                    return updated;
                                                 });
-                                                
-                                                // Auto-save using ref to get latest data
-                                                if (lead) {
-                                                    setTimeout(() => {
-                                                        const latest = {...formDataRef.current, stage: newStage};
-                                                        
-                                                        // Save this as the last saved state
-                                                        lastSavedDataRef.current = latest;
-                                                        isAutoSavingRef.current = true;
-                                                        
-                                                        onSave(latest, true);
-                                                        
-                                                        // Clear the flag after a longer delay to allow API response to propagate
-                                                        setTimeout(() => {
-                                                            isAutoSavingRef.current = false;
-                                                        }, 3000);
-                                                    }, 0);
-                                                }
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
@@ -2116,80 +2197,118 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             const newProposal = {
                                                 id: Date.now(),
                                                 title: `Proposal for ${formData.name}`,
+                                                name: `Proposal for ${formData.name}`,
                                                 createdDate: new Date().toISOString().split('T')[0],
                                                 workflowStage: 'create-site-inspection',
+                                                workingDocumentLink: '',
                                                 stages: [
                                                     { 
                                                         name: 'Create Site Inspection Document', 
                                                         department: 'Business Development',
-                                                        assignee: 'Darren Mortimer',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Darren Mortimer' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Conduct site visit input data to Site Inspection Document', 
                                                         department: 'Technical',
-                                                        assignee: 'Greg Keague',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Greg Keague' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Comments on work loading requirements', 
                                                         department: 'Data',
-                                                        assignee: 'Gareth Mauck',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Gareth Mauck' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Comments on time allocations', 
                                                         department: 'Support',
-                                                        assignee: 'Keith Geere',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Keith Geere' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Relevant comments time allocations', 
                                                         department: 'Compliance',
-                                                        assignee: 'Timothy La Fontaine',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Timothy La Fontaine' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Creates proposal from template add client information', 
                                                         department: 'Business Development',
-                                                        assignee: 'Darren Mortimer',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Darren Mortimer' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Reviews proposal against Site Inspection comments', 
                                                         department: 'Operations Manager',
-                                                        assignee: 'Gareth Mauck',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Gareth Mauck' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Price proposal', 
                                                         department: 'Commercial',
-                                                        assignee: 'Reinhardt Scholtz',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'Reinhardt Scholtz' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     },
                                                     { 
                                                         name: 'Final Approval', 
                                                         department: 'CEO',
-                                                        assignee: 'David Buttemer',
+                                                        assignee: '',
+                                                        assigneeId: '',
+                                                        assigneeEmail: '',
                                                         status: 'pending',
-                                                        canApprove: window.storage?.getUser()?.name === 'David Buttemer' || window.storage?.getUser()?.role === 'admin',
-                                                        comments: ''
+                                                        comments: [],
+                                                        rejectedBy: null,
+                                                        rejectedAt: null,
+                                                        rejectedReason: ''
                                                     }
                                                 ],
                                                 proposalContent: '',
@@ -2201,8 +2320,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 }
                                             };
                                             const updatedProposals = [...(formData.proposals || []), newProposal];
-                                            setFormData({ ...formData, proposals: updatedProposals });
-                                            handleSave({ ...formData, proposals: updatedProposals }, true);
+                                            saveProposals(updatedProposals);
                                         }}
                                         className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                                     >
@@ -2219,141 +2337,426 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {formData.proposals.map((proposal, proposalIndex) => (
-                                            <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <div>
-                                                        <h4 className="font-semibold text-gray-900">{proposal.title}</h4>
-                                                        <div className="text-sm text-gray-600 mt-1">
-                                                            <i className="fas fa-calendar mr-1"></i>
-                                                            Created: {new Date(proposal.createdDate).toLocaleDateString()}
-                                                        </div>
-                                                    </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            if (confirm('Delete this proposal?')) {
-                                                                const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
-                                                                setFormData({ ...formData, proposals: updatedProposals });
-                                                                handleSave({ ...formData, proposals: updatedProposals }, true);
-                                                            }
-                                                        }}
-                                                        className="text-red-600 hover:text-red-700"
-                                                    >
-                                                        <i className="fas fa-trash"></i>
-                                                    </button>
-                                                </div>
-
-                                                {/* Workflow Stages */}
-                                                <div className="space-y-3">
-                                                    <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
-                                                    {proposal.stages.map((stage, stageIndex) => {
-                                                        const currentStage = proposal.stages[proposal.stages.findIndex(s => s.status === 'in-progress') || 0];
-                                                        const canApprove = 
-                                                            (stage.status === 'pending' || stage.status === 'in-progress') &&
-                                                            (stageIndex === 0 || proposal.stages[stageIndex - 1].status === 'approved');
-                                                        const statusColor = 
-                                                            stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
-                                                            stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
-                                                            'bg-gray-100 text-gray-600 border-gray-300';
-                                                        // Map department name to team style/icon similar to Teams module
-                                                        const teamKey = (stage.department || '').toLowerCase();
-                                                        const teamMetaMap = {
-                                                            'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
-                                                            'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
-                                                            'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
-                                                            'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
-                                                            'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
-                                                            'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
-                                                            'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
-                                                            'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
-                                                            'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
-                                                        };
-                                                        const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
-                                                        
-                                                        return (
-                                                            <>
-                                                                <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
-                                                                    <div className="flex justify-between items-start">
-                                                                        <div className="flex-1">
-                                                                            <div className="flex items-center gap-2 mb-1">
-                                                                                <span className="font-medium text-sm">{stageIndex + 1}.</span>
-                                                                                <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
-                                                                            </div>
-                                                                            <div className="text-xs ml-6">
-                                                                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
-                                                                                    <i className={`fas ${teamMeta.icon}`}></i>
-                                                                                    {stage.department}
-                                                                                </span>
-                                                                            </div>
-                                                                            {stage.comments && (
-                                                                                <div className="mt-2 p-2 bg-white rounded text-xs text-gray-700">
-                                                                                    <strong>Comments:</strong> {stage.comments}
-                                                                                </div>
-                                                                            )}
-                                                                            {stage.approvedBy && (
-                                                                                <div className="mt-2 text-[11px] text-gray-600">
-                                                                                    <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                        <div className="flex items-center gap-2">
-                                                                            {canApprove && (
-                                                                                <button
-                                                                                    type="button"
-                                                                                    onClick={() => {
-                                                                                        const comments = prompt('Enter comments (optional):');
-                                                                                        // Identify current user for audit trail
-                                                                                        let approver = 'Unknown';
-                                                                                        try {
-                                                                                            const u = (window.storage && (window.storage.getUserInfo?.() || window.storage.getUser?.())) || null;
-                                                                                            approver = (u && (u.name || u.email)) || 'Unknown';
-                                                                                        } catch (_) {}
-                                                                                        if (comments !== null) {
-                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
-                                                                                                if (idx === stageIndex) {
-                                                                                                    return { ...s, status: 'approved', comments, approvedBy: approver, approvedAt: new Date().toISOString() };
-                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
-                                                                                                    return { ...s, status: 'in-progress' };
-                                                                                                }
-                                                                                                return s;
-                                                                                            });
-                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
-                                                                                            );
-                                                                                            setFormData({ ...formData, proposals: updatedProposals });
-                                                                                            handleSave({ ...formData, proposals: updatedProposals }, true);
-                                                                                        }
-                                                                                    }}
-                                                                                    className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                                                                >
-                                                                                    Approve
-                                                                                </button>
-                                                                            )}
-                                                                            {stage.status === 'approved' && (
-                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
-                                                                                    <i className="fas fa-check mr-1"></i>Approved
-                                                                                </span>
-                                                                            )}
-                                                                            {stage.status === 'in-progress' && (
-                                                                                <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
-                                                                                    <i className="fas fa-clock mr-1"></i>In Progress
-                                                                                </span>
-                                                                            )}
-                                                                        </div>
+                                        {formData.proposals.map((proposal, proposalIndex) => {
+                                            const currentUser = window.storage?.getUserInfo?.() || window.storage?.getUser?.() || {};
+                                            const currentUserId = currentUser.id || currentUser.sub;
+                                            
+                                            return (
+                                                <div key={proposal.id} className="bg-white border border-gray-200 rounded-lg p-5">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div className="flex-1">
+                                                            {editingProposalName === proposal.id ? (
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={proposalNameInput}
+                                                                        onChange={(e) => setProposalNameInput(e.target.value)}
+                                                                        onBlur={() => {
+                                                                            if (proposalNameInput.trim()) {
+                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                    idx === proposalIndex ? { ...p, title: proposalNameInput.trim(), name: proposalNameInput.trim() } : p
+                                                                                );
+                                                                                saveProposals(updatedProposals);
+                                                                            }
+                                                                            setEditingProposalName(null);
+                                                                        }}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                e.target.blur();
+                                                                            }
+                                                                            if (e.key === 'Escape') {
+                                                                                setEditingProposalName(null);
+                                                                                setProposalNameInput(proposal.title || proposal.name || '');
+                                                                            }
+                                                                        }}
+                                                                        autoFocus
+                                                                        className="text-lg font-semibold text-gray-900 border-b-2 border-primary-500 px-2 py-1"
+                                                                    />
+                                                                </div>
+                                                            ) : (
+                                                                <div>
+                                                                    <h4 
+                                                                        className="font-semibold text-gray-900 cursor-pointer hover:text-primary-600"
+                                                                        onClick={() => {
+                                                                            setEditingProposalName(proposal.id);
+                                                                            setProposalNameInput(proposal.title || proposal.name || '');
+                                                                        }}
+                                                                        title="Click to edit name"
+                                                                    >
+                                                                        {proposal.title || proposal.name || 'Untitled Proposal'}
+                                                                        <i className="fas fa-edit ml-2 text-xs text-gray-400"></i>
+                                                                    </h4>
+                                                                    <div className="text-sm text-gray-600 mt-1">
+                                                                        <i className="fas fa-calendar mr-1"></i>
+                                                                        Created: {new Date(proposal.createdDate).toLocaleDateString()}
                                                                     </div>
                                                                 </div>
-                                                                {stageIndex < proposal.stages.length - 1 && (
-                                                                    <div className="flex justify-center -my-1">
-                                                                        <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
+                                                            )}
+                                                            
+                                                            {/* Working Document Link */}
+                                                            <div className="mt-3">
+                                                                <label className="block text-xs font-medium text-gray-700 mb-1">Working Document Link</label>
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={proposal.workingDocumentLink || ''}
+                                                                        onChange={(e) => {
+                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: e.target.value } : p
+                                                                            );
+                                                                            setFormData({ ...formData, proposals: updatedProposals });
+                                                                        }}
+                                                                        onBlur={() => {
+                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: proposal.workingDocumentLink || '' } : p
+                                                                            );
+                                                                            saveProposals(updatedProposals);
+                                                                        }}
+                                                                        placeholder="https://..."
+                                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                                    />
+                                                                    {proposal.workingDocumentLink && (
+                                                                        <a 
+                                                                            href={proposal.workingDocumentLink} 
+                                                                            target="_blank" 
+                                                                            rel="noopener noreferrer"
+                                                                            className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+                                                                        >
+                                                                            <i className="fas fa-external-link-alt mr-1"></i>
+                                                                            Open
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (confirm('Delete this proposal?')) {
+                                                                    const updatedProposals = formData.proposals.filter(p => p.id !== proposal.id);
+                                                                    saveProposals(updatedProposals);
+                                                                }
+                                                            }}
+                                                            className="text-red-600 hover:text-red-700"
+                                                        >
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Workflow Stages */}
+                                                    <div className="space-y-3">
+                                                        <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
+                                                        {proposal.stages.map((stage, stageIndex) => {
+                                                            const previousStage = stageIndex > 0 ? proposal.stages[stageIndex - 1] : null;
+                                                            const canApprove = 
+                                                                (stage.status === 'pending' || stage.status === 'in-progress') &&
+                                                                (stageIndex === 0 || previousStage?.status === 'approved') &&
+                                                                (stage.assigneeId === currentUserId || currentUser.role === 'admin' || !stage.assigneeId);
+                                                            const isAssigned = stage.assigneeId === currentUserId;
+                                                            const statusColor = 
+                                                                stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
+                                                                stage.status === 'rejected' ? 'bg-red-100 text-red-700 border-red-300' :
+                                                                stage.status === 'in-progress' ? 'bg-blue-100 text-blue-700 border-blue-300' :
+                                                                'bg-gray-100 text-gray-600 border-gray-300';
+                                                            const teamKey = (stage.department || '').toLowerCase();
+                                                            const teamMetaMap = {
+                                                                'business development': { icon: 'fa-rocket', colorClass: 'text-pink-700 bg-pink-100 border-pink-200' },
+                                                                'technical': { icon: 'fa-cogs', colorClass: 'text-blue-700 bg-blue-100 border-blue-200' },
+                                                                'data': { icon: 'fa-chart-line', colorClass: 'text-indigo-700 bg-indigo-100 border-indigo-200' },
+                                                                'support': { icon: 'fa-life-ring', colorClass: 'text-teal-700 bg-teal-100 border-teal-200' },
+                                                                'compliance': { icon: 'fa-shield-alt', colorClass: 'text-red-700 bg-red-100 border-red-200' },
+                                                                'operations': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                                'operations manager': { icon: 'fa-project-diagram', colorClass: 'text-purple-700 bg-purple-100 border-purple-200' },
+                                                                'commercial': { icon: 'fa-handshake', colorClass: 'text-orange-700 bg-orange-100 border-orange-200' },
+                                                                'ceo': { icon: 'fa-user-tie', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' }
+                                                            };
+                                                            const teamMeta = teamMetaMap[teamKey] || { icon: 'fa-users', colorClass: 'text-gray-700 bg-gray-100 border-gray-200' };
+                                                            const stageKey = `${proposalIndex}-${stageIndex}`;
+                                                            const showComments = showStageComments[stageKey] || false;
+                                                            
+                                                            return (
+                                                                <>
+                                                                    <div key={stageIndex} className={`border-2 rounded-lg p-3 ${statusColor}`}>
+                                                                        <div className="flex justify-between items-start">
+                                                                            <div className="flex-1">
+                                                                                <div className="flex items-center gap-2 mb-1">
+                                                                                    <span className="font-medium text-sm">{stageIndex + 1}.</span>
+                                                                                    <span className="font-medium text-sm">{(stage.name || '').replace(/\w\S*/g, (t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())}</span>
+                                                                                </div>
+                                                                                <div className="text-xs ml-6 mb-2">
+                                                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 border rounded-full ${teamMeta.colorClass}`}>
+                                                                                        <i className={`fas ${teamMeta.icon}`}></i>
+                                                                                        {stage.department}
+                                                                                    </span>
+                                                                                </div>
+                                                                                
+                                                                                {/* Assignee Selection */}
+                                                                                <div className="mb-2">
+                                                                                    {editingStageAssignee === stageKey ? (
+                                                                                        <select
+                                                                                            value={stage.assigneeId || ''}
+                                                                                            onChange={(e) => {
+                                                                                                const selectedUser = allUsers.find(u => u.id === e.target.value);
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                    idx === stageIndex ? { 
+                                                                                                        ...s, 
+                                                                                                        assigneeId: e.target.value || '',
+                                                                                                        assignee: selectedUser?.name || '',
+                                                                                                        assigneeEmail: selectedUser?.email || ''
+                                                                                                    } : s
+                                                                                                );
+                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                );
+                                                                                                setFormData({ ...formData, proposals: updatedProposals });
+                                                                                                setEditingStageAssignee(null);
+                                                                                                saveProposals(updatedProposals);
+                                                                                            }}
+                                                                                            onBlur={() => setEditingStageAssignee(null)}
+                                                                                            className="text-xs px-2 py-1 border border-gray-300 rounded"
+                                                                                            autoFocus
+                                                                                        >
+                                                                                            <option value="">Assign to...</option>
+                                                                                            {allUsers.filter(u => u.status === 'active').map(user => (
+                                                                                                <option key={user.id} value={user.id}>{user.name || user.email}</option>
+                                                                                            ))}
+                                                                                        </select>
+                                                                                    ) : (
+                                                                                        <div className="text-xs">
+                                                                                            <span className="text-gray-600">Assigned to: </span>
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={() => setEditingStageAssignee(stageKey)}
+                                                                                                className="text-primary-600 hover:text-primary-700 font-medium"
+                                                                                            >
+                                                                                                {stage.assignee || <span className="text-gray-400 italic">Unassigned</span>}
+                                                                                                <i className="fas fa-edit ml-1 text-xs"></i>
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                                
+                                                                                {/* Comments Section */}
+                                                                                {showComments && (
+                                                                                    <div className="mt-2 p-2 bg-white rounded border border-gray-200">
+                                                                                        <div className="text-xs font-medium text-gray-700 mb-2">Comments:</div>
+                                                                                        <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
+                                                                                            {Array.isArray(stage.comments) && stage.comments.length > 0 ? (
+                                                                                                stage.comments.map((comment, commentIdx) => (
+                                                                                                    <div key={commentIdx} className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                                                                                        <div className="font-medium text-gray-700">{comment.author || 'Unknown'}</div>
+                                                                                                        <div className="mt-1">{comment.text}</div>
+                                                                                                        <div className="text-[10px] text-gray-400 mt-1">
+                                                                                                            {new Date(comment.timestamp).toLocaleString()}
+                                                                                                        </div>
+                                                                                                    </div>
+                                                                                                ))
+                                                                                            ) : (
+                                                                                                <div className="text-xs text-gray-400 italic">No comments yet</div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                        <textarea
+                                                                                            value={stageCommentInput[stageKey] || ''}
+                                                                                            onChange={(e) => setStageCommentInput({ ...stageCommentInput, [stageKey]: e.target.value })}
+                                                                                            placeholder="Add a comment..."
+                                                                                            className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-1"
+                                                                                            rows="2"
+                                                                                        />
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => {
+                                                                                                if (stageCommentInput[stageKey]?.trim()) {
+                                                                                                    const newComment = {
+                                                                                                        id: Date.now(),
+                                                                                                        text: stageCommentInput[stageKey].trim(),
+                                                                                                        author: currentUser.name || currentUser.email || 'Unknown',
+                                                                                                        authorId: currentUserId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    };
+                                                                                                    const updatedComments = [...(Array.isArray(stage.comments) ? stage.comments : []), newComment];
+                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                        idx === stageIndex ? { ...s, comments: updatedComments } : s
+                                                                                                    );
+                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                    );
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                    saveProposals(updatedProposals);
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
+                                                                                        >
+                                                                                            Add Comment
+                                                                                        </button>
+                                                                                    </div>
+                                                                                )}
+                                                                                
+                                                                                {/* Status Messages */}
+                                                                                {stage.approvedBy && (
+                                                                                    <div className="mt-2 text-[11px] text-gray-600">
+                                                                                        <i className="fas fa-user-check mr-1"></i>Approved by {stage.approvedBy} on {new Date(stage.approvedAt).toLocaleDateString()}
+                                                                                    </div>
+                                                                                )}
+                                                                                {stage.rejectedBy && (
+                                                                                    <div className="mt-2 text-[11px] text-red-600">
+                                                                                        <i className="fas fa-times-circle mr-1"></i>Rejected by {stage.rejectedBy} on {new Date(stage.rejectedAt).toLocaleDateString()}
+                                                                                        {stage.rejectedReason && (
+                                                                                            <div className="mt-1 text-gray-600">Reason: {stage.rejectedReason}</div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2 flex-col">
+                                                                                {canApprove && (
+                                                                                    <>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                const commentText = stageCommentInput[stageKey] || '';
+                                                                                                let approver = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                const approverId = currentUserId;
+                                                                                                
+                                                                                                const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                if (commentText.trim()) {
+                                                                                                    updatedComments.push({
+                                                                                                        id: Date.now(),
+                                                                                                        text: commentText.trim(),
+                                                                                                        author: approver,
+                                                                                                        authorId: approverId,
+                                                                                                        timestamp: new Date().toISOString()
+                                                                                                    });
+                                                                                                }
+                                                                                                
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                    if (idx === stageIndex) {
+                                                                                                        return { 
+                                                                                                            ...s, 
+                                                                                                            status: 'approved', 
+                                                                                                            comments: updatedComments,
+                                                                                                            approvedBy: approver,
+                                                                                                            approvedAt: new Date().toISOString()
+                                                                                                        };
+                                                                                                    } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                        return { ...s, status: 'in-progress' };
+                                                                                                    }
+                                                                                                    return s;
+                                                                                                });
+                                                                                                
+                                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                    idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                );
+                                                                                                setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                setShowStageComments({ ...showStageComments, [stageKey]: false });
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify assigned users of next stage
+                                                                                                if (stageIndex + 1 < proposal.stages.length) {
+                                                                                                    const nextStage = updatedStages[stageIndex + 1];
+                                                                                                    if (nextStage.assigneeId) {
+                                                                                                        await sendNotification(
+                                                                                                            nextStage.assigneeId,
+                                                                                                            `Proposal Stage Ready: ${proposal.title || proposal.name}`,
+                                                                                                            `Stage "${nextStage.name}" is now ready for your review.`,
+                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                        );
+                                                                                                    }
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                        >
+                                                                                            <i className="fas fa-check mr-1"></i>Approve
+                                                                                        </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={async () => {
+                                                                                                const reason = prompt('Please provide a reason for rejection:');
+                                                                                                if (reason !== null) {
+                                                                                                    let rejector = currentUser.name || currentUser.email || 'Unknown';
+                                                                                                    const rejectorId = currentUserId;
+                                                                                                    
+                                                                                                    const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                                    const commentText = stageCommentInput[stageKey] || '';
+                                                                                                    if (commentText.trim()) {
+                                                                                                        updatedComments.push({
+                                                                                                            id: Date.now(),
+                                                                                                            text: commentText.trim(),
+                                                                                                            author: rejector,
+                                                                                                            authorId: rejectorId,
+                                                                                                            timestamp: new Date().toISOString()
+                                                                                                        });
+                                                                                                    }
+                                                                                                    
+                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                        idx === stageIndex ? { 
+                                                                                                            ...s, 
+                                                                                                            status: 'rejected',
+                                                                                                            comments: updatedComments,
+                                                                                                            rejectedBy: rejector,
+                                                                                                            rejectedAt: new Date().toISOString(),
+                                                                                                            rejectedReason: reason
+                                                                                                        } : s
+                                                                                                    );
+                                                                                                    
+                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                                    );
+                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                                    setShowStageComments({ ...showStageComments, [stageKey]: false });
+                                                                                                    await saveProposals(updatedProposals);
+                                                                                                }
+                                                                                            }}
+                                                                                            className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                                                        >
+                                                                                            <i className="fas fa-times mr-1"></i>Reject
+                                                                                        </button>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
+                                                                                            className="px-3 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                                                                        >
+                                                                                            <i className="fas fa-comment mr-1"></i>{showComments ? 'Hide' : 'Show'} Comments
+                                                                                        </button>
+                                                                                    </>
+                                                                                )}
+                                                                                {stage.status === 'approved' && (
+                                                                                    <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                        <i className="fas fa-check mr-1"></i>Approved
+                                                                                    </span>
+                                                                                )}
+                                                                                {stage.status === 'rejected' && (
+                                                                                    <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
+                                                                                        <i className="fas fa-times mr-1"></i>Rejected
+                                                                                    </span>
+                                                                                )}
+                                                                                {stage.status === 'in-progress' && (
+                                                                                    <span className="px-2 py-1 text-xs bg-blue-200 text-blue-800 rounded">
+                                                                                        <i className="fas fa-clock mr-1"></i>In Progress
+                                                                                    </span>
+                                                                                )}
+                                                                                {stage.status === 'pending' && !canApprove && (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
+                                                                                        className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                                                                                    >
+                                                                                        <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     </div>
-                                                                )}
-                                                            </>
-                                                        );
-                                                    })}
+                                                                    {stageIndex < proposal.stages.length - 1 && (
+                                                                        <div className="flex justify-center -my-1">
+                                                                            <i className="fas fa-arrow-down text-gray-400 text-xs"></i>
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            );
+                                                        })}
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -2797,7 +3200,48 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDIA Stage'),
                                         React.createElement('select', {
                                             value: formData.stage,
-                                            onChange: (e) => setFormData({...formData, stage: e.target.value}),
+                                            onChange: async (e) => {
+                                                const newStage = e.target.value;
+                                                
+                                                // Update state and get the updated formData
+                                                setFormData(prev => {
+                                                    const updated = {...prev, stage: newStage};
+                                                    
+                                                    // Auto-save immediately with the updated data
+                                                    if (lead && onSave) {
+                                                        // Use setTimeout to ensure state is updated
+                                                        setTimeout(async () => {
+                                                            try {
+                                                                // Get the latest formData from ref (updated by useEffect)
+                                                                const latest = {...formDataRef.current, stage: newStage};
+                                                                
+                                                                // Explicitly ensure stage is included
+                                                                latest.stage = newStage;
+                                                                
+                                                                // Save this as the last saved state
+                                                                lastSavedDataRef.current = latest;
+                                                                isAutoSavingRef.current = true;
+                                                                
+                                                                // Save to API - ensure it's awaited
+                                                                await onSave(latest, true);
+                                                                
+                                                                console.log('✅ Stage saved successfully:', newStage);
+                                                                
+                                                                // Clear the flag after a longer delay to allow API response to propagate
+                                                                setTimeout(() => {
+                                                                    isAutoSavingRef.current = false;
+                                                                }, 3000);
+                                                            } catch (error) {
+                                                                console.error('❌ Error saving stage:', error);
+                                                                isAutoSavingRef.current = false;
+                                                                alert('Failed to save stage change. Please try again.');
+                                                            }
+                                                        }, 100); // Small delay to ensure state update is processed
+                                                    }
+                                                    
+                                                    return updated;
+                                                });
+                                            },
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         },
                                             React.createElement('option', { value: 'Awareness' }, 'Awareness - Lead knows about us'),

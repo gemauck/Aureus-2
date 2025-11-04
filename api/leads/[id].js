@@ -91,6 +91,7 @@ async function handler(req, res) {
 
       console.log('🔍 Updating lead with data:', updateData)
       console.log('🔍 Update contains status:', updateData.status)
+      console.log('🔍 Update contains stage:', updateData.stage, '(type:', typeof updateData.stage, ')')
       console.log('🔍 Update contains contacts:', updateData.contacts ? `${typeof updateData.contacts} (length: ${updateData.contacts.length})` : 'not included')
       console.log('🔍 Update contains followUps:', updateData.followUps ? `${typeof updateData.followUps} (length: ${updateData.followUps.length})` : 'not included')
       console.log('🔍 Update contains notes:', updateData.notes !== undefined ? `string (length: ${updateData.notes.length})` : 'not included')
@@ -121,6 +122,7 @@ async function handler(req, res) {
         })
         console.log('✅ Lead updated successfully:', lead.id)
         console.log('✅ New status:', lead.status, '(was:', existing.status, ')')
+        console.log('✅ New stage:', lead.stage, '(was:', existing.stage, ')')
         console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
         
         // If name changed, trigger RSS feed update (async, don't wait)
