@@ -143,17 +143,111 @@ async function handler(req, res) {
 
     if (req.method === 'DELETE') {
         try {
+            console.log('🗑️ DELETE request received:', { url: req.url, userId })
+            
             if (!req.user || req.user.role !== 'admin') {
+                console.log('❌ Unauthorized: user role:', req.user?.role)
                 return unauthorized(res, 'Admin access required')
             }
 
             // Prevent deleting own account
             const currentUserId = req.user.sub || req.user.id
             if (currentUserId === userId) {
+                console.log('❌ Cannot delete own account')
                 return badRequest(res, 'Cannot delete your own account')
             }
 
-            // Delete user
+            // Check if user exists
+            const userExists = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, email: true, name: true }
+            })
+
+            if (!userExists) {
+                console.log('❌ User not found:', userId)
+                return notFound(res, 'User not found')
+            }
+
+            console.log('🗑️ Attempting to delete user:', { id: userId, email: userExists.email, name: userExists.name })
+
+            // Delete related records first to avoid foreign key constraints
+            // Delete in order: dependent records first, then user
+            try {
+                // Delete memberships
+                await prisma.membership.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted memberships')
+
+                // Delete password resets
+                await prisma.passwordReset.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted password resets')
+
+                // Delete sessions
+                await prisma.session.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted sessions')
+
+                // Delete two factor
+                await prisma.twoFactor.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted two factor')
+
+                // Delete security events
+                await prisma.securityEvent.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted security events')
+
+                // Delete password history
+                await prisma.passwordHistory.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted password history')
+
+                // Delete starred clients
+                await prisma.starredClient.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted starred clients')
+
+                // Delete notification settings
+                await prisma.notificationSetting.deleteMany({
+                    where: { userId: userId }
+                })
+                console.log('✅ Deleted notification settings')
+
+                // Set owned clients to null (or delete if preferred)
+                await prisma.client.updateMany({
+                    where: { ownerId: userId },
+                    data: { ownerId: null }
+                })
+                console.log('✅ Removed ownership from clients')
+
+                // Set owned projects to null
+                await prisma.project.updateMany({
+                    where: { ownerId: userId },
+                    data: { ownerId: null }
+                })
+                console.log('✅ Removed ownership from projects')
+
+                // Set assigned tasks to empty string (or null if schema allows)
+                await prisma.task.updateMany({
+                    where: { assignedTo: userId },
+                    data: { assignedTo: '' }
+                })
+                console.log('✅ Removed assignment from tasks')
+
+            } catch (relationError) {
+                console.error('⚠️ Error deleting related records:', relationError.message)
+                // Continue with user deletion even if some relations fail
+            }
+
+            // Now delete the user
             await prisma.user.delete({
                 where: { id: userId }
             })
@@ -163,7 +257,22 @@ async function handler(req, res) {
             return ok(res, { success: true, message: 'User deleted successfully' })
 
         } catch (error) {
-            console.error('Delete user error:', error)
+            console.error('❌ Delete user error:', {
+                error: error.message,
+                code: error.code,
+                meta: error.meta,
+                userId: userId,
+                stack: error.stack
+            })
+            
+            // Provide more specific error messages
+            if (error.code === 'P2003') {
+                return serverError(res, 'Cannot delete user: User is referenced by other records. Please remove all references first.')
+            }
+            if (error.code === 'P2025') {
+                return notFound(res, 'User not found')
+            }
+            
             return serverError(res, 'Failed to delete user', error.message)
         }
     }
