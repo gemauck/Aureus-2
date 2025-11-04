@@ -46,6 +46,22 @@ else
 fi
 
 echo ""
+echo "📦 Installing dependencies..."
+npm install
+
+echo ""
+echo "🏗️  Building JSX files..."
+npm run build:jsx || echo "⚠️ JSX build had warnings but continuing..."
+
+echo ""
+echo "🎨 Building CSS..."
+npm run build:css || echo "⚠️ CSS build had warnings but continuing..."
+
+echo ""
+echo "🔧 Generating Prisma client..."
+npx prisma generate || echo "⚠️ Prisma generate had warnings but continuing..."
+
+echo ""
 echo "🔄 Restarting application..."
 
 # Try PM2 first
