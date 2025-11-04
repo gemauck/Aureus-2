@@ -495,12 +495,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
 
     // Update note content from editor
     const updateNoteContent = useCallback(() => {
-        // Don't update during initialization to prevent overwriting loaded content
-        if (isInitializingRef.current) {
-            console.log('⚠️ Skipping updateNoteContent during initialization');
-            return;
-        }
-        
+        // Always allow updates - user typing should always work
         if (editorRef.current) {
             const html = editorRef.current.innerHTML;
             setCurrentNoteHtml(html);
@@ -822,36 +817,37 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const saveTimeoutRef = useRef(null);
     const isInitializingRef = useRef(true);
     
-    // Mark initialization as complete after editor content is loaded
+    // Mark initialization as complete after editor content is loaded (faster)
     useEffect(() => {
         if (!showListView && currentDate) {
             isInitializingRef.current = true;
-            console.log('🔒 Initialization started - auto-save disabled');
+            window._dailyNotesInitTime = Date.now();
+            console.log('🔒 Initialization started - auto-save will enable quickly');
             
-            // Wait for editor to be ready and content to be set
+            // Wait for editor to be ready and content to be set (reduced delay)
             const checkEditorReady = () => {
-                if (editorRef.current && currentNoteHtml) {
-                    // Editor is ready and we have content - wait a bit more for sync
+                if (editorRef.current) {
+                    // Editor is ready - enable auto-save quickly (500ms)
                     setTimeout(() => {
                         isInitializingRef.current = false;
                         console.log('✅ Initialization complete - editor ready, auto-save enabled');
-                    }, 1500);
+                    }, 500); // Reduced from 1500ms to 500ms
                 } else {
-                    // Fallback: disable initialization after 3 seconds
+                    // Fallback: disable initialization after 1 second (much faster)
                     setTimeout(() => {
                         isInitializingRef.current = false;
                         console.log('✅ Initialization timeout - auto-save enabled');
-                    }, 3000);
+                    }, 1000); // Reduced from 3000ms to 1000ms
                 }
             };
             
-            const timer = setTimeout(checkEditorReady, 500);
+            const timer = setTimeout(checkEditorReady, 200); // Reduced from 500ms
             return () => clearTimeout(timer);
         } else {
             // If switching to list view, reset initialization flag
             isInitializingRef.current = false;
         }
-    }, [currentDate, showListView, currentNoteHtml]);
+    }, [currentDate, showListView]);
     
     // Auto-save: Watch for editor content changes directly with interval + MutationObserver
     useEffect(() => {
@@ -892,8 +888,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Set up MutationObserver to watch for editor changes
         const observer = new MutationObserver(() => {
-            // Debounce: wait a bit after mutation before checking
-            setTimeout(checkAndSave, 1000);
+            // More aggressive: check immediately on mutation (with minimal debounce)
+            setTimeout(checkAndSave, 800); // Reduced from 1000ms to 800ms
         });
         
         // Observe the editor for changes
@@ -904,16 +900,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             attributes: false
         });
         
-        // Also set up interval as backup (every 3 seconds)
+        // Also set up interval as backup (every 2 seconds for faster saves)
         const autoSaveInterval = setInterval(() => {
-            // Don't check during the first 2 seconds (initialization period)
+            // Reduced initialization wait time - only skip first 1 second
             const initTime = window._dailyNotesInitTime || 0;
-            if (Date.now() - initTime < 2000) {
+            if (Date.now() - initTime < 1000) {
                 return;
             }
             
             checkAndSave();
-        }, 3000);
+        }, 2000); // Reduced from 3000ms to 2000ms for more frequent checks
         
         return () => {
             observer.disconnect();
@@ -927,9 +923,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Skip during the first 2 seconds (initialization period)
+        // Reduced initialization wait - only skip first 1 second
         const initTime = window._dailyNotesInitTime || 0;
-        if (Date.now() - initTime < 2000) {
+        if (Date.now() - initTime < 1000) {
             return;
         }
         
@@ -947,7 +943,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Set new timeout for auto-save (2 seconds after last change for debouncing)
+        // Set new timeout for auto-save (1.5 seconds after last change for faster saves)
         saveTimeoutRef.current = setTimeout(() => {
             console.log('💾 Auto-saving note (state change backup)...');
             saveNote().catch(err => console.error('Auto-save error:', err));
@@ -962,11 +958,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     
     // Save drawing when handwriting is disabled or when drawing stops
     useEffect(() => {
-        // Don't auto-save during initialization
-        if (isInitializingRef.current) {
-            return;
-        }
-        
+        // Allow auto-save immediately - user actions should always save
         if (!showHandwriting && canvasRef.current) {
             // If we just disabled handwriting, check if there was drawing
             const canvas = canvasRef.current;
@@ -999,11 +991,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     // Save when drawing stops (after a delay)
     const drawingTimeoutRef = useRef(null);
     useEffect(() => {
-        // Don't auto-save drawing during initialization
-        if (isInitializingRef.current) {
-            return;
-        }
-        
+        // Allow auto-save immediately - user drawing should always save
         if (!isDrawing && showHandwriting && canvasRef.current) {
             // Drawing just stopped - check if there's actual drawing content
             const canvas = canvasRef.current;
@@ -1173,9 +1161,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         updateNoteContent();
     };
 
-    // Handle editor input - always update content, don't block during initialization
+    // Handle editor input - always update content and trigger auto-save immediately
     const handleEditorInput = () => {
-        // Force update even during initialization if user is typing
+        // Force update immediately - user typing should always work
         if (editorRef.current) {
             const html = editorRef.current.innerHTML;
             setCurrentNoteHtml(html);
@@ -1184,8 +1172,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             setCurrentNote(text);
             console.log('📝 Editor input detected, content length:', html.length);
             
-            // Trigger immediate auto-save after a short delay (debounced)
-            // This ensures auto-save happens even if MutationObserver doesn't catch it
+            // Trigger auto-save more aggressively (1 second debounce for faster saves)
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
@@ -1193,11 +1180,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 if (editorRef.current) {
                     const editorContent = editorRef.current.innerHTML || '';
                     if (editorContent && editorContent.trim().length > 0) {
-                        console.log('💾 Auto-saving note (from input handler)...');
+                        console.log('💾 Auto-saving note (from input handler)...', { contentLength: editorContent.length });
                         saveNote().catch(err => console.error('Auto-save error from input handler:', err));
                     }
                 }
-            }, 2000);
+            }, 1000); // Reduced from 2000ms to 1000ms for faster auto-save
         }
     };
 
