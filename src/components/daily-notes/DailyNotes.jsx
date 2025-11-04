@@ -108,6 +108,22 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     };
 
+    // Set editing date flag when editing starts
+    useEffect(() => {
+        if (!showListView && currentDate) {
+            const dateString = formatDateString(currentDate);
+            sessionStorage.setItem('calendar_editing_date', dateString);
+            console.log('📝 Set editing date flag:', dateString);
+        } else {
+            sessionStorage.removeItem('calendar_editing_date');
+        }
+        
+        return () => {
+            // Clear on unmount
+            sessionStorage.removeItem('calendar_editing_date');
+        };
+    }, [currentDate, showListView]);
+    
     // Load notes
     useEffect(() => {
         const loadNotes = async () => {

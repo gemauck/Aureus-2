@@ -85,6 +85,29 @@ const Calendar = () => {
                                 console.log('📅 Note dates found:', Object.keys(serverNotes));
                             }
                             
+                            // CRITICAL: Don't overwrite if DailyNotes component is actively editing
+                            // Check if there's a note being edited in DailyNotes
+                            const editingDate = sessionStorage.getItem('calendar_editing_date');
+                            const isSaving = sessionStorage.getItem('calendar_is_saving') === 'true';
+                            
+                            if (editingDate && (isSaving || document.querySelector('.daily-notes-container'))) {
+                                console.log('⚠️ Skipping Calendar refresh - note being edited for date:', editingDate);
+                                // Keep existing notes but merge other dates from server
+                                // Read current notes from localStorage (most up-to-date source)
+                                const currentNotesStr = localStorage.getItem(notesKey);
+                                const currentNotes = currentNotesStr ? JSON.parse(currentNotesStr) : {};
+                                const mergedNotes = { ...currentNotes };
+                                // Only update dates that aren't being edited
+                                Object.keys(serverNotes).forEach(date => {
+                                    if (date !== editingDate) {
+                                        mergedNotes[date] = serverNotes[date];
+                                    }
+                                });
+                                setNotes(mergedNotes);
+                                localStorage.setItem(notesKey, JSON.stringify(mergedNotes));
+                                return true;
+                            }
+                            
                             // SERVER DATA ALWAYS TAKES PRIORITY - replace entirely, not merge
                             // This ensures cross-device synchronization
                             setNotes(serverNotes);
