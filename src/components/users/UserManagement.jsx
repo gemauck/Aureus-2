@@ -741,11 +741,40 @@ const UserManagement = () => {
                 </div>
                 <div className="flex gap-3">
                     <button
-                        onClick={() => setShowAddUserModal(true)}
+                        onClick={() => {
+                            setNewUser({
+                                name: '',
+                                email: '',
+                                role: 'user',
+                                department: '',
+                                phone: '',
+                                status: 'active',
+                                accessibleProjectIds: []
+                            });
+                            setShowAddUserModal(true);
+                        }}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors flex items-center"
                     >
                         <i className="fas fa-user-plus mr-2"></i>
                         Add User
+                    </button>
+                    <button
+                        onClick={() => {
+                            setNewUser({
+                                name: '',
+                                email: '',
+                                role: 'guest',
+                                department: '',
+                                phone: '',
+                                status: 'active',
+                                accessibleProjectIds: []
+                            });
+                            setShowAddUserModal(true);
+                        }}
+                        className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors flex items-center"
+                    >
+                        <i className="fas fa-user-friends mr-2"></i>
+                        Add Guest
                     </button>
                     <button
                         onClick={() => setShowInviteModal(true)}
