@@ -32,9 +32,11 @@ async function handler(req, res) {
     })
   } catch (error) {
     console.error('Heartbeat error:', error)
-    // Check if it's a database connection error - comprehensive list
+    // Check if it's a database connection error - comprehensive list including PrismaClientInitializationError
+    const errorName = error.name || ''
     const errorMessage = error.message || String(error)
     const isConnectionError = 
+      errorName === 'PrismaClientInitializationError' ||
       errorMessage.includes("Can't reach database server") ||
       errorMessage.includes("Can't reach database") ||
       (errorMessage.includes("connection") && (errorMessage.includes("timeout") || errorMessage.includes("refused") || errorMessage.includes("unreachable"))) ||

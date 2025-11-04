@@ -107,11 +107,14 @@ async function handler(req, res) {
             console.error('❌ Get users error:', error)
             console.error('❌ Get users error stack:', error.stack)
             
-            // Check if it's a connection error - comprehensive list of Prisma error codes
+            // Check if it's a connection error - comprehensive list including PrismaClientInitializationError
+            const errorName = error.name || ''
+            const errorMessage = error.message || ''
             const isConnectionError = 
-              error.message?.includes("Can't reach database server") ||
-              error.message?.includes("Can't reach database") ||
-              (error.message?.includes("connection") && (error.message?.includes("timeout") || error.message?.includes("refused") || error.message?.includes("unreachable"))) ||
+              errorName === 'PrismaClientInitializationError' ||
+              errorMessage.includes("Can't reach database server") ||
+              errorMessage.includes("Can't reach database") ||
+              (errorMessage.includes("connection") && (errorMessage.includes("timeout") || errorMessage.includes("refused") || errorMessage.includes("unreachable"))) ||
               error.code === 'P1001' || // Can't reach database server
               error.code === 'P1002' || // The database server is not reachable
               error.code === 'P1008' || // Operations timed out

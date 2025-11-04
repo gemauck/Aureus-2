@@ -8,6 +8,17 @@ export function isConnectionError(error) {
   
   const message = error.message?.toLowerCase() || ''
   const code = error.code || ''
+  const name = error.name || ''
+  
+  // Check for PrismaClientInitializationError (common when DB is unreachable)
+  if (name === 'PrismaClientInitializationError' || name.includes('Prisma')) {
+    if (message.includes("can't reach database server") ||
+        message.includes("can't reach database") ||
+        message.includes("connection") ||
+        message.includes("unreachable")) {
+      return true
+    }
+  }
   
   return (
     message.includes("can't reach database server") ||
