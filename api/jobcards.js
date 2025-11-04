@@ -306,11 +306,27 @@ async function handler(req, res) {
     // DELETE (DELETE /api/jobcards/:id)
     if (req.method === 'DELETE' && id) {
       try {
-        await prisma.jobCard.delete({ where: { id } })
-        console.log('✅ Deleted job card:', id)
-        return ok(res, { deleted: true })
+        console.log('🗑️ DELETE request received for job card:', id);
+        console.log('🗑️ Request method:', req.method);
+        console.log('🗑️ Request URL:', req.url);
+        
+        // Check if job card exists first
+        const existing = await prisma.jobCard.findUnique({ where: { id } });
+        if (!existing) {
+          console.log('⚠️ Job card not found:', id);
+          return notFound(res, 'Job card not found');
+        }
+        
+        console.log('🗑️ Found job card, deleting:', id);
+        await prisma.jobCard.delete({ where: { id } });
+        console.log('✅ Deleted job card:', id);
+        
+        // Return simple deletion confirmation
+        return ok(res, { deleted: true, id });
       } catch (error) {
-        console.error('❌ Failed to delete job card:', error)
+        console.error('❌ Failed to delete job card:', error);
+        console.error('❌ Error code:', error.code);
+        console.error('❌ Error message:', error.message);
         if (error.code === 'P2025') {
           return notFound(res, 'Job card not found')
         }

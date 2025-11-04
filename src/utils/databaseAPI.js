@@ -1273,7 +1273,17 @@ const DatabaseAPI = {
         const response = await this.makeRequest(`/jobcards/${id}`, {
             method: 'DELETE'
         });
-        console.log('✅ Job card deleted from database');
+        console.log('📥 Delete response:', response);
+        console.log('📥 Delete response keys:', Object.keys(response || {}));
+        console.log('📥 Delete response data:', response?.data);
+        
+        // Verify deletion was successful
+        if (response?.data?.deleted === true || response?.deleted === true) {
+            console.log('✅ Job card deleted from database');
+        } else {
+            console.warn('⚠️ Delete response does not indicate success:', response);
+        }
+        
         // Clear cache for job cards list and individual job card to ensure fresh data
         this._responseCache.delete('GET:/jobcards');
         this._responseCache.delete(`GET:/jobcards/${id}`);
