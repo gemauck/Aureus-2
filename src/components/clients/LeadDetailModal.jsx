@@ -53,6 +53,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
+    const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
     
     // Initialize formDataRef after formData is declared
     useEffect(() => {
@@ -70,7 +71,12 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
         // Don't reset formData if we're in the middle of auto-saving OR saving proposals OR creating a proposal
-        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposal) {
+        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+            console.log('🚫 useEffect blocked: saving in progress', {
+                isAutoSaving: isAutoSavingRef.current,
+                isSavingProposals: isSavingProposalsRef.current,
+                isCreatingProposal: isCreatingProposalRef.current
+            });
             return;
         }
         
@@ -268,7 +274,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const [editingStageAssignee, setEditingStageAssignee] = useState(null);
     const [showStageComments, setShowStageComments] = useState({});
     const [stageCommentInput, setStageCommentInput] = useState({});
-    const [isCreatingProposal, setIsCreatingProposal] = useState(false); // Prevent duplicate proposal creation
+    const [isCreatingProposal, setIsCreatingProposal] = useState(false); // UI state for button disabled state
     const lastSaveTimeoutRef = useRef(null); // Debounce saves
     
     // Load users for assignment
@@ -315,15 +321,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         isSavingProposalsRef.current = true;
         lastSavedDataRef.current = updatedFormData;
         
+        console.log('💾 Saving proposals:', {
+            count: updatedProposals.length,
+            ids: updatedProposals.map(p => p.id),
+            isCreatingProposal: isCreatingProposalRef.current
+        });
+        
         // Debounce the actual save to prevent rapid repeated saves
         lastSaveTimeoutRef.current = setTimeout(async () => {
             if (onSave) {
                 try {
                     await onSave(updatedFormData, true);
+                    console.log('✅ Proposals saved successfully');
                     // Keep the flag set briefly to prevent immediate reset
                     setTimeout(() => {
                         isSavingProposalsRef.current = false;
-                    }, 1000); // Increased to 1 second for better stability
+                        console.log('🔓 Save guard released');
+                    }, 2000); // Increased to 2 seconds for better stability
                 } catch (error) {
                     console.error('Error saving proposals:', error);
                     isSavingProposalsRef.current = false;
@@ -331,7 +345,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             } else {
                 isSavingProposalsRef.current = false;
             }
-        }, 300); // Debounce saves by 300ms
+        }, 500); // Increased debounce to 500ms
     };
     
     // Helper function to send notifications
@@ -2256,11 +2270,19 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <h3 className="text-lg font-semibold text-gray-900">Proposals</h3>
                                     <button
                                         type="button"
-                                        disabled={isCreatingProposal}
+                                        disabled={isCreatingProposal || isCreatingProposalRef.current}
                                         onClick={() => {
-                                            if (isCreatingProposal) return; // Prevent double-clicks
+                                            // Use ref check for immediate guard (before state updates)
+                                            if (isCreatingProposalRef.current || isCreatingProposal) {
+                                                console.warn('⚠️ Proposal creation already in progress, ignoring click');
+                                                return;
+                                            }
                                             
+                                            // Set both ref (immediate) and state (for UI)
+                                            isCreatingProposalRef.current = true;
                                             setIsCreatingProposal(true);
+                                            
+                                            console.log('🆕 Creating new proposal...');
                                             
                                             // Generate a stable ID that won't change on re-renders
                                             const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -2413,26 +2435,30 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     proposalId,
                                                     existingCount: existingProposals.length
                                                 });
+                                                isCreatingProposalRef.current = false;
                                                 setIsCreatingProposal(false);
                                                 return;
                                             }
                                             
+                                            console.log('✅ Adding proposal to state:', proposalId);
                                             const updatedProposals = [...existingProposals, newProposal];
                                             saveProposals(updatedProposals);
                                             
-                                            // Reset flag after a delay
+                                            // Reset flags after a delay (longer to ensure save completes)
                                             setTimeout(() => {
+                                                isCreatingProposalRef.current = false;
                                                 setIsCreatingProposal(false);
-                                            }, 1000);
+                                                console.log('🔓 Proposal creation guard released');
+                                            }, 2000);
                                         }}
                                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-                                            isCreatingProposal 
+                                            (isCreatingProposal || isCreatingProposalRef.current)
                                                 ? 'bg-gray-400 text-white cursor-not-allowed' 
                                                 : 'bg-primary-600 text-white hover:bg-primary-700'
                                         }`}
                                     >
                                         <i className="fas fa-plus mr-2"></i>
-                                        {isCreatingProposal ? 'Creating...' : 'Create New Proposal'}
+                                        {(isCreatingProposal || isCreatingProposalRef.current) ? 'Creating...' : 'Create New Proposal'}
                                     </button>
                                 </div>
 
