@@ -382,7 +382,7 @@ const DashboardLive = () => {
         return () => {
             window.LiveDataSync.unsubscribe(subscriptionId);
         };
-    }, [calculateStats]);
+    }, []); // Removed calculateStats dependency - stats are calculated inline
 
     // Wait for Calendar to be available and force re-render when found
     React.useEffect(() => {
