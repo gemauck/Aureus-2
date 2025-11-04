@@ -10,7 +10,7 @@
 // - Clients selectable from clients list
 // - Sites selectable per client
 
-const { useState, useEffect, useCallback, useRef } = React;
+const { useState, useEffect, useCallback, useRef, memo } = React;
 const { useAuth } = window;
 
 const JobCards = ({ clients: clientsProp, users: usersProp }) => {
@@ -2881,6 +2881,9 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
   );
 };
 
+// Memoize component to prevent unnecessary re-renders
+const JobCardsMemo = memo(JobCards);
+
 // Make available globally
-window.JobCards = JobCards;
+window.JobCards = JobCardsMemo;
 

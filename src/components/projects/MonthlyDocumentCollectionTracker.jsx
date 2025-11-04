@@ -1678,6 +1678,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                     >
                                                         <i className="fas fa-edit text-xs"></i>
                                                     </button>
+                                                    <button
+                                                        onClick={() => handleDeleteSection(section.id)}
+                                                        className="text-gray-600 hover:text-red-600 p-1"
+                                                        title="Delete Section"
+                                                    >
+                                                        <i className="fas fa-trash text-xs"></i>
+                                                    </button>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1685,8 +1692,18 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                         {/* Document Rows */}
                                         {section.documents.length === 0 ? (
                                             <tr>
-                                                <td colSpan={14} className="px-8 py-4 text-center text-gray-400 text-xs">
-                                                    No documents/data in this section
+                                                <td colSpan={14} className="px-8 py-4 text-center text-gray-400">
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <i className="fas fa-file-alt text-2xl opacity-50"></i>
+                                                        <p className="text-xs">No documents/data in this section</p>
+                                                        <button
+                                                            onClick={() => handleAddDocument(section.id)}
+                                                            className="px-3 py-1.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-xs font-medium flex items-center gap-1.5"
+                                                        >
+                                                            <i className="fas fa-plus"></i>
+                                                            Add Document/Data
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ) : (
@@ -1713,6 +1730,13 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                                                                 title="Edit"
                                                             >
                                                                 <i className="fas fa-edit text-xs"></i>
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteDocument(section.id, document.id)}
+                                                                className="text-gray-600 hover:text-red-600 p-1"
+                                                                title="Delete"
+                                                            >
+                                                                <i className="fas fa-trash text-xs"></i>
                                                             </button>
                                                         </div>
                                                     </td>

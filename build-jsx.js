@@ -109,10 +109,10 @@ try {
       '.js': 'js'
     },
     target: ['es2020'],
-    minify: false, // Keep readable for debugging
+    minify: process.env.NODE_ENV === 'production', // Minify in production for smaller bundles
     sourcemap: false,
     define: {
-      'process.env.NODE_ENV': '"production"'
+      'process.env.NODE_ENV': `"${process.env.NODE_ENV || 'production'}"`
     }
   });
 

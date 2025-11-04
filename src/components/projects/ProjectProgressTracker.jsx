@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, memo } = React;
 const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
@@ -896,9 +896,12 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     );
 };
 
+// Memoize component to prevent unnecessary re-renders
+const ProjectProgressTrackerMemo = memo(ProjectProgressTracker);
+
 // Register globally
 try {
-    window.ProjectProgressTracker = ProjectProgressTracker;
+    window.ProjectProgressTracker = ProjectProgressTrackerMemo;
     console.log('✅ ProjectProgressTracker registered successfully');
 } catch (error) {
     console.error('❌ Failed to register ProjectProgressTracker:', error);

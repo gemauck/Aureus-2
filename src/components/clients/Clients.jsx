@@ -1693,9 +1693,10 @@ const Clients = React.memo(() => {
     // Filter clients - explicitly exclude leads and records without proper type
     // Use multiple checks to ensure leads never appear in clients list
     const filteredClients = clients.filter(client => {
-        // STRICT: Only include if type is explicitly 'client'
-        if (client.type !== 'client') {
-            return false; // Exclude leads, null types, undefined, or any other value
+        // Include clients with type='client' OR null/undefined (legacy clients without type field)
+        // This matches the logic in loadClients() which includes legacy clients
+        if (client.type !== 'client' && client.type !== null && client.type !== undefined) {
+            return false; // Exclude leads or any other type value
         }
         
         // Additional safeguard: exclude records with status='Potential' (always a lead)

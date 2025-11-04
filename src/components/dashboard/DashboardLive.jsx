@@ -3,6 +3,43 @@
 const { useState, useEffect, useCallback } = React;
 const SectionCommentWidget = window.SectionCommentWidget;
 
+// Helper function to calculate dashboard stats - defined before component to avoid TDZ issues
+const calculateStats = (clients, leads, projects, timeEntries) => {
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    
+    const thisMonthEntries = (timeEntries || []).filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= thisMonthStart;
+    });
+    const lastMonthEntries = (timeEntries || []).filter(entry => {
+        const entryDate = new Date(entry.date);
+        return entryDate >= lastMonthStart && entryDate < thisMonthStart;
+    });
+    
+    const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+    const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
+    
+    const clientsArray = Array.isArray(clients) ? clients : [];
+    const leadsArray = Array.isArray(leads) ? leads : [];
+    const projectsArray = Array.isArray(projects) ? projects : [];
+    
+    const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
+    const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
+    
+    return {
+        totalClients: clientsArray.length,
+        totalLeads: leadsArray.length,
+        totalProjects: projectsArray.length,
+        activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
+        hoursThisMonth: hoursThisMonth,
+        hoursLastMonth: hoursLastMonth,
+        pipelineValue: pipelineValue,
+        weightedPipeline: weightedPipeline
+    };
+};
+
 const DashboardLive = () => {
     const [dashboardData, setDashboardData] = useState({
         clients: [],
@@ -63,35 +100,7 @@ const DashboardLive = () => {
             const cachedUsers = window.storage?.getUsers?.() || [];
 
             // Calculate stats from cached data immediately
-            const now = new Date();
-            const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-            const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-            const thisMonthEntries = cachedTimeEntries.filter(entry => {
-                const entryDate = new Date(entry.date);
-                return entryDate >= thisMonth;
-            });
-            const lastMonthEntries = cachedTimeEntries.filter(entry => {
-                const entryDate = new Date(entry.date);
-                return entryDate >= lastMonth && entryDate < thisMonth;
-            });
-
-            const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-            const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-
-            const pipelineValue = cachedLeads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-            const weightedPipeline = cachedLeads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
-
-            const cachedStats = {
-                totalClients: cachedClients.length,
-                totalLeads: cachedLeads.length,
-                totalProjects: cachedProjects.length,
-                activeProjects: cachedProjects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                hoursThisMonth: hoursThisMonth,
-                hoursLastMonth: hoursLastMonth,
-                pipelineValue: pipelineValue,
-                weightedPipeline: weightedPipeline
-            };
+            const cachedStats = calculateStats(cachedClients, cachedLeads, cachedProjects, cachedTimeEntries);
 
             // Set cached data immediately for instant display
             setDashboardData({
@@ -198,31 +207,7 @@ const DashboardLive = () => {
                              Array.isArray(usersRes?.data) ? usersRes.data : cachedUsers;
 
                 // Recalculate stats with fresh data
-                const freshThisMonthEntries = timeEntries.filter(entry => {
-                    const entryDate = new Date(entry.date);
-                    return entryDate >= thisMonth;
-                });
-                const freshLastMonthEntries = timeEntries.filter(entry => {
-                    const entryDate = new Date(entry.date);
-                    return entryDate >= lastMonth && entryDate < thisMonth;
-                });
-
-                const freshHoursThisMonth = freshThisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-                const freshHoursLastMonth = freshLastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-
-                const freshPipelineValue = leads.reduce((sum, lead) => sum + (lead.value || 0), 0);
-                const freshWeightedPipeline = leads.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
-
-                const freshStats = {
-                    totalClients: clients.length,
-                    totalLeads: leads.length,
-                    totalProjects: projects.length,
-                    activeProjects: projects.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                    hoursThisMonth: freshHoursThisMonth,
-                    hoursLastMonth: freshHoursLastMonth,
-                    pipelineValue: freshPipelineValue,
-                    weightedPipeline: freshWeightedPipeline
-                };
+                const freshStats = calculateStats(clients, leads, projects, timeEntries);
 
                 // Update with fresh data
                 setDashboardData({
@@ -275,44 +260,18 @@ const DashboardLive = () => {
                     }
                     
                     setDashboardData(prev => {
-                        // Calculate stats inline to avoid dependency issues
                         const newData = {
                             ...prev,
                             [message.dataType]: normalizedData
                         };
                         
-                        // Calculate stats
-                        const now = new Date();
-                        const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-                        const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                        const timeEntriesArray = Array.isArray(newData.timeEntries) ? newData.timeEntries : [];
-                        const thisMonthEntries = timeEntriesArray.filter(entry => {
-                            const entryDate = new Date(entry.date);
-                            return entryDate >= thisMonth;
-                        });
-                        const lastMonthEntries = timeEntriesArray.filter(entry => {
-                            const entryDate = new Date(entry.date);
-                            return entryDate >= lastMonth && entryDate < thisMonth;
-                        });
-                        const hoursThisMonth = thisMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-                        const hoursLastMonth = lastMonthEntries.reduce((sum, entry) => sum + (entry.hours || 0), 0);
-                        
-                        const clientsArray = Array.isArray(newData.clients) ? newData.clients : [];
-                        const leadsArray = Array.isArray(newData.leads) ? newData.leads : [];
-                        const projectsArray = Array.isArray(newData.projects) ? newData.projects : [];
-                        const pipelineValue = leadsArray.reduce((sum, lead) => sum + (lead.value || 0), 0);
-                        const weightedPipeline = leadsArray.reduce((sum, lead) => sum + ((lead.value || 0) * (lead.probability || 0) / 100), 0);
-                        
-                        const stats = {
-                            totalClients: clientsArray.length,
-                            totalLeads: leadsArray.length,
-                            totalProjects: projectsArray.length,
-                            activeProjects: projectsArray.filter(p => p.status === 'Active' || p.status === 'In Progress').length,
-                            hoursThisMonth: hoursThisMonth,
-                            hoursLastMonth: hoursLastMonth,
-                            pipelineValue: pipelineValue,
-                            weightedPipeline: weightedPipeline
-                        };
+                        // Calculate stats using helper function
+                        const stats = calculateStats(
+                            newData.clients,
+                            newData.leads,
+                            newData.projects,
+                            newData.timeEntries
+                        );
                         
                         return {
                             ...newData,
@@ -342,7 +301,7 @@ const DashboardLive = () => {
         return () => {
             window.LiveDataSync.unsubscribe(subscriptionId);
         };
-    }, []); // Removed calculateStats dependency - stats are calculated inline
+    }, []); // calculateStats is defined at module level, no dependency needed
 
     // Wait for Calendar to be available and force re-render when found
     React.useEffect(() => {

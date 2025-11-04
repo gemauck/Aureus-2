@@ -417,12 +417,15 @@ app.all('/api/contacts/client/:clientId/:contactId?', async (req, res, next) => 
 // Explicit mapping for manufacturing endpoints (inventory, boms, production-orders, stock-movements, suppliers)
 app.all('/api/manufacturing/:resource/:id?', async (req, res, next) => {
   try {
-    console.log('🏭 Manufacturing API:', {
-      method: req.method,
-      url: req.url,
-      params: req.params,
-      resource: req.params.resource
-    })
+    // Only log in development to reduce production overhead
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🏭 Manufacturing API:', {
+        method: req.method,
+        url: req.url,
+        params: req.params,
+        resource: req.params.resource
+      })
+    }
     const handler = await loadHandler(path.join(apiDir, 'manufacturing.js'))
     if (!handler) {
       console.error('❌ Manufacturing handler not found')
@@ -685,7 +688,13 @@ app.use(express.static(rootDir, {
       res.setHeader('Cache-Control', 'public, max-age=2592000, immutable') // 30 days
     } else if (path.endsWith('.html')) {
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      res.setHeader('Cache-Control', 'no-cache')
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate')
+    } else if (path.match(/\.(png|jpg|jpeg|gif|svg|webp|ico)$/i)) {
+      // Images: cache for 1 year
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    } else if (path.match(/\.(woff|woff2|ttf|eot)$/i)) {
+      // Fonts: cache for 1 year
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
     }
     
     // Do NOT set Content-Length manually here.
