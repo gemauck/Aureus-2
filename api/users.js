@@ -255,6 +255,16 @@ async function handler(req, res) {
     }
 
     if (req.method === 'DELETE') {
+        // If DELETE request has an ID in the URL path (e.g., /api/users/:id),
+        // let the dynamic route handler at api/users/[id].js handle it
+        const urlPath = req.url.split('?')[0].split('#')[0]
+        const pathParts = urlPath.split('/').filter(Boolean)
+        // If path is /api/users/:id, skip this handler
+        if (pathParts.length >= 3 && pathParts[0] === 'api' && pathParts[1] === 'users' && pathParts[2] !== 'invite' && pathParts[2] !== 'invitation-details' && pathParts[2] !== 'accept-invitation' && pathParts[2] !== 'change-password') {
+            // This should be handled by api/users/[id].js
+            return badRequest(res, 'Use DELETE /api/users/:id endpoint')
+        }
+        
         try {
             // Check if user is admin (req.user is set by authRequired)
             if (!req.user || req.user.role !== 'admin') {
