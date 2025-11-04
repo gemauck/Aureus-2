@@ -394,6 +394,11 @@ const MainLayout = () => {
             }
         }
         
+        // Guest users can only see Projects
+        if (userRole === 'guest') {
+            return allMenuItems.filter(item => item.id === 'projects');
+        }
+        
         const filtered = allMenuItems.filter(item => {
             if (item.adminOnly) {
                 // Strict admin-only access - no fallbacks
@@ -418,13 +423,23 @@ const MainLayout = () => {
     }, [user?.role]);
 
     // Redirect non-admin users away from admin-only pages
+    // Redirect guest users away from non-project pages
     React.useEffect(() => {
+        const userRole = user?.role?.toLowerCase();
+        
+        // Redirect non-admin users away from admin-only pages
         if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
             console.warn(`Access denied: ${currentPage} page requires admin role`);
             navigateToPage('dashboard');
         }
+        
+        // Redirect guest users away from non-project pages
+        if (userRole === 'guest' && currentPage !== 'projects') {
+            console.warn(`Access denied: Guest users can only access Projects`);
+            navigateToPage('projects');
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [currentPage, isAdmin]);
+    }, [currentPage, isAdmin, user?.role]);
 
     // Memoize the render function to prevent unnecessary re-renders
     const renderPage = React.useMemo(() => {
@@ -513,7 +528,7 @@ const MainLayout = () => {
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Sidebar - Always visible at ALL screen sizes (including 300px, 772px, etc.) - responsive width */}
             <div className={`
-                ${isMobile && !sidebarOpen ? 'w-0 overflow-hidden' : sidebarOpen ? 'w-48 sm:w-56 md:w-64 lg:w-48' : 'w-16 lg:w-16'} 
+                ${isMobile && !sidebarOpen ? 'hidden' : sidebarOpen ? 'w-64 lg:w-48' : 'w-16 lg:w-16'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
                 relative z-40
@@ -521,20 +536,20 @@ const MainLayout = () => {
                 ${isMobile && !sidebarOpen ? '' : 'min-w-[64px]'}
             `}
             style={{ 
-                display: 'flex', 
+                display: isMobile && !sidebarOpen ? 'none' : 'flex', 
                 position: isMobile && sidebarOpen ? 'fixed' : 'relative', 
                 height: '100vh', 
                 left: 0, 
                 top: 0,
                 zIndex: isMobile && sidebarOpen ? 40 : 'auto',
                 ...(isMobile && sidebarOpen ? { 
-                    maxWidth: 'calc(100vw - 64px)',
-                    width: 'calc(100vw - 64px)'
+                    maxWidth: '280px',
+                    width: '280px'
                 } : {})
             }}
             >
                 {/* Logo - Always show "Abcotronics" text ONLY in sidebar */}
-                <div className={`h-14 flex items-center ${(!sidebarOpen && !isMobile) ? 'justify-center' : 'justify-between'} px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                <div className={`h-14 flex items-center ${(!sidebarOpen && !isMobile) ? 'justify-center' : 'justify-between'} px-2 sm:px-3 border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`} style={{ borderWidth: '1px' }}>
                     {/* Always show "Abcotronics" text - adjust size based on sidebar state - ONLY in sidebar, never in header */}
                     {((sidebarOpen && !isMobile) || (sidebarOpen && isMobile)) && (
                         <div className="flex-1 flex justify-center min-w-0">
@@ -586,11 +601,12 @@ const MainLayout = () => {
                                 }}
                                 className={`w-full flex items-center ${showText ? 'px-3 py-3 lg:px-2 lg:py-1.5' : 'px-2 py-3 lg:py-1.5 justify-center'} transition-colors text-base lg:text-sm touch-target ${
                                     currentPage === item.id 
-                                        ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600 dark:bg-primary-900 dark:text-primary-200' 
+                                        ? 'bg-primary-50 text-primary-600 border-r border-primary-600 dark:bg-primary-900 dark:text-primary-200' 
                                         : isDark 
                                             ? 'text-gray-200 hover:bg-gray-700 hover:text-white' 
                                             : 'text-gray-700 hover:bg-gray-50'
                                 }`}
+                                style={currentPage === item.id ? { borderRightWidth: '2px' } : {}}
                                 title={!showText ? item.label : ''}
                             >
                                 <i className={`fas ${item.icon} ${showText ? 'mr-3 lg:mr-2' : ''} w-4 lg:w-3 text-base lg:text-sm`}></i>
@@ -601,7 +617,7 @@ const MainLayout = () => {
                 </nav>
 
                 {/* User Profile */}
-                <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} p-3 lg:p-2`}>
+                <div className={`border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} p-3 lg:p-2`} style={{ borderWidth: '1px' }}>
                     <div className={`flex items-center ${(!sidebarOpen && !isMobile) ? 'justify-center' : ''}`}>
                         <div className="w-8 h-8 lg:w-6 lg:h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-sm lg:text-xs">
                             {user?.name?.charAt(0) || 'U'}

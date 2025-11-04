@@ -23,6 +23,7 @@ async function handler(req, res) {
                     name: true,
                     role: true,
                     permissions: true,
+                    accessibleProjectIds: true,
                     status: true,
                     createdAt: true,
                     lastLoginAt: true,
@@ -48,7 +49,22 @@ async function handler(req, res) {
             })
 
         } catch (error) {
-            console.error('Get users error:', error)
+            console.error('❌ Get users error:', {
+              message: error.message,
+              code: error.code,
+              name: error.name
+            })
+            
+            // Check if it's a connection error
+            const isConnectionError = error.message?.includes("Can't reach database server") ||
+                                     error.code === 'P1001' ||
+                                     error.code === 'ETIMEDOUT' ||
+                                     error.code === 'ECONNREFUSED'
+            
+            if (isConnectionError) {
+              console.error('🔌 Database connection issue detected - server may be unreachable')
+            }
+            
             return serverError(res, 'Failed to get users', error.message)
         }
     }
@@ -61,9 +77,9 @@ async function handler(req, res) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
-            const { name, email, role = 'user', department = '', phone = '', status = 'active' } = req.body || {}
+            const { name, email, role = 'user', department = '', phone = '', status = 'active', accessibleProjectIds = [] } = req.body || {}
             
-            console.log('📝 Creating user with data:', { name, email, role, department, phone, status });
+            console.log('📝 Creating user with data:', { name, email, role, department, phone, status, accessibleProjectIds });
             
             if (!name || !email) {
                 return badRequest(res, 'Name and email are required')
@@ -82,6 +98,20 @@ async function handler(req, res) {
             const passwordHash = await bcrypt.hash(tempPassword, 10)
             console.log('🔐 Password hashed successfully');
 
+            // Prepare accessibleProjectIds - ensure it's a JSON string
+            let accessibleProjectIdsJson = '[]';
+            if (Array.isArray(accessibleProjectIds)) {
+                accessibleProjectIdsJson = JSON.stringify(accessibleProjectIds);
+            } else if (typeof accessibleProjectIds === 'string') {
+                // Validate it's valid JSON
+                try {
+                    JSON.parse(accessibleProjectIds);
+                    accessibleProjectIdsJson = accessibleProjectIds;
+                } catch (e) {
+                    accessibleProjectIdsJson = '[]';
+                }
+            }
+
             const newUser = await prisma.user.create({
                 data: {
                     name,
@@ -91,6 +121,7 @@ async function handler(req, res) {
                     department,
                     phone,
                     status,
+                    accessibleProjectIds: accessibleProjectIdsJson,
                     mustChangePassword: true,
                     provider: 'local'
                 }
@@ -127,7 +158,7 @@ async function handler(req, res) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
-            const { userId, name, email, role, status, department, phone } = req.body || {}
+            const { userId, name, email, role, status, department, phone, accessibleProjectIds } = req.body || {}
             
             if (!userId) {
                 return badRequest(res, 'User ID is required')
@@ -147,15 +178,35 @@ async function handler(req, res) {
                 }
             }
 
+            // Prepare accessibleProjectIds - ensure it's a JSON string
+            let updateData = {
+                ...(name && { name }),
+                ...(email && { email }),
+                ...(role && { role }),
+                ...(status && { status }),
+            };
+            
+            // Handle accessibleProjectIds if provided
+            if (accessibleProjectIds !== undefined) {
+                if (Array.isArray(accessibleProjectIds)) {
+                    updateData.accessibleProjectIds = JSON.stringify(accessibleProjectIds);
+                } else if (typeof accessibleProjectIds === 'string') {
+                    // Validate it's valid JSON
+                    try {
+                        JSON.parse(accessibleProjectIds);
+                        updateData.accessibleProjectIds = accessibleProjectIds;
+                    } catch (e) {
+                        updateData.accessibleProjectIds = '[]';
+                    }
+                } else {
+                    updateData.accessibleProjectIds = '[]';
+                }
+            }
+
             // Update user
             const updatedUser = await prisma.user.update({
                 where: { id: userId },
-                data: {
-                    ...(name && { name }),
-                    ...(email && { email }),
-                    ...(role && { role }),
-                    ...(status && { status }),
-                }
+                data: updateData
             })
 
             return ok(res, { 

@@ -151,7 +151,25 @@ const AuthProvider = ({ children }) => {
                                 }
                             }
                         } catch (err) {
-                            console.warn('Me API failed or timed out:', err.message);
+                            // Handle "User not found" error - means token is valid but user doesn't exist (orphaned token)
+                            if (err.message && err.message.includes('User not found')) {
+                                console.warn('⚠️ User not found in database - clearing orphaned token');
+                                // Clear token and user data since user doesn't exist
+                                if (window.storage?.removeToken) window.storage.removeToken();
+                                if (window.storage?.removeUser) window.storage.removeUser();
+                                setUser(null);
+                                return; // Don't try to use stored user if API says user doesn't exist
+                            }
+                            
+                            // Only log if it's not a 401 (authentication) error - 401s are expected when token is invalid
+                            if (err.message && !err.message.includes('401') && !err.message.includes('Unauthorized')) {
+                                console.warn('Me API failed or timed out:', err.message);
+                            }
+                            // If we have a stored user and no user was loaded from API, ensure stored user is set
+                            // (storedUser was already set earlier, but this ensures it's still set if API fails)
+                            if (storedUser && !storage.getUser()) {
+                                setUser(storedUser);
+                            }
                         }
                     }
                 }

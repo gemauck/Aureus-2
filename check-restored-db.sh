@@ -2,7 +2,7 @@
 # Check contents of restored database
 
 DB_USER="doadmin"
-DB_PASSWORD="YOUR_PASSWORD_HERE"
+DB_PASSWORD="${DB_PASSWORD:-YOUR_PASSWORD_HERE}"
 DB_HOST="dbaas-db-6934625-nov-3-backup-do-user-28031752-0.e.db.ondigitalocean.com"
 DB_PORT="25060"
 DB_NAME="defaultdb"

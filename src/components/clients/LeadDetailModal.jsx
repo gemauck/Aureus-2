@@ -102,6 +102,30 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
+    // Refs for auto-scrolling comments
+    const commentsContainerRef = useRef(null);
+    const contentScrollableRef = useRef(null);
+    
+    // Auto-scroll to last comment when notes tab is opened
+    useEffect(() => {
+        if (activeTab === 'notes' && commentsContainerRef.current && formData.comments && Array.isArray(formData.comments) && formData.comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                // Scroll the parent scrollable container to show the last comment
+                if (contentScrollableRef.current) {
+                    // Find the last comment element
+                    const lastComment = commentsContainerRef.current?.lastElementChild;
+                    if (lastComment) {
+                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else if (contentScrollableRef.current) {
+                        // Fallback: scroll container to bottom
+                        contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
+                    }
+                }
+            }, 150);
+        }
+    }, [activeTab, formData.comments?.length]); // Re-scroll when tab changes or comments update
+    
     const [formData, setFormData] = useState(() => {
         // Parse JSON strings to arrays/objects if needed
         const parsedLead = lead ? {
@@ -1199,7 +1223,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6">
+                <div ref={contentScrollableRef} className="flex-1 overflow-y-auto p-6">
                     <form onSubmit={handleSubmit} className="space-y-6">
                         {/* Overview Tab */}
                         {activeTab === 'overview' && (
@@ -2462,7 +2486,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     ))}
                                 </div>
 
-                                <div className="space-y-2">
+                                <div ref={commentsContainerRef} className="space-y-2">
                                     {(!Array.isArray(formData.comments) || formData.comments.length === 0) ? (
                                         <div className="text-center py-8 text-gray-500 text-sm">
                                             <i className="fas fa-comment-alt text-3xl mb-2"></i>

@@ -2,7 +2,7 @@
 # Diagnose why data isn't showing on production site
 
 DB_HOST="dbaas-db-6934625-nov-3-backup-do-user-28031752-0.e.db.ondigitalocean.com"
-DB_PASS="YOUR_PASSWORD_HERE"
+DB_PASS="${DB_PASS:-YOUR_PASSWORD_HERE}"
 
 echo "🔍 DIAGNOSING DATA VISIBILITY ISSUE"
 echo "===================================="

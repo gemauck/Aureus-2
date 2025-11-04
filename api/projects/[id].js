@@ -29,6 +29,32 @@ async function handler(req, res) {
       try {
         const project = await prisma.project.findUnique({ where: { id } })
         if (!project) return notFound(res)
+        
+        // Check if user is guest and has access to this project
+        const userRole = req.user?.role?.toLowerCase();
+        if (userRole === 'guest') {
+          try {
+            // Parse accessibleProjectIds from user
+            let accessibleProjectIds = [];
+            if (req.user?.accessibleProjectIds) {
+              if (typeof req.user.accessibleProjectIds === 'string') {
+                accessibleProjectIds = JSON.parse(req.user.accessibleProjectIds);
+              } else if (Array.isArray(req.user.accessibleProjectIds)) {
+                accessibleProjectIds = req.user.accessibleProjectIds;
+              }
+            }
+            
+            // Check if project ID is in accessible projects
+            if (!accessibleProjectIds || !accessibleProjectIds.includes(project.id)) {
+              console.log('❌ Guest user does not have access to project:', project.id);
+              return notFound(res); // Return not found to hide project existence
+            }
+          } catch (parseError) {
+            console.error('❌ Error parsing accessibleProjectIds:', parseError);
+            return notFound(res);
+          }
+        }
+        
         console.log('✅ Project retrieved successfully:', project.id)
         return ok(res, { project })
       } catch (dbError) {

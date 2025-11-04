@@ -2,10 +2,66 @@
 // VERSION: Contact filter updated - removed "All Contacts" option
 // DEPLOYMENT FIX: Contact filter now only shows site-specific contacts
 // FIX: Added useRef to prevent form reset when user is editing
+// FIX: formData initialization moved to top to prevent TDZ errors
 const { useState, useEffect, useRef } = React;
 const GoogleCalendarSync = window.GoogleCalendarSync;
 
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
+    // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
+    // This prevents "Cannot access 'formData' before initialization" errors
+    const [formData, setFormData] = useState(() => {
+        // Parse JSON strings to arrays/objects if needed
+        const parsedClient = client ? {
+            ...client,
+            contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+            followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+            projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+            comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+            contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+            sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+            opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+            activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+            services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
+            billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            })
+        } : {
+            name: '',
+            type: 'client',
+            industry: '',
+            status: 'active',
+            stage: 'Awareness',
+            revenue: 0,
+            value: 0,
+            probability: 100,
+            contacts: [],
+            followUps: [],
+            projectIds: [],
+            comments: [],
+            contracts: [],
+            sites: [],
+            opportunities: [],
+            activityLog: [],
+            services: [],
+            billingTerms: {
+                paymentTerms: 'Net 30',
+                billingFrequency: 'Monthly',
+                currency: 'ZAR',
+                retainerAmount: 0,
+                taxExempt: false,
+                notes: ''
+            }
+        };
+        
+        return parsedClient;
+    });
+    
+    // Now initialize other state and refs AFTER formData
     const [activeTab, setActiveTab] = useState(initialTab);
     const [uploadingContract, setUploadingContract] = useState(false);
     
@@ -26,25 +82,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
     
-    // Auto-scroll to last comment when notes tab is opened
+    // Initialize formDataRef after formData is declared
     useEffect(() => {
-        if (activeTab === 'notes' && commentsContainerRef.current && formData.comments && formData.comments.length > 0) {
-            // Small delay to ensure DOM is ready
-            setTimeout(() => {
-                // Scroll the parent scrollable container to show the last comment
-                if (contentScrollableRef.current) {
-                    // Find the last comment element
-                    const lastComment = commentsContainerRef.current?.lastElementChild;
-                    if (lastComment) {
-                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
-                    } else if (contentScrollableRef.current) {
-                        // Fallback: scroll container to bottom
-                        contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
-                    }
-                }
-            }, 150);
-        }
-    }, [activeTab, formData.comments?.length]); // Re-scroll when tab changes or comments update
+        formDataRef.current = formData;
+    }, [formData]);
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -173,61 +214,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         }
     }, [client?.id, initialTab]); // Run when client ID or initialTab changes
-    const [formData, setFormData] = useState(() => {
-        // Parse JSON strings to arrays/objects if needed
-        const parsedClient = client ? {
-            ...client,
-            contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
-            followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
-            projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
-            comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
-            contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
-            sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-            opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-            activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-            services: typeof client.services === 'string' ? JSON.parse(client.services || '[]') : (client.services || []),
-            billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
-                paymentTerms: 'Net 30',
-                billingFrequency: 'Monthly',
-                currency: 'ZAR',
-                retainerAmount: 0,
-                taxExempt: false,
-                notes: ''
-            })
-        } : {
-            name: '',
-            industry: '',
-            status: 'Active',
-            address: '',
-            website: '',
-            notes: '',
-            contacts: [],
-            followUps: [],
-            projectIds: [],
-            comments: [],
-            contracts: [],
-            sites: [],
-            opportunities: [],
-            activityLog: [],
-            services: [],
-            billingTerms: {
-                paymentTerms: 'Net 30',
-                billingFrequency: 'Monthly',
-                currency: 'ZAR',
-                retainerAmount: 0,
-                taxExempt: false,
-                notes: ''
-            }
-        };
-        
-        formDataRef.current = parsedClient;
-        return parsedClient;
-    });
     
-    // Keep ref in sync with state
+    // Auto-scroll to last comment when notes tab is opened
     useEffect(() => {
-        formDataRef.current = formData;
-    }, [formData]);
+        // Defensive check: ensure formData is initialized before accessing it
+        if (!formData) return;
+        
+        if (activeTab === 'notes' && commentsContainerRef.current && formData && formData.comments && formData.comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                // Scroll the parent scrollable container to show the last comment
+                if (contentScrollableRef.current) {
+                    // Find the last comment element
+                    const lastComment = commentsContainerRef.current?.lastElementChild;
+                    if (lastComment) {
+                        lastComment.scrollIntoView({ behavior: 'smooth', block: 'end' });
+                    } else if (contentScrollableRef.current) {
+                        // Fallback: scroll container to bottom
+                        contentScrollableRef.current.scrollTop = contentScrollableRef.current.scrollHeight;
+                    }
+                }
+            }, 150);
+        }
+    }, [activeTab, formData]); // Use formData directly - it's already initialized at this point
+    
     const { isDark } = window.useTheme();
     
     // GPS coordinate parsing function
@@ -3642,7 +3652,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     );
 };
 
-// Make available globally
-window.ClientDetailModal = ClientDetailModal;
+// Make available globally with error handling wrapper
+try {
+    window.ClientDetailModal = ClientDetailModal;
+} catch (error) {
+    console.error('❌ Error registering ClientDetailModal:', error);
+    // Fallback: wrap in error boundary component
+    window.ClientDetailModal = ({ client, onClose, ...props }) => {
+        try {
+            return React.createElement(ClientDetailModal, { client, onClose, ...props });
+        } catch (err) {
+            console.error('❌ ClientDetailModal render error:', err);
+            return React.createElement('div', { 
+                className: 'p-4 bg-red-50 border border-red-200 rounded-lg' 
+            }, React.createElement('p', { className: 'text-red-800' }, 'Error loading client details. Please refresh the page.'));
+        }
+    };
+}
 // CONTACT FILTER: Only shows site-specific contacts - no "All Contacts" option
 // This ensures contacts are always properly linked to specific sites

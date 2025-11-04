@@ -45,6 +45,7 @@ async function handler(req, res) {
           name: true,
           role: true,
           // permissions: true, // Temporarily removed - will add back after fixing schema
+          accessibleProjectIds: true,
           provider: true,
           lastLoginAt: true,
           mustChangePassword: true,

@@ -416,16 +416,40 @@ const Calendar = () => {
     const handleDayClick = (day) => {
         if (day === null) return;
         
+        console.log('📅 Calendar: Day clicked, opening DailyNotes...');
         const dateString = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+        
+        // Check if DailyNotes is available
+        if (!window.DailyNotes) {
+            console.warn('⚠️ DailyNotes not loaded yet, will wait for it...');
+            // Force load DailyNotes by triggering lazy loader if available
+            if (window.triggerLazyLoad) {
+                window.triggerLazyLoad('DailyNotes');
+            }
+        }
+        
         setDailyNotesDate(date);
         setShowDailyNotes(true);
+        setDailyNotesLoaded(window.DailyNotes ? true : false);
     };
     
     // Handle opening daily notes list view
     const handleOpenDailyNotes = () => {
+        console.log('📝 Calendar: Opening Daily Notes list view...');
+        
+        // Check if DailyNotes is available
+        if (!window.DailyNotes) {
+            console.warn('⚠️ DailyNotes not loaded yet, will wait for it...');
+            // Force load DailyNotes by triggering lazy loader if available
+            if (window.triggerLazyLoad) {
+                window.triggerLazyLoad('DailyNotes');
+            }
+        }
+        
         setDailyNotesDate(null);
         setShowDailyNotes(true);
+        setDailyNotesLoaded(window.DailyNotes ? true : false);
     };
     
     // Format date string helper
@@ -451,45 +475,113 @@ const Calendar = () => {
         );
     };
     
+    // Wait for DailyNotes component to load (lazy loading)
+    const [dailyNotesLoaded, setDailyNotesLoaded] = useState(false);
+    
+    useEffect(() => {
+        if (showDailyNotes && !window.DailyNotes) {
+            // Manually load DailyNotes component if not already loaded
+            console.log('📥 Calendar: Loading DailyNotes component...');
+            const script = document.createElement('script');
+            script.src = './dist/src/components/daily-notes/DailyNotes.js';
+            script.async = true;
+            script.onload = () => {
+                console.log('✅ DailyNotes script loaded');
+                // Wait a bit for component to register
+                setTimeout(() => {
+                    if (window.DailyNotes) {
+                        console.log('✅ DailyNotes component registered');
+                        setDailyNotesLoaded(true);
+                    } else {
+                        console.error('❌ DailyNotes script loaded but component not registered');
+                    }
+                }, 100);
+            };
+            script.onerror = () => {
+                console.error('❌ Failed to load DailyNotes script');
+            };
+            document.body.appendChild(script);
+            
+            // Also wait for DailyNotes to load (check every 100ms for up to 5 seconds)
+            let attempts = 0;
+            const maxAttempts = 50;
+            const checkInterval = setInterval(() => {
+                attempts++;
+                if (window.DailyNotes) {
+                    console.log('✅ DailyNotes component loaded');
+                    setDailyNotesLoaded(true);
+                    clearInterval(checkInterval);
+                } else if (attempts >= maxAttempts) {
+                    console.error('❌ DailyNotes component failed to load after 5 seconds');
+                    clearInterval(checkInterval);
+                }
+            }, 100);
+            
+            return () => {
+                clearInterval(checkInterval);
+            };
+        } else if (showDailyNotes && window.DailyNotes) {
+            setDailyNotesLoaded(true);
+        }
+    }, [showDailyNotes]);
+    
     // Get DailyNotes component
-    const DailyNotes = window.DailyNotes || (() => null);
+    const DailyNotes = window.DailyNotes || (() => {
+        console.warn('⚠️ DailyNotes component not available yet');
+        return null;
+    });
     
     return (
         <>
             {/* Daily Notes Full-Page View */}
-            {showDailyNotes && DailyNotes && (
-                <DailyNotes 
-                    initialDate={dailyNotesDate}
-                    onClose={() => {
-                        setShowDailyNotes(false);
-                        setDailyNotesDate(null);
-                        // Reload notes after closing
-                        const loadNotes = async () => {
-                            try {
-                                const user = window.storage?.getUser?.();
-                                const userId = user?.id || user?.email || 'default';
-                                const token = window.storage?.getToken?.();
-                                if (token) {
-                                    const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
-                                        headers: { 
-                                            Authorization: `Bearer ${token}`,
-                                            'Cache-Control': 'no-cache'
-                                        },
-                                        credentials: 'include'
-                                    });
-                                    if (res.ok) {
-                                        const data = await res.json();
-                                        const serverNotes = data?.data?.notes || data?.notes || {};
-                                        setNotes(serverNotes);
+            {showDailyNotes && (
+                <>
+                    {dailyNotesLoaded && DailyNotes ? (
+                        <DailyNotes 
+                            initialDate={dailyNotesDate}
+                            onClose={() => {
+                                setShowDailyNotes(false);
+                                setDailyNotesDate(null);
+                                setDailyNotesLoaded(false);
+                                // Reload notes after closing
+                                const loadNotes = async () => {
+                                    try {
+                                        const user = window.storage?.getUser?.();
+                                        const userId = user?.id || user?.email || 'default';
+                                        const token = window.storage?.getToken?.();
+                                        if (token) {
+                                            const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                                                headers: { 
+                                                    Authorization: `Bearer ${token}`,
+                                                    'Cache-Control': 'no-cache'
+                                                },
+                                                credentials: 'include'
+                                            });
+                                            if (res.ok) {
+                                                const data = await res.json();
+                                                const serverNotes = data?.data?.notes || data?.notes || {};
+                                                setNotes(serverNotes);
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('Error reloading notes:', error);
                                     }
-                                }
-                            } catch (error) {
-                                console.error('Error reloading notes:', error);
-                            }
-                        };
-                        loadNotes();
-                    }}
-                />
+                                };
+                                loadNotes();
+                            }}
+                        />
+                    ) : (
+                        <div className={`fixed inset-0 z-50 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex items-center justify-center`}>
+                            <div className="text-center">
+                                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                                <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>Loading Daily Notes...</p>
+                                <p className={`text-sm mt-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    {window.DailyNotes ? 'Initializing...' : 'Loading component...'}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                </>
             )}
             
             {!showDailyNotes && (

@@ -6,6 +6,7 @@ import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { sendNotificationEmail } from './_lib/email.js'
 import { parseJsonBody } from './_lib/body.js'
+import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
     // JWT payload uses 'sub' for user ID, not 'id'
@@ -47,7 +48,7 @@ async function handler(req, res) {
                 unreadCount
             });
         } catch (error) {
-            console.error('Get notifications error:', error);
+            logDatabaseError(error, 'getting notifications');
             return serverError(res, 'Failed to get notifications', error.message);
         }
     }

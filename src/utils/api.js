@@ -81,7 +81,18 @@ async function request(path, options = {}) {
           }
         }
       }
-      throw new Error(data?.error?.message || data?.message || `Request failed with status ${res.status}`)
+      // Extract error details if available
+      const errorCode = data?.error?.code;
+      const errorMessage = data?.error?.message || data?.message;
+      const errorDetails = data?.error?.details;
+      
+      // Handle database connection errors with user-friendly messages
+      if (errorCode === 'DATABASE_CONNECTION_ERROR') {
+        console.error(`🔌 Database connection error on ${path}:`, errorDetails || errorMessage);
+        throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
+      }
+      
+      throw new Error(errorMessage || `Request failed with status ${res.status}`)
     }
 
     return data
@@ -167,7 +178,10 @@ const api = {
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam
-      console.warn('Heartbeat failed:', error.message)
+      // Don't log 401/500 errors as they're expected when auth is in flux
+      if (error.message && !error.message.includes('401') && !error.message.includes('500') && !error.message.includes('Failed to update')) {
+        console.warn('Heartbeat failed:', error.message)
+      }
       return null
     }
   },

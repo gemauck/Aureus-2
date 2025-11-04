@@ -32,13 +32,49 @@ const UserManagement = () => {
         role: 'user',
         department: '',
         phone: '',
-        status: 'active'
+        status: 'active',
+        accessibleProjectIds: []
     });
+    const [availableProjects, setAvailableProjects] = useState([]);
+    const [loadingProjects, setLoadingProjects] = useState(false);
     const { isDark } = window.useTheme();
 
     useEffect(() => {
         loadUsers();
     }, []);
+
+    // Load projects when role is guest
+    useEffect(() => {
+        const loadProjects = async () => {
+            if (newUser.role === 'guest' || editingUser?.role === 'guest') {
+                setLoadingProjects(true);
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (token && window.api && window.api.getProjects) {
+                        const response = await window.api.getProjects();
+                        let projects = [];
+                        if (response?.data?.projects) {
+                            projects = response.data.projects;
+                        } else if (response?.projects) {
+                            projects = response.projects;
+                        } else if (Array.isArray(response?.data)) {
+                            projects = response.data;
+                        } else if (Array.isArray(response)) {
+                            projects = response;
+                        }
+                        setAvailableProjects(projects);
+                    }
+                } catch (error) {
+                    console.error('Error loading projects:', error);
+                    setAvailableProjects([]);
+                } finally {
+                    setLoadingProjects(false);
+                }
+            }
+        };
+        
+        loadProjects();
+    }, [newUser.role, editingUser?.role]);
 
     const loadUsers = async () => {
         try {
@@ -1149,13 +1185,17 @@ const UserManagement = () => {
                                 </label>
                                 <select
                                     value={newUser.role}
-                                    onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+                                    onChange={(e) => setNewUser({...newUser, role: e.target.value, accessibleProjectIds: e.target.value === 'guest' ? [] : newUser.accessibleProjectIds})}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                 >
                                     <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
+                                    <option value="guest">Guest</option>
                                 </select>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                    Guest users can only view specified projects
+                                </p>
                             </div>
 
                             <div>
@@ -1197,6 +1237,67 @@ const UserManagement = () => {
                                     <option value="inactive">Inactive</option>
                                 </select>
                             </div>
+
+                            {/* Project Access for Guest Users */}
+                            {newUser.role === 'guest' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Accessible Projects
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                        Select which projects this guest user can view
+                                    </p>
+                                    {loadingProjects ? (
+                                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Loading projects...
+                                        </div>
+                                    ) : availableProjects.length === 0 ? (
+                                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                            No projects available. Create projects first before assigning guest access.
+                                        </div>
+                                    ) : (
+                                        <div className={`border ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-gray-50'} rounded-lg p-3 max-h-60 overflow-y-auto`}>
+                                            <div className="space-y-2">
+                                                {availableProjects.map(project => {
+                                                    const isSelected = newUser.accessibleProjectIds.includes(project.id);
+                                                    return (
+                                                        <label
+                                                            key={project.id}
+                                                            className={`flex items-center gap-2 p-2 rounded cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={isSelected}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setNewUser({
+                                                                            ...newUser,
+                                                                            accessibleProjectIds: [...newUser.accessibleProjectIds, project.id]
+                                                                        });
+                                                                    } else {
+                                                                        setNewUser({
+                                                                            ...newUser,
+                                                                            accessibleProjectIds: newUser.accessibleProjectIds.filter(id => id !== project.id)
+                                                                        });
+                                                                    }
+                                                                }}
+                                                                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                                            />
+                                                            <span className={`text-sm flex-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                                                {project.name}
+                                                                {project.clientName && (
+                                                                    <span className={`ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>({project.clientName})</span>
+                                                                )}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="flex gap-3 pt-4">
                                 <button
@@ -1336,13 +1437,27 @@ const UserManagement = () => {
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             const formData = new FormData(e.target);
+                            // Parse accessibleProjectIds if role is guest
+                            let accessibleProjectIds = [];
+                            if (formData.get('role') === 'guest') {
+                                const projectIdsInput = formData.get('accessibleProjectIds');
+                                if (projectIdsInput) {
+                                    try {
+                                        accessibleProjectIds = JSON.parse(projectIdsInput);
+                                    } catch (e) {
+                                        accessibleProjectIds = [];
+                                    }
+                                }
+                            }
+                            
                             const userData = {
                                 name: formData.get('name'),
                                 email: formData.get('email'),
                                 role: formData.get('role'),
                                 status: formData.get('status'),
                                 department: formData.get('department'),
-                                phone: formData.get('phone')
+                                phone: formData.get('phone'),
+                                accessibleProjectIds: formData.get('role') === 'guest' ? accessibleProjectIds : undefined
                             };
                             
                             const success = await handleEditUser(editingUser.id, userData);
@@ -1386,10 +1501,23 @@ const UserManagement = () => {
                                     defaultValue={editingUser.role || 'user'}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                     required
+                                    onChange={(e) => {
+                                        // Update accessibleProjectIds when role changes
+                                        if (e.target.value !== 'guest') {
+                                            const form = e.target.closest('form');
+                                            if (form) {
+                                                const hiddenInput = form.querySelector('input[name="accessibleProjectIds"]');
+                                                if (hiddenInput) {
+                                                    hiddenInput.value = '[]';
+                                                }
+                                            }
+                                        }
+                                    }}
                                 >
                                     <option value="user">User</option>
                                     <option value="manager">Manager</option>
                                     <option value="admin">Admin</option>
+                                    <option value="guest">Guest</option>
                                 </select>
                                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                                     Change the user's role to grant or revoke permissions
@@ -1434,6 +1562,111 @@ const UserManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                                 />
                             </div>
+
+                            {/* Project Access for Guest Users */}
+                            {editingUser?.role === 'guest' && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                        Accessible Projects
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                                        Select which projects this guest user can view
+                                    </p>
+                                    <input
+                                        type="hidden"
+                                        name="accessibleProjectIds"
+                                        value={JSON.stringify(
+                                            (() => {
+                                                // Parse existing accessibleProjectIds
+                                                let existingIds = [];
+                                                if (editingUser?.accessibleProjectIds) {
+                                                    if (typeof editingUser.accessibleProjectIds === 'string') {
+                                                        try {
+                                                            existingIds = JSON.parse(editingUser.accessibleProjectIds);
+                                                        } catch (e) {
+                                                            existingIds = [];
+                                                        }
+                                                    } else if (Array.isArray(editingUser.accessibleProjectIds)) {
+                                                        existingIds = editingUser.accessibleProjectIds;
+                                                    }
+                                                }
+                                                return existingIds;
+                                            })()
+                                        )}
+                                    />
+                                    {loadingProjects ? (
+                                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                            <i className="fas fa-spinner fa-spin mr-2"></i>
+                                            Loading projects...
+                                        </div>
+                                    ) : availableProjects.length === 0 ? (
+                                        <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
+                                            No projects available. Create projects first before assigning guest access.
+                                        </div>
+                                    ) : (
+                                        <div className={`border ${isDark ? 'border-gray-600 bg-gray-700' : 'border-gray-300 bg-gray-50'} rounded-lg p-3 max-h-60 overflow-y-auto`}>
+                                            <div className="space-y-2" id="edit-user-projects-list">
+                                                {availableProjects.map(project => {
+                                                    const existingIds = (() => {
+                                                        let ids = [];
+                                                        if (editingUser?.accessibleProjectIds) {
+                                                            if (typeof editingUser.accessibleProjectIds === 'string') {
+                                                                try {
+                                                                    ids = JSON.parse(editingUser.accessibleProjectIds);
+                                                                } catch (e) {
+                                                                    ids = [];
+                                                                }
+                                                            } else if (Array.isArray(editingUser.accessibleProjectIds)) {
+                                                                ids = editingUser.accessibleProjectIds;
+                                                            }
+                                                        }
+                                                        return ids;
+                                                    })();
+                                                    const isSelected = existingIds.includes(project.id);
+                                                    return (
+                                                        <label
+                                                            key={project.id}
+                                                            className={`flex items-center gap-2 p-2 rounded cursor-pointer ${isDark ? 'hover:bg-gray-600' : 'hover:bg-gray-100'}`}
+                                                        >
+                                                            <input
+                                                                type="checkbox"
+                                                                defaultChecked={isSelected}
+                                                                data-project-id={project.id}
+                                                                onChange={(e) => {
+                                                                    const hiddenInput = document.querySelector('input[name="accessibleProjectIds"]');
+                                                                    if (hiddenInput) {
+                                                                        let currentIds = [];
+                                                                        try {
+                                                                            currentIds = JSON.parse(hiddenInput.value);
+                                                                        } catch (e) {
+                                                                            currentIds = [];
+                                                                        }
+                                                                        if (e.target.checked) {
+                                                                            if (!currentIds.includes(project.id)) {
+                                                                                currentIds.push(project.id);
+                                                                            }
+                                                                        } else {
+                                                                            currentIds = currentIds.filter(id => id !== project.id);
+                                                                        }
+                                                                        hiddenInput.value = JSON.stringify(currentIds);
+                                                                    }
+                                                                }}
+                                                                className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
+                                                            />
+                                                            <span className={`text-sm flex-1 ${isDark ? 'text-gray-200' : 'text-gray-700'}`}>
+                                                                {project.name}
+                                                                {project.clientName && (
+                                                                    <span className={`ml-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>({project.clientName})</span>
+                                                                )}
+                                                            </span>
+                                                        </label>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             <div className="flex gap-3 mt-6">
                                 <button

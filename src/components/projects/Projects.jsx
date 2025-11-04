@@ -104,19 +104,28 @@ const Projects = () => {
 
                 console.log('🔄 Projects: Loading projects from database');
                 
-                // Wait for DatabaseAPI to be available (with timeout)
+                // Wait for DatabaseAPI to be available (with timeout - max 5 seconds)
                 let waitAttempts = 0;
-                while (!window.DatabaseAPI && waitAttempts < 50) {
+                const maxWaitAttempts = 50; // 5 seconds total (50 * 100ms)
+                
+                while (!window.DatabaseAPI && waitAttempts < maxWaitAttempts) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     waitAttempts++;
+                    
+                    // Log progress every 10 attempts (1 second)
+                    if (waitAttempts % 10 === 0) {
+                        console.log(`⏳ Projects: Waiting for DatabaseAPI... (${waitAttempts * 100}ms elapsed)`);
+                    }
                 }
                 
                 if (!window.DatabaseAPI) {
-                    console.error('❌ Projects: DatabaseAPI not available on window object after waiting');
+                    console.error('❌ Projects: DatabaseAPI not available on window object after waiting 5 seconds');
                     console.error('🔍 Available window properties:', Object.keys(window).filter(k => k.toLowerCase().includes('database') || k.toLowerCase().includes('api')));
+                    console.error('🔍 Checking if databaseAPI.js script is loaded:', document.querySelector('script[src*="databaseAPI"]'));
+                    
                     if (isMounted) {
                         setProjects([]);
-                        setLoadError('Database API not available. Please refresh the page.');
+                        setLoadError('Database API not available. The databaseAPI.js script may not have loaded. Please refresh the page.');
                         setIsLoading(false);
                     }
                     return;
@@ -125,27 +134,53 @@ const Projects = () => {
                 if (!window.DatabaseAPI.getProjects) {
                     console.error('❌ Projects: DatabaseAPI.getProjects method not available');
                     console.error('🔍 DatabaseAPI methods:', Object.keys(window.DatabaseAPI));
+                    console.error('🔍 DatabaseAPI type:', typeof window.DatabaseAPI);
+                    
                     if (isMounted) {
                         setProjects([]);
-                        setLoadError('Projects API method not available. Please refresh the page.');
+                        setLoadError('Projects API method not available. Please refresh the page. If the issue persists, check the browser console for errors.');
                         setIsLoading(false);
                     }
                     return;
                 }
                 
                 console.log('✅ DatabaseAPI.getProjects is available, making request...');
-                const response = await window.DatabaseAPI.getProjects();
-                console.log('📡 Raw response from database:', response);
-                console.log('📡 Response structure check:', {
-                    hasData: !!response?.data,
-                    hasProjects: !!response?.data?.projects,
-                    isProjectsArray: Array.isArray(response?.data?.projects),
-                    projectsLength: response?.data?.projects?.length || 0,
-                    dataKeys: response?.data ? Object.keys(response.data) : [],
-                    responseKeys: Object.keys(response || {}),
-                    responseType: typeof response,
-                    dataType: typeof response?.data
-                });
+                let response;
+                try {
+                    response = await window.DatabaseAPI.getProjects();
+                    
+                    // Validate response exists
+                    if (!response) {
+                        throw new Error('API returned null or undefined response');
+                    }
+                    
+                    // Check if response is an error response
+                    if (response.error) {
+                        const errorMsg = response.error.message || response.error || 'Unknown API error';
+                        throw new Error(`API returned error: ${errorMsg}`);
+                    }
+                    
+                    console.log('📡 Raw response from database:', response);
+                    console.log('📡 Response structure check:', {
+                        hasData: !!response?.data,
+                        hasProjects: !!response?.data?.projects,
+                        isProjectsArray: Array.isArray(response?.data?.projects),
+                        projectsLength: response?.data?.projects?.length || 0,
+                        dataKeys: response?.data ? Object.keys(response.data) : [],
+                        responseKeys: Object.keys(response || {}),
+                        responseType: typeof response,
+                        dataType: typeof response?.data,
+                        fullResponse: JSON.stringify(response).substring(0, 500)
+                    });
+                } catch (apiError) {
+                    console.error('❌ Projects: DatabaseAPI.getProjects threw an error:', apiError);
+                    console.error('❌ API Error details:', {
+                        message: apiError.message,
+                        stack: apiError.stack,
+                        name: apiError.name
+                    });
+                    throw apiError; // Re-throw to be caught by outer catch
+                }
                 
                 // Handle different response structures - try all possible formats
                 let apiProjects = [];
@@ -200,20 +235,34 @@ const Projects = () => {
                         console.log('✅ Found projects in nested structure, count:', apiProjects.length);
                     } else {
                         console.error('❌ Could not find projects array in response');
+                        console.error('❌ Full response structure:', JSON.stringify(response, null, 2).substring(0, 1000));
                         apiProjects = [];
+                        // If we can't find projects but response exists, this might be an error response
+                        if (response?.error) {
+                            throw new Error(response.error.message || response.error || 'Unknown error from API');
+                        }
                     }
                 }
                 
                 console.log('📡 Database returned projects:', apiProjects?.length || 0);
                 if (apiProjects.length > 0) {
                     console.log('📡 First project sample:', apiProjects[0]);
+                } else if (response && !response.error) {
+                    console.warn('⚠️ Projects: API returned empty array (no projects found)');
                 }
                 
                 // Normalize projects: map clientName to client for frontend compatibility
-                const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => ({
-                    ...p,
-                    client: p.clientName || p.client || ''
-                }));
+                const normalizedProjects = (Array.isArray(apiProjects) ? apiProjects : []).map(p => {
+                    try {
+                        return {
+                            ...p,
+                            client: p.clientName || p.client || ''
+                        };
+                    } catch (normalizeError) {
+                        console.error('❌ Error normalizing project:', p, normalizeError);
+                        return p; // Return original if normalization fails
+                    }
+                });
                 
                 console.log('📡 Normalized projects:', normalizedProjects?.length || 0);
                 

@@ -14,7 +14,7 @@ const Tools = () => {
     useEffect(() => {
         let timeoutId = null;
         let retryCount = 0;
-        const maxRetries = 100; // Stop after 10 seconds (100 * 100ms)
+        const maxRetries = 200; // Stop after 20 seconds (200 * 100ms)
         
         const checkComponents = () => {
             const components = {
@@ -23,6 +23,12 @@ const Tools = () => {
                 UnitConverter: window.UnitConverter,
                 TankSizeCalculator: window.TankSizeCalculator
             };
+            
+            // Log current status for debugging
+            const loadedCount = Object.values(components).filter(comp => comp !== undefined && comp !== null).length;
+            if (retryCount % 10 === 0) { // Log every second
+                console.log(`🔧 Tools: Checking components... (${loadedCount}/4 loaded, attempt ${retryCount})`);
+            }
             
             // Check if any component is missing
             const allLoaded = Object.values(components).every(comp => comp !== undefined && comp !== null);
@@ -34,8 +40,20 @@ const Tools = () => {
             } else {
                 // All components loaded or max retries reached
                 setToolComponents(components);
-                if (retryCount >= maxRetries) {
-                    console.warn('Some tool components failed to load after maximum retries');
+                if (allLoaded) {
+                    console.log('✅ Tools: All tool components loaded successfully!', {
+                        TankSizeCalculator: !!components.TankSizeCalculator,
+                        UnitConverter: !!components.UnitConverter,
+                        PDFToWordConverter: !!components.PDFToWordConverter,
+                        HandwritingToWord: !!components.HandwritingToWord
+                    });
+                } else {
+                    console.warn('⚠️ Tools: Some tool components failed to load after maximum retries', {
+                        TankSizeCalculator: !!components.TankSizeCalculator,
+                        UnitConverter: !!components.UnitConverter,
+                        PDFToWordConverter: !!components.PDFToWordConverter,
+                        HandwritingToWord: !!components.HandwritingToWord
+                    });
                 }
             }
         };
@@ -45,6 +63,13 @@ const Tools = () => {
         
         // Also listen for window load events
         window.addEventListener('load', checkComponents);
+        
+        // Also check when scripts are loaded
+        if (document.readyState === 'complete') {
+            checkComponents();
+        } else {
+            window.addEventListener('load', checkComponents);
+        }
         
         // Cleanup
         return () => {

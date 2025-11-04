@@ -7,7 +7,7 @@ echo ""
 
 # Restored DB
 RESTORED_HOST="dbaas-db-6934625-nov-3-backup-do-user-28031752-0.e.db.ondigitalocean.com"
-RESTORED_PASS="YOUR_PASSWORD_HERE"
+RESTORED_PASS="${RESTORED_PASS:-YOUR_PASSWORD_HERE}"
 
 # Current production (from server)
 echo "📡 Checking current production database..."

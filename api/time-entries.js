@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -30,7 +31,7 @@ async function handler(req, res) {
         console.log('✅ Time entries retrieved successfully:', timeEntries.length)
         return ok(res, timeEntries)
       } catch (dbError) {
-        console.error('❌ Database error listing time entries:', dbError)
+        logDatabaseError(dbError, 'listing time entries')
         return serverError(res, 'Failed to list time entries', dbError.message)
       }
     }

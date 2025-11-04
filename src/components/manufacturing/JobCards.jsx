@@ -100,8 +100,19 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             setJobCards([]);
           }
         } catch (error) {
-          console.error('❌ JobCards: Failed to sync from API:', error);
-          console.error('❌ Error details:', error.message, error.stack);
+          // Handle authentication errors gracefully
+          const isAuthError = error.message?.includes('401') || 
+                              error.message?.includes('Unauthorized') ||
+                              error.message?.includes('No authentication token');
+          
+          if (isAuthError) {
+            console.warn('⚠️ JobCards: Authentication error - will retry when user logs in');
+            // Don't clear cached data on auth errors - user might just need to refresh token
+          } else {
+            console.error('❌ JobCards: Failed to sync from API:', error);
+            console.error('❌ Error details:', error.message, error.stack);
+          }
+          
           // Still show cached data if available
           if (cached.length > 0) {
             console.log('📦 JobCards: Using cached data due to API error');
@@ -159,8 +170,18 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           cached = cached.map(jc => jc.id === card.id ? { ...jc, synced: true } : jc);
           localStorage.setItem('manufacturing_jobcards', JSON.stringify(cached));
         } catch (error) {
-          console.error(`❌ Failed to sync job card ${card.id}:`, error);
-          // Keep as unsynced for next attempt
+          // Handle authentication errors gracefully
+          const isAuthError = error.message?.includes('401') || 
+                              error.message?.includes('Unauthorized') ||
+                              error.message?.includes('No authentication token');
+          
+          if (isAuthError) {
+            console.warn(`⚠️ JobCards: Authentication error syncing job card ${card.id} - will retry when authenticated`);
+            // Keep as unsynced - will retry when user authenticates
+          } else {
+            console.error(`❌ Failed to sync job card ${card.id}:`, error);
+            // Keep as unsynced for next attempt
+          }
         }
       }
       
@@ -789,8 +810,17 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
             }
           }
         } catch (error) {
-          console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
-          // Card is already marked as unsynced, will be synced when back online
+          // Handle authentication errors gracefully
+          const isAuthError = error.message?.includes('401') || 
+                              error.message?.includes('Unauthorized') ||
+                              error.message?.includes('No authentication token');
+          
+          if (isAuthError) {
+            console.warn('⚠️ JobCards: Authentication error - job card saved offline, will sync when authenticated');
+          } else {
+            console.warn('⚠️ Failed to sync job card to API, saved offline:', error.message);
+          }
+          // Card is already marked as unsynced, will be synced when back online or authenticated
         }
       } else {
         console.log('📴 Offline mode: Job card saved locally, will sync when online');
@@ -817,9 +847,19 @@ const JobCards = ({ clients: clientsProp, users: usersProp }) => {
           await window.DatabaseAPI.deleteJobCard(id);
           console.log('✅ Job card deleted from database successfully');
         } catch (error) {
-          console.error('❌ Failed to delete from API:', error);
-          const errorMessage = error.message || 'Unknown error';
-          alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
+          // Handle authentication errors gracefully
+          const isAuthError = error.message?.includes('401') || 
+                              error.message?.includes('Unauthorized') ||
+                              error.message?.includes('No authentication token');
+          
+          if (isAuthError) {
+            console.warn('⚠️ JobCards: Authentication error during delete - please log in and try again');
+            alert('Authentication required. Please log in and try again.');
+          } else {
+            console.error('❌ Failed to delete from API:', error);
+            const errorMessage = error.message || 'Unknown error';
+            alert(`Failed to delete job card from server: ${errorMessage}. Please check your connection and try again.`);
+          }
           return; // Don't proceed with local deletion if API fails
         }
       } else if (isOnline && !window.DatabaseAPI?.deleteJobCard) {

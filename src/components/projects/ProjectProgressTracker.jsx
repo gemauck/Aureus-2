@@ -4,12 +4,14 @@ const storage = window.storage;
 
 // Main component - completely rebuilt for reliability
 const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
-    // Immediate logging to confirm function is called
-    console.log('🔍 ProjectProgressTracker: FUNCTION CALLED');
-    console.log('🔍 Props received:', props);
-    console.log('🔍 Props type:', typeof props);
-    console.log('🔍 React available:', typeof React !== 'undefined');
-    console.log('🔍 useState available:', typeof useState !== 'undefined');
+    // Reduced logging - only log on initial mount to reduce noise
+    const hasLoggedRef = useRef(false);
+    useEffect(() => {
+        if (!hasLoggedRef.current) {
+            console.log('🔍 ProjectProgressTracker: Component mounted');
+            hasLoggedRef.current = true;
+        }
+    }, []);
     
     // Check if this is being called
     if (!props) {

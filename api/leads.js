@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 // Helper function to parse JSON fields from database responses
 function parseClientJsonFields(client) {
@@ -202,18 +203,8 @@ async function handler(req, res) {
         
         return ok(res, { leads: parsedLeads })
       } catch (dbError) {
-        console.error('❌ Database error listing leads:', {
-          message: dbError.message,
-          name: dbError.name,
-          code: dbError.code,
-          meta: dbError.meta,
-          stack: dbError.stack
-        })
-        return serverError(res, 'Failed to list leads', {
-          error: dbError.message,
-          code: dbError.code,
-          name: dbError.name
-        })
+        logDatabaseError(dbError, 'listing leads')
+        return serverError(res, 'Failed to list leads', dbError.message || 'Unknown database error')
       }
     }
 

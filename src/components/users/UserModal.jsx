@@ -9,10 +9,13 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         role: 'user',
         department: '',
         status: 'Active',
-        customPermissions: []
+        customPermissions: [],
+        accessibleProjectIds: []
     });
 
     const [showPermissions, setShowPermissions] = useState(false);
+    const [availableProjects, setAvailableProjects] = useState([]);
+    const [loadingProjects, setLoadingProjects] = useState(false);
 
     // All available permissions
     const allPermissions = [
@@ -48,6 +51,20 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
 
     useEffect(() => {
         if (user) {
+            // Parse accessibleProjectIds if it's a string
+            let accessibleProjectIds = [];
+            if (user.accessibleProjectIds) {
+                if (typeof user.accessibleProjectIds === 'string') {
+                    try {
+                        accessibleProjectIds = JSON.parse(user.accessibleProjectIds);
+                    } catch (e) {
+                        accessibleProjectIds = [];
+                    }
+                } else if (Array.isArray(user.accessibleProjectIds)) {
+                    accessibleProjectIds = user.accessibleProjectIds;
+                }
+            }
+            
             setFormData({
                 name: user.name || '',
                 email: user.email || '',
@@ -55,10 +72,44 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                 role: user.role || 'user',
                 department: user.department || '',
                 status: user.status || 'Active',
-                customPermissions: user.customPermissions || []
+                customPermissions: user.customPermissions || [],
+                accessibleProjectIds: accessibleProjectIds
             });
         }
     }, [user]);
+
+    // Load projects when role is guest or when component mounts
+    useEffect(() => {
+        const loadProjects = async () => {
+            if (formData.role === 'guest') {
+                setLoadingProjects(true);
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (token && window.api && window.api.getProjects) {
+                        const response = await window.api.getProjects();
+                        let projects = [];
+                        if (response?.data?.projects) {
+                            projects = response.data.projects;
+                        } else if (response?.projects) {
+                            projects = response.projects;
+                        } else if (Array.isArray(response?.data)) {
+                            projects = response.data;
+                        } else if (Array.isArray(response)) {
+                            projects = response;
+                        }
+                        setAvailableProjects(projects);
+                    }
+                } catch (error) {
+                    console.error('Error loading projects:', error);
+                    setAvailableProjects([]);
+                } finally {
+                    setLoadingProjects(false);
+                }
+            }
+        };
+        
+        loadProjects();
+    }, [formData.role]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -237,6 +288,65 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                             </div>
                         </div>
                     </div>
+
+                    {/* Project Access (for Guest users) */}
+                    {formData.role === 'guest' && (
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-900 mb-2">Project Access</h3>
+                            <p className="text-xs text-gray-600 mb-3">
+                                Select which projects this guest user can view. Guest users can only access the Projects section.
+                            </p>
+                            {loadingProjects ? (
+                                <div className="text-center py-4 text-gray-500 text-xs">
+                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                    Loading projects...
+                                </div>
+                            ) : availableProjects.length === 0 ? (
+                                <div className="text-center py-4 text-gray-500 text-xs">
+                                    No projects available. Create projects first before assigning guest access.
+                                </div>
+                            ) : (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 max-h-60 overflow-y-auto">
+                                    <div className="space-y-2">
+                                        {availableProjects.map(project => {
+                                            const isSelected = formData.accessibleProjectIds.includes(project.id);
+                                            return (
+                                                <label
+                                                    key={project.id}
+                                                    className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    accessibleProjectIds: [...formData.accessibleProjectIds, project.id]
+                                                                });
+                                                            } else {
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    accessibleProjectIds: formData.accessibleProjectIds.filter(id => id !== project.id)
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                    />
+                                                    <span className="text-xs text-gray-700 flex-1">
+                                                        {project.name}
+                                                        {project.clientName && (
+                                                            <span className="text-gray-500 ml-1">({project.clientName})</span>
+                                                        )}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     {/* Permissions */}
                     <div>

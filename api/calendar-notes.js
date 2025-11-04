@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -98,7 +99,7 @@ async function handler(req, res) {
         
         return ok(res, responseData)
       } catch (dbError) {
-        console.error('❌ Database error listing calendar notes:', dbError)
+        logDatabaseError(dbError, 'listing calendar notes')
         return serverError(res, 'Failed to list calendar notes', dbError.message)
       }
     }

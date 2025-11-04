@@ -206,6 +206,15 @@ const DatabaseAPI = {
 
         const execute = async (authToken) => {
             const config = buildConfigWithToken(authToken);
+            
+            // Warn about large payloads that might cause timeouts
+            if (config.body) {
+                const payloadSize = new Blob([config.body]).size;
+                if (payloadSize > 100000) { // 100KB
+                    console.warn(`⚠️ Large payload detected (${(payloadSize / 1024).toFixed(2)}KB) for ${endpoint}. This may cause timeouts.`);
+                }
+            }
+            
             const response = await fetch(url, config);
             return response;
         };
@@ -252,25 +261,40 @@ const DatabaseAPI = {
 
                 if (!response.ok) {
                     // Try to extract backend error message for better debugging
+                    let serverError = null;
                     let serverErrorMessage = '';
                     try {
                         const text = await response.text();
                         if (text) {
                             try {
                                 const json = JSON.parse(text);
-                                // Prefer nested error.message if present
-                                serverErrorMessage =
-                                    (json && json.error && typeof json.error === 'object' && json.error.message) ||
-                                    json?.message ||
-                                    json?.data?.message ||
-                                    // Fallback if error is a string
-                                    (typeof json?.error === 'string' ? json.error : '');
+                                // Extract full error object if present
+                                if (json?.error && typeof json.error === 'object') {
+                                    serverError = json.error;
+                                    serverErrorMessage = json.error.message || '';
+                                } else {
+                                    serverErrorMessage =
+                                        json?.message ||
+                                        json?.data?.message ||
+                                        (typeof json?.error === 'string' ? json.error : '');
+                                }
                             } catch (_) {
                                 serverErrorMessage = text.substring(0, 200);
                             }
                         }
                     } catch (_) {
                         // ignore parse failures
+                    }
+
+                    // Check if this is a retry-able server error (502, 503, 504)
+                    const isRetryableServerError = response.status === 502 || response.status === 503 || response.status === 504;
+                    
+                    if (isRetryableServerError && attempt < maxRetries) {
+                        // Retry on 502/503/504 with exponential backoff
+                        const delay = baseDelay * Math.pow(2, attempt);
+                        console.warn(`⚠️ Server error ${response.status} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        continue; // Retry the request
                     }
 
                     if (response.status === 401) {
@@ -290,9 +314,19 @@ const DatabaseAPI = {
                         }
                         throw new Error(serverErrorMessage || 'Authentication expired or unauthorized.');
                     }
+                    
+                    // Handle database connection errors with user-friendly messages
+                    if (serverError && serverError.code === 'DATABASE_CONNECTION_ERROR') {
+                        const errorMsg = serverError.details || serverError.message || 'Database connection failed';
+                        console.error(`🔌 Database connection error on ${endpoint}:`, errorMsg);
+                        throw new Error(`Database connection failed. The database server is unreachable. Please contact support if this issue persists.`);
+                    }
+                    
+                    // For other errors, use the server's error message if available
                     const statusText = response.statusText || 'Error';
-                    const msg = serverErrorMessage ? ` ${serverErrorMessage}` : '';
-                    throw new Error(`HTTP ${response.status}: ${statusText}${msg}`);
+                    const msg = serverErrorMessage || '';
+                    const errorMessage = msg ? `${statusText}${msg}` : `HTTP ${response.status}: ${statusText}`;
+                    throw new Error(errorMessage);
                 }
 
                 // Check if response is JSON
@@ -321,21 +355,29 @@ const DatabaseAPI = {
             } catch (error) {
                 lastError = error;
                 
-                // Only retry on network errors, not on HTTP errors or auth errors
+                // Check if error message indicates a 502/503/504 that we should retry
+                const isServerError = error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
+                
+                // Only retry on network errors or server errors (502/503/504), not on other HTTP errors or auth errors
                 const isNetwork = this.isNetworkError(error);
-                const shouldRetry = isNetwork && attempt < maxRetries;
+                const shouldRetry = (isNetwork || isServerError) && attempt < maxRetries;
                 
                 if (shouldRetry) {
                     // Calculate exponential backoff delay: 1s, 2s, 4s
                     const delay = baseDelay * Math.pow(2, attempt);
-                    console.warn(`⚠️ Network error on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
+                    const errorType = isServerError ? 'Server error' : 'Network error';
+                    console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
                     await new Promise(resolve => setTimeout(resolve, delay));
                     continue; // Retry the request
                 } else {
                     // Don't retry - log and throw
-                    if (isNetwork && attempt === maxRetries) {
+                    if ((isNetwork || isServerError) && attempt === maxRetries) {
                         console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
-                        throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                        if (isServerError) {
+                            throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
+                        } else {
+                            throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                        }
                     } else {
                         console.error(`❌ Database API request failed (${endpoint}):`, error);
                         throw error;

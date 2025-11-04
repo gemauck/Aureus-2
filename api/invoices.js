@@ -5,6 +5,7 @@ import { badRequest, created, ok, serverError, notFound } from './_lib/response.
 import { parseJsonBody } from './_lib/body.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { logDatabaseError } from './_lib/dbErrorHandler.js'
 
 async function handler(req, res) {
   try {
@@ -30,7 +31,7 @@ async function handler(req, res) {
         console.log('✅ Invoices retrieved successfully:', invoices.length)
         return ok(res, invoices)
       } catch (dbError) {
-        console.error('❌ Database error listing invoices:', dbError)
+        logDatabaseError(dbError, 'listing invoices')
         return serverError(res, 'Failed to list invoices', dbError.message)
       }
     }

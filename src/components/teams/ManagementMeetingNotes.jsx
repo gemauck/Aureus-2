@@ -26,17 +26,28 @@ const ManagementMeetingNotes = () => {
         const now = new Date();
         const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         setSelectedMonth(monthKey);
+        console.log('📅 ManagementMeetingNotes: Initialized with month', monthKey);
     }, []);
 
     // Load meeting notes
     useEffect(() => {
         const loadMeetingNotes = async () => {
             try {
-                const savedNotes = await window.dataService?.getManagementMeetingNotes?.() || [];
-                setMeetingNotes(Array.isArray(savedNotes) ? savedNotes : []);
+                console.log('📥 ManagementMeetingNotes: Loading meeting notes...');
+                const dataService = window.dataService;
+                if (!dataService || typeof dataService.getManagementMeetingNotes !== 'function') {
+                    console.error('❌ ManagementMeetingNotes: dataService not available');
+                    setMeetingNotes([]);
+                    setIsReady(true);
+                    return;
+                }
+                const savedNotes = await dataService.getManagementMeetingNotes();
+                const notes = Array.isArray(savedNotes) ? savedNotes : [];
+                console.log('✅ ManagementMeetingNotes: Loaded', notes.length, 'month(s)');
+                setMeetingNotes(notes);
                 setIsReady(true);
             } catch (error) {
-                console.error('Error loading meeting notes:', error);
+                console.error('❌ ManagementMeetingNotes: Error loading meeting notes:', error);
                 setMeetingNotes([]);
                 setIsReady(true);
             }
@@ -212,12 +223,19 @@ const ManagementMeetingNotes = () => {
         return (
             <div className="p-4">
                 <div className="text-center py-12">
-                    <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3"></i>
-                    <p className="text-sm text-gray-500">Loading meeting notes...</p>
+                    <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
+                    <p className="text-sm text-gray-500 dark:text-slate-400">Loading meeting notes...</p>
                 </div>
             </div>
         );
     }
+
+    console.log('🔍 ManagementMeetingNotes: Rendering with', {
+        selectedMonth,
+        meetingNotesCount: meetingNotes.length,
+        currentMonthNotes: currentMonthNotes ? 'exists' : 'null',
+        isReady
+    });
 
     return (
         <div className="space-y-3">

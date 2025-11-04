@@ -80,6 +80,14 @@ export const ROLE_PERMISSIONS = {
             PERMISSIONS.MANAGE_MANUFACTURING
         ],
         color: 'orange'
+    },
+    guest: {
+        name: 'Guest',
+        description: 'Limited access - Can only view specified projects',
+        permissions: [
+            PERMISSIONS.VIEW_PROJECTS
+        ],
+        color: 'gray'
     }
 };
 

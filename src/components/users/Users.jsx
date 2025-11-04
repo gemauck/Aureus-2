@@ -18,7 +18,7 @@ const Users = () => {
     const [filterStatus, setFilterStatus] = useState('all');
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'table'
 
-    // Role definitions with permissions (Admin > Manager > User hierarchy)
+    // Role definitions with permissions (Admin > Manager > User > Guest hierarchy)
     const roleDefinitions = {
         admin: {
             name: 'Administrator',
@@ -37,6 +37,12 @@ const Users = () => {
             color: 'orange',
             permissions: ['view_assigned', 'edit_assigned', 'time_tracking'],
             description: 'Standard user with assigned task access'
+        },
+        guest: {
+            name: 'Guest',
+            color: 'gray',
+            permissions: ['view_projects'],
+            description: 'Limited access - Can only view specified projects'
         }
     };
 

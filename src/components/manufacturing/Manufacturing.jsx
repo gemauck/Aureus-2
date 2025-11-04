@@ -2028,6 +2028,8 @@ const Manufacturing = () => {
       const orderData = {
         clientId: formData.clientId || null,
         clientName: formData.clientName || '',
+        clientSiteId: formData.clientSiteId || null,
+        clientSiteName: formData.clientSiteName || '',
         status: 'confirmed', // Sales orders are automatically confirmed when created
         priority: formData.priority || 'normal',
         orderDate: formData.orderDate || new Date().toISOString(),
@@ -2190,7 +2192,7 @@ const Manufacturing = () => {
       internalNotes: ''
     });
     setPurchaseOrderItems([]);
-    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0, supplierPartNumber: '' });
     setModalType('add_purchase');
     setShowModal(true);
     console.log('🔵 Modal state set:', { modalType: 'add_purchase', showModal: true });
@@ -2209,11 +2211,12 @@ const Manufacturing = () => {
       name: newPurchaseOrderItem.name,
       quantity: parseFloat(newPurchaseOrderItem.quantity),
       unitPrice: parseFloat(newPurchaseOrderItem.unitPrice),
-      total: total
+      total: total,
+      supplierPartNumber: newPurchaseOrderItem.supplierPartNumber || ''
     };
     
     setPurchaseOrderItems([...purchaseOrderItems, item]);
-    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0 });
+    setNewPurchaseOrderItem({ sku: '', name: '', quantity: 1, unitPrice: 0, supplierPartNumber: '' });
   };
 
   const handleRemovePurchaseOrderItem = (itemId) => {
@@ -2244,7 +2247,7 @@ const Manufacturing = () => {
       const orderData = {
         supplierId: formData.supplierId || '',
         supplierName: formData.supplierName || '',
-        status: 'received', // Purchase orders are automatically marked as received
+        status: 'draft', // Purchase orders start as draft and must be marked as received to update inventory
         priority: formData.priority || 'normal',
         orderDate: formData.orderDate || new Date().toISOString(),
         expectedDate: formData.expectedDate || null,
@@ -2257,7 +2260,8 @@ const Manufacturing = () => {
           name: item.name,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          total: item.total
+          total: item.total,
+          supplierPartNumber: item.supplierPartNumber || ''
         })),
         notes: formData.notes || '',
         internalNotes: formData.internalNotes || ''
@@ -2268,109 +2272,11 @@ const Manufacturing = () => {
       if (response?.data?.purchaseOrder) {
         const createdOrder = response.data.purchaseOrder;
         const orderNumber = createdOrder.orderNumber || createdOrder.id;
-        
-        // Create stock movements for each item (receipt - items being purchased/received)
-        if (purchaseOrderItems && purchaseOrderItems.length > 0) {
-          console.log('📦 Creating stock movements for purchase order:', {
-            orderNumber: orderNumber,
-            itemsCount: purchaseOrderItems.length,
-            items: purchaseOrderItems
-          });
-          
-          try {
-            // Get default warehouse location (main warehouse)
-            const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001' || loc.type === 'warehouse') || stockLocations[0];
-            const defaultLocationId = mainWarehouse ? mainWarehouse.id : '';
-            const defaultLocationName = mainWarehouse ? mainWarehouse.name : 'Main Warehouse';
-            
-            // Create a stock movement for each item in the purchase order
-            for (const orderItem of purchaseOrderItems) {
-              if (!orderItem.sku || orderItem.quantity <= 0) {
-                console.warn('⚠️ Skipping invalid order item:', orderItem);
-                continue;
-              }
-
-              // Use the unit price as unit cost for purchased items
-              const unitCost = orderItem.unitPrice || 0;
-
-              const movementData = {
-                type: 'receipt', // Stock being received/purchased
-                sku: orderItem.sku,
-                itemName: orderItem.name || '',
-                quantity: parseFloat(orderItem.quantity),
-                unitCost: unitCost ? parseFloat(unitCost) : undefined,
-                fromLocation: '', // Empty as this is a receipt from supplier
-                toLocation: String(defaultLocationId || ''), // Location where stock is received into (convert to string)
-                reference: `Purchase Order ${orderNumber}`,
-                performedBy: user?.name || 'System',
-                notes: `Stock received from supplier: ${formData.supplierName || 'N/A'} - Purchase Order ${orderNumber}`,
-                date: new Date().toISOString()
-              };
-
-              console.log('📝 Creating stock movement:', movementData);
-
-              // Try to create stock movement via API
-              if (window.DatabaseAPI?.createStockMovement) {
-                try {
-                  const movementResponse = await safeCallAPI('createStockMovement', movementData);
-                  console.log(`✅ Stock movement created successfully for ${orderItem.name}:`, movementResponse);
-                } catch (error) {
-                  console.error(`❌ Failed to create stock movement for ${orderItem.name}:`, error);
-                  console.error('Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    movementData
-                  });
-                  // Store in localStorage for offline sync
-                  const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-                  cachedMovements.push({
-                    ...movementData,
-                    id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                    synced: false
-                  });
-                  localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-                  console.log(`📦 Stock movement saved to localStorage for later sync: ${orderItem.name}`);
-                }
-              } else {
-                // Offline mode - store in localStorage for later sync
-                const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-                cachedMovements.push({
-                  ...movementData,
-                  id: `MOV${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                  synced: false
-                });
-                localStorage.setItem('manufacturing_movements', JSON.stringify(cachedMovements));
-                console.log(`📦 Stock movement queued for sync (offline mode): ${orderItem.name}`);
-              }
-            }
-            console.log('✅ Stock movement creation process completed');
-            
-            // Refresh inventory to show updated quantities
-            if (window.DatabaseAPI && window.DatabaseAPI.getInventory) {
-              try {
-                const invResponse = await window.DatabaseAPI.getInventory();
-                const invData = invResponse?.data?.inventory || [];
-                setInventory(invData);
-                localStorage.setItem('manufacturing_inventory', JSON.stringify(invData));
-                console.log('✅ Inventory refreshed after purchase order');
-              } catch (invError) {
-                console.error('❌ Failed to refresh inventory:', invError);
-              }
-            }
-          } catch (error) {
-            console.error('❌ Error creating stock movements:', error);
-            console.error('Error stack:', error.stack);
-            // Don't block save - just warn
-            console.warn('⚠️ Purchase order will be saved but stock movements may not have been recorded');
-          }
-        } else {
-          console.log('ℹ️ No items in purchase order to create stock movements for');
-        }
 
         const updatedOrders = [...purchaseOrders, { ...createdOrder, id: createdOrder.id }];
         setPurchaseOrders(updatedOrders);
         localStorage.setItem('manufacturing_purchase_orders', JSON.stringify(updatedOrders));
-        alert('Purchase order created successfully! Stock movements have been recorded.');
+        alert('Purchase order created successfully! Mark it as "received" to record stock movements and update inventory.');
       } else {
         alert('Purchase order created but response data incomplete. Please refresh to verify.');
       }
@@ -5240,11 +5146,50 @@ const Manufacturing = () => {
                     value={formData.clientId || ''}
                     onChange={(e) => {
                       const selectedClient = clients.find(c => c.id === e.target.value);
-                      setFormData({
-                        ...formData,
-                        clientId: e.target.value,
-                        clientName: selectedClient ? selectedClient.name : ''
-                      });
+                      if (selectedClient) {
+                        // Parse client sites with error handling
+                        let clientSites = [];
+                        try {
+                          if (typeof selectedClient.sites === 'string') {
+                            clientSites = JSON.parse(selectedClient.sites || '[]');
+                          } else if (Array.isArray(selectedClient.sites)) {
+                            clientSites = selectedClient.sites;
+                          }
+                        } catch (parseError) {
+                          console.warn('⚠️ Failed to parse client sites:', parseError);
+                          clientSites = [];
+                        }
+                        
+                        // Ensure clientSites is an array
+                        if (!Array.isArray(clientSites)) {
+                          clientSites = [];
+                        }
+                        
+                        // Auto-populate shipping address from client address
+                        const defaultShippingAddress = selectedClient.address || '';
+                        
+                        setFormData({
+                          ...formData,
+                          clientId: e.target.value,
+                          clientName: selectedClient.name || '',
+                          clientAddress: selectedClient.address || '',
+                          clientSites: clientSites,
+                          clientSiteId: '', // Reset site selection when client changes
+                          clientSiteName: '',
+                          shippingAddress: defaultShippingAddress // Auto-populate with client address
+                        });
+                      } else {
+                        setFormData({
+                          ...formData,
+                          clientId: e.target.value,
+                          clientName: '',
+                          clientAddress: '',
+                          clientSites: [],
+                          clientSiteId: '',
+                          clientSiteName: '',
+                          shippingAddress: ''
+                        });
+                      }
                     }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
@@ -5256,6 +5201,55 @@ const Manufacturing = () => {
                   </select>
                   <p className="text-xs text-gray-500 mt-1">This sales order will be sold to the selected client</p>
                 </div>
+
+                {/* Client Site Selection - Only show if client has sites */}
+                {formData.clientId && formData.clientSites && Array.isArray(formData.clientSites) && formData.clientSites.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Client Site (Optional)</label>
+                    <select
+                      value={formData.clientSiteId || ''}
+                      onChange={(e) => {
+                        if (!e.target.value) {
+                          // Reset to client address if "No site" is selected
+                          setFormData({
+                            ...formData,
+                            clientSiteId: '',
+                            clientSiteName: '',
+                            shippingAddress: formData.clientAddress || ''
+                          });
+                          return;
+                        }
+                        
+                        // Find the selected site by index (since we use index as value)
+                        const siteIndex = parseInt(e.target.value, 10);
+                        const selectedSite = formData.clientSites[siteIndex];
+                        
+                        if (selectedSite) {
+                          const siteAddress = typeof selectedSite === 'object' ? selectedSite.address || '' : '';
+                          const siteName = typeof selectedSite === 'object' ? selectedSite.name || `Site ${siteIndex + 1}` : String(selectedSite);
+                          const siteId = typeof selectedSite === 'object' && selectedSite.id ? selectedSite.id : String(siteIndex);
+                          
+                          setFormData({
+                            ...formData,
+                            clientSiteId: siteId,
+                            clientSiteName: siteName,
+                            shippingAddress: siteAddress || formData.clientAddress || '' // Use site address, fallback to client address
+                          });
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    >
+                      <option value="">No specific site (use client address)</option>
+                      {formData.clientSites.map((site, index) => {
+                        const siteName = typeof site === 'object' ? site.name || `Site ${index + 1}` : String(site);
+                        return (
+                          <option key={index} value={String(index)}>{siteName}</option>
+                        );
+                      })}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Select a specific site for this order. Shipping address will be updated automatically.</p>
+                  </div>
+                )}
 
                 {/* Order Details */}
                 <div className="grid grid-cols-2 gap-4">
@@ -5581,7 +5575,7 @@ const Manufacturing = () => {
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                   <p className="text-xs text-blue-700">
                     <i className="fas fa-info-circle mr-1"></i>
-                    <strong>Note:</strong> Purchase orders are automatically marked as "received" when created, and stock movements will be recorded to update your inventory.
+                    <strong>Note:</strong> Purchase orders are created with "draft" status. Stock movements will only be recorded and inventory updated when the order is marked as "received".
                   </p>
                 </div>
 
@@ -5591,7 +5585,7 @@ const Manufacturing = () => {
                   
                   {/* Add Item Form */}
                   <div className="grid grid-cols-12 gap-2 mb-3">
-                    <div className="col-span-4">
+                    <div className="col-span-3">
                       <select
                         value={newPurchaseOrderItem.sku}
                         onChange={(e) => {
@@ -5613,12 +5607,21 @@ const Manufacturing = () => {
                         ))}
                       </select>
                     </div>
-                    <div className="col-span-4">
+                    <div className="col-span-3">
                       <input
                         type="text"
                         value={newPurchaseOrderItem.name}
                         onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, name: e.target.value })}
                         placeholder="Item Name *"
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="text"
+                        value={newPurchaseOrderItem.supplierPartNumber || ''}
+                        onChange={(e) => setNewPurchaseOrderItem({ ...newPurchaseOrderItem, supplierPartNumber: e.target.value })}
+                        placeholder="Supplier Part #"
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
@@ -5669,7 +5672,10 @@ const Manufacturing = () => {
                         <div key={item.id} className="flex items-center justify-between bg-white border border-gray-200 rounded-lg p-3">
                           <div className="flex-1">
                             <p className="text-sm font-medium text-gray-900">{item.name}</p>
-                            <p className="text-xs text-gray-600">SKU: {item.sku} • Qty: {item.quantity} • R {item.unitPrice.toFixed(2)} each</p>
+                            <p className="text-xs text-gray-600">
+                              SKU: {item.sku} • Qty: {item.quantity} • R {item.unitPrice.toFixed(2)} each
+                              {item.supplierPartNumber && ` • Supplier Part: ${item.supplierPartNumber}`}
+                            </p>
                           </div>
                           <div className="flex items-center gap-3">
                             <p className="text-sm font-semibold text-blue-600">R {item.total.toFixed(2)}</p>

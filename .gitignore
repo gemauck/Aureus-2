@@ -75,4 +75,6 @@ prisma/migrations/
 
 # Temporary files
 *.tmp
-*.temp
+*.tempdatabase-backups/
+*.sql.gz
+*.db.backup

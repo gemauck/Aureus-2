@@ -368,8 +368,12 @@ if (window.storage?.getToken?.() && window.storage?.getUser?.()) {
     autoStartLog('🚀 Auto-starting live data sync...');
     window.LiveDataSync.start();
 } else if (window.storage?.getToken?.() && !window.storage?.getUser?.()) {
-    console.log('⚠️ Token exists but no user data, clearing token');
+    console.log('⚠️ Token exists but no user data, clearing orphaned token');
     window.storage?.removeToken?.();
+    // Clear any stale user data as well
+    if (window.storage?.removeUser) {
+        window.storage.removeUser();
+    }
 }
 
 // Debug function

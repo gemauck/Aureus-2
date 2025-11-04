@@ -23,14 +23,84 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const editorRef = useRef(null);
     const canvasRef = useRef(null);
     const toolbarRef = useRef(null);
-
-    // Format date string helper
+    
+    // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
+    
+    // Load note when date changes or component mounts with initial date
+    useEffect(() => {
+        if (initialDate && !showListView) {
+            const dateString = formatDateString(initialDate);
+            // Load from localStorage first
+            const user = window.storage?.getUser?.();
+            const userId = user?.id || user?.email || 'default';
+            const notesKey = `user_notes_${userId}`;
+            const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+            const note = localNotes[dateString] || notes[dateString] || '';
+            
+            console.log('📝 Loading initial note for date:', dateString, 'from localStorage length:', note.length);
+            
+            if (note) {
+                setCurrentNote(note);
+                setCurrentNoteHtml(note);
+                console.log('📝 Set initial note state, length:', note.length);
+                
+                // Force set editor content immediately
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = note;
+                    console.log('✅ Set initial editor content immediately, length:', note.length);
+                } else {
+                    // If editor not ready, wait and set
+                    setTimeout(() => {
+                        if (editorRef.current) {
+                            editorRef.current.innerHTML = note;
+                            console.log('✅ Set initial editor content (delayed), length:', note.length);
+                        }
+                    }, 100);
+                }
+            } else {
+                // Even if empty, set it to ensure editor is initialized
+                setCurrentNote('');
+                setCurrentNoteHtml('');
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = '';
+                }
+            }
+            
+            // Also try to fetch from server
+            const token = window.storage?.getToken?.();
+            if (token) {
+                fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                    headers: { 
+                        Authorization: `Bearer ${token}`,
+                        'Cache-Control': 'no-cache'
+                    },
+                    credentials: 'include'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const serverNotes = data?.data?.notes || data?.notes || {};
+                    const serverNote = serverNotes[dateString] || '';
+                    
+                    if (serverNote && serverNote !== note) {
+                        console.log('📝 Found server note, length:', serverNote.length);
+                        setCurrentNote(serverNote);
+                        setCurrentNoteHtml(serverNote);
+                        // Update notes state and localStorage
+                        setNotes(prev => ({ ...prev, [dateString]: serverNote }));
+                        localNotes[dateString] = serverNote;
+                        localStorage.setItem(notesKey, JSON.stringify(localNotes));
+                    }
+                })
+                .catch(err => console.error('Error fetching initial note:', err));
+            }
+        }
+    }, [initialDate, showListView]);
 
     // Format date for display
     const formatDateDisplay = (dateString) => {
@@ -45,8 +115,48 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             try {
                 const user = window.storage?.getUser?.();
                 const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
                 const token = window.storage?.getToken?.();
                 
+                // First load from localStorage for instant display
+                const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                if (Object.keys(localNotes).length > 0) {
+                    setNotes(localNotes);
+                    console.log('📝 Loaded notes from localStorage:', Object.keys(localNotes).length);
+                    
+                    // Load current note if editing specific date
+                    if (!showListView && currentDate) {
+                        const dateString = formatDateString(currentDate);
+                        const note = localNotes[dateString] || '';
+                        const currentEditorContent = editorRef.current?.innerHTML || '';
+                        
+                        // Load note if editor is empty or content is different
+                        if (note && (!currentEditorContent || currentEditorContent.trim().length === 0)) {
+                            setCurrentNote(note);
+                            setCurrentNoteHtml(note);
+                            console.log('📝 Loading note for date from localStorage:', dateString, 'length:', note.length);
+                            
+                            // Force set editor content immediately
+                            if (editorRef.current) {
+                                editorRef.current.innerHTML = note;
+                                console.log('✅ Set editor content from localStorage, length:', note.length);
+                            }
+                        } else if (note && currentEditorContent.trim() !== note.trim()) {
+                            // Update if different
+                            setCurrentNote(note);
+                            setCurrentNoteHtml(note);
+                            console.log('📝 Updating note from localStorage:', dateString, 'length:', note.length);
+                            
+                            // Force set editor content
+                            if (editorRef.current) {
+                                editorRef.current.innerHTML = note;
+                                console.log('✅ Updated editor content from localStorage, length:', note.length);
+                            }
+                        }
+                    }
+                }
+                
+                // Then sync from server
                 if (token) {
                     const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
                         headers: { 
@@ -59,16 +169,42 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     if (res.ok) {
                         const data = await res.json();
                         const serverNotes = data?.data?.notes || data?.notes || {};
-                        setNotes(serverNotes);
+                        console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
+                        console.log('📝 Server notes keys:', Object.keys(serverNotes));
                         
-                        // Load current note if editing specific date
+                        // Merge server notes (server takes priority)
+                        const mergedNotes = { ...localNotes, ...serverNotes };
+                        setNotes(mergedNotes);
+                        
+                        // Update localStorage with server data
+                        localStorage.setItem(notesKey, JSON.stringify(mergedNotes));
+                        
+                        // Load current note if editing specific date - ONLY if we don't have newer content
                         if (!showListView && currentDate) {
                             const dateString = formatDateString(currentDate);
-                            const note = serverNotes[dateString] || '';
-                            setCurrentNote(note);
-                            setCurrentNoteHtml(note);
-                            if (editorRef.current) {
-                                editorRef.current.innerHTML = note;
+                            const serverNote = serverNotes[dateString] || '';
+                            const currentNoteContent = currentNoteHtml || currentNote;
+                            
+                            console.log('📝 Comparing notes for date:', dateString, {
+                                serverLength: serverNote.length,
+                                currentLength: currentNoteContent.length,
+                                areEqual: serverNote === currentNoteContent
+                            });
+                            
+                            // Only update if server note exists and is different from current, or if current is empty
+                            const editorContent = editorRef.current?.innerHTML || '';
+                            const shouldUpdate = serverNote && serverNote.length > 0 && 
+                                (serverNote !== currentNoteContent || !currentNoteContent || currentNoteContent.length === 0) &&
+                                (serverNote !== editorContent || !editorContent || editorContent.trim().length === 0);
+                            
+                            if (shouldUpdate) {
+                                console.log('📝 Updating note from server, server length:', serverNote.length);
+                                setCurrentNote(serverNote);
+                                setCurrentNoteHtml(serverNote);
+                            } else if (!serverNote || serverNote.length === 0) {
+                                console.log('⚠️ Server note is empty for date:', dateString);
+                            } else {
+                                console.log('📝 Skipping update - current note is already set or editor has content');
                             }
                         }
                     }
@@ -114,65 +250,123 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         }
     }, [searchQuery, notes]);
 
-    // Initialize handwriting canvas
+    // Initialize handwriting canvas - overlay on editor
     useEffect(() => {
-        if (showHandwriting && canvasRef.current) {
+        if (showHandwriting && canvasRef.current && editorRef.current) {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             
             const resizeCanvas = () => {
-                const rect = canvas.getBoundingClientRect();
+                if (!editorRef.current || !canvas) return;
+                
+                // Match editor dimensions exactly
+                const editorRect = editorRef.current.getBoundingClientRect();
                 const dpr = window.devicePixelRatio || 1;
-                canvas.width = rect.width * dpr;
-                canvas.height = rect.height * dpr;
+                
+                // Set canvas size to match editor
+                const width = editorRect.width;
+                const height = editorRect.height;
+                
+                canvas.width = width * dpr;
+                canvas.height = height * dpr;
+                canvas.style.width = width + 'px';
+                canvas.style.height = height + 'px';
+                
+                // Scale context for high DPI displays
                 ctx.scale(dpr, dpr);
                 
                 // Set drawing styles
                 ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
-                ctx.lineWidth = 2;
+                ctx.lineWidth = 3;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
+                ctx.globalAlpha = 1.0;
             };
             
-            resizeCanvas();
-            setHandwritingCanvas(canvas);
+            // Wait for editor to be positioned
+            const initTimeout = setTimeout(() => {
+                resizeCanvas();
+                setHandwritingCanvas(canvas);
+            }, 150);
             
-            // Handle window resize
-            const handleResize = () => resizeCanvas();
+            // Handle window resize and scroll
+            const handleResize = () => {
+                setTimeout(resizeCanvas, 50);
+            };
+            
             window.addEventListener('resize', handleResize);
+            window.addEventListener('scroll', handleResize, true);
             
             return () => {
+                clearTimeout(initTimeout);
                 window.removeEventListener('resize', handleResize);
+                window.removeEventListener('scroll', handleResize, true);
             };
+        } else if (!showHandwriting && canvasRef.current) {
+            // Clear canvas when handwriting is disabled
+            const ctx = canvasRef.current.getContext('2d');
+            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         }
     }, [showHandwriting, isDark]);
 
     // Handle drawing on canvas
     const startDrawing = (e) => {
+        if (!canvasRef.current || !showHandwriting) return;
+        
         setIsDrawing(true);
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         const rect = canvas.getBoundingClientRect();
-        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        
+        // Get coordinates relative to canvas
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        
+        // Restore drawing styles (in case they were reset)
+        ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
         ctx.beginPath();
         ctx.moveTo(x, y);
+        
+        e.preventDefault();
+        e.stopPropagation();
     };
 
     const draw = (e) => {
-        if (!isDrawing) return;
+        if (!isDrawing || !canvasRef.current || !showHandwriting) return;
+        
         e.preventDefault();
+        e.stopPropagation();
+        
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         const rect = canvas.getBoundingClientRect();
-        const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
-        const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+        
+        // Get coordinates relative to canvas
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        
         ctx.lineTo(x, y);
         ctx.stroke();
     };
 
-    const stopDrawing = () => {
-        setIsDrawing(false);
+    const stopDrawing = (e) => {
+        if (isDrawing) {
+            setIsDrawing(false);
+        }
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
     };
 
     // Recognize handwriting using OCR
@@ -181,12 +375,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         setIsRecognizing(true);
         try {
-            // Convert canvas to image
-            const imageDataUrl = canvasRef.current.toDataURL('image/png');
-            
-            // Convert to blob
-            const response = await fetch(imageDataUrl);
-            const blob = await response.blob();
+            // Convert canvas directly to blob (avoid CSP issues with data URIs)
+            const blob = await new Promise((resolve, reject) => {
+                canvasRef.current.toBlob((blob) => {
+                    if (blob) {
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Failed to convert canvas to blob'));
+                    }
+                }, 'image/png');
+            });
             
             // Load Tesseract if needed
             if (!window.Tesseract && window.loadTesseract) {
@@ -209,16 +407,32 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             
             // Insert recognized text into editor
             if (editorRef.current && text.trim()) {
-                const selection = window.getSelection();
-                const range = selection.getRangeAt(0);
-                const textNode = document.createTextNode(text);
-                range.insertNode(textNode);
-                range.setStartAfter(textNode);
-                selection.removeAllRanges();
-                selection.addRange(range);
+                // Re-enable editor temporarily
+                editorRef.current.contentEditable = 'true';
+                editorRef.current.style.pointerEvents = 'auto';
                 
-                // Update note content
+                const selection = window.getSelection();
+                if (selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const textNode = document.createTextNode(text + ' ');
+                    range.insertNode(textNode);
+                    range.setStartAfter(textNode);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                } else {
+                    // Fallback: append to end
+                    const textNode = document.createTextNode(' ' + text);
+                    editorRef.current.appendChild(textNode);
+                }
+                
+                // Update note content and save
                 updateNoteContent();
+                
+                // Save after recognizing
+                setTimeout(() => {
+                    console.log('💾 Saving after recognition...');
+                    saveNote().catch(err => console.error('Error saving after recognition:', err));
+                }, 500);
             }
 
             await worker.terminate();
@@ -240,6 +454,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
 
     // Update note content from editor
     const updateNoteContent = useCallback(() => {
+        // Don't update during initialization to prevent overwriting loaded content
+        if (isInitializingRef.current) {
+            console.log('⚠️ Skipping updateNoteContent during initialization');
+            return;
+        }
+        
         if (editorRef.current) {
             const html = editorRef.current.innerHTML;
             setCurrentNoteHtml(html);
@@ -248,20 +468,167 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             setCurrentNote(text);
         }
     }, []);
+    
+    // CRITICAL: Set editor content when editor ref becomes available or content changes
+    useEffect(() => {
+        if (!showListView && currentNoteHtml && currentNoteHtml.trim().length > 0) {
+            // Use requestAnimationFrame to ensure DOM is ready
+            requestAnimationFrame(() => {
+                if (editorRef.current) {
+                    const currentContent = editorRef.current.innerHTML || '';
+                    // Only set if editor is empty or content is different
+                    if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
+                        console.log('🔧 Setting editor content on mount/update - editor:', currentContent.length, 'state:', currentNoteHtml.length);
+                        editorRef.current.innerHTML = currentNoteHtml;
+                        console.log('✅ Editor content set successfully, length:', currentNoteHtml.length);
+                    }
+                }
+            });
+        }
+    }, [currentNoteHtml, showListView]);
+    
+    // Sync editor content with currentNoteHtml state (ensures editor displays saved content)
+    useEffect(() => {
+        if (!showListView && editorRef.current && currentNoteHtml !== undefined && currentNoteHtml !== null) {
+            const currentEditorContent = editorRef.current.innerHTML || '';
+            // Update if state has content and editor doesn't match, OR if editor is empty and state has content
+            const shouldUpdate = (currentNoteHtml && currentNoteHtml.trim().length > 0) && 
+                                (currentEditorContent.trim() !== currentNoteHtml.trim() || 
+                                 (currentEditorContent.trim().length === 0 && currentNoteHtml.trim().length > 0));
+            
+            // Always sync during initialization to ensure content is loaded
+            // After initialization, only sync if not initializing to avoid overwriting user input
+            if (shouldUpdate) {
+                console.log('🔄 Syncing editor - state has content, editor:', currentEditorContent.length, 'state:', currentNoteHtml.length, 'initializing:', isInitializingRef.current);
+                // Use requestAnimationFrame to ensure DOM is ready
+                requestAnimationFrame(() => {
+                    if (editorRef.current && editorRef.current.innerHTML.trim() !== currentNoteHtml.trim()) {
+                        // Temporarily disable updateNoteContent to prevent feedback loop
+                        const wasInitializing = isInitializingRef.current;
+                        isInitializingRef.current = true;
+                        editorRef.current.innerHTML = currentNoteHtml;
+                        console.log('✅ Editor synced with state, length:', currentNoteHtml.length);
+                        // Re-enable after editor has time to update
+                        setTimeout(() => {
+                            isInitializingRef.current = wasInitializing;
+                        }, 300);
+                    }
+                });
+            }
+        }
+    }, [currentNoteHtml, showListView]);
 
-    // Save note
-    const saveNote = async () => {
+    // Save note (including handwriting as image) - MUST be defined before useEffects that use it
+    const saveNote = useCallback(async () => {
         setIsSaving(true);
         try {
             const dateString = formatDateString(currentDate);
-            const noteContent = currentNoteHtml || currentNote;
+            
+            // Get content from editor first (most up-to-date)
+            let noteContent = '';
+            if (editorRef.current) {
+                noteContent = editorRef.current.innerHTML || '';
+                console.log('📝 Reading from editor for save, length:', noteContent.length);
+            } else {
+                noteContent = currentNoteHtml || currentNote || '';
+                console.log('📝 Reading from state for save (editor not available), length:', noteContent.length);
+            }
+            
+            // If editor is empty but state has content, use state (editor might not be synced yet)
+            if (!noteContent || noteContent.trim().length === 0) {
+                if (currentNoteHtml && currentNoteHtml.trim().length > 0) {
+                    console.log('⚠️ Editor empty but state has content, using state for save, length:', currentNoteHtml.length);
+                    noteContent = currentNoteHtml;
+                } else if (currentNote && currentNote.trim().length > 0) {
+                    console.log('⚠️ Editor empty but currentNote has content, using currentNote for save, length:', currentNote.length);
+                    noteContent = currentNote;
+                }
+            }
+            
+            // CRITICAL: Don't save if content is empty and we already have saved content for this date
+            // This prevents overwriting saved notes with empty content during initialization
+            // BUT: If we're not initializing and user explicitly cleared content, allow saving empty
+            if (!noteContent || noteContent.trim().length === 0) {
+                // During initialization, don't save empty content
+                if (isInitializingRef.current) {
+                    console.log('⚠️ Skipping save during initialization - content is empty');
+                    setIsSaving(false);
+                    return;
+                }
+                
+                // If not initializing, check if we have existing content
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                const existingNote = savedNotes[dateString] || notes[dateString] || '';
+                
+                // If we have existing content and editor is empty, don't overwrite (user might have just opened)
+                if (existingNote && existingNote.trim().length > 0) {
+                    console.log('⚠️ Preventing save of empty content - existing note found, length:', existingNote.length);
+                    setIsSaving(false);
+                    return;
+                }
+            }
+            
+            // If handwriting canvas has content, save it as an image in the note
+            if (showHandwriting && canvasRef.current) {
+                const canvas = canvasRef.current;
+                // Check if canvas has any drawing (not empty)
+                const ctx = canvas.getContext('2d');
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const hasDrawing = imageData.data.some((channel, index) => {
+                    return index % 4 !== 3 && channel !== 0; // Check non-alpha channels for non-zero values
+                });
+                
+                if (hasDrawing) {
+                    // Convert canvas to data URL
+                    const canvasDataUrl = canvas.toDataURL('image/png');
+                    // Insert image into note content
+                    const imgTag = `<img src="${canvasDataUrl}" alt="Handwriting" style="max-width: 100%; height: auto; margin: 10px 0;" />`;
+                    
+                    // Update note content with image
+                    if (editorRef.current) {
+                        // Insert image at cursor position or append
+                        const selection = window.getSelection();
+                        if (selection.rangeCount > 0) {
+                            const range = selection.getRangeAt(0);
+                            const img = document.createElement('img');
+                            img.src = canvasDataUrl;
+                            img.alt = 'Handwriting';
+                            img.style.maxWidth = '100%';
+                            img.style.height = 'auto';
+                            img.style.margin = '10px 0';
+                            range.insertNode(img);
+                            range.setStartAfter(img);
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                        }
+                        // Update content after inserting image
+                        noteContent = editorRef.current.innerHTML;
+                    } else {
+                        // Fallback: append image to content
+                        noteContent = noteContent + imgTag;
+                    }
+                }
+            }
             
             const token = window.storage?.getToken?.();
             if (!token) {
-                alert('Not authenticated. Please log in.');
+                console.warn('Not authenticated - saving locally only');
+                // Save to localStorage as fallback
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                setIsSaving(false);
                 return;
             }
 
+            console.log('💾 Saving note:', { dateString, contentLength: noteContent.length });
+            
             const res = await fetch('/api/calendar-notes', {
                 method: 'POST',
                 headers: {
@@ -276,38 +643,336 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             });
 
             if (res.ok) {
-                // Update local notes
-                setNotes(prev => ({ ...prev, [dateString]: noteContent }));
+                const data = await res.json();
+                console.log('✅ Note saved successfully to server:', { dateString, contentLength: noteContent.length });
                 
-                if (window.showNotification) {
-                    window.showNotification('Note saved successfully', 'success');
+                // Update local notes state immediately - CRITICAL for persistence
+                setNotes(prev => {
+                    const updated = { ...prev, [dateString]: noteContent };
+                    console.log('📝 Updated notes state after save, date:', dateString, 'length:', noteContent.length);
+                    return updated;
+                });
+                
+                // Also save to localStorage - CRITICAL for persistence
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                console.log('💾 Saved to localStorage after server save, date:', dateString, 'length:', noteContent.length);
+                
+                // Verify the save by checking localStorage
+                const verify = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                if (verify[dateString] === noteContent) {
+                    console.log('✅ Verified: Note persisted to localStorage correctly');
+                } else {
+                    console.error('❌ Verification failed: localStorage content mismatch');
                 }
                 
-                // If in list view, switch to it
-                if (!showListView) {
-                    // Optionally close or stay in editor
+                // Clear handwriting canvas after saving
+                if (showHandwriting && canvasRef.current) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 }
             } else {
-                throw new Error('Failed to save note');
+                const errorText = await res.text();
+                console.error('❌ Failed to save note:', res.status, errorText);
+                throw new Error(`Failed to save note: ${res.status}`);
             }
         } catch (error) {
             console.error('Error saving note:', error);
-            alert('Failed to save note: ' + error.message);
+            // Try to save to localStorage as fallback
+            try {
+                const dateString = formatDateString(currentDate);
+                const noteContent = currentNoteHtml || currentNote;
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                console.log('💾 Saved to localStorage as fallback');
+            } catch (localError) {
+                console.error('Failed to save to localStorage:', localError);
+            }
         } finally {
             setIsSaving(false);
         }
-    };
+    }, [currentDate, currentNoteHtml, currentNote, showHandwriting, isDark]);
+    
+    // Auto-save on content change (debounced)
+    const saveTimeoutRef = useRef(null);
+    const isInitializingRef = useRef(true);
+    
+    // Mark initialization as complete after editor content is loaded
+    useEffect(() => {
+        if (!showListView && currentDate) {
+            isInitializingRef.current = true;
+            console.log('🔒 Initialization started - auto-save disabled');
+            
+            // Wait for editor to be ready and content to be set
+            const checkEditorReady = () => {
+                if (editorRef.current && currentNoteHtml) {
+                    // Editor is ready and we have content - wait a bit more for sync
+                    setTimeout(() => {
+                        isInitializingRef.current = false;
+                        console.log('✅ Initialization complete - editor ready, auto-save enabled');
+                    }, 1500);
+                } else {
+                    // Fallback: disable initialization after 3 seconds
+                    setTimeout(() => {
+                        isInitializingRef.current = false;
+                        console.log('✅ Initialization timeout - auto-save enabled');
+                    }, 3000);
+                }
+            };
+            
+            const timer = setTimeout(checkEditorReady, 500);
+            return () => clearTimeout(timer);
+        } else {
+            // If switching to list view, reset initialization flag
+            isInitializingRef.current = false;
+        }
+    }, [currentDate, showListView, currentNoteHtml]);
+    
+    useEffect(() => {
+        if (!currentDate || showListView || isInitializingRef.current) {
+            // Don't auto-save during initialization
+            return;
+        }
+        
+        // Clear existing timeout
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+        }
+        
+        // Get content from editor (most current)
+        const editorContent = editorRef.current?.innerHTML || '';
+        const hasContent = (editorContent && editorContent.trim().length > 0) || 
+                          (currentNoteHtml && currentNoteHtml.trim().length > 0);
+        
+        if (!hasContent) {
+            console.log('⚠️ Skipping auto-save - no content');
+            return;
+        }
+        
+        // Set new timeout for auto-save (1 second after last change for faster saves)
+        saveTimeoutRef.current = setTimeout(() => {
+            console.log('💾 Auto-saving note...');
+            saveNote().catch(err => console.error('Auto-save error:', err));
+        }, 1000);
+        
+        return () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+            }
+        };
+    }, [currentNoteHtml, currentDate, showListView, saveNote]);
+    
+    // Save drawing when handwriting is disabled or when drawing stops
+    useEffect(() => {
+        // Don't auto-save during initialization
+        if (isInitializingRef.current) {
+            return;
+        }
+        
+        if (!showHandwriting && canvasRef.current) {
+            // If we just disabled handwriting, check if there was drawing
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            
+            // Check a larger sample to see if there's actual drawing
+            const sampleWidth = Math.min(canvas.width, 200);
+            const sampleHeight = Math.min(canvas.height, 200);
+            const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+            const hasDrawing = imageData.data.some((channel, index) => {
+                return index % 4 !== 3 && channel !== 0;
+            });
+            
+            // Also check if editor has content
+            const editorContent = editorRef.current?.innerHTML || '';
+            const hasEditorContent = editorContent && editorContent.trim().length > 0;
+            
+            if (hasDrawing || hasEditorContent) {
+                // Wait a bit then save
+                setTimeout(() => {
+                    console.log('💾 Saving after handwriting disabled...', { hasDrawing, hasEditorContent, editorLength: editorContent.length });
+                    saveNote().catch(err => console.error('Error saving after handwriting:', err));
+                }, 500);
+            } else {
+                console.log('⚠️ Skipping save after handwriting disabled - no drawing or editor content');
+            }
+        }
+    }, [showHandwriting, saveNote]);
+    
+    // Save when drawing stops (after a delay)
+    const drawingTimeoutRef = useRef(null);
+    useEffect(() => {
+        // Don't auto-save drawing during initialization
+        if (isInitializingRef.current) {
+            return;
+        }
+        
+        if (!isDrawing && showHandwriting && canvasRef.current) {
+            // Drawing just stopped - check if there's actual drawing content
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            
+            // Check a larger sample to see if there's actual drawing
+            const sampleWidth = Math.min(canvas.width, 200);
+            const sampleHeight = Math.min(canvas.height, 200);
+            const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+            const hasDrawing = imageData.data.some((channel, index) => {
+                return index % 4 !== 3 && channel !== 0;
+            });
+            
+            // Also check if editor has content
+            const editorContent = editorRef.current?.innerHTML || '';
+            const hasEditorContent = editorContent && editorContent.trim().length > 0;
+            
+            if (hasDrawing || hasEditorContent) {
+                // Drawing or editor content exists - save after a short delay
+                if (drawingTimeoutRef.current) {
+                    clearTimeout(drawingTimeoutRef.current);
+                }
+                drawingTimeoutRef.current = setTimeout(() => {
+                    console.log('💾 Auto-saving drawing...', { hasDrawing, hasEditorContent, editorLength: editorContent.length });
+                    saveNote().catch(err => console.error('Error saving drawing:', err));
+                }, 2000);
+            } else {
+                console.log('⚠️ Skipping drawing auto-save - no drawing or editor content');
+            }
+        }
+        
+        return () => {
+            if (drawingTimeoutRef.current) {
+                clearTimeout(drawingTimeoutRef.current);
+            }
+        };
+    }, [isDrawing, showHandwriting, saveNote]);
+    
+    // Save on page unload (using visibilitychange for better reliability)
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.hidden && currentNoteHtml && !showListView) {
+                // Page is being hidden - save immediately
+                const dateString = formatDateString(currentDate);
+                const noteContent = currentNoteHtml || currentNote;
+                const token = window.storage?.getToken?.();
+                
+                if (token && noteContent) {
+                    // Use fetch with keepalive for reliable save
+                    fetch('/api/calendar-notes', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${token}`
+                        },
+                        body: JSON.stringify({
+                            date: dateString,
+                            note: noteContent
+                        }),
+                        keepalive: true
+                    }).catch(err => console.error('Error saving on page hide:', err));
+                }
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [currentNoteHtml, currentDate, showListView, currentNote]);
 
     // Open note for editing
-    const openNote = (dateString) => {
+    const openNote = async (dateString) => {
         const date = new Date(dateString + 'T00:00:00Z');
         setCurrentDate(date);
         setShowListView(false);
-        const note = notes[dateString] || '';
+        
+        // Reset initialization flag for new note
+        isInitializingRef.current = true;
+        
+        // First check localStorage for instant display
+        const user = window.storage?.getUser?.();
+        const userId = user?.id || user?.email || 'default';
+        const notesKey = `user_notes_${userId}`;
+        const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+        let note = localNotes[dateString] || notes[dateString] || '';
+        
+        console.log('📝 Opening note for date:', dateString, 'from localStorage length:', note.length);
+        
+        // Set initial content
         setCurrentNote(note);
         setCurrentNoteHtml(note);
-        if (editorRef.current) {
+        console.log('📝 Set note state for openNote, length:', note.length);
+        
+        // Set editor content immediately if available
+        if (note && editorRef.current) {
+            // Force set editor content immediately
             editorRef.current.innerHTML = note;
+            console.log('✅ Set editor content immediately on open, length:', note.length);
+        } else if (note) {
+            // If editor not ready yet, wait a bit and try again
+            setTimeout(() => {
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = note;
+                    console.log('✅ Set editor content on open (delayed), length:', note.length);
+                }
+            }, 100);
+        }
+        
+        // Also try to fetch fresh from server
+        try {
+            const token = window.storage?.getToken?.();
+            if (token) {
+                const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                    headers: { 
+                        Authorization: `Bearer ${token}`,
+                        'Cache-Control': 'no-cache'
+                    },
+                    credentials: 'include'
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    const serverNotes = data?.data?.notes || data?.notes || {};
+                    const serverNote = serverNotes[dateString] || '';
+                    
+                    console.log('📝 Server note for date:', dateString, 'length:', serverNote.length);
+                    
+                    if (serverNote && serverNote !== note) {
+                        // Always use server version if available and different
+                        note = serverNote;
+                        setCurrentNote(note);
+                        setCurrentNoteHtml(note);
+                        // Update notes state and localStorage
+                        setNotes(prev => ({ ...prev, [dateString]: note }));
+                        localNotes[dateString] = note;
+                        localStorage.setItem(notesKey, JSON.stringify(localNotes));
+                        console.log('📝 Loaded fresh note from server:', dateString, 'length:', note.length);
+                        
+                        // Update editor with server content immediately
+                        if (editorRef.current) {
+                            editorRef.current.innerHTML = note;
+                            console.log('✅ Updated editor with server note immediately, length:', note.length);
+                        } else {
+                            // If editor not ready, wait and try again
+                            setTimeout(() => {
+                                if (editorRef.current) {
+                                    editorRef.current.innerHTML = note;
+                                    console.log('✅ Updated editor with server note (delayed), length:', note.length);
+                                }
+                            }, 200);
+                        }
+                    } else if (!serverNote) {
+                        console.log('⚠️ No server note found for date:', dateString);
+                    } else {
+                        console.log('✅ Server note matches local note');
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching note:', error);
         }
     };
 
@@ -458,23 +1123,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <button
-                        onClick={saveNote}
-                        disabled={isSaving}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
-                    >
-                        {isSaving ? (
-                            <>
-                                <i className="fas fa-spinner fa-spin mr-2"></i>
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <i className="fas fa-save mr-2"></i>
-                                Save
-                            </>
-                        )}
-                    </button>
+                    {isSaving && (
+                        <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                            <i className="fas fa-spinner fa-spin"></i>
+                            <span>Auto-saving...</span>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -540,20 +1194,44 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 </button>
                 <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
                 <button
-                    onClick={() => setShowHandwriting(!showHandwriting)}
+                    onClick={() => {
+                        const newHandwritingState = !showHandwriting;
+                        setShowHandwriting(newHandwritingState);
+                        // When enabling handwriting, disable contentEditable temporarily
+                        if (editorRef.current) {
+                            if (newHandwritingState) {
+                                editorRef.current.style.pointerEvents = 'none';
+                                editorRef.current.contentEditable = 'false';
+                            } else {
+                                editorRef.current.style.pointerEvents = 'auto';
+                                editorRef.current.contentEditable = 'true';
+                            }
+                        }
+                    }}
                     className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${showHandwriting ? 'bg-blue-100 text-blue-600' : isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Handwriting"
+                    title={showHandwriting ? 'Disable Handwriting' : 'Enable Handwriting'}
                 >
                     <i className="fas fa-pen"></i>
                 </button>
             </div>
 
-            {/* Editor Area */}
-            <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Rich Text Editor */}
-                <div className="flex-1 p-4 overflow-y-auto">
+            {/* Editor Area with integrated handwriting */}
+            <div className="flex-1 flex flex-col overflow-hidden relative">
+                {/* Rich Text Editor with handwriting overlay */}
+                <div className="flex-1 p-4 overflow-y-auto relative">
                     <div
-                        ref={editorRef}
+                        ref={(el) => {
+                            editorRef.current = el;
+                            // When editor ref is set, immediately set content if we have it
+                            if (el && currentNoteHtml && currentNoteHtml.trim().length > 0) {
+                                const currentContent = el.innerHTML || '';
+                                if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
+                                    console.log('🔧 Setting editor content via ref callback - editor:', currentContent.length, 'state:', currentNoteHtml.length);
+                                    el.innerHTML = currentNoteHtml;
+                                    console.log('✅ Editor content set via ref callback, length:', currentNoteHtml.length);
+                                }
+                            }
+                        }}
                         contentEditable
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
@@ -564,42 +1242,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                         style={{ minHeight: 'calc(100vh - 200px)' }}
                     />
-                </div>
-
-                {/* Handwriting Panel */}
-                {showHandwriting && (
-                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-t p-4`}>
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                Handwriting
-                            </h3>
-                            <div className="flex items-center space-x-2">
-                                <button
-                                    onClick={clearHandwriting}
-                                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
-                                >
-                                    <i className="fas fa-eraser mr-1"></i>
-                                    Clear
-                                </button>
-                                <button
-                                    onClick={recognizeHandwriting}
-                                    disabled={isRecognizing}
-                                    className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {isRecognizing ? (
-                                        <>
-                                            <i className="fas fa-spinner fa-spin mr-1"></i>
-                                            Recognizing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <i className="fas fa-magic mr-1"></i>
-                                            Recognize Text
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
+                    
+                    {/* Handwriting canvas overlay - directly on editor */}
+                    {showHandwriting && (
                         <canvas
                             ref={canvasRef}
                             onMouseDown={startDrawing}
@@ -609,20 +1254,42 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             onTouchStart={startDrawing}
                             onTouchMove={draw}
                             onTouchEnd={stopDrawing}
-                            className={`w-full h-64 border-2 rounded-lg cursor-crosshair ${
-                                isDark ? 'border-gray-600 bg-gray-900' : 'border-gray-300 bg-white'
-                            }`}
-                            style={{ touchAction: 'none' }}
+                            className="absolute inset-0 cursor-crosshair"
+                            style={{ 
+                                touchAction: 'none',
+                                pointerEvents: 'auto',
+                                zIndex: 10
+                            }}
                         />
-                        {recognizedText && (
-                            <div className={`mt-3 p-3 rounded-lg ${isDark ? 'bg-gray-700' : 'bg-gray-100'}`}>
-                                <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-                                    <strong>Recognized:</strong> {recognizedText}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                )}
+                    )}
+                    
+                    {/* Handwriting controls overlay */}
+                    {showHandwriting && (
+                        <div className={`absolute top-6 right-6 flex items-center space-x-2 p-2 rounded-lg shadow-lg ${
+                            isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
+                        }`}>
+                            <button
+                                onClick={clearHandwriting}
+                                className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+                                title="Clear handwriting"
+                            >
+                                <i className="fas fa-eraser"></i>
+                            </button>
+                            <button
+                                onClick={recognizeHandwriting}
+                                disabled={isRecognizing}
+                                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Recognize handwriting as text"
+                            >
+                                {isRecognizing ? (
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                ) : (
+                                    <i className="fas fa-magic"></i>
+                                )}
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

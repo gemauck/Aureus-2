@@ -1,5 +1,5 @@
 // Lightweight feedback widget with comment viewing
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const FeedbackWidget = () => {
     const [open, setOpen] = useState(false);
@@ -12,6 +12,7 @@ const FeedbackWidget = () => {
     const [loadingComments, setLoadingComments] = useState(false);
     const { user } = window.useAuth();
     const { isDark } = window.useTheme();
+    const recentCommentsContainerRef = useRef(null);
 
     // Auto-detect current section/page
     const detectCurrentSection = () => {
@@ -124,6 +125,18 @@ const FeedbackWidget = () => {
             loadRecentComments();
         }
     }, [open]);
+    
+    // Auto-scroll to last comment when widget opens
+    useEffect(() => {
+        if (open && recentCommentsContainerRef.current && comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (recentCommentsContainerRef.current) {
+                    recentCommentsContainerRef.current.scrollTop = recentCommentsContainerRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    }, [open, comments.length]); // Re-scroll when widget opens or comments update
 
     const loadRecentComments = async () => {
         setLoadingComments(true);
@@ -227,7 +240,7 @@ const FeedbackWidget = () => {
                             <div className={`text-[10px] font-semibold uppercase ${isDark ? 'text-gray-400' : 'text-gray-500'} mb-1`}>
                                 Recent Comments
                             </div>
-                            <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                            <div ref={recentCommentsContainerRef} className="space-y-1.5 max-h-32 overflow-y-auto">
                                 {loadingComments ? (
                                     <div className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                                         <i className="fas fa-spinner fa-spin mr-1"></i>Loading...

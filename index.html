@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="robots" content="noindex, nofollow">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover">
     <meta name="theme-color" content="#0284c7">
     <meta name="mobile-web-app-capable" content="yes">
@@ -345,6 +348,14 @@
     
     <!-- Critical utilities that must load BEFORE components -->
     <script src="./dist/src/utils/authStorage.js"></script>
+    <script>
+        // Verify critical dependencies loaded
+        if (!window.storage) {
+            console.error('❌ CRITICAL: window.storage not available after authStorage.js loaded');
+        } else {
+            console.log('✅ window.storage available:', Object.keys(window.storage));
+        }
+    </script>
     
     <!-- Persistence Hook and Common Components -->
     <script defer src="./dist/src/hooks/usePersistence.js"></script>
@@ -390,6 +401,14 @@
     
     
     <script src="./dist/src/components/auth/AuthProvider.js"></script>
+    <script>
+        // Verify AuthProvider loaded
+        if (!window.AuthProvider || !window.useAuth) {
+            console.error('❌ CRITICAL: AuthProvider not available after loading');
+        } else {
+            console.log('✅ AuthProvider loaded successfully');
+        }
+    </script>
     <script src="./dist/src/components/auth/LoginPage.js?v=1761971000"></script>
     <script src="./dist/src/components/auth/AcceptInvitation.js"></script>
     <script src="./dist/src/components/auth/PasswordChangeModal.js"></script>
@@ -492,7 +511,7 @@
     <script defer src="./dist/src/components/hr/HR.js"></script>
     
     <!-- Clients - Load early since it's a main menu item and critical (not lazy) -->
-    <script defer src="./dist/src/components/clients/ClientDetailModal.js"></script>
+    <script defer src="./dist/src/components/clients/ClientDetailModal.js?v=simple-fix-1762241059"></script>
     <script defer src="./dist/src/components/clients/LeadDetailModal.js"></script>
     <script defer src="./dist/src/components/clients/Clients.js"></script>
     
@@ -508,7 +527,12 @@
     
     <!-- Manufacturing moved to lazy -->
     
-    <!-- Tools moved to lazy -->
+    <!-- Tools - Load tool components before Tools.jsx (loaded early for main menu) -->
+    <script defer src="./dist/src/components/tools/TankSizeCalculator.js?v=1008"></script>
+    <script defer src="./dist/src/components/tools/UnitConverter.js?v=1008"></script>
+    <script defer src="./dist/src/components/tools/PDFToWordConverter.js?v=1008"></script>
+    <script defer src="./dist/src/components/tools/HandwritingToWord.js?v=1008"></script>
+    <script defer src="./dist/src/components/tools/Tools.js?v=1008"></script>
     
     <!-- HR moved to lazy -->
     
@@ -664,6 +688,17 @@
     <!-- App Entry Point - Load AFTER setup -->
     <link rel="preload" href="./dist/src/App.js" as="script">
     <script defer src="./dist/src/App.js"></script>
+    <script>
+        // Verify App loaded after a delay
+        setTimeout(() => {
+            if (!window.App) {
+                console.error('❌ CRITICAL: App component not loaded after 2 seconds');
+                console.error('Check browser console for JavaScript errors');
+            } else {
+                console.log('✅ App component loaded');
+            }
+        }, 2000);
+    </script>
     
     
     <!-- Mount App - Fast loader for immediate mounting -->

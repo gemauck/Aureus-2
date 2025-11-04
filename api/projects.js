@@ -34,8 +34,47 @@ async function handler(req, res) {
     // List Projects (GET /api/projects)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'projects') {
       try {
+        const userRole = req.user?.role?.toLowerCase();
+        
+        // Build where clause
+        let whereClause = {};
+        
+        // For guest users, filter by accessibleProjectIds
+        if (userRole === 'guest') {
+          try {
+            // Parse accessibleProjectIds from user
+            let accessibleProjectIds = [];
+            if (req.user?.accessibleProjectIds) {
+              if (typeof req.user.accessibleProjectIds === 'string') {
+                accessibleProjectIds = JSON.parse(req.user.accessibleProjectIds);
+              } else if (Array.isArray(req.user.accessibleProjectIds)) {
+                accessibleProjectIds = req.user.accessibleProjectIds;
+              }
+            }
+            
+            // If no accessible projects specified, return empty array
+            if (!accessibleProjectIds || accessibleProjectIds.length === 0) {
+              console.log('✅ Guest user has no accessible projects');
+              return ok(res, { projects: [] });
+            }
+            
+            // Filter by accessible project IDs
+            whereClause = {
+              id: {
+                in: accessibleProjectIds
+              }
+            };
+            
+            console.log('✅ Filtering projects for guest user:', accessibleProjectIds);
+          } catch (parseError) {
+            console.error('❌ Error parsing accessibleProjectIds:', parseError);
+            return ok(res, { projects: [] });
+          }
+        }
+        
         // Optimize: Only select fields needed for the list view
         const projects = await prisma.project.findMany({ 
+          where: whereClause,
           select: {
             id: true,
             name: true,
@@ -56,7 +95,24 @@ async function handler(req, res) {
         console.log('✅ Projects retrieved successfully:', projects.length)
         return ok(res, { projects })
       } catch (dbError) {
-        console.error('❌ Database error listing projects:', dbError)
+        console.error('❌ Database error listing projects:', {
+          message: dbError.message,
+          code: dbError.code,
+          name: dbError.name,
+          meta: dbError.meta,
+          stack: dbError.stack?.substring(0, 500)
+        })
+        
+        // Check if it's a connection error
+        const isConnectionError = dbError.message?.includes("Can't reach database server") ||
+                                 dbError.code === 'P1001' ||
+                                 dbError.code === 'ETIMEDOUT' ||
+                                 dbError.code === 'ECONNREFUSED'
+        
+        if (isConnectionError) {
+          console.error('🔌 Database connection issue detected - server may be unreachable')
+        }
+        
         return serverError(res, 'Failed to list projects', dbError.message)
       }
     }

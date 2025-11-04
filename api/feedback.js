@@ -117,24 +117,16 @@ async function notifyAdminsOfFeedback(feedback, submittingUser) {
         console.error('❌ Feedback email error details:', {
           message: emailError.message,
           code: emailError.code,
+          command: emailError.command,
           response: emailError.response,
-          to: admin.email
+          to: admin.email,
+          stack: emailError.stack
         })
         if (emailError.stack) {
           console.error('❌ Feedback email error stack:', emailError.stack)
         }
         failureCount++
         return { success: false, email: admin.email, error: emailError.message }
-      } catch (err) {
-        console.error(`❌ Failed to send feedback notification to ${admin.email}:`, err.message)
-        console.error(`❌ Error details:`, {
-          code: err.code,
-          command: err.command,
-          response: err.response,
-          stack: err.stack
-        })
-        failureCount++
-        return { success: false, email: admin.email, error: err.message }
       }
     })
 
@@ -194,37 +186,50 @@ async function handler(req, res) {
         if (pageUrl) where.pageUrl = pageUrl
         if (section) where.section = section
 
-        const selectFields = {
-          id: true,
-          userId: true,
-          pageUrl: true,
-          section: true,
-          message: true,
-          type: true,
-          severity: true,
-          meta: true,
-          createdAt: true
+        // Build query options - use include for relations, select for fields
+        const queryOptions = {
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: pageUrl && section ? 50 : 200 // More results for specific sections
         }
 
         if (includeUser) {
-          selectFields.user = {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              avatar: true
+          // Use include for relations - more reliable than nested select
+          queryOptions.include = {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true
+              }
             }
+          }
+        } else {
+          // Use select when not including relations for better performance
+          queryOptions.select = {
+            id: true,
+            userId: true,
+            pageUrl: true,
+            section: true,
+            message: true,
+            type: true,
+            severity: true,
+            meta: true,
+            createdAt: true
           }
         }
 
-        const feedback = await prisma.feedback.findMany({
-          where,
-          select: selectFields,
-          orderBy: { createdAt: 'desc' },
-          take: pageUrl && section ? 50 : 200 // More results for specific sections
-        })
+        const feedback = await prisma.feedback.findMany(queryOptions)
         return ok(res, feedback)
       } catch (e) {
+        console.error('❌ Error fetching feedback:', e)
+        console.error('❌ Error stack:', e.stack)
+        console.error('❌ Query params:', { 
+          pageUrl: queryParams.pageUrl, 
+          section: queryParams.section, 
+          includeUser: queryParams.includeUser 
+        })
         return serverError(res, 'Failed to fetch feedback', e.message)
       }
     }

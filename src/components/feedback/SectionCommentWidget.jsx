@@ -1,5 +1,5 @@
 // Section-specific comment widget that can be embedded in any section
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -10,6 +10,7 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
     const [message, setMessage] = useState('');
     const { user } = window.useAuth();
     const { isDark } = window.useTheme();
+    const commentsContainerRef = useRef(null);
 
     // Get current page URL and section identifier
     const pageUrl = window.location.pathname;
@@ -21,6 +22,18 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
             loadComments();
         }
     }, [isOpen, pageUrl, section]);
+    
+    // Auto-scroll to last comment when widget opens
+    useEffect(() => {
+        if (isOpen && commentsContainerRef.current && comments.length > 0) {
+            // Small delay to ensure DOM is ready
+            setTimeout(() => {
+                if (commentsContainerRef.current) {
+                    commentsContainerRef.current.scrollTop = commentsContainerRef.current.scrollHeight;
+                }
+            }, 100);
+        }
+    }, [isOpen, comments.length]); // Re-scroll when widget opens or comments update
 
     const loadComments = async () => {
         setLoading(true);
@@ -143,7 +156,7 @@ const SectionCommentWidget = ({ sectionId, sectionName, className = '' }) => {
                 </div>
 
                 {/* Comments List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div ref={commentsContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3">
                     {loading ? (
                         <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                             <i className="fas fa-spinner fa-spin text-lg mb-2"></i>

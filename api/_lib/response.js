@@ -51,6 +51,30 @@ export function notFound(res, message = 'Not found') {
 export function serverError(res, message = 'Server error', details) {
   res.setHeader('Content-Type', 'application/json')
   res.statusCode = 500
-  res.end(JSON.stringify({ error: { code: 'SERVER_ERROR', message, details } }))
+  
+  // Detect database connection errors and provide better error messages
+  let errorCode = 'SERVER_ERROR'
+  let errorMessage = message
+  let errorDetails = details
+  
+  // Check both message and details for connection errors
+  const messageStr = typeof message === 'string' ? message.toLowerCase() : ''
+  const detailsStr = typeof details === 'string' ? details.toLowerCase() : ''
+  const combinedText = `${messageStr} ${detailsStr}`
+  
+  if (combinedText.includes("can't reach database server") ||
+      combinedText.includes("can't reach database") ||
+      combinedText.includes("econnrefused") ||
+      combinedText.includes("etimedout") ||
+      combinedText.includes("enotfound") ||
+      combinedText.includes("connection timeout") ||
+      combinedText.includes("connection refused") ||
+      (combinedText.includes("connection") && (combinedText.includes("unreachable") || combinedText.includes("failed")))) {
+    errorCode = 'DATABASE_CONNECTION_ERROR'
+    errorMessage = 'Database connection failed'
+    errorDetails = 'The database server is unreachable. Please check your network connection and ensure the database server is running.'
+  }
+  
+  res.end(JSON.stringify({ error: { code: errorCode, message: errorMessage, details: errorDetails } }))
 }
 

@@ -259,9 +259,27 @@ const TankSizeCalculator = () => {
                         const segmentArea = (r * r / 2) * (theta - Math.sin(theta));
                         const cylinderPartVolume = segmentArea * cylinderLength;
                         
-                        // Add end caps (spherical segments)
-                        const capsVolume = (Math.PI * fill * fill * (3 * r - fill)) / 3;
-                        volumeAtFillLevel = cylinderPartVolume + (2 * capsVolume);
+                        // Calculate end caps volume correctly
+                        // Bottom cap: contributes when fill > 0
+                        // Top cap: only contributes when fill > (d - r)
+                        let bottomCapVolume = 0;
+                        let topCapVolume = 0;
+                        
+                        if (fill <= r) {
+                            // Only bottom cap is partially filled
+                            bottomCapVolume = (Math.PI * fill * fill * (3 * r - fill)) / 3;
+                        } else {
+                            // Bottom cap is full (hemisphere)
+                            bottomCapVolume = (2/3) * Math.PI * r * r * r;
+                            
+                            // Check if top cap is filling
+                            if (fill > (d - r)) {
+                                const topFill = fill - (d - r);
+                                topCapVolume = (Math.PI * topFill * topFill * (3 * r - topFill)) / 3;
+                            }
+                        }
+                        
+                        volumeAtFillLevel = cylinderPartVolume + bottomCapVolume + topCapVolume;
                     }
                     usableVolume = totalVolume * 0.95;
                 }
@@ -405,7 +423,7 @@ const TankSizeCalculator = () => {
                         // where a = radius, b = depth
                         endVolume = (2/3) * Math.PI * r * r * endDepth;
                     } else if (endType === 'torispherical') {
-                        // F&D head volume calculation (improved)
+                        // F&D head volume calculation (ASME standard approximation)
                         const Rd = parseFloat(dimensions.dishRadius) || d;
                         const rk = parseFloat(dimensions.knuckleRadius) || (0.06 * d);
                         
@@ -414,9 +432,13 @@ const TankSizeCalculator = () => {
                         const h_dish = Rd * (1 - Math.cos(alpha));
                         const V_dish = (Math.PI * h_dish / 6) * (3 * Math.pow(r - rk, 2) + Math.pow(h_dish, 2));
                         
-                        // Toroidal knuckle segment volume (approximation)
+                        // Toroidal knuckle segment volume (ASME approximation)
+                        // The knuckle is a torus segment swept by rotating the knuckle arc
+                        // Standard approximation: V ≈ π·rk²·(r-rk)·(2α) for small angles
+                        // Improved approximation accounts for the swept volume
                         const h_knuckle = rk * (1 - Math.cos(alpha));
-                        const V_knuckle = Math.PI * Math.PI * rk * rk * (r - rk) * alpha;
+                        // Corrected formula: π (not π²) times the swept volume
+                        const V_knuckle = Math.PI * rk * rk * (r - rk) * (2 * alpha);
                         
                         endVolume = V_dish + V_knuckle;
                     } else {
@@ -622,6 +644,36 @@ const TankSizeCalculator = () => {
                         const topFill = fillHeight - (h - r);
                         const topHemisphereVolume = (Math.PI * topFill * topFill * (3 * r - topFill)) / 3;
                         volume = hemisphereVolume + cylinderFullVolume + topHemisphereVolume;
+                    }
+                    break;
+                    
+                case 'horizontal-capsule':
+                    if (fillHeight > 0 && fillHeight <= d) {
+                        // Use circular segment for cylinder part
+                        const cylinderLength = l - d;
+                        const theta = 2 * Math.acos((r - fillHeight) / r);
+                        const segmentArea = (r * r / 2) * (theta - Math.sin(theta));
+                        const cylinderPartVolume = segmentArea * cylinderLength;
+                        
+                        // Calculate end caps volume correctly (same logic as main calculation)
+                        let bottomCapVolume = 0;
+                        let topCapVolume = 0;
+                        
+                        if (fillHeight <= r) {
+                            // Only bottom cap is partially filled
+                            bottomCapVolume = (Math.PI * fillHeight * fillHeight * (3 * r - fillHeight)) / 3;
+                        } else {
+                            // Bottom cap is full (hemisphere)
+                            bottomCapVolume = (2/3) * Math.PI * r * r * r;
+                            
+                            // Check if top cap is filling
+                            if (fillHeight > (d - r)) {
+                                const topFill = fillHeight - (d - r);
+                                topCapVolume = (Math.PI * topFill * topFill * (3 * r - topFill)) / 3;
+                            }
+                        }
+                        
+                        volume = cylinderPartVolume + bottomCapVolume + topCapVolume;
                     }
                     break;
                     

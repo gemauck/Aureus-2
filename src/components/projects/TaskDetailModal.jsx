@@ -6,6 +6,8 @@ const TaskDetailModal = ({
     parentTask, 
     customFieldDefinitions, 
     taskLists,
+    project,
+    users: usersProp,
     onUpdate, 
     onClose,
     onAddSubtask,
@@ -19,7 +21,7 @@ const TaskDetailModal = ({
     const [editedTask, setEditedTask] = useState(task || {
         title: '',
         description: '',
-        assignee: 'Gareth Mauck',
+        assignee: '',
         dueDate: '',
         priority: 'Medium',
         listId: task?.listId || (taskLists && taskLists[0]?.id) || 1,
@@ -33,17 +35,66 @@ const TaskDetailModal = ({
         actualHours: '',
         status: 'To Do',
         blockedBy: '',
-        dependencies: []
+        dependencies: [],
+        subscribers: [] // Track users subscribed to task conversation
     });
     const [newComment, setNewComment] = useState('');
     const [comments, setComments] = useState(task?.comments || []);
     const [attachments, setAttachments] = useState(task?.attachments || []);
     const [checklist, setChecklist] = useState(task?.checklist || []);
+    
+    // Initialize subscribers from task if it exists
+    useEffect(() => {
+        if (task?.subscribers) {
+            setEditedTask(prev => ({
+                ...prev,
+                subscribers: task.subscribers
+            }));
+        }
+    }, [task?.subscribers]);
     const [newChecklistItem, setNewChecklistItem] = useState('');
     const [newTag, setNewTag] = useState('');
     const [tags, setTags] = useState(task?.tags || []);
+    const [users, setUsers] = useState(usersProp || []);
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [showMentionSuggestions, setShowMentionSuggestions] = useState(false);
+    const [mentionPosition, setMentionPosition] = useState({ top: 0, left: 0 });
+    const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+    const commentTextareaRef = useRef(null);
+    const mentionSuggestionsRef = useRef(null);
     const commentsContainerRef = useRef(null);
     const leftContentRef = useRef(null);
+
+    // Update users if prop changes
+    useEffect(() => {
+        if (usersProp && usersProp.length > 0) {
+            setUsers(usersProp);
+        }
+    }, [usersProp]);
+
+    // Fetch users on component mount
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                if (window.DatabaseAPI?.getUsers) {
+                    const response = await window.DatabaseAPI.getUsers();
+                    const usersList = response?.data?.users || response?.data?.data?.users || 
+                                     (Array.isArray(response?.data) ? response.data : []) ||
+                                     (Array.isArray(response) ? response : []);
+                    setUsers(usersList.filter(u => u.status !== 'inactive'));
+                } else if (window.api?.getUsers) {
+                    const response = await window.api.getUsers();
+                    const usersList = response?.data?.users || response?.data?.data?.users || 
+                                     (Array.isArray(response?.data) ? response.data : []) ||
+                                     (Array.isArray(response) ? response : []);
+                    setUsers(usersList.filter(u => u.status !== 'inactive'));
+                }
+            } catch (error) {
+                console.error('Error fetching users:', error);
+            }
+        };
+        fetchUsers();
+    }, []);
 
     // Auto-scroll to last comment when comments tab is opened
     useEffect(() => {
@@ -65,6 +116,19 @@ const TaskDetailModal = ({
         }
     }, [activeTab, comments.length]); // Re-scroll when tab changes or comments update
 
+    // Close mention suggestions when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (mentionSuggestionsRef.current && !mentionSuggestionsRef.current.contains(event.target) &&
+                commentTextareaRef.current && !commentTextareaRef.current.contains(event.target)) {
+                setShowMentionSuggestions(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+
     const handleSave = () => {
         const title = (editedTask && typeof editedTask.title === 'string') ? editedTask.title : '';
         if (!title.trim()) {
@@ -79,15 +143,140 @@ const TaskDetailModal = ({
             subtasks: editedTask.subtasks || [],
             checklist,
             tags,
+            subscribers: editedTask.subscribers || [],
             id: editedTask.id || Date.now()
         });
         onClose();
     };
 
-    const handleAddComment = () => {
+    // Parse mentions from comment text (@username format)
+    // Handles both @username and @John Doe (with spaces, but only up to the next space or end)
+    const parseMentions = (text) => {
+        // Match @ followed by word characters or spaces, but stop at space or punctuation
+        const mentionRegex = /@([\w]+(?:\s+[\w]+)*)/g;
+        const mentions = [];
+        let match;
+        while ((match = mentionRegex.exec(text)) !== null) {
+            // Remove @ and trim
+            const mentionText = match[1].trim();
+            if (mentionText) {
+                mentions.push(mentionText);
+            }
+        }
+        return mentions;
+    };
+
+    // Find users by name or email (case-insensitive partial match)
+    const findUsersByMention = (mentionText) => {
+        if (!mentionText) return [];
+        const query = mentionText.toLowerCase();
+        return users.filter(user => {
+            const name = (user.name || '').toLowerCase();
+            const email = (user.email || '').toLowerCase();
+            return name.includes(query) || email.includes(query);
+        });
+    };
+
+    // Get suggested users for mention autocomplete
+    const getMentionSuggestions = () => {
+        if (!mentionQuery) return users.slice(0, 5); // Show first 5 users if no query
+        return findUsersByMention(mentionQuery).slice(0, 5);
+    };
+
+    // Handle mention insertion in comment
+    const insertMention = (user) => {
+        if (!commentTextareaRef.current) return;
+        
+        const textarea = commentTextareaRef.current;
+        const text = newComment;
+        const start = mentionStartIndex;
+        const end = textarea.selectionStart;
+        const before = text.substring(0, start);
+        const after = text.substring(end);
+        const mentionText = `@${user.name || user.email}`;
+        
+        setNewComment(before + mentionText + ' ' + after);
+        setShowMentionSuggestions(false);
+        setMentionQuery('');
+        setMentionStartIndex(-1);
+        
+        // Focus back on textarea and set cursor position
+        setTimeout(() => {
+            textarea.focus();
+            const newPosition = start + mentionText.length + 1;
+            textarea.setSelectionRange(newPosition, newPosition);
+        }, 0);
+    };
+
+    // Handle comment text change and detect @ mentions
+    const handleCommentChange = (e) => {
+        const text = e.target.value;
+        const cursorPos = e.target.selectionStart;
+        
+        // Find @ symbol before cursor
+        const textBeforeCursor = text.substring(0, cursorPos);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+        
+        if (lastAtIndex !== -1) {
+            // Check if there's a space after @ (meaning @ is not for mention)
+            const afterAt = textBeforeCursor.substring(lastAtIndex + 1);
+            if (!afterAt.includes(' ')) {
+                // This is a mention
+                const mentionText = afterAt;
+                setMentionQuery(mentionText);
+                setMentionStartIndex(lastAtIndex);
+                setShowMentionSuggestions(true);
+                
+                // Position suggestions directly below the textarea
+                // Using simple positioning - just below the textarea
+                setMentionPosition({
+                    top: 0, // Will be overridden by CSS
+                    left: 0
+                });
+            } else {
+                setShowMentionSuggestions(false);
+            }
+        } else {
+            setShowMentionSuggestions(false);
+        }
+        
+        setNewComment(text);
+    };
+
+    const handleAddComment = async () => {
         if (newComment.trim()) {
             // Get current user info
             const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+            
+            // Parse mentions from comment text
+            const mentionTexts = parseMentions(newComment);
+            const mentionedUsers = [];
+            
+            // Find actual user objects for mentions
+            mentionTexts.forEach(mentionText => {
+                const mentionLower = mentionText.toLowerCase();
+                const user = users.find(u => {
+                    const name = (u.name || '').toLowerCase();
+                    const email = (u.email || '').toLowerCase();
+                    // Match exact name/email or if mention is contained in name (for partial matches)
+                    return name === mentionLower || 
+                           email === mentionLower ||
+                           name.startsWith(mentionLower + ' ') ||
+                           name.includes(' ' + mentionLower + ' ') ||
+                           name.endsWith(' ' + mentionLower) ||
+                           (name.split(' ').some(word => word === mentionLower)); // Match any word in name
+                });
+                if (user) {
+                    // Only add if not already mentioned
+                    if (!mentionedUsers.find(m => m.id === user.id)) {
+                        mentionedUsers.push({
+                            id: user.id,
+                            name: user.name,
+                            email: user.email
+                        });
+                    }
+                }
+            });
             
             const comment = {
                 id: Date.now(),
@@ -96,10 +285,113 @@ const TaskDetailModal = ({
                 authorEmail: currentUser.email,
                 authorId: currentUser.id,
                 timestamp: new Date().toISOString(),
-                date: new Date().toLocaleString()
+                date: new Date().toLocaleString(),
+                mentions: mentionedUsers // Store mentioned users
             };
+            
+            // Update subscribers list - add mentioned users and comment author
+            const newSubscribers = [...new Set([
+                ...(editedTask.subscribers || []),
+                currentUser.id, // Comment author is always subscribed
+                ...mentionedUsers.map(u => u.id) // Add all mentioned users
+            ])];
+            
+            setEditedTask({
+                ...editedTask,
+                subscribers: newSubscribers
+            });
+            
             setComments([...comments, comment]);
             setNewComment('');
+            
+            // Send notifications
+            try {
+                const projectLink = project ? `/projects/${project.id}` : '/projects';
+                const taskTitle = editedTask.title || task?.title || 'Untitled Task';
+                const projectName = project?.name || 'Project';
+                
+                // Send notifications to mentioned users using MentionHelper
+                if (window.MentionHelper && mentionedUsers.length > 0) {
+                    const contextTitle = `Task: ${taskTitle}`;
+                    const contextLink = projectLink;
+                    await window.MentionHelper.processMentions(
+                        newComment,
+                        contextTitle,
+                        contextLink,
+                        currentUser.name,
+                        users
+                    );
+                }
+                
+                // Send notification to task assignee if they're not the comment author
+                if (editedTask.assignee) {
+                    const assigneeUser = users.find(u => 
+                        u.name === editedTask.assignee || 
+                        u.email === editedTask.assignee ||
+                        u.id === editedTask.assignee
+                    );
+                    
+                    if (assigneeUser && assigneeUser.id !== currentUser.id && !mentionedUsers.find(m => m.id === assigneeUser.id)) {
+                        await window.DatabaseAPI.makeRequest('/notifications', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                userId: assigneeUser.id,
+                                type: 'comment',
+                                title: `New comment on task: ${taskTitle}`,
+                                message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
+                                link: projectLink,
+                                metadata: {
+                                    taskId: editedTask.id || task?.id,
+                                    taskTitle: taskTitle,
+                                    projectId: project?.id,
+                                    projectName: projectName,
+                                    commentAuthor: currentUser.name,
+                                    commentText: newComment
+                                }
+                            })
+                        });
+                        console.log(`✅ Comment notification sent to assignee ${assigneeUser.name}`);
+                    }
+                }
+                
+                // Send notifications to subscribers (excluding comment author and mentioned users)
+                const subscribersToNotify = (editedTask.subscribers || []).filter(subId => {
+                    return subId !== currentUser.id && 
+                           !mentionedUsers.find(m => m.id === subId) &&
+                           subId !== (editedTask.assignee ? users.find(u => u.name === editedTask.assignee || u.email === editedTask.assignee || u.id === editedTask.assignee)?.id : null);
+                });
+                
+                for (const subscriberId of subscribersToNotify) {
+                    const subscriber = users.find(u => u.id === subscriberId);
+                    if (subscriber) {
+                        try {
+                            await window.DatabaseAPI.makeRequest('/notifications', {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                    userId: subscriber.id,
+                                    type: 'comment',
+                                    title: `New comment on task: ${taskTitle}`,
+                                    message: `${currentUser.name} commented on "${taskTitle}" in project "${projectName}": "${newComment.substring(0, 100)}${newComment.length > 100 ? '...' : ''}"`,
+                                    link: projectLink,
+                                    metadata: {
+                                        taskId: editedTask.id || task?.id,
+                                        taskTitle: taskTitle,
+                                        projectId: project?.id,
+                                        projectName: projectName,
+                                        commentAuthor: currentUser.name,
+                                        commentText: newComment
+                                    }
+                                })
+                            });
+                            console.log(`✅ Comment notification sent to subscriber ${subscriber.name}`);
+                        } catch (error) {
+                            console.error(`❌ Failed to send comment notification to subscriber ${subscriber.name}:`, error);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Failed to send comment notifications:', error);
+            }
         }
     };
 
@@ -576,15 +868,99 @@ const TaskDetailModal = ({
                         {activeTab === 'comments' && (
                             <div className="space-y-3">
                                 {/* Add Comment */}
-                                <div>
+                                <div className="relative">
                                     <textarea
+                                        ref={commentTextareaRef}
                                         value={newComment}
-                                        onChange={(e) => setNewComment(e.target.value)}
+                                        onChange={handleCommentChange}
+                                        onKeyDown={(e) => {
+                                            // Handle arrow keys and enter in mention suggestions
+                                            if (showMentionSuggestions && mentionSuggestionsRef.current) {
+                                                const suggestions = mentionSuggestionsRef.current.querySelectorAll('[data-mention-item]');
+                                                const currentIndex = Array.from(suggestions).findIndex(el => el.classList.contains('bg-primary-100'));
+                                                
+                                                if (e.key === 'ArrowDown') {
+                                                    e.preventDefault();
+                                                    const nextIndex = currentIndex < suggestions.length - 1 ? currentIndex + 1 : 0;
+                                                    suggestions[nextIndex]?.scrollIntoView({ block: 'nearest' });
+                                                    suggestions.forEach((s, i) => {
+                                                        if (i === nextIndex) s.classList.add('bg-primary-100');
+                                                        else s.classList.remove('bg-primary-100');
+                                                    });
+                                                } else if (e.key === 'ArrowUp') {
+                                                    e.preventDefault();
+                                                    const prevIndex = currentIndex > 0 ? currentIndex - 1 : suggestions.length - 1;
+                                                    suggestions[prevIndex]?.scrollIntoView({ block: 'nearest' });
+                                                    suggestions.forEach((s, i) => {
+                                                        if (i === prevIndex) s.classList.add('bg-primary-100');
+                                                        else s.classList.remove('bg-primary-100');
+                                                    });
+                                                } else if (e.key === 'Enter' && currentIndex >= 0) {
+                                                    e.preventDefault();
+                                                    const selectedUser = getMentionSuggestions()[currentIndex];
+                                                    if (selectedUser) insertMention(selectedUser);
+                                                } else if (e.key === 'Escape') {
+                                                    setShowMentionSuggestions(false);
+                                                }
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         rows="3"
-                                        placeholder="Add a comment..."
+                                        placeholder="Add a comment... (use @ to mention someone)"
                                     ></textarea>
-                                    <div className="mt-1.5 flex justify-end">
+                                    
+                                    {/* Mention Suggestions Dropdown */}
+                                    {showMentionSuggestions && (
+                                        <div
+                                            ref={mentionSuggestionsRef}
+                                            className="absolute top-full mt-1 left-0 right-0 z-[9999] bg-white border border-gray-300 rounded-lg shadow-xl max-h-48 overflow-y-auto"
+                                            style={{
+                                                minWidth: '200px',
+                                                maxWidth: '100%'
+                                            }}
+                                        >
+                                            {getMentionSuggestions().length > 0 ? (
+                                                getMentionSuggestions().map((user, index) => (
+                                                    <div
+                                                        key={user.id}
+                                                        data-mention-item
+                                                        onClick={() => insertMention(user)}
+                                                        className={`px-3 py-2 cursor-pointer hover:bg-primary-100 flex items-center gap-2 ${
+                                                            index === 0 ? 'bg-primary-50' : ''
+                                                        }`}
+                                                    >
+                                                        <div className="w-6 h-6 rounded-full bg-primary-600 flex items-center justify-center text-white font-semibold text-[10px]">
+                                                            {(user.name || user.email || 'U').charAt(0).toUpperCase()}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="text-xs font-medium text-gray-800 truncate">
+                                                                {user.name || user.email}
+                                                            </div>
+                                                            {user.name && user.email && (
+                                                                <div className="text-[10px] text-gray-500 truncate">
+                                                                    {user.email}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <div className="px-3 py-2 text-xs text-gray-500">
+                                                    No users found
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    
+                                    <div className="mt-1.5 flex justify-between items-center">
+                                        <div className="text-[10px] text-gray-500">
+                                            {editedTask.subscribers && editedTask.subscribers.length > 0 && (
+                                                <span>
+                                                    <i className="fas fa-bell mr-1"></i>
+                                                    {editedTask.subscribers.length} subscriber{editedTask.subscribers.length !== 1 ? 's' : ''}
+                                                </span>
+                                            )}
+                                        </div>
                                         <button
                                             onClick={handleAddComment}
                                             className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
@@ -628,7 +1004,31 @@ const TaskDetailModal = ({
                                                         <i className="fas fa-trash text-xs"></i>
                                                     </button>
                                                 </div>
-                                                <p className="text-gray-700 text-xs whitespace-pre-wrap">{comment.text}</p>
+                                                <p className="text-gray-700 text-xs whitespace-pre-wrap">
+                                                    {comment.text.split(/(@[\w]+(?:\s+[\w]+)*)/g).map((part, idx) => {
+                                                        if (part.startsWith('@')) {
+                                                            const mentionText = part.substring(1).trim();
+                                                            const mentionedUser = comment.mentions?.find(m => {
+                                                                const mName = (m.name || '').toLowerCase();
+                                                                const mEmail = (m.email || '').toLowerCase();
+                                                                return mName === mentionText.toLowerCase() || 
+                                                                       mEmail === mentionText.toLowerCase() ||
+                                                                       mName.includes(mentionText.toLowerCase()) ||
+                                                                       mEmail.includes(mentionText.toLowerCase());
+                                                            });
+                                                            return (
+                                                                <span
+                                                                    key={idx}
+                                                                    className="inline-flex items-center px-1.5 py-0.5 bg-primary-100 text-primary-700 rounded font-medium"
+                                                                    title={mentionedUser ? `@${mentionedUser.name || mentionedUser.email}` : `@${mentionText}`}
+                                                                >
+                                                                    @{mentionText}
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return <span key={idx}>{part}</span>;
+                                                    })}
+                                                </p>
                                             </div>
                                         ))
                                     )}
@@ -756,13 +1156,16 @@ const TaskDetailModal = ({
                                     Assignee
                                 </label>
                                 <select
-                                    value={editedTask.assignee}
+                                    value={editedTask.assignee || ''}
                                     onChange={(e) => setEditedTask({...editedTask, assignee: e.target.value})}
                                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                 >
                                     <option value="">Unassigned</option>
-                                    <option>Gareth Mauck</option>
-                                    <option>David Buttemer</option>
+                                    {users.map(user => (
+                                        <option key={user.id} value={user.name || user.email}>
+                                            {user.name || user.email}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
 

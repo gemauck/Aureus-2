@@ -12,7 +12,9 @@
             MainLayout: !!window.MainLayout,
             ThemeProvider: !!window.ThemeProvider,
             AuthProvider: !!window.AuthProvider,
-            DataProvider: !!window.DataProvider
+            DataProvider: !!window.DataProvider,
+            storage: !!window.storage,
+            api: !!window.api
         };
     }
     
@@ -20,7 +22,9 @@
         if (window.__appMounted || mounted) return true;
         
         const components = checkComponents();
-        const allReady = Object.values(components).every(v => v);
+        // Required components (storage and api are optional - loaded async)
+        const required = ['React', 'ReactDOM', 'App', 'ThemeProvider', 'AuthProvider', 'DataProvider'];
+        const allReady = required.every(key => components[key]);
         
         if (!allReady) {
             return false;
@@ -62,13 +66,20 @@
             return true;
         }
         
-        // Log progress every 10 attempts
-        if (attempts % 10 === 0) {
+        // Log progress every 5 attempts for better visibility
+        if (attempts % 5 === 0) {
             const components = checkComponents();
             const missing = Object.entries(components)
                 .filter(([k, v]) => !v)
                 .map(([k]) => k);
-            console.log(`⏳ Waiting for components... (${attempts}/${MAX_ATTEMPTS}) Missing:`, missing.join(', '));
+            const available = Object.entries(components)
+                .filter(([k, v]) => v)
+                .map(([k]) => k);
+            console.log(`⏳ Loading components... (${attempts}/${MAX_ATTEMPTS})`);
+            console.log(`   ✅ Available:`, available.join(', '));
+            if (missing.length > 0) {
+                console.log(`   ⏳ Missing:`, missing.join(', '));
+            }
         }
         
         // Show error if max attempts reached

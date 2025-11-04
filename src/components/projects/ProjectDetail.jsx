@@ -651,9 +651,94 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
         setShowTaskDetailModal(true);
     };
 
-    const handleUpdateTaskFromDetail = (updatedTaskData) => {
+    const handleUpdateTaskFromDetail = async (updatedTaskData) => {
         const isNewTask = !updatedTaskData.id || (!tasks.find(t => t.id === updatedTaskData.id) && 
                                                     !tasks.some(t => (t.subtasks || []).find(st => st.id === updatedTaskData.id)));
+        
+        // Get current user info
+        const currentUser = window.storage?.getUserInfo() || { name: 'System', email: 'system', id: 'system' };
+        
+        // Find the old task to compare assignee changes
+        let oldTask = null;
+        if (!isNewTask) {
+            if (viewingTaskParent) {
+                const parentTask = tasks.find(t => t.id === viewingTaskParent.id);
+                oldTask = parentTask?.subtasks?.find(st => st.id === updatedTaskData.id);
+            } else {
+                oldTask = tasks.find(t => t.id === updatedTaskData.id);
+            }
+        }
+        
+        // Send notification if assignee changed
+        if (!isNewTask && oldTask && updatedTaskData.assignee && updatedTaskData.assignee !== oldTask.assignee) {
+            // Find the assignee user
+            const assigneeUser = users.find(u => 
+                u.name === updatedTaskData.assignee || 
+                u.email === updatedTaskData.assignee ||
+                u.id === updatedTaskData.assignee
+            );
+            
+            if (assigneeUser && assigneeUser.id !== currentUser.id) {
+                try {
+                    const projectLink = `/projects/${project.id}`;
+                    await window.DatabaseAPI.makeRequest('/notifications', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            userId: assigneeUser.id,
+                            type: 'task',
+                            title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
+                            message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                            link: projectLink,
+                            metadata: {
+                                taskId: updatedTaskData.id,
+                                taskTitle: updatedTaskData.title,
+                                projectId: project.id,
+                                projectName: project.name,
+                                assignedBy: currentUser.name
+                            }
+                        })
+                    });
+                    console.log(`✅ Task assignment notification sent to ${assigneeUser.name}`);
+                } catch (error) {
+                    console.error('❌ Failed to send task assignment notification:', error);
+                }
+            }
+        }
+        
+        // Send notification if this is a new task with an assignee
+        if (isNewTask && updatedTaskData.assignee) {
+            const assigneeUser = users.find(u => 
+                u.name === updatedTaskData.assignee || 
+                u.email === updatedTaskData.assignee ||
+                u.id === updatedTaskData.assignee
+            );
+            
+            if (assigneeUser && assigneeUser.id !== currentUser.id) {
+                try {
+                    const projectLink = `/projects/${project.id}`;
+                    await window.DatabaseAPI.makeRequest('/notifications', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            userId: assigneeUser.id,
+                            type: 'task',
+                            title: `Task assigned: ${updatedTaskData.title || 'Untitled Task'}`,
+                            message: `${currentUser.name} assigned you to "${updatedTaskData.title || 'Untitled Task'}" in project "${project.name}"`,
+                            link: projectLink,
+                            metadata: {
+                                taskId: updatedTaskData.id,
+                                taskTitle: updatedTaskData.title,
+                                projectId: project.id,
+                                projectName: project.name,
+                                assignedBy: currentUser.name
+                            }
+                        })
+                    });
+                    console.log(`✅ Task assignment notification sent to ${assigneeUser.name}`);
+                } catch (error) {
+                    console.error('❌ Failed to send task assignment notification:', error);
+                }
+            }
+        }
         
         if (isNewTask) {
             if (viewingTaskParent) {
@@ -1716,6 +1801,8 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
                     parentTask={viewingTaskParent}
                     customFieldDefinitions={customFieldDefinitions}
                     taskLists={taskLists}
+                    project={project}
+                    users={users}
                     onUpdate={handleUpdateTaskFromDetail}
                     onAddSubtask={handleAddSubtask}
                     onViewSubtask={handleViewTaskDetail}

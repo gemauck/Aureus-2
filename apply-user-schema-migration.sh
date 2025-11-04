@@ -16,8 +16,17 @@ if [ -f "prisma/dev.db" ]; then
     echo "✅ SQLite migration applied successfully!"
 elif [ -d "prisma" ]; then
     echo "⚠️  Database file not found at prisma/dev.db"
-    echo "💡 Attempting Prisma db push instead..."
-    npx prisma db push --force-reset --skip-generate || npx prisma migrate deploy
+    echo "💡 Attempting Prisma migration (SAFE - no data loss)..."
+    
+    # Use safe migration wrapper if available
+    if [ -f "scripts/safe-db-migration.sh" ]; then
+        echo "🔒 Using safe migration wrapper..."
+        bash scripts/safe-db-migration.sh npx prisma migrate deploy || bash scripts/safe-db-migration.sh npx prisma db push --skip-generate
+    else
+        # REMOVED --force-reset which DELETES ALL DATA
+        # Use migrate deploy instead which is safe
+        npx prisma migrate deploy || npx prisma db push --skip-generate
+    fi
     echo "✅ Prisma migration applied!"
 else
     echo "❌ Error: prisma directory not found!"

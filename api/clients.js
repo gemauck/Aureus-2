@@ -91,15 +91,16 @@ async function handler(req, res) {
           // TEMPORARY DEBUG: Test simple query first
           console.log('🔍 DEBUG: Testing simple count query...')
           const simpleCount = await prisma.client.count({ where: { type: 'client' } })
-          console.log(`🔍 DEBUG: Simple count found ${simpleCount} clients with type=client`)
+          const nullCount = await prisma.client.count({ where: { type: null } })
+          const totalCount = await prisma.client.count()
+          console.log(`🔍 DEBUG: Counts - type=client: ${simpleCount}, type=null: ${nullCount}, total: ${totalCount}`)
           
           // Use Prisma to include tags relation - needed for list view
           // Note: starredBy relation removed because StarredClient table doesn't exist in restored DB
-          console.log('🔍 Querying clients with type=client, validUserId:', validUserId)
-          rawClients = await prisma.client.findMany({
-            where: {
-              type: 'client'
-            },
+          // Query all records and filter in memory to handle null types correctly
+          // This is more reliable than trying to use OR with null in Prisma
+          console.log('🔍 Querying all Client records (will filter for clients/legacy)...')
+          const allRecords = await prisma.client.findMany({
             include: {
               tags: {
                 include: {
@@ -112,7 +113,15 @@ async function handler(req, res) {
               createdAt: 'desc'
             }
           })
-          console.log(`🔍 Raw query returned ${rawClients.length} clients (expected ${simpleCount})`)
+          console.log(`🔍 Raw query returned ${allRecords.length} total Client records`)
+          
+          // Filter to only clients (type='client' OR type=null/undefined, but NOT type='lead')
+          rawClients = allRecords.filter(c => {
+            const type = c.type;
+            // Include if type is 'client' or null/undefined (legacy), but exclude if type is 'lead'
+            return (type === 'client' || type === null || type === undefined) && type !== 'lead';
+          });
+          console.log(`🔍 After filtering: ${rawClients.length} clients (excluding ${allRecords.length - rawClients.length} leads/non-clients)`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.error('❌ Type filter failed, trying without filter:', typeError.message)
@@ -132,6 +141,10 @@ async function handler(req, res) {
             }
           }
           
+          // Also check total count for debugging
+          const totalCount = await prisma.client.count()
+          console.log(`🔍 DEBUG: Total Client records in database: ${totalCount}`)
+          
           rawClients = await prisma.client.findMany({
             include: {
               tags: {
@@ -145,8 +158,10 @@ async function handler(req, res) {
               createdAt: 'desc'
             }
           })
+          console.log(`🔍 DEBUG: Found ${rawClients.length} total records before filtering`)
           // Filter manually in case type column doesn't exist in DB but we want to exclude leads
           rawClients = rawClients.filter(c => !c.type || c.type === 'client' || c.type === null)
+          console.log(`🔍 DEBUG: After filtering (excluding leads): ${rawClients.length} records`)
         }
         
         // Prisma returns objects with relations - parse JSON fields
@@ -170,8 +185,19 @@ async function handler(req, res) {
           name: dbError.name,
           code: dbError.code,
           meta: dbError.meta,
-          stack: dbError.stack
+          stack: dbError.stack?.substring(0, 500)
         })
+        
+        // Check if it's a connection error
+        const isConnectionError = dbError.message?.includes("Can't reach database server") ||
+                                 dbError.code === 'P1001' ||
+                                 dbError.code === 'ETIMEDOUT' ||
+                                 dbError.code === 'ECONNREFUSED'
+        
+        if (isConnectionError) {
+          console.error('🔌 Database connection issue detected - server may be unreachable')
+        }
+        
         // Return detailed error for debugging
         return serverError(res, 'Failed to list clients', dbError.message || 'Unknown database error')
       }
