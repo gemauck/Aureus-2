@@ -666,6 +666,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     saved: data?.saved
                 });
                 
+                // Store last saved content to prevent duplicate saves
+                sessionStorage.setItem(`last_saved_note_${dateString}`, noteContent);
+                
                 // Update local notes state immediately - CRITICAL for persistence
                 setNotes(prev => {
                     const updated = { ...prev, [dateString]: noteContent };
@@ -791,6 +794,41 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         }
     }, [currentDate, showListView, currentNoteHtml]);
     
+    // Auto-save: Watch for editor content changes directly with interval
+    useEffect(() => {
+        if (!currentDate || showListView) {
+            return;
+        }
+        
+        const dateString = formatDateString(currentDate);
+        
+        // Set up interval to check editor content periodically
+        // This ensures auto-save works even if state updates are blocked
+        const autoSaveInterval = setInterval(() => {
+            // Skip during initialization
+            if (isInitializingRef.current || !editorRef.current) {
+                return;
+            }
+            
+            const editorContent = editorRef.current.innerHTML || '';
+            const hasContent = editorContent && editorContent.trim().length > 0;
+            
+            if (hasContent) {
+                // Only save if content has actually changed
+                const lastSavedContent = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
+                if (editorContent !== lastSavedContent) {
+                    console.log('💾 Auto-saving note (interval check)...', { contentLength: editorContent.length, dateString });
+                    saveNote().catch(err => console.error('Auto-save error:', err));
+                }
+            }
+        }, 3000); // Check every 3 seconds
+        
+        return () => {
+            clearInterval(autoSaveInterval);
+        };
+    }, [currentDate, showListView, saveNote]);
+    
+    // Also auto-save on state changes (for immediate saves after user input)
     useEffect(() => {
         if (!currentDate || showListView || isInitializingRef.current) {
             // Don't auto-save during initialization
@@ -808,15 +846,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                           (currentNoteHtml && currentNoteHtml.trim().length > 0);
         
         if (!hasContent) {
-            console.log('⚠️ Skipping auto-save - no content');
             return;
         }
         
-        // Set new timeout for auto-save (1 second after last change for faster saves)
+        // Set new timeout for auto-save (2 seconds after last change for debouncing)
         saveTimeoutRef.current = setTimeout(() => {
-            console.log('💾 Auto-saving note...');
+            console.log('💾 Auto-saving note (state change)...');
             saveNote().catch(err => console.error('Auto-save error:', err));
-        }, 1000);
+        }, 2000);
         
         return () => {
             if (saveTimeoutRef.current) {
@@ -1038,9 +1075,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         updateNoteContent();
     };
 
-    // Handle editor input
+    // Handle editor input - always update content, don't block during initialization
     const handleEditorInput = () => {
-        updateNoteContent();
+        // Force update even during initialization if user is typing
+        if (editorRef.current) {
+            const html = editorRef.current.innerHTML;
+            setCurrentNoteHtml(html);
+            // Strip HTML for plain text version (for search)
+            const text = editorRef.current.innerText || editorRef.current.textContent || '';
+            setCurrentNote(text);
+            console.log('📝 Editor input detected, content length:', html.length);
+        }
     };
 
     // Handle paste to strip unwanted formatting
