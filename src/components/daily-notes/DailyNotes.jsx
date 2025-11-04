@@ -629,6 +629,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
 
             console.log('💾 Saving note:', { dateString, contentLength: noteContent.length });
             
+            // Set save flag to prevent Calendar component from refreshing during save
+            sessionStorage.setItem('calendar_is_saving', 'true');
+            
             const res = await fetch('/api/calendar-notes', {
                 method: 'POST',
                 headers: {
@@ -643,8 +646,25 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             });
 
             if (res.ok) {
-                const data = await res.json();
-                console.log('✅ Note saved successfully to server:', { dateString, contentLength: noteContent.length });
+                const response = await res.json();
+                console.log('✅ Note save response received:', response);
+                
+                // The API wraps response in {data: {saved: true, note: ..., ...}}
+                const data = response?.data || response;
+                console.log('📋 Parsed response data:', data);
+                
+                // Verify the save was successful
+                if (data?.saved === false || (data?.saved === undefined && !data?.note && !data?.id)) {
+                    console.error('❌ Server indicated save failed:', data);
+                    throw new Error(data?.message || 'Note save failed on server');
+                }
+                
+                console.log('✅ Note saved successfully to server:', { 
+                    dateString, 
+                    contentLength: noteContent.length,
+                    savedNoteId: data?.id,
+                    saved: data?.saved
+                });
                 
                 // Update local notes state immediately - CRITICAL for persistence
                 setNotes(prev => {
@@ -670,18 +690,53 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     console.error('❌ Verification failed: localStorage content mismatch');
                 }
                 
+                // Verify the save by fetching from server after a short delay
+                setTimeout(async () => {
+                    try {
+                        const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                            headers: { 
+                                Authorization: `Bearer ${token}`,
+                                'Cache-Control': 'no-cache, no-store, must-revalidate'
+                            },
+                            credentials: 'include',
+                            cache: 'no-store'
+                        });
+                        if (verifyRes.ok) {
+                            const verifyData = await verifyRes.json();
+                            const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
+                            if (serverNotes[dateString] === noteContent) {
+                                console.log('✅ Server verification: Note found on server with matching content');
+                            } else if (serverNotes[dateString]) {
+                                console.warn('⚠️ Server verification: Note found but content differs');
+                            } else {
+                                console.error('❌ Server verification: Note not found on server!');
+                            }
+                        }
+                    } catch (verifyError) {
+                        console.error('Error verifying save on server:', verifyError);
+                    }
+                }, 1000);
+                
                 // Clear handwriting canvas after saving
                 if (showHandwriting && canvasRef.current) {
                     const ctx = canvasRef.current.getContext('2d');
                     ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
                 }
+                
+                // Clear save flag after a delay to allow server to process
+                setTimeout(() => {
+                    sessionStorage.removeItem('calendar_is_saving');
+                    console.log('✅ Save flag cleared - Calendar refresh can resume');
+                }, 3000); // Wait 3 seconds before allowing refresh
             } else {
                 const errorText = await res.text();
                 console.error('❌ Failed to save note:', res.status, errorText);
+                sessionStorage.removeItem('calendar_is_saving');
                 throw new Error(`Failed to save note: ${res.status}`);
             }
         } catch (error) {
             console.error('Error saving note:', error);
+            sessionStorage.removeItem('calendar_is_saving');
             // Try to save to localStorage as fallback
             try {
                 const dateString = formatDateString(currentDate);

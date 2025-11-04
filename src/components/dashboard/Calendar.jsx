@@ -225,11 +225,15 @@ const Calendar = () => {
                 });
                 
                 if (res.ok) {
-                    const data = await res.json();
-                    console.log('✅ Saved note to server successfully:', dateString, data);
+                    const response = await res.json();
+                    console.log('✅ Saved note to server successfully:', dateString, response);
+                    
+                    // The API wraps response in {data: {saved: true, ...}}
+                    const data = response?.data || response;
+                    console.log('📋 Parsed response data:', data);
                     
                     // Verify the save was successful
-                    if (data.saved !== false) {
+                    if (data?.saved !== false) {
                         // Wait longer before refresh to ensure server has fully processed
                         // Also retry if note isn't found immediately
                         let retryCount = 0;
