@@ -2497,16 +2497,27 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 // Use formDataRef for most up-to-date data
                                                 const refData = formDataRef.current;
                                                 const stateData = formData;
+                                                const lastSavedData = lastSavedDataRef.current;
                                                 
-                                                // Get proposals from both sources
+                                                // Get proposals from all sources (including last saved)
                                                 const refProposals = refData?.proposals || [];
                                                 const stateProposals = stateData?.proposals || [];
+                                                const lastSavedProposals = lastSavedData?.proposals || [];
                                                 
-                                                // Merge them by ID (ref takes precedence if both exist)
+                                                // Merge them by ID (ref takes precedence, then lastSaved, then state)
                                                 const allProposalsMap = new Map();
+                                                
+                                                // Add state proposals first
                                                 stateProposals.forEach(p => {
                                                     if (p.id) allProposalsMap.set(p.id, p);
                                                 });
+                                                
+                                                // Add lastSaved proposals (overwrites state if same ID)
+                                                lastSavedProposals.forEach(p => {
+                                                    if (p.id) allProposalsMap.set(p.id, p);
+                                                });
+                                                
+                                                // Add ref proposals last (highest priority - overwrites all)
                                                 refProposals.forEach(p => {
                                                     if (p.id) allProposalsMap.set(p.id, p);
                                                 });
