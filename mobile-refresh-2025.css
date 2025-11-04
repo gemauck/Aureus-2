@@ -1,0 +1,1016 @@
+/* ============================================
+   ABCOTRONICS ERP - MOBILE REFRESH 2025
+   Complete mobile optimization overhaul
+   ============================================ */
+
+/* ============================================
+   1. FOUNDATION - PREVENT HORIZONTAL SCROLL
+   ============================================ */
+@media (max-width: 1024px) {
+  html, body {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    position: relative !important;
+  }
+  
+  * {
+    box-sizing: border-box !important;
+  }
+  
+  /* Prevent any element from exceeding viewport */
+  #root,
+  #root > div,
+  main,
+  .flex,
+  .grid {
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+}
+
+/* ============================================
+   2. HEADER - FIXED MOBILE NAVIGATION
+   ============================================ */
+@media (max-width: 1024px) {
+  header,
+  .header-mobile {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 50 !important;
+    background: white !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1) !important;
+    height: 56px !important;
+    padding: 0 12px !important;
+  }
+  
+  .dark header,
+  .dark .header-mobile {
+    background: #1f2937 !important;
+  }
+  
+  /* Ensure header content fits */
+  header .flex {
+    gap: 8px !important;
+  }
+  
+  /* Header buttons */
+  header button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 8px !important;
+    border-radius: 8px !important;
+  }
+  
+  /* Make hamburger prominent */
+  header .hamburger-menu-btn {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  
+  /* Hide desktop search on mobile */
+  header .hidden.lg\:block {
+    display: none !important;
+  }
+}
+
+/* Smaller screens - even more compact */
+@media (max-width: 640px) {
+  header {
+    padding: 0 8px !important;
+  }
+  
+  header button {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    padding: 6px !important;
+  }
+  
+  header .hamburger-menu-btn {
+    min-width: 40px !important;
+    min-height: 40px !important;
+  }
+}
+
+/* ============================================
+   3. SIDEBAR - MOBILE MENU
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Sidebar positioning */
+  aside {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 280px !important;
+    max-width: 85vw !important;
+    z-index: 100 !important;
+    transition: transform 0.3s ease !important;
+  }
+  
+  /* Show/hide via transform instead of display */
+  aside[style*="display: none"] {
+    display: flex !important;
+    transform: translateX(-100%) !important;
+  }
+  
+  aside:not([style*="display: none"]) {
+    transform: translateX(0) !important;
+  }
+  
+  /* Overlay when sidebar is open */
+  body:has(aside:not([style*="display: none"])) {
+    overflow: hidden;
+  }
+  
+  /* Mobile menu items need better touch targets */
+  aside nav button,
+  aside nav a {
+    min-height: 56px !important;
+    padding: 16px !important;
+    font-size: 16px !important;
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+  
+  /* Ensure icon and text are visible */
+  aside nav button i {
+    width: 20px !important;
+    font-size: 18px !important;
+  }
+  
+  aside nav button span {
+    display: inline-block !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+}
+
+/* ============================================
+   4. MAIN CONTENT AREA
+   ============================================ */
+@media (max-width: 1024px) {
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 12px !important;
+    margin: 0 !important;
+    overflow-x: hidden !important;
+  }
+  
+  main > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  main {
+    padding: 8px !important;
+  }
+}
+
+/* ============================================
+   5. FORMS - MOBILE OPTIMIZED
+   ============================================ */
+@media (max-width: 1024px) {
+  /* All form inputs must be touch-friendly */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="search"],
+  input[type="url"],
+  textarea,
+  select {
+    min-height: 52px !important;
+    padding: 14px 16px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+    border: 2px solid #e5e7eb !important;
+    width: 100% !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+  }
+  
+  /* Override any small size classes */
+  input.text-xs,
+  input.text-sm,
+  select.text-xs,
+  select.text-sm,
+  textarea.text-xs,
+  textarea.text-sm {
+    font-size: 16px !important;
+    padding: 14px 16px !important;
+  }
+  
+  /* Labels must be readable */
+  label {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    margin-bottom: 8px !important;
+    display: block !important;
+  }
+  
+  /* Override label size classes */
+  label.text-xs,
+  label.text-sm {
+    font-size: 15px !important;
+  }
+  
+  /* Textareas */
+  textarea {
+    min-height: 120px !important;
+    resize: vertical !important;
+  }
+  
+  /* Select styling */
+  select {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 16px center !important;
+    background-size: 14px !important;
+    padding-right: 48px !important;
+  }
+  
+  /* Focus states */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none !important;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15) !important;
+  }
+  
+  /* Checkboxes and radios */
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+    margin-right: 12px !important;
+    cursor: pointer !important;
+  }
+  
+  /* Override small checkbox sizes */
+  input[type="checkbox"][class*="w-"],
+  input[type="radio"][class*="w-"] {
+    width: 28px !important;
+    height: 28px !important;
+    min-width: 28px !important;
+    min-height: 28px !important;
+  }
+  
+  /* Form spacing */
+  form > div,
+  form .space-y > * {
+    margin-bottom: 20px !important;
+  }
+}
+
+/* ============================================
+   6. BUTTONS - TOUCH FRIENDLY
+   ============================================ */
+@media (max-width: 1024px) {
+  button,
+  .btn,
+  [role="button"] {
+    min-height: 48px !important;
+    min-width: 48px !important;
+    padding: 12px 20px !important;
+    font-size: 16px !important;
+    border-radius: 10px !important;
+    font-weight: 500 !important;
+    touch-action: manipulation !important;
+  }
+  
+  /* Primary buttons */
+  .bg-primary-600,
+  .bg-blue-600 {
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+  }
+  
+  /* Active state feedback */
+  button:active,
+  .btn:active {
+    transform: scale(0.98) !important;
+    transition: transform 0.1s ease !important;
+  }
+  
+  /* Small icon-only buttons */
+  button[class*="p-1"],
+  button[class*="p-2"] {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+  
+  /* Button groups - stack vertically */
+  .flex.gap-2:has(button),
+  .flex.gap-3:has(button),
+  .flex.gap-4:has(button) {
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  
+  .flex.gap-2 > button,
+  .flex.gap-3 > button,
+  .flex.gap-4 > button {
+    width: 100% !important;
+  }
+  
+  /* Exception: horizontal button groups for navigation */
+  .overflow-x-auto .flex:has(button),
+  nav .flex:has(button),
+  [class*="tabs"] .flex:has(button) {
+    flex-direction: row !important;
+  }
+}
+
+/* ============================================
+   7. MODALS - FULLSCREEN ON MOBILE
+   ============================================ */
+@media (max-width: 1024px) {
+  /* All modals go fullscreen */
+  [class*="modal"],
+  [class*="Modal"],
+  [role="dialog"],
+  .fixed.inset-0[class*="z-"] > div {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* Modal content wrapper */
+  [class*="modal"] > div,
+  [role="dialog"] > div {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* Modal header - sticky */
+  [class*="modal-header"],
+  [class*="Modal"] > div:first-child:has(h1, h2, h3),
+  [role="dialog"] > div > div:first-child {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 10 !important;
+    background: white !important;
+    padding: 16px !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    flex-shrink: 0 !important;
+  }
+  
+  .dark [class*="modal-header"],
+  .dark [class*="Modal"] > div:first-child {
+    background: #1f2937 !important;
+    border-bottom-color: #374151 !important;
+  }
+  
+  /* Modal body - scrollable */
+  [class*="modal-body"],
+  [class*="Modal"] form,
+  [role="dialog"] form {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding: 16px !important;
+  }
+  
+  /* Modal footer - sticky */
+  [class*="modal-footer"],
+  [class*="Modal"] > div:last-child:has(button),
+  [role="dialog"] > div > div:last-child:has(button) {
+    position: sticky !important;
+    bottom: 0 !important;
+    z-index: 10 !important;
+    background: white !important;
+    padding: 16px !important;
+    border-top: 1px solid #e5e7eb !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+  }
+  
+  .dark [class*="modal-footer"] {
+    background: #1f2937 !important;
+    border-top-color: #374151 !important;
+  }
+  
+  /* Modal footer buttons */
+  [class*="modal-footer"] button {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+}
+
+/* ============================================
+   8. GRIDS - SINGLE COLUMN ON MOBILE
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Force all form grids to single column */
+  form .grid,
+  [class*="modal"] .grid,
+  [role="dialog"] .grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+  
+  /* Force multi-column grids to single column */
+  .grid.grid-cols-2,
+  .grid.grid-cols-3,
+  .grid.grid-cols-4,
+  .grid.grid-cols-5,
+  .grid.grid-cols-6,
+  .grid.grid-cols-12 {
+    grid-template-columns: 1fr !important;
+  }
+  
+  /* Exception: Stats/metrics can be 2 columns */
+  .grid[class*="stats"],
+  .grid[class*="metrics"],
+  .grid[class*="summary"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+  
+  /* Reset grid-column spans */
+  .grid > * {
+    grid-column: 1 / -1 !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Even stats go to single column on very small screens */
+  .grid[class*="stats"],
+  .grid[class*="metrics"],
+  .grid[class*="summary"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ============================================
+   9. TABLES - HIDE ON MOBILE
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Hide tables - they should be converted to cards by JS */
+  table:not([data-keep-visible="true"]) {
+    display: none !important;
+  }
+  
+  /* Table wrappers */
+  .overflow-x-auto:has(table),
+  [class*="table-wrapper"] {
+    overflow-x: visible !important;
+  }
+  
+  /* Mobile cards for table data */
+  .mobile-card,
+  .mobile-table-card {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 12px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    width: 100%;
+    max-width: 100%;
+  }
+  
+  .dark .mobile-card,
+  .dark .mobile-table-card {
+    background: #1f2937;
+    border-color: #374151;
+  }
+  
+  /* Active feedback for cards */
+  .mobile-card:active,
+  .mobile-table-card:active {
+    transform: scale(0.98);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* ============================================
+   10. CARDS & CONTAINERS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* All cards need proper mobile padding */
+  .card,
+  [class*="card"],
+  .bg-white.rounded-lg,
+  [class*="rounded-lg"].bg-white {
+    padding: 16px !important;
+    margin-bottom: 12px !important;
+    border-radius: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  .dark .card,
+  .dark .bg-white.rounded-lg {
+    background: #1f2937 !important;
+    border-color: #374151 !important;
+  }
+  
+  /* Reduce padding on very small screens */
+}
+
+@media (max-width: 640px) {
+  .card,
+  .bg-white.rounded-lg {
+    padding: 12px !important;
+  }
+}
+
+/* ============================================
+   11. STICKY PAGE HEADERS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Page headers with titles and action buttons */
+  div[class*="border-b"]:has(h1, h2),
+  [class*="page-header"] {
+    position: sticky !important;
+    top: 56px !important; /* Below main header */
+    z-index: 40 !important;
+    background: white !important;
+    padding: 12px !important;
+  }
+  
+  .dark div[class*="border-b"]:has(h1, h2) {
+    background: #1f2937 !important;
+  }
+  
+  /* Navigation tabs */
+  .nav-tabs,
+  [class*="nav-tabs"],
+  .overflow-x-auto[class*="tab"] {
+    position: sticky !important;
+    top: 112px !important; /* Below header + page header */
+    z-index: 39 !important;
+    background: white !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: thin !important;
+  }
+  
+  .dark .nav-tabs,
+  .dark [class*="nav-tabs"] {
+    background: #1f2937 !important;
+  }
+  
+  /* Tab buttons */
+  [class*="tab"] button {
+    min-width: max-content !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    padding: 12px 16px !important;
+  }
+}
+
+/* ============================================
+   12. TYPOGRAPHY
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Scale headings appropriately */
+  h1 {
+    font-size: 1.5rem !important; /* 24px */
+  }
+  
+  h2 {
+    font-size: 1.25rem !important; /* 20px */
+  }
+  
+  h3 {
+    font-size: 1.125rem !important; /* 18px */
+  }
+  
+  h4 {
+    font-size: 1rem !important; /* 16px */
+  }
+  
+  /* Prevent text overflow */
+  p, span, div, h1, h2, h3, h4, h5, h6 {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    max-width: 100% !important;
+  }
+}
+
+@media (max-width: 640px) {
+  h1 {
+    font-size: 1.25rem !important; /* 20px */
+  }
+  
+  h2 {
+    font-size: 1.125rem !important; /* 18px */
+  }
+  
+  h3 {
+    font-size: 1rem !important; /* 16px */
+  }
+}
+
+/* ============================================
+   13. SPACING ADJUSTMENTS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Reduce excessive padding */
+  .p-6, .px-6, .py-6 {
+    padding: 16px !important;
+  }
+  
+  .p-8, .px-8, .py-8 {
+    padding: 20px !important;
+  }
+  
+  /* Reduce excessive margins */
+  .m-6, .mx-6, .my-6 {
+    margin: 16px !important;
+  }
+  
+  .m-8, .mx-8, .my-8 {
+    margin: 20px !important;
+  }
+  
+  /* Container padding */
+  .container,
+  [class*="max-w-"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .p-6, .px-6, .py-6 {
+    padding: 12px !important;
+  }
+  
+  .container {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+  }
+}
+
+/* ============================================
+   14. DROPDOWNS & MENUS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Dropdown menus */
+  .relative > [class*="absolute"]:not([class*="tooltip"]),
+  [class*="dropdown-menu"] {
+    position: fixed !important;
+    left: 16px !important;
+    right: 16px !important;
+    width: calc(100vw - 32px) !important;
+    max-width: calc(100vw - 32px) !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
+    z-index: 60 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+  }
+  
+  /* Dropdown items */
+  [class*="dropdown"] button,
+  [class*="dropdown"] a {
+    min-height: 48px !important;
+    padding: 14px 16px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* ============================================
+   15. SPECIFIC COMPONENT FIXES
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Dashboard metrics */
+  [class*="Dashboard"] .grid[class*="gap"] {
+    gap: 12px !important;
+  }
+  
+  /* Client/Lead cards */
+  [class*="ClientCard"],
+  [class*="LeadCard"] {
+    padding: 14px !important;
+  }
+  
+  /* Project cards */
+  [class*="ProjectCard"] {
+    padding: 14px !important;
+  }
+  
+  /* Job card forms */
+  [class*="JobCard"] form {
+    padding: 16px !important;
+  }
+  
+  /* Invoice forms */
+  [class*="Invoice"] form {
+    padding: 16px !important;
+  }
+}
+
+/* ============================================
+   16. SCROLLBAR IMPROVEMENTS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Better touch scrolling */
+  .overflow-y-auto,
+  .overflow-auto {
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior: contain !important;
+  }
+  
+  /* Thin scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #555;
+  }
+  
+  /* Dark mode scrollbars */
+  .dark ::-webkit-scrollbar-track {
+    background: #374151;
+  }
+  
+  .dark ::-webkit-scrollbar-thumb {
+    background: #6b7280;
+  }
+  
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+}
+
+/* ============================================
+   17. LOGIN PAGE - SPECIAL HANDLING
+   ============================================ */
+@media (max-width: 1024px) {
+  body.login-page {
+    overflow-y: auto !important;
+  }
+  
+  body.login-page header,
+  body.login-page .header-mobile {
+    display: none !important;
+  }
+  
+  body.login-page #root {
+    min-height: 100vh !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: center !important;
+    align-items: center !important;
+    padding: 20px !important;
+  }
+  
+  body.login-page .login-container {
+    width: 100% !important;
+    max-width: 420px !important;
+    margin: 0 auto !important;
+  }
+  
+  body.login-page input {
+    font-size: 16px !important;
+    min-height: 52px !important;
+  }
+  
+  body.login-page button[type="submit"] {
+    min-height: 52px !important;
+    font-size: 16px !important;
+  }
+}
+
+/* ============================================
+   18. LOADING & EMPTY STATES
+   ============================================ */
+@media (max-width: 1024px) {
+  .loading-state,
+  .empty-state {
+    padding: 48px 20px !important;
+    text-align: center !important;
+  }
+  
+  .loading-spinner {
+    width: 40px;
+    height: 40px;
+    border-width: 3px;
+  }
+}
+
+/* ============================================
+   19. FLOATING ACTION BUTTON (FAB)
+   ============================================ */
+@media (max-width: 1024px) {
+  .fab,
+  [class*="fixed"][class*="bottom-"]:has(button[class*="rounded-full"]) {
+    position: fixed !important;
+    bottom: 20px !important;
+    right: 20px !important;
+    z-index: 50 !important;
+    width: 56px !important;
+    height: 56px !important;
+    border-radius: 50% !important;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
+  }
+}
+
+/* ============================================
+   20. ACCESSIBILITY & TOUCH IMPROVEMENTS
+   ============================================ */
+@media (max-width: 1024px) {
+  /* All touch targets minimum 44x44 */
+  button,
+  a[role="button"],
+  [role="button"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  
+  /* Remove tap highlight on everything except interactive elements */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: rgba(59, 130, 246, 0.2);
+  }
+  
+  /* Prevent zoom on input focus (iOS) */
+  @supports (-webkit-touch-callout: none) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+}
+
+/* ============================================
+   21. EXTREME SMALL SCREENS (< 375px)
+   ============================================ */
+@media (max-width: 375px) {
+  header {
+    height: 52px !important;
+    padding: 0 6px !important;
+  }
+  
+  header button {
+    min-width: 36px !important;
+    min-height: 36px !important;
+  }
+  
+  main {
+    padding: 6px !important;
+  }
+  
+  .card,
+  .mobile-card {
+    padding: 10px !important;
+  }
+  
+  h1 {
+    font-size: 1.125rem !important;
+  }
+  
+  h2 {
+    font-size: 1rem !important;
+  }
+}
+
+/* ============================================
+   22. DARK MODE ENHANCEMENTS
+   ============================================ */
+.dark {
+  /* Better dark mode colors */
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: #3b82f6;
+  background: #374151;
+}
+
+.dark label {
+  color: #e5e7eb;
+}
+
+/* ============================================
+   23. PRINT STYLES
+   ============================================ */
+@media print {
+  header,
+  aside,
+  .sidebar,
+  .fab,
+  button:not([type="button"]) {
+    display: none !important;
+  }
+  
+  main {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+  
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #000 !important;
+  }
+}
+
+/* ============================================
+   24. CRITICAL FIXES - MUST BE LAST
+   ============================================ */
+@media (max-width: 1024px) {
+  /* Remove any fixed widths that break mobile */
+  [style*="width: "],
+  [class*="w-["],
+  [class*="min-w-["] {
+    max-width: 100% !important;
+  }
+  
+  /* Ensure flex items don't overflow */
+  .flex > * {
+    min-width: 0 !important;
+  }
+  
+  /* Prevent any absolute positioning from breaking layout */
+  [class*="absolute"]:not(.tooltip):not([class*="dropdown"]) {
+    position: relative !important;
+  }
+  
+  /* Force all images to be responsive */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+  
+  /* Ensure no element has horizontal margin that breaks layout */
+  * {
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+  
+  /* Reset specific margins that need to be preserved */
+  nav *,
+  header *,
+  .flex > *,
+  .grid > * {
+    margin-left: initial !important;
+    margin-right: initial !important;
+  }
+}
