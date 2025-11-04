@@ -4,6 +4,9 @@
     let attempts = 0;
     const MAX_ATTEMPTS = 60; // 15 seconds (60 * 250ms)
     
+    // Show initial loading message
+    console.log('🚀 Fast loader starting...');
+    
     function checkComponents() {
         return {
             React: !!window.React,
@@ -76,7 +79,7 @@
                 .filter(([k, v]) => v)
                 .map(([k]) => k);
             console.log(`⏳ Loading components... (${attempts}/${MAX_ATTEMPTS})`);
-            console.log(`   ✅ Available:`, available.join(', '));
+            console.log(`   ✅ Available:`, available.join(', ') || 'None');
             if (missing.length > 0) {
                 console.log(`   ⏳ Missing:`, missing.join(', '));
             }
@@ -89,6 +92,9 @@
                 .filter(([k, v]) => !v)
                 .map(([k]) => k);
             
+            console.error('❌ Failed to mount app after', MAX_ATTEMPTS, 'attempts');
+            console.error('Missing components:', missing);
+            
             const root = document.getElementById('root');
             if (root) {
                 root.innerHTML = `
@@ -97,6 +103,7 @@
                             <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
                             <div style="font-size: 24px; font-weight: 600; color: #e53e3e; margin-bottom: 16px;">Loading Failed</div>
                             <div style="font-size: 14px; color: #4a5568; margin-bottom: 24px;">Missing: <strong>${missing.join(', ')}</strong></div>
+                            <div style="font-size: 12px; color: #718096; margin-bottom: 16px;">Check browser console for details</div>
                             <button onclick="location.reload()" style="padding: 12px 32px; background: #3182ce; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: 600;">Reload Page</button>
                         </div>
                     </div>
@@ -110,16 +117,20 @@
     
     // Start checking for components (no Babel needed anymore)
     function startChecking() {
+        console.log('🔍 Starting component check...');
         // Check if BabelReady event was fired (or just start checking)
         if (window.BabelReady) {
+            console.log('✅ BabelReady event already fired');
             const checkInterval = setInterval(() => {
                 if (tryMount()) {
                     clearInterval(checkInterval);
                 }
             }, 250);
         } else {
+            console.log('⏳ Waiting for babelready event...');
             // Wait for babelready event (still used for React loading signal)
             window.addEventListener('babelready', () => {
+                console.log('✅ babelready event received');
                 const checkInterval = setInterval(() => {
                     if (tryMount()) {
                         clearInterval(checkInterval);
@@ -130,6 +141,7 @@
             // Fallback: start checking after a delay
             setTimeout(() => {
                 if (!mounted) {
+                    console.log('⏳ Fallback: Starting checks without babelready event');
                     const checkInterval = setInterval(() => {
                         if (tryMount()) {
                             clearInterval(checkInterval);
@@ -143,9 +155,11 @@
     // Start after DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => {
+            console.log('✅ DOM loaded');
             setTimeout(startChecking, 500);
         });
     } else {
+        console.log('✅ DOM already ready');
         setTimeout(startChecking, 500);
     }
 })();

@@ -248,23 +248,31 @@
 
     <!-- React Production Builds - Much faster than development -->
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; }"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); }"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; console.log('✅ React loaded'); }" onerror="console.error('❌ Failed to load React from CDN');"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onload="if(typeof React !== 'undefined') { window.React = React; } if(typeof ReactDOM !== 'undefined') { window.ReactDOM = ReactDOM; window.BabelReady = true; window.dispatchEvent(new Event('babelready')); console.log('✅ ReactDOM loaded'); }" onerror="console.error('❌ Failed to load ReactDOM from CDN');"></script>
     
     <!-- Verify React loaded and expose globally (fallback) -->
     <script>
         // Fallback check after scripts load
-        if (typeof React !== 'undefined') {
-            window.React = React;
-        }
-        if (typeof ReactDOM !== 'undefined') {
-            window.ReactDOM = ReactDOM;
-            // Dispatch ready event
-            if (!window.BabelReady) {
-                window.BabelReady = true;
-                window.dispatchEvent(new Event('babelready'));
+        setTimeout(() => {
+            if (typeof React !== 'undefined') {
+                window.React = React;
+                console.log('✅ React verified');
+            } else {
+                console.error('❌ React not loaded - check CDN connection');
             }
-        }
+            if (typeof ReactDOM !== 'undefined') {
+                window.ReactDOM = ReactDOM;
+                // Dispatch ready event
+                if (!window.BabelReady) {
+                    window.BabelReady = true;
+                    window.dispatchEvent(new Event('babelready'));
+                }
+                console.log('✅ ReactDOM verified');
+            } else {
+                console.error('❌ ReactDOM not loaded - check CDN connection');
+            }
+        }, 1000);
     </script>
     
     <!-- Leaflet JavaScript - Lazy load (only needed for maps) -->
