@@ -5,6 +5,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { sendInvitationEmail } from '../_lib/email.js'
 import { authRequired } from '../_lib/authRequired.js'
+import { getAppUrl } from '../_lib/getAppUrl.js'
 import crypto from 'crypto'
 
 async function handler(req, res) {
@@ -146,7 +147,7 @@ async function handler(req, res) {
             
             // Generate invitation link using the token that was ACTUALLY saved to the database
             const savedToken = updated.token || newToken
-            const invitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${savedToken}`
+            const invitationLink = `${getAppUrl()}/accept-invitation?token=${savedToken}`
             console.log('🔗 Generated resend invitation link with token:', savedToken.substring(0, 20) + '...')
             console.log('🔗 Full resend invitation link:', invitationLink)
             
@@ -160,7 +161,7 @@ async function handler(req, res) {
             try {
                 // Always use the token from the database (updated.token) as source of truth
                 const emailLink = updated.token 
-                    ? `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${updated.token}`
+                    ? `${getAppUrl()}/accept-invitation?token=${updated.token}`
                     : invitationLink
                 console.log('📧 Resending email with link token:', updated.token ? updated.token.substring(0, 20) + '...' : 'using newToken')
                 await sendInvitationEmail({
@@ -180,7 +181,7 @@ async function handler(req, res) {
                 message: emailSent ? 'Invitation resent successfully' : 'Invitation updated. Email sending failed.',
                 invitation: updated,
                 invitationLink: updated.token 
-                    ? `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${updated.token}`
+                    ? `${getAppUrl()}/accept-invitation?token=${updated.token}`
                     : invitationLink,
                 emailSent
             })

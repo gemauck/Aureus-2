@@ -4,6 +4,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import crypto from 'crypto'
 import { sendPasswordResetEmail } from '../_lib/email.js'
+import { getAppUrl } from '../_lib/getAppUrl.js'
 
 async function handler(req, res) {
   if (req.method !== 'POST') return badRequest(res, 'Invalid method')
@@ -35,7 +36,7 @@ async function handler(req, res) {
     })
 
     // Build reset link
-    const appUrl = process.env.APP_URL || 'http://localhost:3001'
+    const appUrl = getAppUrl()
     const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`
 
     // Try send email, but don't reveal errors to client (for security - don't reveal if user exists)

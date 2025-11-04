@@ -5,6 +5,7 @@ import { withHttp } from '../_lib/withHttp.js'
 import { withLogging } from '../_lib/logger.js'
 import { authRequired } from '../_lib/authRequired.js'
 import { sendInvitationEmail } from '../_lib/email.js'
+import { getAppUrl } from '../_lib/getAppUrl.js'
 import crypto from 'crypto'
 
 async function handler(req, res) {
@@ -119,7 +120,7 @@ async function handler(req, res) {
         // Generate invitation link using the ACTUAL token from the database
         // This ensures we always use the token that was actually saved, not just the one we intended to save
         const actualToken = invitation.token || invitationToken
-        const invitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${actualToken}`
+        const invitationLink = `${getAppUrl()}/accept-invitation?token=${actualToken}`
         console.log('🔗 Generated invitation link with token:', actualToken.substring(0, 20) + '...')
         console.log('🔗 Full invitation link:', invitationLink)
         
@@ -127,7 +128,7 @@ async function handler(req, res) {
         if (invitation.token && invitation.token !== actualToken) {
             console.warn('⚠️ Token mismatch! Database token:', invitation.token.substring(0, 20) + '...', 'Link token:', actualToken.substring(0, 20) + '...')
             // Use the database token as the source of truth
-            const correctedLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitation.token}`
+            const correctedLink = `${getAppUrl()}/accept-invitation?token=${invitation.token}`
             console.log('🔗 Using corrected link with database token:', correctedLink)
         }
         
@@ -140,7 +141,7 @@ async function handler(req, res) {
             console.log('📧 Attempting to send invitation email...')
             // Use the actual token from the database for the email link
             const emailLink = invitation.token 
-                ? `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitation.token}`
+                ? `${getAppUrl()}/accept-invitation?token=${invitation.token}`
                 : invitationLink
             console.log('📧 Sending email with link token:', invitation.token ? invitation.token.substring(0, 20) + '...' : 'using invitationToken')
             const emailResult = await sendInvitationEmail({
@@ -200,7 +201,7 @@ async function handler(req, res) {
                 expiresAt: invitation.expiresAt
             },
             invitationLink: invitation.token 
-                ? `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=${invitation.token}`
+                ? `${getAppUrl()}/accept-invitation?token=${invitation.token}`
                 : invitationLink,
             debug: {
                 emailSent,

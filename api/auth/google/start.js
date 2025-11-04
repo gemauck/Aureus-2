@@ -2,6 +2,7 @@
 import { badRequest, ok, serverError } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
+import { getAppUrl } from '../../_lib/getAppUrl.js'
 
 async function handler(req, res) {
     if (req.method !== 'GET') return badRequest(res, 'Invalid method')
@@ -9,7 +10,7 @@ async function handler(req, res) {
     try {
         // Google OAuth configuration
         const googleClientId = process.env.GOOGLE_CLIENT_ID || 'your-google-client-id'
-        const redirectUri = `${process.env.APP_URL || 'http://localhost:3001'}/api/auth/google/callback`
+        const redirectUri = `${getAppUrl()}/api/auth/google/callback`
         
         // Generate state parameter for security
         const state = Buffer.from(JSON.stringify({

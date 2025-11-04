@@ -4,6 +4,7 @@ import { badRequest, ok, serverError } from '../../_lib/response.js'
 import { withHttp } from '../../_lib/withHttp.js'
 import { withLogging } from '../../_lib/logger.js'
 import { signAccessToken, signRefreshToken } from '../../_lib/jwt.js'
+import { getAppUrl } from '../../_lib/getAppUrl.js'
 
 async function handler(req, res) {
     if (req.method !== 'GET') return badRequest(res, 'Invalid method')
@@ -32,7 +33,7 @@ async function handler(req, res) {
                 client_secret: process.env.GOOGLE_CLIENT_SECRET || 'your-google-client-secret',
                 code: code,
                 grant_type: 'authorization_code',
-                redirect_uri: `${process.env.APP_URL || 'http://localhost:3001'}/api/auth/google/callback`
+                redirect_uri: `${getAppUrl()}/api/auth/google/callback`
             })
         })
         
@@ -107,12 +108,12 @@ async function handler(req, res) {
         ])
         
         // Redirect to frontend with success
-        const frontendUrl = `${process.env.APP_URL || 'http://localhost:3001'}?login=success&token=${accessToken}`
+        const frontendUrl = `${getAppUrl()}?login=success&token=${accessToken}`
         res.redirect(frontendUrl)
         
     } catch (error) {
         console.error('Google OAuth callback error:', error)
-        const frontendUrl = `${process.env.APP_URL || 'http://localhost:3001'}?login=error&message=${encodeURIComponent(error.message)}`
+        const frontendUrl = `${getAppUrl()}?login=error&message=${encodeURIComponent(error.message)}`
         res.redirect(frontendUrl)
     }
 }

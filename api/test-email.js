@@ -3,6 +3,7 @@ import { sendInvitationEmail } from './_lib/email.js'
 import { badRequest, ok, serverError } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
+import { getAppUrl } from './_lib/getAppUrl.js'
 
 async function handler(req, res) {
     if (req.method !== 'POST') return badRequest(res, 'Invalid method')
@@ -23,7 +24,7 @@ async function handler(req, res) {
             APP_URL: process.env.APP_URL
         })
         
-        const testInvitationLink = `${process.env.APP_URL || 'http://localhost:3001'}/accept-invitation?token=test-token-123`
+        const testInvitationLink = `${getAppUrl()}/accept-invitation?token=test-token-123`
         
         console.log('📧 Attempting to send test email...')
         const result = await sendInvitationEmail({
