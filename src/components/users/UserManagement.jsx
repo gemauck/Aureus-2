@@ -477,6 +477,8 @@ const UserManagement = () => {
 
         try {
             const token = window.storage?.getToken?.();
+            console.log('🗑️ Deleting user:', userId);
+            
             const response = await fetch('/api/users', {
                 method: 'DELETE',
                 headers: {
@@ -486,16 +488,20 @@ const UserManagement = () => {
                 body: JSON.stringify({ userId })
             });
 
+            const data = await response.json();
+            
             if (response.ok) {
+                console.log('✅ User deleted successfully');
                 loadUsers();
                 alert('User deleted successfully');
             } else {
-                const data = await response.json();
-                alert(data.message || 'Failed to delete user');
+                console.error('❌ Failed to delete user:', data);
+                const errorMessage = data.message || data.error || 'Failed to delete user';
+                alert(`Failed to delete user: ${errorMessage}`);
             }
         } catch (error) {
-            console.error('Error deleting user:', error);
-            alert('Failed to delete user');
+            console.error('❌ Error deleting user:', error);
+            alert(`Failed to delete user: ${error.message || 'Network error. Please try again.'}`);
         }
     };
 

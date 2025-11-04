@@ -248,15 +248,119 @@ async function handler(req, res) {
                 return badRequest(res, 'Cannot delete your own account')
             }
 
-            // Delete user
-            await prisma.user.delete({
-                where: { id: userId }
+            // Check if user exists
+            const userToDelete = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, email: true, name: true }
             })
+
+            if (!userToDelete) {
+                return badRequest(res, 'User not found')
+            }
+
+            // Use a transaction to handle cascading deletes/updates
+            await prisma.$transaction(async (tx) => {
+                // Delete related records that can be safely removed
+                await tx.membership.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.session.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.passwordReset.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.passwordHistory.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.securityEvent.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.calendarNote.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.starredClient.deleteMany({
+                    where: { userId }
+                })
+
+                // Delete or disconnect two-factor auth
+                await tx.twoFactor.deleteMany({
+                    where: { userId }
+                })
+
+                // Delete notification settings
+                await tx.notificationSetting.deleteMany({
+                    where: { userId }
+                })
+
+                // Delete notifications (or you could set recipientId to null, but deletion is cleaner)
+                await tx.notification.deleteMany({
+                    where: { userId }
+                })
+
+                // Set foreign keys to null for records that should remain but lose the user reference
+                await tx.client.updateMany({
+                    where: { ownerId: userId },
+                    data: { ownerId: null }
+                })
+
+                await tx.project.updateMany({
+                    where: { ownerId: userId },
+                    data: { ownerId: null }
+                })
+
+                await tx.task.updateMany({
+                    where: { assigneeId: userId },
+                    data: { assigneeId: null }
+                })
+
+                // Delete audit logs, feedback, and messages (or set to null - choosing deletion for data cleanup)
+                await tx.auditLog.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.feedback.deleteMany({
+                    where: { userId }
+                })
+
+                await tx.message.deleteMany({
+                    where: { senderId: userId }
+                })
+
+                // Finally, delete the user
+                await tx.user.delete({
+                    where: { id: userId }
+                })
+            })
+
+            console.log('✅ User deleted successfully:', userId)
 
             return ok(res, { success: true, message: 'User deleted successfully' })
 
         } catch (error) {
-            console.error('Delete user error:', error)
+            console.error('❌ Delete user error:', error)
+            console.error('Error details:', {
+                message: error.message,
+                code: error.code,
+                meta: error.meta
+            })
+
+            // Check for foreign key constraint violations
+            if (error.code === 'P2003' || error.message?.includes('Foreign key constraint')) {
+                return serverError(res, 'Cannot delete user: User has related records that prevent deletion. Please reassign or remove related data first.', error.message)
+            }
+
+            // Check for record not found
+            if (error.code === 'P2025') {
+                return badRequest(res, 'User not found')
+            }
+
             return serverError(res, 'Failed to delete user', error.message)
         }
     }
