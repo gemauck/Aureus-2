@@ -1113,6 +1113,12 @@ const Clients = React.memo(() => {
 
         const subscriberId = 'clients-screen-live-sync';
         const handler = async (message) => {
+            // CRITICAL: Ignore all messages if LiveDataSync is not running (stopped)
+            if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
+                console.log('🚫 LiveDataSync: Ignoring message - LiveDataSync is stopped');
+                return;
+            }
+            
             // CRITICAL: Skip LiveDataSync updates if user is editing OR auto-saving
             // Use REF for synchronous check (state might lag)
             if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
