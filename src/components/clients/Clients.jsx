@@ -1736,12 +1736,21 @@ const Clients = React.memo(() => {
                         // Update selectedClient with API response if available (includes notes), otherwise use comprehensiveClient
                         // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
                         const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
-                        // Ensure notes from comprehensiveClient are preserved (in case API response has stale/empty notes)
-                        if (savedClient && comprehensiveClient.notes && comprehensiveClient.notes.trim().length > 0) {
+                        // CRITICAL: ALWAYS preserve notes from comprehensiveClient - API response might not have them yet
+                        if (savedClient && comprehensiveClient.notes !== undefined && comprehensiveClient.notes !== null) {
+                            // Always use comprehensiveClient notes if they exist (even if empty string - user might have cleared it)
                             savedClient.notes = comprehensiveClient.notes;
-                            console.log('🛡️ Preserved notes from comprehensiveClient in savedClient:', comprehensiveClient.notes.substring(0, 50));
+                            console.log('🛡️ Preserved notes from comprehensiveClient in savedClient:', {
+                                notesLength: comprehensiveClient.notes.length,
+                                notesPreview: comprehensiveClient.notes.substring(0, 50)
+                            });
                         }
-                        setSelectedClient(savedClient); // Update selectedClient to show new data
+                        // CRITICAL: Delay setSelectedClient to prevent useEffect from running before save completes
+                        // This ensures isAutoSavingRef is still set when useEffect runs
+                        setTimeout(() => {
+                            setSelectedClient(savedClient); // Update selectedClient to show new data
+                            console.log('✅ Updated selectedClient after delay, notes:', savedClient.notes?.substring(0, 50) || 'none');
+                        }, 100); // Small delay to ensure save flags are still set
                         console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
                         console.log('📝 Saved client notes:', savedClient.notes?.substring(0, 50) || 'none');
                     } else {

@@ -2180,10 +2180,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         // Update formData with saved notes to ensure they persist
                                                         if (savedClient && savedClient.notes !== undefined) {
                                                             setFormData(prev => {
-                                                                // Only update if saved notes are different (to preserve user's current typing)
-                                                                if (prev.notes !== savedClient.notes && savedClient.notes) {
-                                                                    return {...prev, notes: savedClient.notes};
+                                                                // CRITICAL: Always preserve current notes if they exist and are longer
+                                                                // Only use savedClient notes if they're actually different and longer
+                                                                const currentNotes = prev.notes || '';
+                                                                const savedNotes = savedClient.notes || '';
+                                                                if (currentNotes.trim().length > 0 && currentNotes.trim().length >= savedNotes.trim().length) {
+                                                                    // Keep current notes if they're longer (user might have typed more)
+                                                                    console.log('🛡️ Keeping current notes (longer than saved):', currentNotes.substring(0, 50));
+                                                                    return {...prev, notes: currentNotes};
+                                                                } else if (savedNotes.trim().length > 0) {
+                                                                    // Use saved notes if they exist
+                                                                    console.log('🔄 Using saved notes:', savedNotes.substring(0, 50));
+                                                                    return {...prev, notes: savedNotes};
                                                                 }
+                                                                // Otherwise keep current
                                                                 return prev;
                                                             });
                                                         }
@@ -2191,10 +2201,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         console.error('❌ Error saving notes:', error);
                                                     }).finally(() => {
                                                         // Clear auto-saving flag after save completes AND a delay to prevent useEffect from running
+                                                        // CRITICAL: This delay must be LONGER than the setSelectedClient delay in Clients.jsx (100ms)
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
                                                             console.log('🔓 Auto-saving flag cleared');
-                                                        }, 500); // Additional 500ms delay to ensure useEffect doesn't run
+                                                        }, 1000); // Increased to 1000ms to ensure setSelectedClient delay (100ms) completes first
                                                     });
                                                 }, 200); // Increased delay to ensure state is updated
                                             }

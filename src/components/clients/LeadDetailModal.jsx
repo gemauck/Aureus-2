@@ -126,9 +126,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             return;
         }
         
-        // CRITICAL: If user has started typing, NEVER update formData from prop
+        // CRITICAL: If user has started typing, NEVER update formData from prop - PERMANENTLY BLOCKED
         if (userHasStartedTypingRef.current) {
-            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled');
+            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled (PERMANENT)');
+            lastProcessedLeadRef.current = lead;
+            return;
+        }
+        
+        // CRITICAL: If user has edited ANY fields, NEVER update formData from prop
+        if (userEditedFieldsRef.current.size > 0) {
+            console.log('🚫 useEffect BLOCKED: user has edited fields - formData is user-controlled', {
+                editedFields: Array.from(userEditedFieldsRef.current)
+            });
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -150,12 +159,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website')
         );
         
-        // CRITICAL: Block if DOM has content OR formData has content OR user has edited fields
-        if (hasDomContent || formDataHasContent || userEditedFieldsRef.current.size > 0) {
-            console.log('🚫 useEffect BLOCKED: DOM or formData has content or user has edited fields', {
+        // CRITICAL: Block if DOM has content OR formData has content
+        if (hasDomContent || formDataHasContent) {
+            console.log('🚫 useEffect BLOCKED: DOM or formData has content', {
                 hasDomContent,
                 formDataHasContent,
-                editedFields: Array.from(userEditedFieldsRef.current)
+                domName: nameInputRef.current?.value,
+                domNotes: notesTextareaRef.current?.value?.substring(0, 20)
             });
             lastProcessedLeadRef.current = lead;
             return;
@@ -184,8 +194,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             }
         }
         
-        // Only initialize if formData is empty AND user hasn't started typing AND DOM is empty
-        if (lead && !formDataHasContent && !hasDomContent) {
+        // Only initialize if formData is empty AND user hasn't started typing AND DOM is empty AND no fields edited
+        if (lead && !formDataHasContent && !hasDomContent && userEditedFieldsRef.current.size === 0) {
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
@@ -200,7 +210,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 thumbnail: lead.thumbnail || ''
             };
             
-            console.log('✅ Initializing formData from lead prop');
+            console.log('✅ Initializing formData from lead prop (form is empty and user has not typed)');
             setFormData(parsedLead);
             // Also update input refs if they exist
             if (nameInputRef.current && parsedLead.name) {
@@ -244,10 +254,22 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     
     // Reset typing flag when switching to different lead
     // BUT: Don't reset if we're saving a new lead (null -> ID) and user is typing
+    // CRITICAL: NEVER reset if user has edited fields - preserve them permanently
     useEffect(() => {
         const currentLeadId = lead?.id || null;
         const previousLeadId = previousLeadIdRef.current;
         const currentFormDataId = formDataRef.current?.id || null;
+        
+        // CRITICAL: NEVER reset if user has edited any fields
+        if (userEditedFieldsRef.current.size > 0) {
+            console.log('🛡️ Preserving typing flag and edited fields: user has edited', {
+                editedFields: Array.from(userEditedFieldsRef.current),
+                currentLeadId,
+                previousLeadId
+            });
+            previousLeadIdRef.current = currentLeadId;
+            return; // Don't reset anything if user has edited fields
+        }
         
         // If switching to a completely different lead (different ID), reset typing flag
         if (currentLeadId && currentLeadId !== currentFormDataId && currentLeadId !== previousLeadId) {
