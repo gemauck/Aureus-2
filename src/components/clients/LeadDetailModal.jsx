@@ -133,6 +133,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             return;
         }
         
+        // CRITICAL: Check DOM values directly - they are the source of truth for uncontrolled inputs
+        const hasDomContent = Boolean(
+            (nameInputRef.current && nameInputRef.current.value && nameInputRef.current.value.trim()) ||
+            (notesTextareaRef.current && notesTextareaRef.current.value && notesTextareaRef.current.value.trim()) ||
+            (industrySelectRef.current && industrySelectRef.current.value && industrySelectRef.current.value.trim()) ||
+            (sourceSelectRef.current && sourceSelectRef.current.value && sourceSelectRef.current.value.trim() && sourceSelectRef.current.value !== 'Website')
+        );
+        
         // Also check editing flags and formData content
         const currentFormData = formDataRef.current || defaultFormData;
         const formDataHasContent = Boolean(
@@ -142,8 +150,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website')
         );
         
-        if (formDataHasContent) {
-            console.log('🚫 useEffect BLOCKED: formData has content');
+        // CRITICAL: Block if DOM has content OR formData has content OR user has edited fields
+        if (hasDomContent || formDataHasContent || userEditedFieldsRef.current.size > 0) {
+            console.log('🚫 useEffect BLOCKED: DOM or formData has content or user has edited fields', {
+                hasDomContent,
+                formDataHasContent,
+                editedFields: Array.from(userEditedFieldsRef.current)
+            });
             lastProcessedLeadRef.current = lead;
             return;
         }
@@ -154,8 +167,25 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             return;
         }
         
-        // Only initialize if formData is empty AND user hasn't started typing
-        if (lead && !formDataHasContent) {
+        // CRITICAL: Check if incoming lead would overwrite user input with blank/empty values
+        // If current formData has content but incoming lead has empty fields, block the update
+        if (lead && formDataHasContent) {
+            const wouldOverwriteWithBlank = Boolean(
+                (currentFormData.name && currentFormData.name.trim() && (!lead.name || !lead.name.trim())) ||
+                (currentFormData.notes && currentFormData.notes.trim() && (!lead.notes || !lead.notes.trim())) ||
+                (currentFormData.industry && currentFormData.industry.trim() && (!lead.industry || !lead.industry.trim())) ||
+                (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website' && (!lead.source || lead.source === 'Website'))
+            );
+            
+            if (wouldOverwriteWithBlank) {
+                console.log('🚫 useEffect BLOCKED: would overwrite user input with blank values');
+                lastProcessedLeadRef.current = lead;
+                return;
+            }
+        }
+        
+        // Only initialize if formData is empty AND user hasn't started typing AND DOM is empty
+        if (lead && !formDataHasContent && !hasDomContent) {
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',

@@ -161,8 +161,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             (currentFormData.website && currentFormData.website.trim())
         );
         
-        if (formDataHasContent) {
-            console.log('🚫 useEffect BLOCKED: formData has content');
+        // CRITICAL: Block if formData has content OR user has edited fields
+        if (formDataHasContent || userEditedFieldsRef.current.size > 0 || hasUserEditedForm.current) {
+            console.log('🚫 useEffect BLOCKED: formData has content or user has edited fields', {
+                formDataHasContent,
+                editedFields: Array.from(userEditedFieldsRef.current),
+                hasUserEditedForm: hasUserEditedForm.current
+            });
             lastProcessedClientRef.current = client;
             return;
         }
@@ -171,6 +176,24 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log('🚫 useEffect BLOCKED: user is editing or saving');
             lastProcessedClientRef.current = client;
             return;
+        }
+        
+        // CRITICAL: Check if incoming client would overwrite user input with blank/empty values
+        // If current formData has content but incoming client has empty fields, block the update
+        if (client && formDataHasContent) {
+            const wouldOverwriteWithBlank = Boolean(
+                (currentFormData.name && currentFormData.name.trim() && (!client.name || !client.name.trim())) ||
+                (currentFormData.notes && currentFormData.notes.trim() && (!client.notes || !client.notes.trim())) ||
+                (currentFormData.industry && currentFormData.industry.trim() && (!client.industry || !client.industry.trim())) ||
+                (currentFormData.address && currentFormData.address.trim() && (!client.address || !client.address.trim())) ||
+                (currentFormData.website && currentFormData.website.trim() && (!client.website || !client.website.trim()))
+            );
+            
+            if (wouldOverwriteWithBlank) {
+                console.log('🚫 useEffect BLOCKED: would overwrite user input with blank values');
+                lastProcessedClientRef.current = client;
+                return;
+            }
         }
         
         // Only initialize if formData is empty AND user hasn't started typing
