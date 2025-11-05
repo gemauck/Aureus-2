@@ -30,7 +30,7 @@ let lastLeadsApiCallTimestamp = 0;
 let lastLiveDataSyncTime = 0;
 let lastLiveDataClientsHash = null;
 const CACHE_DURATION = 60000; // 60 seconds
-const API_CALL_INTERVAL = 30000; // Only call API every 30 seconds max
+const API_CALL_INTERVAL = 10000; // Only call API every 10 seconds max (reduced for faster updates)
 const LIVE_SYNC_THROTTLE = 2000; // Skip LiveDataSync updates if data hasn't changed in 2 seconds
 
 function processClientData(rawClients, cacheKey) {
@@ -262,14 +262,28 @@ const Clients = React.memo(() => {
     // Removed expensive state tracking logging
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
-    const loadClients = async () => {
-        console.log('🔄 Clients: loadClients() called');
+    const loadClients = async (forceRefresh = false) => {
+        console.log('🔄 Clients: loadClients() called, forceRefresh:', forceRefresh);
         const loadStartTime = performance.now();
         try {
-            // IMMEDIATELY show cached data without waiting for API
+            // If force refresh, clear caches first
+            if (forceRefresh) {
+                console.log('🔄 FORCE REFRESH: Clearing caches...');
+                if (window.dataManager?.invalidate) {
+                    window.dataManager.invalidate('clients');
+                }
+                if (window.DatabaseAPI?.clearCache) {
+                    window.DatabaseAPI.clearCache('/clients');
+                }
+                if (window.ClientCache?.clearCache) {
+                    window.ClientCache.clearCache();
+                }
+            }
+            
+            // IMMEDIATELY show cached data without waiting for API (unless force refresh)
             const cachedClients = safeStorage.getClients();
             
-            if (cachedClients && cachedClients.length > 0) {
+            if (cachedClients && cachedClients.length > 0 && !forceRefresh) {
                 // Separate clients and leads from cache
                 const filteredCachedClients = cachedClients.filter(client => 
                     client.type === 'client'
@@ -327,14 +341,23 @@ const Clients = React.memo(() => {
                 return;
             }
             
-            // Skip API call if we recently called it AND we have data
+            // Skip API call if we recently called it AND we have data (unless force refresh)
             const now = Date.now();
             const timeSinceLastCall = now - lastApiCallTimestamp;
             
-            // If we have cached clients AND it's been less than 30 seconds since last call, skip API entirely
+            // If we have cached clients AND it's been less than 10 seconds since last call, skip API entirely
             // This prevents unnecessary network requests when data is fresh
-            if (timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
+            // UNLESS forceRefresh is true - then ALWAYS call API (bypass all throttling)
+            if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (clients.length > 0 || (cachedClients && cachedClients.length > 0))) {
                 console.log(`⚡ Skipping API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, cached data available)`);
+                
+                // But still trigger LiveDataSync in background to get updates
+                if (window.LiveDataSync?.forceSync) {
+                    console.log('🔄 Triggering background sync for fresh data...');
+                    window.LiveDataSync.forceSync().catch(err => {
+                        console.warn('⚠️ Background sync failed:', err);
+                    });
+                }
                 // Refresh opportunities in background using bulk fetch (much faster)
                 if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
                     window.DatabaseAPI.getOpportunities()
@@ -363,9 +386,13 @@ const Clients = React.memo(() => {
                 return; // Use cached data, skip API call
             }
             
-            // Update last API call timestamp BEFORE making the call
+            // Update last API call timestamp BEFORE making the call (unless force refresh)
             // This prevents race conditions if component re-renders during the API call
-            lastApiCallTimestamp = now;
+            if (!forceRefresh) {
+                lastApiCallTimestamp = now;
+            } else {
+                lastApiCallTimestamp = 0; // Reset to force API call
+            }
             
             // API call happens in background after showing cached data
             // Use DatabaseAPI for deduplication and caching benefits
@@ -643,6 +670,48 @@ const Clients = React.memo(() => {
         setLeadsCount(leads.length);
     }, [leads.length]);
 
+    // Force refresh leads when switching to leads view to ensure fresh data across users
+    useEffect(() => {
+        if (viewMode === 'leads') {
+            const currentUser = window.storage?.getUser?.();
+            const userEmail = currentUser?.email || 'unknown';
+            console.log(`🔄 Switching to leads view (${userEmail}) - refreshing leads to ensure visibility...`);
+            
+            // Immediately refresh and trigger sync
+            setTimeout(async () => {
+                await loadLeads(true); // Force refresh to bypass cache and get latest leads
+                
+                // Also trigger LiveDataSync to ensure we have latest data
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(err => {
+                        console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                    });
+                }
+            }, 100);
+        }
+    }, [viewMode]);
+
+    // Force refresh clients when switching to clients view to ensure fresh data across users
+    useEffect(() => {
+        if (viewMode === 'clients') {
+            const currentUser = window.storage?.getUser?.();
+            const userEmail = currentUser?.email || 'unknown';
+            console.log(`🔄 Switching to clients view (${userEmail}) - refreshing clients to ensure visibility...`);
+            
+            // Immediately refresh and trigger sync
+            setTimeout(async () => {
+                await loadClients(true); // Force refresh to bypass cache and get latest clients
+                
+                // Also trigger LiveDataSync to ensure we have latest data
+                if (window.LiveDataSync?.forceSync) {
+                    window.LiveDataSync.forceSync().catch(err => {
+                        console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                    });
+                }
+            }, 100);
+        }
+    }, [viewMode]);
+
     // Ensure leads are loaded from localStorage if state is empty
     useEffect(() => {
         setLeads(prevLeads => {
@@ -729,12 +798,17 @@ const Clients = React.memo(() => {
                     const dataHash = JSON.stringify(message.data);
                     const now = Date.now();
                     
+                    // Log incoming update
+                    console.log(`📥 LiveDataSync: Received ${message.data.length} clients update`);
+                    
                     if (dataHash === lastLiveDataClientsHash && (now - lastLiveDataSyncTime) < LIVE_SYNC_THROTTLE) {
+                        console.log(`⚡ LiveDataSync: Skipping duplicate clients update (data unchanged)`);
                         return;
                     }
                     
                     // Filter to only include actual clients (exclude leads and null types)
                     const processed = message.data.map(mapDbClient).filter(c => c.type === 'client');
+                    console.log(`📥 LiveDataSync: Processed ${processed.length} clients after filtering`);
                     
                     // Load opportunities for clients from LiveDataSync
                     // Use bulk fetch for much better performance when Pipeline view is active
@@ -775,8 +849,18 @@ const Clients = React.memo(() => {
                 }
                 if (message.dataType === 'leads') {
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
+                    console.log(`📥 LiveDataSync: Received ${processedLeads.length} leads update`);
                     setLeads(processedLeads);
-                    // Leads are database-only, no localStorage sync
+                    setLeadsCount(processedLeads.length); // Update count when LiveDataSync updates
+                    console.log(`✅ LiveDataSync: Updated leads count to ${processedLeads.length}`);
+                    // Also update localStorage for consistency
+                    if (window.storage?.setLeads) {
+                        try {
+                            window.storage.setLeads(processedLeads);
+                        } catch (e) {
+                            console.warn('⚠️ Failed to save LiveDataSync leads to localStorage:', e);
+                        }
+                    }
                 }
             }
         };
@@ -851,12 +935,21 @@ const Clients = React.memo(() => {
                 // Check if we should skip API call:
                 // 1. If we have leads in state AND recent API call - skip
                 // 2. If we have leads in localStorage (just loaded above) AND recent API call - skip
+                // UNLESS forceRefresh is true - then ALWAYS call API
                 const hasLeadsInState = leads.length > 0;
                 const hasLeadsInCache = cachedLeads && Array.isArray(cachedLeads) && cachedLeads.length > 0;
                 
-                if (timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
+                if (!forceRefresh && timeSinceLastCall < API_CALL_INTERVAL && (hasLeadsInState || hasLeadsInCache)) {
                     const leadCount = hasLeadsInState ? leads.length : cachedLeads.length;
                     console.log(`⚡ Skipping leads API call (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, ${leadCount} leads already loaded)`);
+                    
+                    // But still trigger LiveDataSync in background to get updates
+                    if (window.LiveDataSync?.forceSync) {
+                        console.log('🔄 Triggering background sync for fresh leads...');
+                        window.LiveDataSync.forceSync().catch(err => {
+                            console.warn('⚠️ Background sync failed:', err);
+                        });
+                    }
                     return; // Use cached data, skip API call
                 }
             } else {
@@ -899,6 +992,26 @@ const Clients = React.memo(() => {
             const apiResponse = await window.api.getLeads(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             console.log(`📥 Received ${rawLeads.length} leads from API`);
+            
+            // DEBUG: Log lead details and ownerIds for visibility debugging
+            const currentUser = window.storage?.getUser?.();
+            const userEmail = currentUser?.email || 'unknown';
+            console.log(`📥 Received ${rawLeads.length} leads from API for ${userEmail}`);
+            
+            if (rawLeads.length > 0) {
+                console.log(`🔍 Leads received for ${userEmail}:`, rawLeads.map(l => ({ 
+                    id: l.id, 
+                    name: l.name, 
+                    ownerId: l.ownerId || 'null',
+                    type: l.type 
+                })));
+                
+                // Log specific lead IDs to help debug missing leads
+                const leadIds = rawLeads.map(l => l.id).sort();
+                console.log(`📋 Lead IDs for ${userEmail} (${leadIds.length} total):`, leadIds);
+            } else {
+                console.warn(`⚠️ WARNING: API returned 0 leads for ${userEmail}. This might indicate a visibility issue.`);
+            }
             
             // Map database fields to UI expected format with JSON parsing
             const mappedLeads = rawLeads.map(lead => {
@@ -943,12 +1056,16 @@ const Clients = React.memo(() => {
             setLeads(mappedLeads);
             setLeadsCount(mappedLeads.length); // Update count badge immediately
             
+            // Log count update for debugging
+            console.log(`✅ Updated leads count for ${userEmail}: ${mappedLeads.length} leads (was ${leads.length})`);
+            
             // Persist leads to localStorage for fast loading on next boot
             if (window.storage?.setLeads) {
                 try {
                     window.storage.setLeads(mappedLeads);
+                    console.log(`💾 Saved ${mappedLeads.length} leads to localStorage for ${userEmail}`);
                 } catch (e) {
-                    // Silent fail - localStorage might be full
+                    console.warn('⚠️ Failed to save leads to localStorage:', e);
                 }
             }
             
@@ -958,7 +1075,7 @@ const Clients = React.memo(() => {
                     acc[lead.status] = (acc[lead.status] || 0) + 1;
                     return acc;
                 }, {});
-                console.log(`✅ Force refresh complete: ${mappedLeads.length} total leads (${Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(', ')})`);
+                console.log(`✅ Force refresh complete for ${userEmail}: ${mappedLeads.length} total leads (${Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(', ')})`);
             }
         } catch (error) {
             // Keep existing leads on error, don't clear them
@@ -1173,6 +1290,22 @@ const Clients = React.memo(() => {
                             const apiResponse = await window.api.updateClient(selectedClient.id, apiUpdateData);
                             console.log('✅ Client updated via API with ALL data');
                             console.log('📥 API Response:', apiResponse);
+                            
+                            // Clear all caches to ensure updates appear immediately
+                            if (window.ClientCache?.clearCache) {
+                                window.ClientCache.clearCache();
+                            }
+                            if (window.DatabaseAPI?.clearCache) {
+                                window.DatabaseAPI.clearCache('/clients');
+                            }
+                            
+                            // Trigger immediate LiveDataSync to ensure all users see the change
+                            if (window.LiveDataSync?.forceSync) {
+                                console.log('🔄 Triggering immediate sync for all users...');
+                                window.LiveDataSync.forceSync().catch(err => {
+                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                                });
+                            }
                         } catch (apiCallError) {
                             console.error('❌ API call failed with error:', apiCallError);
                             console.error('Error details:', apiCallError.message);
@@ -1214,6 +1347,34 @@ const Clients = React.memo(() => {
                             console.error('❌ No client ID in API response!');
                             console.log('Full API response:', created);
                         }
+                        
+                        // Trigger immediate LiveDataSync to ensure all users see the new client
+                        // Also immediately refresh clients list to show new client without waiting for sync
+                        console.log('🔄 Triggering immediate sync and refresh for all users...');
+                        
+                        // Clear all caches first
+                        if (window.ClientCache?.clearCache) {
+                            window.ClientCache.clearCache();
+                        }
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/clients');
+                        }
+                        if (window.dataManager?.invalidate) {
+                            window.dataManager.invalidate('clients');
+                        }
+                        
+                        // Force refresh immediately and trigger sync
+                        setTimeout(async () => {
+                            // First, force refresh clients immediately
+                            await loadClients(true); // Force refresh bypasses cache
+                            
+                            // Then trigger sync for other users
+                            if (window.LiveDataSync?.forceSync) {
+                                window.LiveDataSync.forceSync().catch(err => {
+                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                                });
+                            }
+                        }, 300); // 300ms delay to ensure DB commit
                     }
                     
                     // Always save comprehensive data to localStorage regardless of API success
@@ -1352,6 +1513,22 @@ const Clients = React.memo(() => {
                         const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                         console.log('✅ Lead updated in database');
                         console.log('✅ API response:', apiResponse);
+                        
+                        // Clear all caches to ensure updates appear immediately
+                        if (window.ClientCache?.clearCache) {
+                            window.ClientCache.clearCache();
+                        }
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/leads');
+                        }
+                        
+                        // Trigger immediate LiveDataSync to ensure all users see the change
+                        if (window.LiveDataSync?.forceSync) {
+                            console.log('🔄 Triggering immediate sync for all users...');
+                            window.LiveDataSync.forceSync().catch(err => {
+                                console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                            });
+                        }
                         console.log('✅ API response structure:', {
                             hasData: !!apiResponse?.data,
                             hasLead: !!apiResponse?.data?.lead,
@@ -1437,6 +1614,17 @@ const Clients = React.memo(() => {
                         const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                         setLeads(updatedLeads);
                         setSelectedLead(updatedLead);
+                        
+                        // Save to localStorage even when API fails
+                        if (window.storage?.setLeads) {
+                            try {
+                                window.storage.setLeads(updatedLeads);
+                                console.log('💾 Saved updated lead to localStorage (API error fallback)');
+                            } catch (e) {
+                                console.warn('⚠️ Failed to save lead to localStorage:', e);
+                            }
+                        }
+                        
                         alert('Lead saved locally but may not have been saved to database. Please check your connection.');
                     }
                 } else {
@@ -1444,6 +1632,17 @@ const Clients = React.memo(() => {
                     const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                     setLeads(updatedLeads);
                     setSelectedLead(updatedLead);
+                    
+                    // Save to localStorage even without authentication
+                    if (window.storage?.setLeads) {
+                        try {
+                            window.storage.setLeads(updatedLeads);
+                            console.log('💾 Saved updated lead to localStorage (no auth)');
+                        } catch (e) {
+                            console.warn('⚠️ Failed to save lead to localStorage:', e);
+                        }
+                    }
+                    
                     console.log('✅ Lead updated locally (no authentication)');
                 }
                 console.log('✅ Lead updated');
@@ -1485,7 +1684,24 @@ const Clients = React.memo(() => {
                     try {
                         console.log('🌐 Calling API to create lead:', newLead);
                         const apiResponse = await window.api.createLead(newLead);
-                        let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                        console.log('📥 API response received:', apiResponse);
+                        console.log('📥 API response structure:', {
+                            hasData: !!apiResponse?.data,
+                            hasLead: !!apiResponse?.data?.lead,
+                            hasDirectLead: !!apiResponse?.lead,
+                            dataKeys: apiResponse?.data ? Object.keys(apiResponse.data) : [],
+                            responseKeys: apiResponse ? Object.keys(apiResponse) : []
+                        });
+                        
+                        // Extract lead from response - API returns { data: { lead: {...} } }
+                        let savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse?.data || null;
+                        
+                        // If savedLead is still null or doesn't have an id, log warning
+                        if (!savedLead || !savedLead.id) {
+                            console.error('❌ CRITICAL: API response does not contain a valid lead with ID!');
+                            console.error('❌ Full API response:', JSON.stringify(apiResponse, null, 2));
+                            throw new Error('API response missing lead data');
+                        }
                         
                         // Ensure savedLead has all required fields including type
                         if (savedLead && savedLead.id) {
@@ -1504,17 +1720,104 @@ const Clients = React.memo(() => {
                         
                         console.log('✅ Lead created in database:', savedLead);
                         
+                        // CRITICAL: Clear all caches to ensure new lead appears immediately
+                        // Clear ClientCache
+                        if (window.ClientCache?.clearCache) {
+                            window.ClientCache.clearCache();
+                            console.log('🗑️ Cleared ClientCache for immediate lead visibility');
+                        }
+                        
+                        // Clear DatabaseAPI cache
+                        if (window.DatabaseAPI?.clearCache) {
+                            window.DatabaseAPI.clearCache('/leads');
+                            console.log('🗑️ Cleared DatabaseAPI cache for leads');
+                        }
+                        
+                        // Clear localStorage cache timestamp to force refresh
+                        if (window.dataManager?.invalidate) {
+                            window.dataManager.invalidate('leads');
+                            console.log('🗑️ Invalidated dataManager cache for leads');
+                        }
+                        
+                        // Trigger immediate LiveDataSync to ensure all users see the new lead
+                        // Also immediately refresh leads list to show new lead without waiting for sync
+                        console.log('🔄 Triggering immediate sync and refresh for all users...');
+                        setTimeout(async () => {
+                            // First, force refresh leads immediately
+                            await loadLeads(true); // Force refresh bypasses cache
+                            
+                            // Then trigger sync for other users
+                            if (window.LiveDataSync?.forceSync) {
+                                window.LiveDataSync.forceSync().catch(err => {
+                                    console.warn('⚠️ Force sync failed (will sync automatically):', err);
+                                });
+                            }
+                        }, 300); // 300ms delay to ensure DB commit
+                        
                         // Use the saved lead from database (with proper ID)
                         if (savedLead && savedLead.id) {
-                            const updatedLeads = [...leads, savedLead];
+                            // Parse JSON fields if they come as strings from database
+                            const safeParseJSON = (value, defaultValue) => {
+                                if (typeof value !== 'string') return value || defaultValue;
+                                try {
+                                    return JSON.parse(value || JSON.stringify(defaultValue));
+                                } catch (e) {
+                                    return defaultValue;
+                                }
+                            };
+                            
+                            // Ensure all JSON fields are properly parsed
+                            const parsedSavedLead = {
+                                ...savedLead,
+                                contacts: safeParseJSON(savedLead.contacts, []),
+                                followUps: safeParseJSON(savedLead.followUps, []),
+                                projectIds: safeParseJSON(savedLead.projectIds, []),
+                                comments: safeParseJSON(savedLead.comments, []),
+                                activityLog: safeParseJSON(savedLead.activityLog, []),
+                                sites: safeParseJSON(savedLead.sites, []),
+                                contracts: safeParseJSON(savedLead.contracts, []),
+                                proposals: safeParseJSON(savedLead.proposals, []),
+                                billingTerms: safeParseJSON(savedLead.billingTerms, {
+                                    paymentTerms: 'Net 30',
+                                    billingFrequency: 'Monthly',
+                                    currency: 'ZAR',
+                                    retainerAmount: 0,
+                                    taxExempt: false,
+                                    notes: ''
+                                })
+                            };
+                            
+                            const updatedLeads = [...leads, parsedSavedLead];
                             setLeads(updatedLeads);
                             setLeadsCount(updatedLeads.length); // Update count immediately
+                            
+                            // CRITICAL: Save to localStorage immediately to ensure persistence
+                            if (window.storage?.setLeads) {
+                                try {
+                                    window.storage.setLeads(updatedLeads);
+                                    console.log('✅ Saved new lead to localStorage for persistence');
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to save lead to localStorage:', e);
+                                }
+                            }
+                            
                             console.log('✅ New lead created and saved to database');
                         } else {
                             // Fallback to local lead if API doesn't return proper response
                             const updatedLeads = [...leads, newLead];
                             setLeads(updatedLeads);
                             setLeadsCount(updatedLeads.length); // Update count immediately
+                            
+                            // Save to localStorage even in fallback case
+                            if (window.storage?.setLeads) {
+                                try {
+                                    window.storage.setLeads(updatedLeads);
+                                    console.log('✅ Saved new lead to localStorage (fallback)');
+                                } catch (e) {
+                                    console.warn('⚠️ Failed to save lead to localStorage:', e);
+                                }
+                            }
+                            
                             console.log('✅ New lead created locally (API fallback)');
                         }
                     } catch (apiError) {
@@ -1538,6 +1841,17 @@ const Clients = React.memo(() => {
                         const updatedLeads = [...leads, newLead];
                         setLeads(updatedLeads);
                         setLeadsCount(updatedLeads.length); // Update count immediately
+                        
+                        // Save to localStorage even in error fallback case
+                        if (window.storage?.setLeads) {
+                            try {
+                                window.storage.setLeads(updatedLeads);
+                                console.log('✅ Saved new lead to localStorage (error fallback)');
+                            } catch (e) {
+                                console.warn('⚠️ Failed to save lead to localStorage:', e);
+                            }
+                        }
+                        
                         console.log('✅ New lead created locally (API fallback)');
                     }
                 } else {
@@ -1546,6 +1860,17 @@ const Clients = React.memo(() => {
                     const updatedLeads = [...leads, newLead];
                     setLeads(updatedLeads);
                     setLeadsCount(updatedLeads.length); // Update count immediately
+                    
+                    // Save to localStorage even without authentication
+                    if (window.storage?.setLeads) {
+                        try {
+                            window.storage.setLeads(updatedLeads);
+                            console.log('✅ Saved new lead to localStorage (no auth)');
+                        } catch (e) {
+                            console.warn('⚠️ Failed to save lead to localStorage:', e);
+                        }
+                    }
+                    
                     console.log('✅ New lead created locally (no authentication)');
                 }
                 

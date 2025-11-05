@@ -331,32 +331,60 @@ const Projects = () => {
 
     // Proactively load ProjectDetail component when Projects component mounts
     useEffect(() => {
-        // Only load if not already available
-        if (!window.ProjectDetail && !projectDetailAvailable) {
-            console.log('📥 Projects: Proactively loading ProjectDetail component...');
-            // Use a small delay to not block initial render
-            const timer = setTimeout(() => {
-                loadProjectDetail().catch(err => {
-                    console.warn('⚠️ Projects: Failed to proactively load ProjectDetail (will retry when needed):', err.message);
-                });
-            }, 100);
-            return () => clearTimeout(timer);
+        // Check if already available
+        if (window.ProjectDetail) {
+            console.log('✅ Projects: ProjectDetail already available on mount');
+            setProjectDetailAvailable(true);
+            return;
         }
+        
+        // Wait a bit for lazy loader to finish, then check again
+        const checkForProjectDetail = () => {
+            if (window.ProjectDetail) {
+                console.log('✅ Projects: ProjectDetail loaded by lazy loader');
+                setProjectDetailAvailable(true);
+                return true;
+            }
+            return false;
+        };
+        
+        // Check immediately
+        if (checkForProjectDetail()) return;
+        
+        // Wait for lazy loader to complete (max 3 seconds)
+        let attempts = 0;
+        const maxAttempts = 30;
+        const checkInterval = setInterval(() => {
+            attempts++;
+            if (checkForProjectDetail() || attempts >= maxAttempts) {
+                clearInterval(checkInterval);
+                if (!window.ProjectDetail && attempts >= maxAttempts) {
+                    console.log('📥 Projects: ProjectDetail not loaded by lazy loader, loading manually...');
+                    // Try to load manually
+                    loadProjectDetail().catch(err => {
+                        console.warn('⚠️ Projects: Failed to proactively load ProjectDetail (will retry when needed):', err.message);
+                    });
+                }
+            }
+        }, 100);
+        
+        return () => clearInterval(checkInterval);
     }, []); // Only run once on mount
 
-    // Function to actively load ProjectDetail if not available
-    const loadProjectDetail = async () => {
+    // BULLETPROOF ProjectDetail loader with multiple strategies and retries
+    const loadProjectDetail = async (retryCount = 0) => {
+        const maxRetries = 3;
+        
         if (window.ProjectDetail) {
             console.log('✅ ProjectDetail already available');
             setProjectDetailAvailable(true);
             return true;
         }
         
-        // Check if script is already in DOM
+        // Strategy 0: Wait for existing script to finish
         const existingScript = document.querySelector(`script[src*="ProjectDetail.js"]`);
-        if (existingScript) {
+        if (existingScript && !existingScript.complete) {
             console.log('⏳ ProjectDetail script already loading, waiting...');
-            // Wait for it to finish loading
             return new Promise((resolve) => {
                 let attempts = 0;
                 const checkInterval = setInterval(() => {
@@ -366,109 +394,168 @@ const Projects = () => {
                         setProjectDetailAvailable(true);
                         clearInterval(checkInterval);
                         resolve(true);
-                    } else if (attempts >= 50) {
-                        console.warn('⚠️ ProjectDetail script loaded but component not registered');
+                    } else if (attempts >= 100) { // Wait up to 10 seconds
+                        console.warn('⚠️ ProjectDetail script loaded but component not registered after 10s');
                         clearInterval(checkInterval);
-                        resolve(false);
+                        // Continue to next strategy
+                        resolve(loadProjectDetail(retryCount + 1));
                     }
                 }, 100);
             });
         }
         
-        // Try to load ProjectDetail from the lazy loader path
-        const projectDetailPath = './dist/src/components/projects/ProjectDetail.js';
-        console.log('📥 Loading ProjectDetail from:', projectDetailPath);
-        
-        try {
-            // First, try to fetch and validate the file
-            const response = await fetch(projectDetailPath);
-            if (!response.ok) {
-                throw new Error(`ProjectDetail not found: ${response.status} ${response.statusText}`);
-            }
-            
-            const text = await response.text();
-            
-            // Validate it's JavaScript (not HTML 404 page)
-            if (text.trim().startsWith('<') || text.trim().startsWith('<!DOCTYPE')) {
-                throw new Error('ProjectDetail appears to be HTML (404 page?)');
-            }
-            
-            const script = document.createElement('script');
-            script.type = 'text/javascript';
-            script.async = false; // Load synchronously to ensure it executes
-            
-            // Create blob URL from validated JavaScript content
-            const blob = new Blob([text], { type: 'application/javascript' });
-            const blobUrl = URL.createObjectURL(blob);
-            script.src = blobUrl;
-            
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    URL.revokeObjectURL(blobUrl);
-                    reject(new Error('ProjectDetail load timeout after 5 seconds'));
-                }, 5000);
-                
-                let attempts = 0;
-                const checkInterval = setInterval(() => {
-                    attempts++;
-                    if (window.ProjectDetail) {
-                        console.log('✅ ProjectDetail registered successfully');
-                        clearTimeout(timeout);
-                        clearInterval(checkInterval);
-                        URL.revokeObjectURL(blobUrl);
-                        setProjectDetailAvailable(true);
-                        resolve(true);
-                    } else if (attempts >= 50) {
-                        clearTimeout(timeout);
-                        clearInterval(checkInterval);
-                        URL.revokeObjectURL(blobUrl);
-                        reject(new Error('ProjectDetail not registered after script load (waited 5s)'));
-                    }
-                }, 100);
-                
-                script.onerror = (error) => {
-                    URL.revokeObjectURL(blobUrl);
-                    clearTimeout(timeout);
-                    clearInterval(checkInterval);
-                    console.error('❌ Failed to execute ProjectDetail script:', error);
-                    reject(new Error(`Failed to execute ProjectDetail script: ${error.message || 'Unknown error'}`));
-                };
-                
-                document.head.appendChild(script);
-            });
-            return true;
-        } catch (error) {
-            console.error('❌ Failed to actively load ProjectDetail:', error);
-            // Try alternative path
-            const altPath = '/dist/src/components/projects/ProjectDetail.js';
-            console.log('🔄 Trying alternative path:', altPath);
-            
+        // Strategy 1: Try blob URL method (most reliable)
+        const tryBlobMethod = async (path) => {
             try {
-                const script2 = document.createElement('script');
-                script2.src = altPath;
-                script2.type = 'text/javascript';
-                script2.async = false;
+                console.log(`📥 Strategy 1 (Blob): Loading ProjectDetail from ${path}...`);
+                const response = await fetch(path, { cache: 'no-cache' });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
                 
-                await new Promise((resolve, reject) => {
-                    script2.onload = () => {
+                const text = await response.text();
+                if (text.trim().startsWith('<') || text.trim().startsWith('<!DOCTYPE')) {
+                    throw new Error('Response is HTML (404 page)');
+                }
+                
+                const script = document.createElement('script');
+                script.type = 'text/javascript';
+                script.async = false;
+                
+                const blob = new Blob([text], { type: 'application/javascript' });
+                const blobUrl = URL.createObjectURL(blob);
+                script.src = blobUrl;
+                
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        URL.revokeObjectURL(blobUrl);
+                        reject(new Error('Timeout after 8 seconds'));
+                    }, 8000);
+                    
+                    let attempts = 0;
+                    const checkInterval = setInterval(() => {
+                        attempts++;
+                        if (window.ProjectDetail) {
+                            console.log('✅ Strategy 1 (Blob): ProjectDetail registered successfully');
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            URL.revokeObjectURL(blobUrl);
+                            setProjectDetailAvailable(true);
+                            resolve(true);
+                        } else if (attempts >= 80) {
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            URL.revokeObjectURL(blobUrl);
+                            reject(new Error('Not registered after 8 seconds'));
+                        }
+                    }, 100);
+                    
+                    script.onerror = (error) => {
+                        URL.revokeObjectURL(blobUrl);
+                        clearTimeout(timeout);
+                        clearInterval(checkInterval);
+                        reject(new Error(`Script execution error: ${error.message || 'Unknown'}`));
+                    };
+                    
+                    document.head.appendChild(script);
+                });
+            } catch (error) {
+                throw new Error(`Blob method failed: ${error.message}`);
+            }
+        };
+        
+        // Strategy 2: Direct script tag (fallback)
+        const tryDirectMethod = async (path) => {
+            try {
+                console.log(`📥 Strategy 2 (Direct): Loading ProjectDetail from ${path}...`);
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = path;
+                    script.type = 'text/javascript';
+                    script.async = false;
+                    
+                    const timeout = setTimeout(() => {
+                        script.remove();
+                        reject(new Error('Timeout after 8 seconds'));
+                    }, 8000);
+                    
+                    let attempts = 0;
+                    const checkInterval = setInterval(() => {
+                        attempts++;
+                        if (window.ProjectDetail) {
+                            console.log('✅ Strategy 2 (Direct): ProjectDetail registered successfully');
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            setProjectDetailAvailable(true);
+                            resolve(true);
+                        } else if (attempts >= 80) {
+                            clearTimeout(timeout);
+                            clearInterval(checkInterval);
+                            script.remove();
+                            reject(new Error('Not registered after 8 seconds'));
+                        }
+                    }, 100);
+                    
+                    script.onload = () => {
+                        // Check again after script loads
                         setTimeout(() => {
                             if (window.ProjectDetail) {
+                                clearTimeout(timeout);
+                                clearInterval(checkInterval);
                                 setProjectDetailAvailable(true);
                                 resolve(true);
-                            } else {
-                                reject(new Error('ProjectDetail not registered from alt path'));
                             }
                         }, 200);
                     };
-                    script2.onerror = () => reject(new Error('Alt path also failed'));
-                    document.head.appendChild(script2);
+                    
+                    script.onerror = () => {
+                        clearTimeout(timeout);
+                        clearInterval(checkInterval);
+                        script.remove();
+                        reject(new Error('Script load failed'));
+                    };
+                    
+                    document.head.appendChild(script);
                 });
-                return true;
-            } catch (altError) {
-                console.error('❌ Alternative path also failed:', altError);
-                return false;
+            } catch (error) {
+                throw new Error(`Direct method failed: ${error.message}`);
+            }
+        };
+        
+        // Try multiple paths
+        const paths = [
+            './dist/src/components/projects/ProjectDetail.js',
+            '/dist/src/components/projects/ProjectDetail.js',
+            `${window.location.origin}/dist/src/components/projects/ProjectDetail.js`
+        ];
+        
+        for (const path of paths) {
+            // Try blob method first
+            try {
+                const result = await tryBlobMethod(path);
+                if (result) return true;
+            } catch (blobError) {
+                console.warn(`⚠️ Blob method failed for ${path}:`, blobError.message);
+                
+                // Try direct method
+                try {
+                    const result = await tryDirectMethod(path);
+                    if (result) return true;
+                } catch (directError) {
+                    console.warn(`⚠️ Direct method failed for ${path}:`, directError.message);
+                }
             }
         }
+        
+        // If all strategies failed and we have retries left, wait and retry
+        if (retryCount < maxRetries) {
+            console.log(`🔄 All strategies failed, retrying in 1 second... (${retryCount + 1}/${maxRetries})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return loadProjectDetail(retryCount + 1);
+        }
+        
+        console.error('❌ All ProjectDetail loading strategies exhausted');
+        return false;
     };
     
     // Wait for ProjectDetail component to load if it's not available yet
@@ -526,21 +613,38 @@ const Projects = () => {
     useEffect(() => {
         const checkProjectDetail = () => {
             if (window.ProjectDetail && !projectDetailAvailable) {
+                console.log('✅ ProjectDetail became available, updating state');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
-                // Removed forced re-render - React will re-render automatically
+                // Force a re-render by updating state if we're viewing a project
+                if (viewingProject) {
+                    // Trigger a state update to force re-render
+                    setViewingProject({ ...viewingProject });
+                }
             }
         };
         
+        // Check immediately
+        checkProjectDetail();
+        
         // Check periodically even when not viewing a project
-        const interval = setInterval(checkProjectDetail, 500);
+        const interval = setInterval(checkProjectDetail, 200);
         
         // Also check on window load events
         window.addEventListener('load', checkProjectDetail);
         
+        // Listen for custom event when components are loaded
+        const handleComponentLoaded = (event) => {
+            if (event.detail && event.detail.component === 'ProjectDetail') {
+                checkProjectDetail();
+            }
+        };
+        window.addEventListener('componentLoaded', handleComponentLoaded);
+        
         return () => {
             clearInterval(interval);
             window.removeEventListener('load', checkProjectDetail);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
         };
     }, [projectDetailAvailable, viewingProject]);
 
@@ -692,6 +796,58 @@ const Projects = () => {
             apiExists: !!window.api,
             apiHasGetProject: !!(window.api && window.api.getProject)
         });
+        console.log('🔍 ProjectDetail availability check:', {
+            windowProjectDetail: typeof window.ProjectDetail,
+            projectDetailAvailable: projectDetailAvailable,
+            condition: !window.ProjectDetail && !projectDetailAvailable
+        });
+        
+        // BULLETPROOF: ALWAYS check if ProjectDetail is loaded, even if projectDetailAvailable is true
+        // This handles cases where the flag is set but component isn't actually loaded
+        if (!window.ProjectDetail) {
+            console.log('🔵 handleViewProject: ProjectDetail not available, loading NOW with all strategies...');
+            console.log('📥 Current state - projectDetailAvailable:', projectDetailAvailable, 'window.ProjectDetail:', typeof window.ProjectDetail);
+            
+            // Reset the flag if component isn't actually available
+            if (projectDetailAvailable) {
+                console.warn('⚠️ projectDetailAvailable flag is true but component not loaded - resetting flag');
+                setProjectDetailAvailable(false);
+            }
+            
+            setWaitingForProjectDetail(true);
+            
+            // Use the bulletproof loader (it has all strategies built-in)
+            const loaded = await loadProjectDetail();
+            
+            if (loaded && window.ProjectDetail) {
+                console.log('✅ handleViewProject: ProjectDetail loaded successfully');
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+            } else {
+                console.error('❌ handleViewProject: ProjectDetail failed to load after all strategies');
+                console.error('🔍 Final check - window.ProjectDetail:', typeof window.ProjectDetail);
+                console.error('🔍 Available components:', Object.keys(window).filter(k => k.includes('Project')));
+                
+                // Try one more time with a short wait (maybe lazy loader is finishing)
+                console.log('🔄 handleViewProject: Waiting 2 more seconds for lazy loader...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                if (window.ProjectDetail) {
+                    console.log('✅ handleViewProject: ProjectDetail appeared after wait!');
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                } else {
+                    setWaitingForProjectDetail(false);
+                    // Don't return - still set viewingProject to show error UI
+                }
+            }
+        } else {
+            // Component exists, ensure flag is set
+            if (!projectDetailAvailable) {
+                setProjectDetailAvailable(true);
+            }
+        }
+        
         try {
             // Fetch full project data from API for detail view
             // Always use safe fallback approach to avoid function errors
@@ -754,7 +910,24 @@ const Projects = () => {
                 team: typeof fullProject.team === 'string' ? JSON.parse(fullProject.team || '[]') : (fullProject.team || [])
             };
             console.log('Normalized project for ProjectDetail:', normalizedProject);
-            setViewingProject(normalizedProject);
+            
+            // Only set viewingProject if ProjectDetail is available
+            if (window.ProjectDetail) {
+                console.log('✅ ProjectDetail is available, setting viewingProject');
+                setViewingProject(normalizedProject);
+            } else {
+                console.error('❌ ProjectDetail still not available after loading attempt');
+                console.error('🔍 Debug info:', {
+                    windowProjectDetail: typeof window.ProjectDetail,
+                    projectDetailAvailable: projectDetailAvailable,
+                    waitingForProjectDetail: waitingForProjectDetail,
+                    lazyLoaderComplete: !!document.querySelector('script[src*="lazy-load-components"]'),
+                    availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
+                });
+                // Still set viewingProject so the loading UI can show
+                setViewingProject(normalizedProject);
+                // The render will show the loading state
+            }
         } catch (error) {
             console.error('Error setting viewingProject:', error);
             alert('Error opening project: ' + error.message);
@@ -1233,19 +1406,74 @@ const Projects = () => {
         }
     }
 
+    // BULLETPROOF: Aggressive monitoring when viewing a project
+    useEffect(() => {
+        if (!viewingProject) return;
+        
+        // If ProjectDetail is missing, try loading immediately
+        if (!window.ProjectDetail) {
+            console.log('🔵 Effect: ProjectDetail missing while viewing project, loading NOW...');
+            setWaitingForProjectDetail(true);
+            
+            // Try loading with aggressive retries
+            let retryCount = 0;
+            const maxRetries = 5;
+            
+            const attemptLoad = () => {
+                loadProjectDetail().then(loaded => {
+                    if (loaded && window.ProjectDetail) {
+                        console.log('✅ Effect: ProjectDetail loaded successfully');
+                        setProjectDetailAvailable(true);
+                        setWaitingForProjectDetail(false);
+                        // Force re-render
+                        setViewingProject({ ...viewingProject });
+                    } else if (retryCount < maxRetries) {
+                        retryCount++;
+                        console.log(`🔄 Effect: Load failed, retrying in 500ms... (${retryCount}/${maxRetries})`);
+                        setTimeout(attemptLoad, 500);
+                    } else {
+                        console.error('❌ Effect: All load attempts exhausted');
+                        setWaitingForProjectDetail(false);
+                    }
+                });
+            };
+            
+            attemptLoad();
+        }
+        
+        // Continuous polling while viewing project - check every 300ms
+        const checkInterval = setInterval(() => {
+            if (window.ProjectDetail) {
+                if (!projectDetailAvailable) {
+                    console.log('✅ Effect: ProjectDetail found during polling!');
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                    setViewingProject({ ...viewingProject });
+                }
+            } else if (!waitingForProjectDetail) {
+                // Component disappeared? Try loading again
+                console.warn('⚠️ Effect: ProjectDetail disappeared, reloading...');
+                setWaitingForProjectDetail(true);
+                loadProjectDetail().then(loaded => {
+                    setWaitingForProjectDetail(false);
+                    if (loaded && window.ProjectDetail) {
+                        setProjectDetailAvailable(true);
+                        setViewingProject({ ...viewingProject });
+                    }
+                });
+            }
+        }, 300); // Check every 300ms
+        
+        return () => clearInterval(checkInterval);
+    }, [viewingProject, waitingForProjectDetail, projectDetailAvailable]);
+
     if (viewingProject) {
         try {
             // Check window.ProjectDetail directly (it may be loaded lazily)
             const ProjectDetailComponent = window.ProjectDetail;
             if (!ProjectDetailComponent) {
-                // If not available and we're not already waiting, trigger loading
-                if (!waitingForProjectDetail && !projectDetailAvailable) {
-                    // Trigger load immediately
-                    loadProjectDetail().catch(err => {
-                        console.error('Failed to load ProjectDetail:', err);
-                    });
-                }
-                
+                // If we just set viewingProject, ProjectDetail should already be loaded
+                // But if it's not, show loading state and keep trying
                 console.warn('ProjectDetail component not found yet, waiting...', {
                     windowProjectDetail: typeof window.ProjectDetail,
                     projectDetailAvailable: projectDetailAvailable,
@@ -1261,6 +1489,9 @@ const Projects = () => {
                         </h2>
                         <p className="text-sm text-blue-600 mb-4">
                             Loading the ProjectDetail component. Please wait...
+                        </p>
+                        <p className="text-xs text-blue-500 mb-4">
+                            If this takes too long, try refreshing the page.
                         </p>
                         <button 
                             onClick={() => setViewingProject(null)}

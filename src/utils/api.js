@@ -15,13 +15,26 @@ async function request(path, options = {}) {
     const res = await fetch(fullUrl, requestOptions)
     const text = await res.text()
 
+    // Check for gateway errors (502, 503, 504) that return HTML
+    if (!res.ok && (res.status === 502 || res.status === 503 || res.status === 504)) {
+      const gatewayError = new Error(`Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`);
+      gatewayError.status = res.status;
+      throw gatewayError; // Throw immediately so it can be caught and handled
+    }
+
     let data = {}
     if (text) {
       try {
         data = JSON.parse(text)
       } catch (parseError) {
-        console.error('❌ JSON Parse Error:', { path, error: parseError.message, textPreview: text.substring(0, 200) });
-        if (text.trim().startsWith('<')) {
+        // Check if response is HTML (common for 502/503/504 gateway errors)
+        if (text.trim().startsWith('<') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<!doctype')) {
+          // If it's a gateway error, throw a more specific error
+          if (res.status === 502 || res.status === 503 || res.status === 504) {
+            const gatewayError = new Error(`Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`);
+            gatewayError.status = res.status;
+            throw gatewayError;
+          }
           throw new Error(`Server returned HTML instead of JSON. This usually means the API endpoint doesn't exist or there's a server error. Response: ${text.substring(0, 100)}...`)
         } else {
           throw new Error(`Invalid JSON response: ${parseError.message}. Response: ${text.substring(0, 100)}...`)
@@ -98,6 +111,12 @@ async function request(path, options = {}) {
         // Include "500" in the error message so catch block can recognize it as server error
         const serverErrorMessage = errorMessage || 'Server error 500: The server encountered an error processing your request.';
         throw new Error(serverErrorMessage);
+      }
+      
+      // Handle 502/503/504 gateway errors gracefully
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        const gatewayErrorMessage = errorMessage || `Server unavailable (${res.status}): The server is temporarily unavailable. Please try again later.`;
+        throw new Error(gatewayErrorMessage);
       }
       
       // For heartbeat endpoint, suppress "Invalid method" errors (they're expected if server hasn't updated)
@@ -205,18 +224,28 @@ const api = {
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam
-      // Don't log 401/500/400 errors or database errors as they're expected when auth is in flux or server hasn't updated or DB is down
+      // Don't log 401/500/502/503/504/400 errors or database errors as they're expected when auth is in flux or server hasn't updated or DB is down
       const errorMessage = error.message || '';
       const isDatabaseError = errorMessage.includes('Database connection failed') ||
                             errorMessage.includes('unreachable');
+      const isServerError = errorMessage.includes('500') || 
+                           errorMessage.includes('502') || 
+                           errorMessage.includes('503') || 
+                           errorMessage.includes('504') ||
+                           errorMessage.includes('Server unavailable');
       
       if (errorMessage && 
           !errorMessage.includes('401') && 
           !errorMessage.includes('500') && 
+          !errorMessage.includes('502') &&
+          !errorMessage.includes('503') &&
+          !errorMessage.includes('504') &&
           !errorMessage.includes('400') &&
           !errorMessage.includes('Invalid method') &&
           !errorMessage.includes('Failed to update') &&
-          !isDatabaseError) {
+          !errorMessage.includes('Server unavailable') &&
+          !isDatabaseError &&
+          !isServerError) {
         console.warn('Heartbeat failed:', errorMessage)
       }
       return null

@@ -132,13 +132,20 @@ async function handler(req, res) {
         }
         
         const userId = req.user?.sub
+        const userEmail = req.user?.email || 'unknown'
         
         // Include tags for list view - needed for Tags column
         let leads = []
         try {
+          console.log(`🔍 Querying leads for user: ${userEmail} (${userId})`)
           console.log('🔍 Querying leads with type filter (including tags)...')
+          // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
+          // EXPLICITLY exclude ownerId from WHERE clause to ensure all leads are returned
           leads = await prisma.client.findMany({ 
-            where: { type: 'lead' },
+            where: { 
+              type: 'lead'
+              // Explicitly NO ownerId filter - all users see all leads
+            },
             include: {
               tags: {
                 include: {
@@ -149,7 +156,71 @@ async function handler(req, res) {
             },
             orderBy: { createdAt: 'desc' } 
           })
-          console.log('✅ Leads retrieved successfully:', leads.length, 'for all users')
+          console.log(`✅ Leads retrieved successfully for ${userEmail}:`, leads.length, 'total leads (no ownerId filtering)')
+          
+          // DEBUG: Also check raw SQL to verify what's actually in database
+          try {
+            const rawLeads = await prisma.$queryRaw`
+              SELECT id, name, type, "ownerId", "createdAt"
+              FROM "Client"
+              WHERE type = 'lead'
+              ORDER BY "createdAt" DESC
+            `
+            console.log(`🔍 RAW SQL QUERY: Found ${rawLeads.length} leads in database`)
+            if (rawLeads.length > 0) {
+              console.log(`📋 Raw SQL leads:`, JSON.stringify(rawLeads.map(l => ({ 
+                id: l.id, 
+                name: l.name, 
+                type: l.type, 
+                ownerId: l.ownerId || 'null' 
+              })), null, 2))
+            }
+            
+            // Compare counts
+            if (rawLeads.length !== leads.length) {
+              console.error(`❌ MISMATCH: Prisma query returned ${leads.length} leads, but raw SQL returned ${rawLeads.length} leads!`)
+              
+              // Find which leads are missing
+              const prismaIds = new Set(leads.map(l => l.id))
+              const missingLeads = rawLeads.filter(rl => !prismaIds.has(rl.id))
+              if (missingLeads.length > 0) {
+                console.error(`❌ Missing leads from Prisma query:`, JSON.stringify(missingLeads, null, 2))
+              }
+            }
+            
+            // Also try case-insensitive search to catch any case issues
+            const caseInsensitiveLeads = await prisma.$queryRaw`
+              SELECT id, name, type, "ownerId", "createdAt"
+              FROM "Client"
+              WHERE LOWER(type) = 'lead'
+              ORDER BY "createdAt" DESC
+            `
+            if (caseInsensitiveLeads.length !== rawLeads.length) {
+              console.warn(`⚠️ Case sensitivity issue detected: Exact match found ${rawLeads.length} leads, case-insensitive found ${caseInsensitiveLeads.length} leads`)
+            }
+          } catch (sqlError) {
+            console.warn('⚠️ Raw SQL query failed (non-critical):', sqlError.message)
+          }
+          
+          // Log lead details for debugging visibility issues
+          if (leads.length > 0) {
+            const leadDetails = leads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null', type: l.type }))
+            console.log(`📋 Lead details visible to ${userEmail}:`, JSON.stringify(leadDetails, null, 2))
+          } else {
+            console.log(`⚠️ No leads found for ${userEmail} - checking if any leads exist in database...`)
+            
+            // Additional check: query ALL records to see what types exist
+            try {
+              const allTypes = await prisma.$queryRaw`
+                SELECT type, COUNT(*) as count
+                FROM "Client"
+                GROUP BY type
+              `
+              console.log(`📊 Database type distribution:`, JSON.stringify(allTypes, null, 2))
+            } catch (e) {
+              console.warn('⚠️ Type distribution query failed:', e.message)
+            }
+          }
         } catch (queryError) {
           console.error('❌ Primary query failed:', {
             message: queryError.message,
@@ -161,6 +232,7 @@ async function handler(req, res) {
           // Fallback: If query fails, try without type filter and filter in memory
           console.warn('⚠️ Trying fallback query without type filter...')
           try {
+            // IMPORTANT: Return ALL leads regardless of ownerId - all users should see all leads
             const allRecords = await prisma.client.findMany({
               include: {
                 tags: {
@@ -171,6 +243,7 @@ async function handler(req, res) {
                 // starredBy relation removed - StarredClient table doesn't exist in restored database
               },
               orderBy: { createdAt: 'desc' }
+              // No ownerId filter - all users see all leads
             })
             console.log(`📊 Found ${allRecords.length} total client records`)
             // Filter to only leads
@@ -182,7 +255,12 @@ async function handler(req, res) {
               // If type is null/undefined/empty, skip (legacy data without type should not be treated as leads)
               return false
             })
-            console.log(`✅ Filtered to ${leads.length} leads`)
+            console.log(`✅ Filtered to ${leads.length} leads for ${userEmail}`)
+            // Log lead details for debugging visibility issues
+            if (leads.length > 0) {
+              const leadDetails = leads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' }))
+              console.log(`📋 Lead details visible to ${userEmail}:`, JSON.stringify(leadDetails, null, 2))
+            }
           } catch (fallbackError) {
             console.error('❌ Fallback query also failed:', {
               message: fallbackError.message,
@@ -201,6 +279,26 @@ async function handler(req, res) {
           parsed.isStarred = false; // StarredClient table doesn't exist in restored database
           return parsed;
         });
+        
+        // Final verification: Log response before sending to ensure all leads are included
+        console.log(`📤 Sending ${parsedLeads.length} leads to ${userEmail} (no filtering applied)`)
+        if (parsedLeads.length > 0) {
+          console.log(`📋 Response includes leads:`, parsedLeads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' })))
+        }
+        
+        // CRITICAL: Double-check that we're not filtering by ownerId
+        // Log database connection info to verify we're querying the same database
+        try {
+          const dbInfo = await prisma.$queryRaw`SELECT current_database() as db_name, current_user as db_user`
+          console.log(`🔍 Database connection for ${userEmail}:`, dbInfo)
+        } catch (e) {
+          console.warn('⚠️ Could not get database info:', e.message)
+        }
+        
+        // Add cache-busting headers to prevent browser caching
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
         
         return ok(res, { leads: parsedLeads })
       } catch (dbError) {
@@ -257,9 +355,11 @@ async function handler(req, res) {
       }
 
       // Only include fields that exist in the database schema
+      // CRITICAL: Always set type to lowercase 'lead' to ensure consistency
+      // Ignore any type value from request body - leads must always be type='lead'
       const leadData = {
         name: String(body.name).trim(),
-        type: 'lead',
+        type: 'lead', // Always lowercase 'lead' - never allow override (ignores body.type if present)
         industry: String(body.industry || 'Other').trim(),
         status: 'active',
         stage: String(body.stage || 'Awareness').trim(),
@@ -314,21 +414,57 @@ async function handler(req, res) {
       })
 
       // Only add ownerId if user is authenticated
-      if (req.user?.sub) {
-        leadData.ownerId = req.user.sub
+      const userEmail = req.user?.email || 'unknown'
+      const userId = req.user?.sub
+      if (userId) {
+        leadData.ownerId = userId
       }
 
+      console.log(`🔍 Creating lead for user: ${userEmail} (${userId})`)
       console.log('🔍 Creating lead with data:', leadData)
       console.log('🔍 Lead data keys:', Object.keys(leadData))
-      console.log('🔍 Lead data values:', Object.values(leadData))
       
       try {
         const lead = await prisma.client.create({
           data: leadData
         })
         
-        console.log('✅ Lead created successfully:', lead.id)
-        return created(res, { lead })
+        console.log(`✅ Lead "${lead.name}" created successfully by ${userEmail}:`, lead.id, 'ownerId:', lead.ownerId || 'null', 'type:', lead.type || 'MISSING')
+        
+        // VERIFY: Immediately re-query the database to confirm the lead exists and is queryable
+        try {
+          const verifyLead = await prisma.client.findUnique({ 
+            where: { id: lead.id },
+            select: { id: true, name: true, type: true, ownerId: true }
+          })
+          if (!verifyLead) {
+            console.error(`❌ CRITICAL: Lead ${lead.id} was created but cannot be found on re-query!`)
+          } else {
+            console.log(`✅ Verification: Lead ${lead.id} exists in database with type="${verifyLead.type}", ownerId="${verifyLead.ownerId || 'null'}"`)
+            
+            // Also verify it's queryable by type filter
+            const typeQueryResult = await prisma.client.findMany({
+              where: { type: 'lead', id: lead.id },
+              select: { id: true, name: true }
+            })
+            if (typeQueryResult.length === 0) {
+              console.error(`❌ CRITICAL: Lead ${lead.id} exists but is NOT queryable by type='lead' filter!`)
+              console.error(`   Lead type in database: "${verifyLead.type}"`)
+            } else {
+              console.log(`✅ Verification: Lead ${lead.id} IS queryable by type='lead' filter`)
+            }
+          }
+        } catch (verifyError) {
+          console.error(`❌ Error verifying lead creation:`, verifyError.message)
+        }
+        
+        // Parse JSON fields for response (same as GET endpoint)
+        const parsedLead = parseClientJsonFields(lead)
+        parsedLead.isStarred = false // StarredClient table doesn't exist
+        
+        console.log(`📤 Returning created lead to ${userEmail}:`, { id: parsedLead.id, name: parsedLead.name, ownerId: parsedLead.ownerId || 'null', type: parsedLead.type })
+        
+        return created(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error creating lead:', dbError)
         console.error('❌ Database error details:', {

@@ -41,8 +41,8 @@ const Users = () => {
         guest: {
             name: 'Guest',
             color: 'gray',
-            permissions: ['view_projects'],
-            description: 'Limited access - Can only view specified projects'
+            permissions: ['view_projects', 'view_clients', 'edit_clients', 'manage_leads'],
+            description: 'Limited access - Can view projects, clients, and leads'
         }
     };
 

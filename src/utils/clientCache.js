@@ -14,8 +14,8 @@ const ClientCache = {
         timeEntriesTimestamp: null
     },
 
-    // Cache duration (5 minutes)
-    CACHE_DURATION: 5 * 60 * 1000,
+    // Cache duration (5 seconds - very short to prevent stale data across users)
+    CACHE_DURATION: 5 * 1000,
 
     // Check if cache is valid
     isCacheValid(timestamp) {
@@ -141,6 +141,19 @@ const ClientCache = {
         if (window.debug && window.debug.enabled) {
             console.log('🧹 ClientCache: All cache cleared');
         }
+    },
+    
+    // Clear specific cache types
+    clearLeadsCache() {
+        this.cache.leads = null;
+        this.cache.leadsTimestamp = null;
+        console.log('🧹 ClientCache: Leads cache cleared');
+    },
+    
+    clearClientsCache() {
+        this.cache.clients = null;
+        this.cache.clientsTimestamp = null;
+        console.log('🧹 ClientCache: Clients cache cleared');
     },
 
     // Force refresh clients from API (bypass cache)

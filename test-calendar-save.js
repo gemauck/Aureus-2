@@ -1,6 +1,8 @@
 // Test script to verify calendar notes are saving correctly
 // Run this from the server after deployment
 
+import { PrismaClient } from '@prisma/client';
+
 const testCalendarSave = async () => {
     console.log('🧪 Testing Calendar Notes Save Functionality\n');
     
@@ -13,10 +15,9 @@ const testCalendarSave = async () => {
     console.log('  Note:', testNote);
     console.log('');
     
+    const prisma = new PrismaClient();
+    
     try {
-        // Import required modules
-        const { PrismaClient } = require('@prisma/client');
-        const prisma = new PrismaClient();
         
         // Test 1: Check if CalendarNote model exists
         console.log('✅ Test 1: Checking CalendarNote model...');

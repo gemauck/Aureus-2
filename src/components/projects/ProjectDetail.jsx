@@ -1,4 +1,5 @@
 // Get dependencies from window
+console.log('🔵 ProjectDetail.jsx: Script is executing...');
 const { useState, useEffect, useRef } = React;
 const storage = window.storage;
 const ListModal = window.ListModal;
@@ -1836,4 +1837,16 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
 };
 
 // Make available globally
+console.log('🔵 ProjectDetail.jsx: About to register on window.ProjectDetail...');
 window.ProjectDetail = ProjectDetail;
+console.log('✅ ProjectDetail component registered on window.ProjectDetail');
+
+// Dispatch event to notify that ProjectDetail is loaded
+try {
+    window.dispatchEvent(new CustomEvent('componentLoaded', { 
+        detail: { component: 'ProjectDetail' } 
+    }));
+    console.log('✅ ProjectDetail component registered and event dispatched');
+} catch (error) {
+    console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
+}

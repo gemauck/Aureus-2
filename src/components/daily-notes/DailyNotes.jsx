@@ -32,6 +32,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return `${year}-${month}-${day}`;
     };
     
+    // Clean HTML content - remove &nbsp; entities and replace with regular spaces
+    const cleanHtmlContent = (html) => {
+        if (!html || typeof html !== 'string') return html;
+        // Replace &nbsp; with regular spaces (both with and without semicolon)
+        return html.replace(/&nbsp;/g, ' ').replace(/&nbsp/g, ' ');
+    };
+    
     // Load note when date changes or component mounts with initial date
     useEffect(() => {
         if (initialDate && !showListView) {
@@ -41,7 +48,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const userId = user?.id || user?.email || 'default';
             const notesKey = `user_notes_${userId}`;
             const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-            const note = localNotes[dateString] || notes[dateString] || '';
+            let note = localNotes[dateString] || notes[dateString] || '';
+            
+            // Clean &nbsp; entities from loaded note
+            note = cleanHtmlContent(note);
             
             console.log('📝 Loading initial note for date:', dateString, 'from localStorage length:', note.length);
             
@@ -85,7 +95,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 .then(res => res.json())
                 .then(data => {
                     const serverNotes = data?.data?.notes || data?.notes || {};
-                    const serverNote = serverNotes[dateString] || '';
+                    let serverNote = serverNotes[dateString] || '';
+                    
+                    // Clean &nbsp; entities from server note
+                    serverNote = cleanHtmlContent(serverNote);
                     
                     if (serverNote && serverNote !== note) {
                         console.log('📝 Found server note, length:', serverNote.length);
@@ -136,14 +149,20 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 
                 // First load from localStorage for instant display
                 const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                if (Object.keys(localNotes).length > 0) {
-                    setNotes(localNotes);
-                    console.log('📝 Loaded notes from localStorage:', Object.keys(localNotes).length);
+                // Clean &nbsp; entities from all notes in localStorage
+                const cleanedLocalNotes = {};
+                Object.keys(localNotes).forEach(key => {
+                    cleanedLocalNotes[key] = cleanHtmlContent(localNotes[key]);
+                });
+                
+                if (Object.keys(cleanedLocalNotes).length > 0) {
+                    setNotes(cleanedLocalNotes);
+                    console.log('📝 Loaded notes from localStorage:', Object.keys(cleanedLocalNotes).length);
                     
                     // Load current note if editing specific date
                     if (!showListView && currentDate) {
                         const dateString = formatDateString(currentDate);
-                        const note = localNotes[dateString] || '';
+                        const note = cleanedLocalNotes[dateString] || '';
                         const currentEditorContent = editorRef.current?.innerHTML || '';
                         
                         // Load note if editor is empty or content is different
@@ -184,7 +203,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     
                     if (res.ok) {
                         const data = await res.json();
-                        const serverNotes = data?.data?.notes || data?.notes || {};
+                        const rawServerNotes = data?.data?.notes || data?.notes || {};
+                        // Clean &nbsp; entities from all server notes
+                        const serverNotes = {};
+                        Object.keys(rawServerNotes).forEach(key => {
+                            serverNotes[key] = cleanHtmlContent(rawServerNotes[key]);
+                        });
                         console.log('📝 Loaded notes from server:', Object.keys(serverNotes).length);
                         console.log('📝 Server notes keys:', Object.keys(serverNotes));
                         
@@ -204,7 +228,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                     dateString
                                 });
                                 // Still update other dates, just not the current one
-                                const mergedNotes = { ...localNotes, ...serverNotes };
+                                const mergedNotes = { ...cleanedLocalNotes, ...serverNotes };
                                 // Preserve current editor content
                                 mergedNotes[dateString] = editorContent;
                                 setNotes(mergedNotes);
@@ -215,7 +239,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         }
                         
                         // Merge server notes (server takes priority)
-                        const mergedNotes = { ...localNotes, ...serverNotes };
+                        const mergedNotes = { ...cleanedLocalNotes, ...serverNotes };
                         setNotes(mergedNotes);
                         
                         // Update localStorage with server data
@@ -223,7 +247,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         
                         // Load current note if editing specific date - ONLY if we don't have newer content
                         if (!showListView && currentDate) {
-                            const serverNote = serverNotes[dateString] || '';
+                            let serverNote = serverNotes[dateString] || '';
                             const currentNoteContent = currentNoteHtml || currentNote;
                             
                             console.log('📝 Comparing notes for date:', dateString, {
@@ -1283,16 +1307,137 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
 
     // Rich text formatting commands
     const execCommand = (command, value = null) => {
-        document.execCommand(command, false, value);
-        editorRef.current?.focus();
+        if (!editorRef.current) return;
+        
+        // Ensure editor is focused
+        editorRef.current.focus();
+        
+        // Get current selection
+        const selection = window.getSelection();
+        let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        
+        // For list commands, use a more reliable approach
+        if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
+            const listType = command === 'insertUnorderedList' ? 'ul' : 'ol';
+            const selectedText = selection.toString();
+            
+            // If there's selected text, convert it to a list
+            if (selectedText && selectedText.trim()) {
+                // Split by lines and create list items
+                const lines = selectedText.split('\n').filter(line => line.trim());
+                
+                if (lines.length > 0) {
+                    // Create list element
+                    const list = document.createElement(listType);
+                    
+                    lines.forEach(line => {
+                        const li = document.createElement('li');
+                        li.textContent = line.trim();
+                        list.appendChild(li);
+                    });
+                    
+                    // Delete selected content and insert list
+                    if (range) {
+                        range.deleteContents();
+                        range.insertNode(list);
+                    } else {
+                        // No range - insert at cursor position
+                        const currentRange = window.getSelection().rangeCount > 0 ? window.getSelection().getRangeAt(0) : null;
+                        if (currentRange) {
+                            currentRange.insertNode(list);
+                        } else {
+                            // Fallback: append to editor
+                            editorRef.current.appendChild(list);
+                        }
+                    }
+                    
+                    // Move cursor after the list
+                    const newRange = document.createRange();
+                    newRange.setStartAfter(list);
+                    newRange.setEndAfter(list);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                    
+                    // Update content
+                    updateNoteContent();
+                    editorRef.current.focus();
+                    
+                    // Trigger input event for auto-save
+                    const inputEvent = new Event('input', { bubbles: true });
+                    editorRef.current.dispatchEvent(inputEvent);
+                    return;
+                }
+            } else {
+                // No selection - create empty list item at cursor
+                const list = document.createElement(listType);
+                const li = document.createElement('li');
+                li.innerHTML = '<br>'; // Use <br> to ensure list item is visible
+                list.appendChild(li);
+                
+                // Insert at cursor position
+                if (range) {
+                    if (!range.collapsed) {
+                        range.deleteContents();
+                    }
+                    range.insertNode(list);
+                } else {
+                    // No range - try to get current selection
+                    const currentRange = window.getSelection().rangeCount > 0 ? window.getSelection().getRangeAt(0) : null;
+                    if (currentRange) {
+                        currentRange.insertNode(list);
+                    } else {
+                        // Fallback: append to editor
+                        editorRef.current.appendChild(list);
+                    }
+                }
+                
+                // Move cursor into the list item
+                const newRange = document.createRange();
+                const newLi = list.querySelector('li');
+                if (newLi) {
+                    newRange.setStart(newLi, 0);
+                    newRange.setEnd(newLi, 0);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                }
+                
+                // Update content
+                updateNoteContent();
+                editorRef.current.focus();
+                
+                // Trigger input event for auto-save
+                const inputEvent = new Event('input', { bubbles: true });
+                editorRef.current.dispatchEvent(inputEvent);
+                return;
+            }
+        }
+        
+        // For other commands, use execCommand
+        try {
+            const success = document.execCommand(command, false, value);
+            if (!success) {
+                console.warn(`Command ${command} failed`);
+            }
+        } catch (error) {
+            console.error(`Error executing command ${command}:`, error);
+        }
+        
+        // Update content after command
+        editorRef.current.focus();
         updateNoteContent();
+        
+        // Trigger input event to ensure auto-save
+        const inputEvent = new Event('input', { bubbles: true });
+        editorRef.current.dispatchEvent(inputEvent);
     };
 
     // Handle editor input - always update content and trigger auto-save immediately
     const handleEditorInput = () => {
         // Force update immediately - user typing should always work
         if (editorRef.current) {
-            const html = editorRef.current.innerHTML;
+            let html = editorRef.current.innerHTML;
+            // Clean &nbsp; entities from editor content
+            html = cleanHtmlContent(html);
             setCurrentNoteHtml(html);
             // Strip HTML for plain text version (for search)
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
@@ -1631,6 +1776,32 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
 
             {/* Editor Area with integrated handwriting */}
             <div className="flex-1 flex flex-col overflow-hidden relative">
+                {/* Add CSS for list styling */}
+                <style>{`
+                    .daily-notes-editor ul,
+                    .daily-notes-editor ol {
+                        margin: 0.5rem 0;
+                        padding-left: 2rem;
+                        list-style-position: outside;
+                    }
+                    .daily-notes-editor ul {
+                        list-style-type: disc;
+                    }
+                    .daily-notes-editor ol {
+                        list-style-type: decimal;
+                    }
+                    .daily-notes-editor li {
+                        margin: 0.25rem 0;
+                        padding-left: 0.5rem;
+                    }
+                    .daily-notes-editor ul ul,
+                    .daily-notes-editor ol ol,
+                    .daily-notes-editor ul ol,
+                    .daily-notes-editor ol ul {
+                        margin-top: 0.25rem;
+                        margin-bottom: 0.25rem;
+                    }
+                `}</style>
                 {/* Rich Text Editor with handwriting overlay */}
                 <div className="flex-1 p-4 overflow-y-auto relative">
                     <div
@@ -1659,12 +1830,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 }
                             }
                         }}
-                        className={`w-full h-full min-h-[400px] p-4 rounded-lg border ${
+                        className={`daily-notes-editor w-full h-full min-h-[400px] p-4 rounded-lg border ${
                             isDark 
                                 ? 'bg-gray-800 border-gray-700 text-gray-100' 
                                 : 'bg-white border-gray-300 text-gray-900'
                         } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                        style={{ minHeight: 'calc(100vh - 200px)' }}
+                        style={{ 
+                            minHeight: 'calc(100vh - 200px)',
+                            // Ensure lists are properly styled
+                        }}
+                        suppressContentEditableWarning={true}
                     />
                     
                     {/* Handwriting canvas overlay - directly on editor */}

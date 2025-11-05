@@ -85,7 +85,11 @@ export const ROLE_PERMISSIONS = {
         name: 'Guest',
         description: 'Limited access - Can only view specified projects',
         permissions: [
-            PERMISSIONS.VIEW_PROJECTS
+            PERMISSIONS.VIEW_PROJECTS,
+            // All users (including guests) can access Clients and Leads
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS
         ],
         color: 'gray'
     }

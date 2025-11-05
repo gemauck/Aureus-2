@@ -57,11 +57,15 @@ async function handler(req, res) {
       healthData.checks.database_error = dbError.message
     }
     
-    // Run database migration if needed (SQLite compatible)
+    // Run database migration if needed (PostgreSQL compatible)
     try {
-      // Check if column exists first
-      const tableInfo = await prisma.$queryRaw`PRAGMA table_info(Client)`
-      const hasTypeColumn = tableInfo.some(col => col.name === 'type')
+      // Check if column exists first (PostgreSQL syntax)
+      const columnCheck = await prisma.$queryRaw`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'Client' AND column_name = 'type'
+      `
+      const hasTypeColumn = Array.isArray(columnCheck) && columnCheck.length > 0
       
       if (!hasTypeColumn) {
         await prisma.$executeRaw`ALTER TABLE "Client" ADD COLUMN "type" TEXT DEFAULT 'client'`

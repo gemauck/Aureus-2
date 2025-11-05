@@ -661,8 +661,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         // Table - Spreadsheet style
         React.createElement('div', { ref: tableRef, className: 'overflow-x-auto bg-white border border-gray-300 shadow-sm' },
             React.createElement('table', { 
-                className: 'w-full text-left border-collapse',
-                style: { borderSpacing: 0, tableLayout: 'fixed' }
+                className: 'text-left border-collapse',
+                style: { borderSpacing: 0, tableLayout: 'auto' }
             },
                 React.createElement('thead', { className: 'bg-gray-100 border-b-2 border-gray-400' },
                     // First row: Month headers

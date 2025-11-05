@@ -1,5 +1,20 @@
 // Railway Server Entry Point
 import 'dotenv/config'
+// Load .env.local for local development (overrides .env)
+import dotenv from 'dotenv'
+import { existsSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+// Load .env.local if it exists (for local development)
+if (existsSync(join(__dirname, '.env.local'))) {
+  dotenv.config({ path: join(__dirname, '.env.local'), override: true })
+  console.log('✅ Loaded .env.local for local development')
+}
+
 import express from 'express'
 import compression from 'compression'
 import cookieParser from 'cookie-parser'
@@ -7,7 +22,6 @@ import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
 
 // Ensure critical environment variables are set
 // Allow relaxed requirements in local dev when DEV_LOCAL_NO_DB=true
@@ -35,8 +49,7 @@ if (!process.env.DATABASE_URL) {
 
 console.log('✅ Environment variables validated')
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
+// Note: __filename and __dirname are already defined above
 const rootDir = __dirname
 const apiDir = path.join(__dirname, 'api')
 
@@ -192,8 +205,27 @@ const apiLimiter = rateLimit({
   message: 'Too many requests, please slow down.',
   standardHeaders: true,
   legacyHeaders: false,
+  // Skip rate limiting for calendar-notes (has its own more lenient limiter)
+  skip: (req) => {
+    const url = req.url || req.originalUrl || ''
+    return url.includes('/calendar-notes')
+  }
 })
 
+// More lenient rate limiting for calendar-notes (to support frequent auto-save)
+const calendarNotesLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 300, // Allow 300 requests per minute for auto-save (increased from 100)
+  message: 'Too many calendar note requests, please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false, // Count all requests (including successful saves)
+})
+
+// Apply calendar-notes limiter first (before general API limiter)
+app.use('/api/calendar-notes', calendarNotesLimiter)
+
+// Apply general API rate limiting (skips calendar-notes)
 app.use('/api', apiLimiter)
 
 // Enable gzip compression for all responses to speed up loads

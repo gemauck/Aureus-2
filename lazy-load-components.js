@@ -24,11 +24,11 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
         './src/components/dashboard/DashboardEnhanced.jsx',
         
         // Clients and related modals
-        // ClientDetailModal, LeadDetailModal, and Clients.jsx are loaded early in index.html - DO NOT load here to avoid conflicts
+        // ClientDetailModal, LeadDetailModal, Clients.jsx, and ClientDetailModalMobile are loaded early in index.html - DO NOT load here to avoid conflicts
         // './src/components/clients/ClientDetailModal.jsx',
         // './src/components/clients/LeadDetailModal.jsx',
         // './src/components/clients/Clients.jsx', // Loaded in index.html BEFORE lazy-loader runs
-        './src/components/clients/ClientDetailModalMobile.jsx',
+        // './src/components/clients/ClientDetailModalMobile.jsx', // Loaded in index.html - blocked to prevent conflicts
         './src/components/clients/ClientsSimple.jsx',
         './src/components/clients/ClientsMobile.jsx',
         './src/components/clients/ClientsMobileOptimized.jsx',

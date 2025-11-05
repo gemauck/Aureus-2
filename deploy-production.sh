@@ -10,6 +10,15 @@ echo "🚀 Deploying to Production..."
 echo "📡 Server: $SERVER"
 echo ""
 
+# Step 0: Run deployment tests before deploying
+echo "🧪 Running deployment tests..."
+if ! npm run test:deploy; then
+    echo "❌ Deployment tests failed! Aborting deployment."
+    echo "   Please fix the issues above before deploying."
+    exit 1
+fi
+echo "✅ All deployment tests passed!"
+
 # Step 1: Build CSS
 echo "🏗️  Building CSS..."
 npm run build:css
@@ -25,21 +34,26 @@ if [ -n "$(git status --porcelain)" ]; then
     echo "⚠️  You have uncommitted changes:"
     git status --short
     echo ""
-    read -p "Do you want to commit and push these changes? (y/n) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git add .
-        git commit -m "Fix: Add explicit route mapping for /api/users/:id to resolve user deletion 500 error"
-        echo "📤 Pushing to git..."
-        git push origin main || git push origin master
-        echo "✅ Changes committed and pushed"
+    # Skip interactive prompt if CI environment or non-interactive
+    if [ -n "$CI" ] || [ ! -t 0 ]; then
+        echo "⚠️  Non-interactive mode: Skipping git commit. Continuing deployment..."
     else
-        echo "⚠️  Skipping git commit. Make sure to commit changes manually before deploying."
-        read -p "Continue with deployment anyway? (y/n) " -n 1 -r
+        read -p "Do you want to commit and push these changes? (y/n) " -n 1 -r
         echo ""
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            echo "❌ Deployment cancelled"
-            exit 1
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            git add .
+            git commit -m "Fix: Add explicit route mapping for /api/users/:id to resolve user deletion 500 error"
+            echo "📤 Pushing to git..."
+            git push origin main || git push origin master
+            echo "✅ Changes committed and pushed"
+        else
+            echo "⚠️  Skipping git commit. Make sure to commit changes manually before deploying."
+            read -p "Continue with deployment anyway? (y/n) " -n 1 -r
+            echo ""
+            if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+                echo "❌ Deployment cancelled"
+                exit 1
+            fi
         fi
     fi
 else
@@ -78,6 +92,16 @@ npx prisma generate || echo "⚠️  Prisma generate skipped"
 echo "🏗️  Building frontend..."
 npm run build:jsx || node build-jsx.js || echo "⚠️  JSX build skipped"
 npm run build:css || echo "⚠️  CSS build skipped"
+
+echo "🧪 Running post-deployment tests..."
+# Run tests against the deployed server
+export TEST_URL="http://localhost:3000"
+if ! npm run test:deploy; then
+  echo "⚠️  Post-deployment tests failed, but application will continue running"
+  echo "   Please check the application manually"
+else
+  echo "✅ Post-deployment tests passed!"
+fi
 
 echo "🔄 Restarting application..."
 pm2 restart abcotronics-erp || pm2 start server.js --name abcotronics-erp

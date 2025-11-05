@@ -42,6 +42,8 @@ const Manufacturing = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
+  const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // Sorting state
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -764,14 +766,150 @@ const Manufacturing = () => {
     // Get main warehouse for default selection
     const mainWarehouse = stockLocations.find(loc => loc.code === 'LOC001');
     
-    const filteredInventory = inventory.filter(item => {
+    // Filter logic with column-specific filters
+    let filteredInventory = inventory.filter(item => {
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
       const category = (item.category || '').toString();
       const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || category === filterCategory;
-      return matchesSearch && matchesCategory;
+      
+      // Column-specific filters
+      const matchesSKU = !columnFilters.sku || (item.sku || '').toString().toLowerCase().includes(columnFilters.sku.toLowerCase());
+      const matchesName = !columnFilters.name || name.includes(columnFilters.name.toLowerCase());
+      const matchesSupplierPart = !columnFilters.supplierPart || (() => {
+        try {
+          const supplierParts = typeof item.supplierPartNumbers === 'string' 
+            ? JSON.parse(item.supplierPartNumbers || '[]') 
+            : (item.supplierPartNumbers || []);
+          return supplierParts.some(sp => 
+            (sp.supplier || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase()) ||
+            (sp.partNumber || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase())
+          );
+        } catch {
+          return false;
+        }
+      })();
+      const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
+      const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
+      const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
+      const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
+      const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
+      
+      return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
+             matchesLegacyPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
     });
+
+    // Sorting logic
+    if (sortConfig.key) {
+      filteredInventory = [...filteredInventory].sort((a, b) => {
+        let aVal, bVal;
+        
+        switch (sortConfig.key) {
+          case 'sku':
+            aVal = (a.sku || '').toString().toLowerCase();
+            bVal = (b.sku || '').toString().toLowerCase();
+            break;
+          case 'name':
+            aVal = (a.name || '').toString().toLowerCase();
+            bVal = (b.name || '').toString().toLowerCase();
+            break;
+          case 'category':
+            aVal = (a.category || '').toString().toLowerCase();
+            bVal = (b.category || '').toString().toLowerCase();
+            break;
+          case 'type':
+            aVal = (a.type || '').toString().toLowerCase();
+            bVal = (b.type || '').toString().toLowerCase();
+            break;
+          case 'quantity':
+            aVal = parseFloat(a.quantity || 0);
+            bVal = parseFloat(b.quantity || 0);
+            break;
+          case 'allocated':
+            aVal = parseFloat(a.allocatedQuantity || 0);
+            bVal = parseFloat(b.allocatedQuantity || 0);
+            break;
+          case 'available':
+            aVal = parseFloat((a.quantity || 0) - (a.allocatedQuantity || 0));
+            bVal = parseFloat((b.quantity || 0) - (b.allocatedQuantity || 0));
+            break;
+          case 'unitCost':
+            aVal = parseFloat(a.unitCost || 0);
+            bVal = parseFloat(b.unitCost || 0);
+            break;
+          case 'totalValue':
+            aVal = parseFloat(a.totalValue || 0);
+            bVal = parseFloat(b.totalValue || 0);
+            break;
+          case 'status':
+            aVal = (a.status || '').toString().toLowerCase();
+            bVal = (b.status || '').toString().toLowerCase();
+            break;
+          case 'location':
+            aVal = (a.location || '').toString().toLowerCase();
+            bVal = (b.location || '').toString().toLowerCase();
+            break;
+          default:
+            return 0;
+        }
+        
+        if (typeof aVal === 'string') {
+          return sortConfig.direction === 'asc' 
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+        } else {
+          return sortConfig.direction === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+      });
+    }
+
+    // Handle column sorting
+    const handleSort = (key, e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      setSortConfig(prevConfig => {
+        if (prevConfig.key === key) {
+          // Toggle direction if same column
+          const newDirection = prevConfig.direction === 'asc' ? 'desc' : 'asc';
+          console.log('Sorting by', key, 'direction:', newDirection);
+          return { key, direction: newDirection };
+        } else {
+          // New column, default to ascending
+          console.log('Sorting by', key, 'direction: asc');
+          return { key, direction: 'asc' };
+        }
+      });
+    };
+
+    // Handle column filter change
+    const handleColumnFilterChange = (column, value) => {
+      setColumnFilters(prev => {
+        const newFilters = {
+          ...prev,
+          [column]: value || undefined
+        };
+        // Remove undefined values
+        Object.keys(newFilters).forEach(k => {
+          if (newFilters[k] === undefined) {
+            delete newFilters[k];
+          }
+        });
+        return newFilters;
+      });
+    };
+
+    // Get sort icon for column
+    const getSortIcon = (columnKey) => {
+      if (sortConfig.key !== columnKey) {
+        return <span className="text-gray-400 text-xs ml-1" title="Click to sort">↕</span>;
+      }
+      return sortConfig.direction === 'asc' 
+        ? <span className="text-blue-600 text-xs font-bold ml-1" title="Sorted ascending - click to reverse">↑</span>
+        : <span className="text-blue-600 text-xs font-bold ml-1" title="Sorted descending - click to reverse">↓</span>;
+    };
 
     return (
       <div className="space-y-3">
@@ -1047,22 +1185,225 @@ const Manufacturing = () => {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
+                {/* Header Row */}
                 <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">SKU</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('sku', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>SKU</span>
+                      {getSortIcon('sku')}
+                    </button>
+                  </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Image</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Item Name</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('name', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Item Name</span>
+                      {getSortIcon('name')}
+                    </button>
+                  </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Part No.</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Legacy Part Number</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Category</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Quantity</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Allocated</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Available</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Location</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Unit Cost</th>
-                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Total Value</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('category', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Category</span>
+                      {getSortIcon('category')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('type', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Type</span>
+                      {getSortIcon('type')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('quantity', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Quantity</span>
+                      {getSortIcon('quantity')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('allocated', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Allocated</span>
+                      {getSortIcon('allocated')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('available', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Available</span>
+                      {getSortIcon('available')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('location', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Location</span>
+                      {getSortIcon('location')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('unitCost', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Unit Cost</span>
+                      {getSortIcon('unitCost')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('totalValue', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full justify-end font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Total Value</span>
+                      {getSortIcon('totalValue')}
+                    </button>
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <button 
+                      type="button"
+                      onClick={(e) => handleSort('status', e)}
+                      className="flex items-center gap-1 hover:text-blue-600 transition-colors cursor-pointer w-full text-left font-medium bg-transparent border-0 p-0"
+                      title="Click to sort"
+                    >
+                      <span>Status</span>
+                      {getSortIcon('status')}
+                    </button>
+                  </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
+                </tr>
+                {/* Filter Row */}
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter SKU..."
+                      value={columnFilters.sku || ''}
+                      onChange={(e) => handleColumnFilterChange('sku', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Name..."
+                      value={columnFilters.name || ''}
+                      onChange={(e) => handleColumnFilterChange('name', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Supplier..."
+                      value={columnFilters.supplierPart || ''}
+                      onChange={(e) => handleColumnFilterChange('supplierPart', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Legacy..."
+                      value={columnFilters.legacyPart || ''}
+                      onChange={(e) => handleColumnFilterChange('legacyPart', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Category..."
+                      value={columnFilters.category || ''}
+                      onChange={(e) => handleColumnFilterChange('category', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Type..."
+                      value={columnFilters.type || ''}
+                      onChange={(e) => handleColumnFilterChange('type', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Location..."
+                      value={columnFilters.location || ''}
+                      onChange={(e) => handleColumnFilterChange('location', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2"></th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
+                      placeholder="Filter Status..."
+                      value={columnFilters.status || ''}
+                      onChange={(e) => handleColumnFilterChange('status', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    {(Object.keys(columnFilters).length > 0) && (
+                      <button
+                        onClick={() => setColumnFilters({})}
+                        className="text-xs text-red-600 hover:text-red-800"
+                        title="Clear all filters"
+                      >
+                        <i className="fas fa-times"></i>
+                      </button>
+                    )}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">

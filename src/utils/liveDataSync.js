@@ -2,7 +2,7 @@
 class LiveDataSync {
     constructor() {
         this.subscribers = new Map();
-        this.refreshInterval = 120000; // 2 minutes (reduced frequency)
+        this.refreshInterval = 5000; // 5 seconds - very frequent sync for real-time updates
         this.isRunning = false;
         this.lastSync = null;
         this.syncInProgress = false;
@@ -90,11 +90,13 @@ class LiveDataSync {
             return;
         }
         
-        // Additional check to prevent rapid sync calls
-        const now = Date.now();
-        if (this.lastSync && (now - this.lastSync.getTime()) < 60000) { // 60 seconds minimum
-            log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
-            return;
+        // Additional check to prevent rapid sync calls (skip if force sync)
+        if (!this._forceSyncInProgress) {
+            const now = Date.now();
+            if (this.lastSync && (now - this.lastSync.getTime()) < 2000) { // 2 seconds minimum to prevent excessive calls
+                log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
+                return;
+            }
         }
         
         this.syncInProgress = true;
@@ -119,19 +121,21 @@ class LiveDataSync {
             
             // Sync core data types - ensure promises never reject by catching all errors
             // syncData handles errors internally, but add extra safety layer
+            // Check if this is a forced sync (bypassCache parameter)
+            const bypassCache = this._forceSyncInProgress || false;
             const syncPromises = [
-                this.syncData('clients', () => window.DatabaseAPI.getClients()).catch(() => ({ dataType: 'clients', success: false })),
-                this.syncData('leads', () => window.DatabaseAPI.getLeads()).catch(() => ({ dataType: 'leads', success: false })),
-                this.syncData('projects', () => window.DatabaseAPI.getProjects()).catch(() => ({ dataType: 'projects', success: false })),
-                this.syncData('invoices', () => window.DatabaseAPI.getInvoices()).catch(() => ({ dataType: 'invoices', success: false })),
-                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries()).catch(() => ({ dataType: 'timeEntries', success: false }))
+                this.syncData('clients', () => window.DatabaseAPI.getClients(), bypassCache).catch(() => ({ dataType: 'clients', success: false })),
+                this.syncData('leads', () => window.DatabaseAPI.getLeads(), bypassCache).catch(() => ({ dataType: 'leads', success: false })),
+                this.syncData('projects', () => window.DatabaseAPI.getProjects(), bypassCache).catch(() => ({ dataType: 'projects', success: false })),
+                this.syncData('invoices', () => window.DatabaseAPI.getInvoices(), bypassCache).catch(() => ({ dataType: 'invoices', success: false })),
+                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries(), bypassCache).catch(() => ({ dataType: 'timeEntries', success: false }))
             ];
 
             // Only sync users if admin to avoid unnecessary 401s and extra load
             try {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
-                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers()).catch(() => ({ dataType: 'users', success: false })));
+                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers(), bypassCache).catch(() => ({ dataType: 'users', success: false })));
                 }
             } catch (_) {
                 // Ignore role check errors
@@ -206,30 +210,33 @@ class LiveDataSync {
             }
         } finally {
             this.syncInProgress = false;
+            this._forceSyncInProgress = false; // Reset force sync flag
         }
     }
 
     // Sync individual data type with caching
-    async syncData(dataType, fetchFunction) {
+    async syncData(dataType, fetchFunction, bypassCache = false) {
         // Wrap entire function to ensure it never throws
         try {
-            // Check if we recently synced this data type
-            const cacheEntry = this.dataCache.get(dataType);
-            const now = Date.now();
-            const CACHE_DURATION = 30000; // 30 seconds per data type
-            
-            if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
-                const getLog = () => window.debug?.log || (() => {});
-                const log = getLog();
-                log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
-                // Send cached data to subscribers
-                this.notifySubscribers({ 
-                    type: 'data', 
-                    dataType, 
-                    data: cacheEntry.data,
-                    timestamp: cacheEntry.timestamp
-                });
-                return { dataType, data: cacheEntry.data, success: true, cached: true };
+            // Check if we recently synced this data type (unless bypassing cache)
+            if (!bypassCache) {
+                const cacheEntry = this.dataCache.get(dataType);
+                const now = Date.now();
+                const CACHE_DURATION = 5000; // 5 seconds per data type - shorter cache for faster updates
+                
+                if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
+                    const getLog = () => window.debug?.log || (() => {});
+                    const log = getLog();
+                    log(`⚡ Using cached ${dataType} (${Math.round((now - cacheEntry.timestamp) / 1000)}s old)`);
+                    // Send cached data to subscribers
+                    this.notifySubscribers({ 
+                        type: 'data', 
+                        dataType, 
+                        data: cacheEntry.data,
+                        timestamp: cacheEntry.timestamp
+                    });
+                    return { dataType, data: cacheEntry.data, success: true, cached: true };
+                }
             }
             
             // Call fetchFunction - errors will be caught by outer try-catch
@@ -372,11 +379,52 @@ class LiveDataSync {
         }
     }
 
-    // Force immediate sync
+    // Force immediate sync (bypasses cache)
     async forceSync() {
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
-        log('🔄 Force sync requested...');
+        log('🔄 Force sync requested (bypassing cache)...');
+        
+        // Clear cache for leads and clients to ensure fresh data
+        this.dataCache.delete('leads');
+        this.dataCache.delete('clients');
+        
+        // Also clear ClientCache if it exists
+        if (window.ClientCache?.clearCache) {
+            window.ClientCache.clearCache();
+            log('🗑️ Cleared ClientCache for fresh data');
+        }
+        
+        // Clear DatabaseAPI cache for leads and clients
+        if (window.DatabaseAPI?.clearCache) {
+            window.DatabaseAPI.clearCache('/leads');
+            window.DatabaseAPI.clearCache('/clients');
+            log('🗑️ Cleared DatabaseAPI cache for leads and clients');
+        }
+        
+        // Clear dataManager cache if it exists
+        if (window.dataManager?.invalidate) {
+            window.dataManager.invalidate('leads');
+            window.dataManager.invalidate('clients');
+            log('🗑️ Invalidated dataManager cache');
+        }
+        
+        // If sync is already in progress, wait for it to complete (with timeout)
+        if (this.syncInProgress) {
+            log('⏳ Sync already in progress, waiting for completion...');
+            let waitCount = 0;
+            const maxWait = 50; // Wait up to 5 seconds (50 * 100ms)
+            while (this.syncInProgress && waitCount < maxWait) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                waitCount++;
+            }
+            if (this.syncInProgress) {
+                log('⚠️ Sync still in progress after timeout, proceeding anyway...');
+            }
+        }
+        
+        // Set flag to bypass cache during sync
+        this._forceSyncInProgress = true;
         await this.sync();
     }
 }

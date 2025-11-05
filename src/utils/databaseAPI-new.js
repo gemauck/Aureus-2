@@ -2,7 +2,7 @@
 const DatabaseAPI = {
     // API response cache
     cache: new Map(),
-    CACHE_DURATION: 30000, // 30 seconds
+    CACHE_DURATION: 5000, // 5 seconds - very short to prevent stale data across users
     
     // Base configuration - Use local API for localhost, production for deployed
     API_BASE: (() => {
@@ -146,7 +146,39 @@ const DatabaseAPI = {
     // Clear cache
     clearCache(endpoint) {
         if (endpoint) {
-            this.cache.delete(endpoint);
+            // Normalize endpoint - remove query params
+            const cacheKey = endpoint.split('?')[0];
+            this.cache.delete(cacheKey);
+            
+            // Also clear related caches
+            if (cacheKey === '/leads' || cacheKey === '/clients') {
+                // Clear both leads and clients caches since they're related
+                this.cache.delete('/leads');
+                this.cache.delete('/clients');
+                
+                // Clear ClientCache and localStorage for leads/clients
+                if (window.ClientCache) {
+                    if (cacheKey === '/leads') {
+                        window.ClientCache.clearLeadsCache();
+                    }
+                    if (cacheKey === '/clients') {
+                        window.ClientCache.clearClientsCache();
+                    }
+                }
+                
+                // Clear localStorage to prevent stale data across users
+                if (cacheKey === '/leads' && window.storage?.removeLeads) {
+                    window.storage.removeLeads();
+                    console.log('🗑️ Cleared localStorage for leads');
+                }
+                if (cacheKey === '/clients' && window.storage?.removeClients) {
+                    window.storage.removeClients();
+                    console.log('🗑️ Cleared localStorage for clients');
+                }
+            }
+            
+            const log = window.debug?.log || (() => {});
+            log(`🗑️ Cleared cache for ${cacheKey}`);
         } else {
             this.cache.clear();
         }
@@ -156,7 +188,8 @@ const DatabaseAPI = {
     async getClients() {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching clients from database...');
-        return this.makeRequest('/clients');
+        // Add cache-busting timestamp to ensure fresh data
+        return this.makeRequest('/clients?_t=' + Date.now(), { forceRefresh: true });
     },
 
     async getClient(id) {

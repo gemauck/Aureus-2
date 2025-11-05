@@ -69,6 +69,8 @@ async function handler(req, res) {
         console.log('📋 GET /api/clients - Starting optimized query...')
         
         const userId = req.user?.sub
+        const userEmail = req.user?.email || 'unknown'
+        console.log(`🔍 Querying clients for user: ${userEmail} (${userId})`)
         
         // Try query with type filter first, fallback to all clients if type column doesn't exist
         let rawClients
@@ -101,6 +103,7 @@ async function handler(req, res) {
           // Query all records and filter in memory to handle null types correctly
           // This is more reliable than trying to use OR with null in Prisma
           console.log('🔍 Querying all Client records (will filter for clients/legacy)...')
+          // IMPORTANT: Return ALL clients regardless of ownerId - all users should see all clients
           const allRecords = await prisma.client.findMany({
             include: {
               tags: {
@@ -113,6 +116,7 @@ async function handler(req, res) {
             orderBy: {
               createdAt: 'desc'
             }
+            // No WHERE clause filtering by ownerId - all users see all clients
           })
           console.log(`🔍 Raw query returned ${allRecords.length} total Client records`)
           
@@ -146,6 +150,7 @@ async function handler(req, res) {
           const totalCount = await prisma.client.count()
           console.log(`🔍 DEBUG: Total Client records in database: ${totalCount}`)
           
+          // IMPORTANT: Return ALL clients regardless of ownerId - all users should see all clients
           rawClients = await prisma.client.findMany({
             include: {
               tags: {
@@ -158,6 +163,7 @@ async function handler(req, res) {
             orderBy: {
               createdAt: 'desc'
             }
+            // No WHERE clause filtering by ownerId - all users see all clients
           })
           console.log(`🔍 DEBUG: Found ${rawClients.length} total records before filtering`)
           // Filter manually in case type column doesn't exist in DB but we want to exclude leads
@@ -168,7 +174,61 @@ async function handler(req, res) {
         // Prisma returns objects with relations - parse JSON fields
         const clients = rawClients
         
-        console.log(`✅ Found ${clients.length} clients (filtered in database)`)
+        console.log(`✅ Found ${clients.length} clients (filtered in database) for ${userEmail}`)
+        
+        // DEBUG: Also check raw SQL to verify what's actually in database
+        try {
+          const rawClientsSQL = await prisma.$queryRaw`
+            SELECT id, name, type, "ownerId", "createdAt"
+            FROM "Client"
+            WHERE (type = 'client' OR type IS NULL)
+            AND type != 'lead'
+            ORDER BY "createdAt" DESC
+          `
+          console.log(`🔍 RAW SQL QUERY: Found ${rawClientsSQL.length} clients in database`)
+          if (rawClientsSQL.length > 0) {
+            console.log(`📋 Raw SQL clients:`, JSON.stringify(rawClientsSQL.map(c => ({ 
+              id: c.id, 
+              name: c.name, 
+              type: c.type || 'null', 
+              ownerId: c.ownerId || 'null' 
+            })), null, 2))
+          }
+          
+          // Compare counts
+          if (rawClientsSQL.length !== clients.length) {
+            console.error(`❌ MISMATCH: Prisma query returned ${clients.length} clients, but raw SQL returned ${rawClientsSQL.length} clients!`)
+            
+            // Find which clients are missing
+            const prismaIds = new Set(clients.map(c => c.id))
+            const missingClients = rawClientsSQL.filter(rc => !prismaIds.has(rc.id))
+            if (missingClients.length > 0) {
+              console.error(`❌ Missing clients from Prisma query:`, JSON.stringify(missingClients, null, 2))
+            }
+          }
+        } catch (sqlError) {
+          console.warn('⚠️ Raw SQL query failed (non-critical):', sqlError.message)
+        }
+        
+        // Log client details for debugging visibility issues
+        if (clients.length > 0) {
+          const clientDetails = clients.map(c => ({ id: c.id, name: c.name, ownerId: c.ownerId || 'null', type: c.type || 'null' }))
+          console.log(`📋 Client details visible to ${userEmail}:`, JSON.stringify(clientDetails, null, 2))
+        } else {
+          console.log(`⚠️ No clients found for ${userEmail} - checking if any clients exist in database...`)
+          
+          // Additional check: query ALL records to see what types exist
+          try {
+            const allTypes = await prisma.$queryRaw`
+              SELECT type, COUNT(*) as count
+              FROM "Client"
+              GROUP BY type
+            `
+            console.log(`📊 Database type distribution:`, JSON.stringify(allTypes, null, 2))
+          } catch (e) {
+            console.warn('⚠️ Type distribution query failed:', e.message)
+          }
+        }
         
         // Parse JSON fields before returning and add starred status
         const parsedClients = clients.map(client => {
@@ -177,7 +237,28 @@ async function handler(req, res) {
           parsed.isStarred = false // StarredClient table doesn't exist in restored database
           return parsed
         })
-        console.log(`✅ Returning ${parsedClients.length} parsed clients`)
+        
+        // Final verification: Log response before sending
+        console.log(`📤 Sending ${parsedClients.length} clients to ${userEmail} (no filtering applied)`)
+        if (parsedClients.length > 0) {
+          console.log(`📋 Response includes clients:`, parsedClients.map(c => ({ id: c.id, name: c.name, ownerId: c.ownerId || 'null' })))
+        }
+        
+        // CRITICAL: Double-check that we're not filtering by ownerId
+        // Log database connection info to verify we're querying the same database
+        try {
+          const dbInfo = await prisma.$queryRaw`SELECT current_database() as db_name, current_user as db_user`
+          console.log(`🔍 Database connection for ${userEmail}:`, dbInfo)
+        } catch (e) {
+          console.warn('⚠️ Could not get database info:', e.message)
+        }
+        
+        // Add cache-busting headers to prevent browser caching
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+        res.setHeader('Pragma', 'no-cache')
+        res.setHeader('Expires', '0')
+        
+        console.log(`✅ Returning ${parsedClients.length} parsed clients (all users can see all clients regardless of ownerId)`)
         
         return ok(res, { clients: parsedClients })
       } catch (dbError) {
@@ -230,21 +311,24 @@ async function handler(req, res) {
       }
 
       // Verify user exists before setting ownerId
+      const userEmail = req.user?.email || 'unknown'
+      const userId = req.user?.sub
       let ownerId = null;
-      if (req.user?.sub) {
+      if (userId) {
         try {
-          const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+          const user = await prisma.user.findUnique({ where: { id: userId } });
           if (user) {
-            ownerId = req.user.sub;
+            ownerId = userId;
           }
         } catch (userError) {
           // Skip ownerId if error
         }
       }
 
+      // CRITICAL: Always set type to 'client' for client creation (ignore body.type if present for leads)
       const clientData = {
         name: body.name,
-        type: body.type || 'client', // Handle type field for leads vs clients
+        type: 'client', // Always 'client' for client creation - never allow override
         industry: body.industry || 'Other',
         status: body.status || 'active',
         revenue: parseFloat(body.revenue) || 0,
@@ -273,11 +357,14 @@ async function handler(req, res) {
         ...(ownerId ? { ownerId } : {})
       }
 
+      console.log(`🔍 Creating client for user: ${userEmail} (${userId})`)
+      console.log(`🔍 Client data: name="${clientData.name}", type="${clientData.type}", ownerId="${ownerId || 'null'}"`)
+      
       try {
         const client = await prisma.client.create({
           data: {
             name: clientData.name,
-            type: clientData.type,
+            type: clientData.type, // Always 'client'
             industry: clientData.industry,
             status: clientData.status,
             revenue: clientData.revenue,
@@ -300,8 +387,46 @@ async function handler(req, res) {
           }
         })
         
+        console.log(`✅ Client "${client.name}" created successfully by ${userEmail}:`, client.id, 'ownerId:', client.ownerId || 'null', 'type:', client.type || 'MISSING')
+        
+        // VERIFY: Immediately re-query the database to confirm the client exists and is queryable
+        try {
+          const verifyClient = await prisma.client.findUnique({ 
+            where: { id: client.id },
+            select: { id: true, name: true, type: true, ownerId: true }
+          })
+          if (!verifyClient) {
+            console.error(`❌ CRITICAL: Client ${client.id} was created but cannot be found on re-query!`)
+          } else {
+            console.log(`✅ Verification: Client ${client.id} exists in database with type="${verifyClient.type}", ownerId="${verifyClient.ownerId || 'null'}"`)
+            
+            // Also verify it's queryable by type filter
+            const typeQueryResult = await prisma.client.findMany({
+              where: { 
+                OR: [
+                  { type: 'client' },
+                  { type: null }
+                ],
+                id: client.id
+              },
+              select: { id: true, name: true }
+            })
+            if (typeQueryResult.length === 0) {
+              console.error(`❌ CRITICAL: Client ${client.id} exists but is NOT queryable by type='client' filter!`)
+              console.error(`   Client type in database: "${verifyClient.type}"`)
+            } else {
+              console.log(`✅ Verification: Client ${client.id} IS queryable by type='client' filter`)
+            }
+          }
+        } catch (verifyError) {
+          console.error(`❌ Error verifying client creation:`, verifyError.message)
+        }
+        
         // Parse JSON fields before returning
         const parsedClient = parseClientJsonFields(client)
+        
+        console.log(`📤 Returning created client to ${userEmail}:`, { id: parsedClient.id, name: parsedClient.name, ownerId: parsedClient.ownerId || 'null', type: parsedClient.type })
+        
         return created(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error creating client:', dbError)

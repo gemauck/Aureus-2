@@ -6,24 +6,67 @@ on:
     branches: [ main ]
 
 jobs:
-  api-tests:
+  deployment-tests:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: abcotronics-erp-modular
+        working-directory: .
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm ci
-      - run: npx prisma generate
-      - name: Start Vercel Dev (no internet; simulate API only)
-        run: npx vercel dev --yes & sleep 3
-      - name: Run smoke tests
-        run: node tests/run.js
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Generate Prisma client
+        run: npx prisma generate
         env:
-          DATABASE_URL: postgresql://user:pass@localhost:5432/db
-          JWT_SECRET: test_secret
+          DATABASE_URL: file:./prisma/test.db
+      
+      - name: Build application
+        run: |
+          npm run build:css || echo "CSS build skipped"
+          npm run build:jsx || echo "JSX build skipped"
+        env:
+          DATABASE_URL: file:./prisma/test.db
+      
+      - name: Create test database
+        run: |
+          mkdir -p prisma
+          touch prisma/test.db || true
+        continue-on-error: true
+      
+      - name: Start server in background
+        run: |
+          export DATABASE_URL="file:./prisma/test.db"
+          export JWT_SECRET="test_secret_for_ci"
+          export APP_URL="http://localhost:3000"
+          export NODE_ENV="test"
+          node server.js &
+          sleep 10
+          curl -f http://localhost:3000/api/health || exit 1
+        env:
+          DATABASE_URL: file:./prisma/test.db
+          JWT_SECRET: test_secret_for_ci
           APP_URL: http://localhost:3000
+          NODE_ENV: test
+      
+      - name: Run deployment tests
+        run: npm run test:deploy
+        env:
+          DATABASE_URL: file:./prisma/test.db
+          JWT_SECRET: test_secret_for_ci
+          APP_URL: http://localhost:3000
+          TEST_URL: http://localhost:3000
+          NODE_ENV: test
+      
+      - name: Stop server
+        if: always()
+        run: pkill -f "node server.js" || true
 

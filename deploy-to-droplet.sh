@@ -43,6 +43,16 @@ npm install
 echo "🏗️  Building frontend (dist)..."
 npm run build || echo "⚠️ Build had warnings but continuing..."
 
+echo "🧪 Running deployment tests..."
+# Set test URL to localhost since we're testing on the server
+export TEST_URL="http://localhost:3000"
+if ! npm run test:deploy; then
+  echo "❌ Deployment tests failed! Aborting deployment."
+  echo "   Please fix the issues above before deploying."
+  exit 1
+fi
+echo "✅ All deployment tests passed!"
+
 echo "🔧 Setting up environment..."
 # Create .env file if it doesn't exist
 if [ ! -f .env ]; then
@@ -107,6 +117,20 @@ pm2 delete abcotronics-erp || true
 # Start the application using ecosystem config
 echo "🚀 Starting application..."
 pm2 start server.js --name abcotronics-erp -i 1
+
+# Wait for server to start
+echo "⏳ Waiting for server to start..."
+sleep 5
+
+# Run post-deployment tests
+echo "🧪 Running post-deployment tests..."
+export TEST_URL="http://localhost:3000"
+if npm run test:deploy; then
+  echo "✅ Post-deployment tests passed!"
+else
+  echo "⚠️  Post-deployment tests failed, but application is running"
+  echo "   Please check the application manually at http://165.22.127.196:3000"
+fi
 
 # Save PM2 configuration
 pm2 save

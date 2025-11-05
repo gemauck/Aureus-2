@@ -16,7 +16,12 @@
     "railway-build": "npm run build:jsx && npm run build:css && npx prisma generate && echo 'Railway build completed'",
     "railway-start": "./deploy-railway-fixes.sh",
     "postinstall": "npx prisma generate",
-    "deploy": "./deploy-production.sh"
+    "deploy": "./deploy-production.sh",
+    "test": "node tests/deployment-test.js",
+    "test:deploy": "node tests/deployment-test.js",
+    "predeploy": "npm run test",
+    "validate:deps": "node scripts/validate-component-deps.js",
+    "precommit": "npm run validate:deps"
   },
   "dependencies": {
     "@prisma/client": "^5.18.0",
