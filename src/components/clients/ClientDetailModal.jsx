@@ -94,11 +94,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Ref for notes textarea to preserve cursor position
     const notesTextareaRef = useRef(null);
+    const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     
-    // Initialize formDataRef after formData is declared
+    // Restore cursor position after formData.notes changes
     useEffect(() => {
-        formDataRef.current = formData;
-    }, [formData]);
+        if (notesCursorPositionRef.current !== null && notesTextareaRef.current) {
+            const pos = notesCursorPositionRef.current;
+            // Use setTimeout to ensure DOM is updated
+            setTimeout(() => {
+                if (notesTextareaRef.current && notesTextareaRef.current.value.length >= pos) {
+                    notesTextareaRef.current.setSelectionRange(pos, pos);
+                    notesTextareaRef.current.focus();
+                }
+            }, 0);
+        }
+    }, [formData.notes]);
     
     // Cleanup editing timeout on unmount
     useEffect(() => {
@@ -256,6 +266,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // CRITICAL: NEVER update user-edited fields (name, notes, industry, address, website) 
                     // even if they're blank in the API response - preserve user input
                     setFormData(prevFormData => {
+                        // CRITICAL: Get latest notes from formDataRef FIRST (most up-to-date) before checking prevFormData
+                        // This ensures we use the notes that were just typed, even if React state hasn't updated yet
+                        const currentNotesFromRef = formDataRef.current?.notes || '';
+                        const notesToPreserve = (currentNotesFromRef && currentNotesFromRef.trim().length > 0) 
+                            ? currentNotesFromRef 
+                            : (prevFormData.notes && prevFormData.notes.trim().length > 0) 
+                                ? prevFormData.notes 
+                                : (client.notes && client.notes.trim().length > 0) 
+                                    ? client.notes 
+                                    : '';
+                        
                         const newFormData = {
                             ...prevFormData,
                             // Only update fields that can't be edited by user OR are safe to update
@@ -271,24 +292,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
                                 ? prevFormData.opportunities 
                                 : parsedClient.opportunities,
-                            // CRITICAL: ALWAYS preserve user-editable fields - never overwrite with API values (even if blank)
-                            // Only use client prop notes if local state has no notes at all
-                            notes: (prevFormData.notes && prevFormData.notes.trim().length > 0) 
-                                ? prevFormData.notes 
-                                : (client.notes && client.notes.trim().length > 0) 
-                                    ? client.notes 
-                                    : ''
+                            // CRITICAL: Use notes from ref first (most recent), then prevFormData, then client prop
+                            notes: notesToPreserve
                         };
                         // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
+                        // BUT: For notes specifically, use the computed notesToPreserve (from ref or prevFormData)
                         userEditedFieldsRef.current.forEach(fieldName => {
-                            if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
-                                newFormData[fieldName] = prevFormData[fieldName];
+                            if (fieldName === 'notes') {
+                                // For notes, use the notes we already computed above (from ref or prevFormData)
+                                // Don't override with potentially empty prevFormData.notes
+                                newFormData[fieldName] = notesToPreserve;
+                                console.log('🛡️ Preserving notes from userEditedFieldsRef:', notesToPreserve.substring(0, 50));
+                            } else {
+                                // For other fields, preserve as-is
+                                if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
+                                    newFormData[fieldName] = prevFormData[fieldName];
+                                }
                             }
                         });
                         console.log('🔄 Preserving local changes:', {
                             contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
                             contactsCount: newFormData.contacts?.length,
-                            preservedFields: Array.from(userEditedFieldsRef.current)
+                            preservedFields: Array.from(userEditedFieldsRef.current),
+                            notesPreserved: notesToPreserve.substring(0, 50),
+                            notesSource: (currentNotesFromRef && currentNotesFromRef.trim().length > 0) ? 'ref' : (prevFormData.notes && prevFormData.notes.trim().length > 0) ? 'prevFormData' : 'client'
                         });
                         return newFormData;
                     });
@@ -2083,19 +2110,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             const cursorPos = textarea.selectionStart;
                                             const newValue = e.target.value;
                                             
+                                            // Store cursor position for restoration after render
+                                            notesCursorPositionRef.current = cursorPos;
+                                            
                                             setFormData(prev => {
                                                 const updated = {...prev, notes: newValue};
                                                 // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
-                                            });
-                                            
-                                            // Restore cursor position after React update
-                                            requestAnimationFrame(() => {
-                                                if (notesTextareaRef.current && notesTextareaRef.current.value === newValue) {
-                                                    const newCursorPos = Math.min(cursorPos, newValue.length);
-                                                    notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-                                                }
                                             });
                                         }}
                                         onKeyDown={(e) => {
@@ -2107,20 +2129,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const start = textarea.selectionStart;
                                                 const end = textarea.selectionEnd;
                                                 const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
+                                                
+                                                // Store cursor position for restoration
+                                                notesCursorPositionRef.current = start + 1;
+                                                
                                                 setFormData(prev => {
                                                     const updated = {...prev, notes: newValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Restore cursor position after React re-renders - use double RAF to ensure it's after render
-                                                requestAnimationFrame(() => {
-                                                    requestAnimationFrame(() => {
-                                                        if (notesTextareaRef.current) {
-                                                            notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
-                                                            notesTextareaRef.current.focus();
-                                                        }
-                                                    });
-                                                });
+                                                // Cursor will be restored by useEffect hook
                                             }
                                         }}
                                         onBlur={(e) => {

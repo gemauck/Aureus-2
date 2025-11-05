@@ -328,8 +328,21 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     
     // Ref for notes textarea to preserve cursor position
     const notesTextareaRef = useRef(null);
+    const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     
-    // Auto-scroll to last comment when notes tab is opened
+    // Restore cursor position after formData.notes changes
+    useEffect(() => {
+        if (notesCursorPositionRef.current !== null && notesTextareaRef.current) {
+            const pos = notesCursorPositionRef.current;
+            // Use setTimeout to ensure DOM is updated
+            setTimeout(() => {
+                if (notesTextareaRef.current && notesTextareaRef.current.value.length >= pos) {
+                    notesTextareaRef.current.setSelectionRange(pos, pos);
+                    notesTextareaRef.current.focus();
+                }
+            }, 0);
+        }
+    }, [formData.notes]);
     // CRITICAL FIX: Cannot use formData in dependency array as it causes TDZ error
     // Track comments length in state to avoid accessing formData directly in dependency array
     const [commentsLength, setCommentsLength] = useState(0);
@@ -1909,19 +1922,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             const cursorPos = textarea.selectionStart;
                                             const newValue = e.target.value;
                                             
+                                            // Store cursor position for restoration after render
+                                            notesCursorPositionRef.current = cursorPos;
+                                            
                                             setFormData(prev => {
                                                 const updated = {...prev, notes: newValue};
                                                 // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
-                                            });
-                                            
-                                            // Restore cursor position after React update
-                                            requestAnimationFrame(() => {
-                                                if (notesTextareaRef.current && notesTextareaRef.current.value === newValue) {
-                                                    const newCursorPos = Math.min(cursorPos, newValue.length);
-                                                    notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-                                                }
                                             });
                                         }}
                                         onKeyDown={(e) => {
@@ -1933,20 +1941,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 const start = textarea.selectionStart;
                                                 const end = textarea.selectionEnd;
                                                 const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
+                                                
+                                                // Store cursor position for restoration
+                                                notesCursorPositionRef.current = start + 1;
+                                                
                                                 setFormData(prev => {
                                                     const updated = {...prev, notes: newValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Restore cursor position after React re-renders - use double RAF to ensure it's after render
-                                                requestAnimationFrame(() => {
-                                                    requestAnimationFrame(() => {
-                                                        if (notesTextareaRef.current) {
-                                                            notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
-                                                            notesTextareaRef.current.focus();
-                                                        }
-                                                    });
-                                                });
+                                                // Cursor will be restored by useEffect hook
                                             }
                                         }}
                                         onBlur={(e) => {
