@@ -106,23 +106,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // On first render, formDataRef.current may be null, so we use defaultFormData
         const currentFormData = formDataRef.current || defaultFormData;
         
-        // CRITICAL: Check if user has entered ANY data - if so, NEVER overwrite with blank/null values
-        const hasUserEnteredData = Boolean(
-            (currentFormData.name && currentFormData.name.trim()) ||
-            (currentFormData.notes && currentFormData.notes.trim()) ||
-            (currentFormData.industry && currentFormData.industry.trim()) ||
-            (currentFormData.source && currentFormData.source.trim())
-        );
+        // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
+        const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
         
-        // CRITICAL: If user is editing OR has entered ANY data, NEVER reset formData
+        // CRITICAL: If user is editing OR has edited any fields, NEVER reset formData
         // This prevents ANY updates (including blank values) from overwriting user input
-        if (isEditingRef.current || hasUserEnteredData) {
-            console.log('🚫 useEffect blocked: user is editing or has entered data', {
+        if (isEditingRef.current || hasUserEditedFields) {
+            console.log('🚫 useEffect blocked: user is editing or has edited fields', {
                 isEditing: isEditingRef.current,
-                hasUserEnteredData,
-                hasName: !!(currentFormData.name && currentFormData.name.trim()),
-                hasNotes: !!(currentFormData.notes && currentFormData.notes.trim()),
-                hasIndustry: !!(currentFormData.industry && currentFormData.industry.trim()),
+                hasUserEditedFields,
+                editedFields: Array.from(userEditedFieldsRef.current),
                 currentName: currentFormData.name
             });
             return;
@@ -131,10 +124,10 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // ONLY initialize formData when switching to a different lead (different ID)
         // Do NOT reinitialize when the same lead is updated
         if (lead && !currentFormData.id) {
-            // First load - CRITICAL: Only initialize if user hasn't entered any data
-            // If user has entered data, preserve it instead of overwriting with API data
-            if (hasUserEnteredData) {
-                console.log('🚫 First load but user has entered data - preserving user input');
+            // First load - CRITICAL: Only initialize if user hasn't edited any fields
+            // If user has edited fields, preserve those fields instead of overwriting with API data
+            if (hasUserEditedFields) {
+                console.log('🚫 First load but user has edited fields - preserving user input');
                 const parsedLead = {
                     ...lead,
                     stage: lead.stage || 'Awareness',
@@ -148,17 +141,19 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                     proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                     thumbnail: lead.thumbnail || ''
                 };
-                // Merge but preserve user-entered fields
-                setFormData(prevFormData => ({
-                    ...parsedLead,
-                    // CRITICAL: NEVER overwrite user-entered fields with blank/null API values
-                    name: (prevFormData.name && prevFormData.name.trim()) ? prevFormData.name : (parsedLead.name || ''),
-                    notes: (prevFormData.notes && prevFormData.notes.trim()) ? prevFormData.notes : (parsedLead.notes || ''),
-                    industry: (prevFormData.industry && prevFormData.industry.trim()) ? prevFormData.industry : (parsedLead.industry || ''),
-                    source: (prevFormData.source && prevFormData.source.trim()) ? prevFormData.source : (parsedLead.source || '')
-                }));
+                // Merge but preserve user-edited fields
+                setFormData(prevFormData => {
+                    const merged = {...parsedLead};
+                    // CRITICAL: NEVER overwrite user-edited fields with blank/null API values
+                    userEditedFieldsRef.current.forEach(fieldName => {
+                        if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
+                            merged[fieldName] = prevFormData[fieldName];
+                        }
+                    });
+                    return merged;
+                });
             } else {
-                // User hasn't entered data - safe to initialize fresh
+                // User hasn't edited any fields - safe to initialize fresh
                 const parsedLead = {
                     ...lead,
                     stage: lead.stage || 'Awareness',
@@ -173,9 +168,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                     thumbnail: lead.thumbnail || ''
                 };
                 setFormData(parsedLead);
+                // Reset edited fields tracking when loading new lead
+                userEditedFieldsRef.current.clear();
             }
         } else if (lead && currentFormData.id && lead.id !== currentFormData.id) {
-            // Switching to a different lead - CRITICAL: Preserve user data if entered
+            // Switching to a different lead - CRITICAL: Preserve user-edited fields
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
@@ -189,19 +186,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                 thumbnail: lead.thumbnail || ''
             };
-            // Only switch if user hasn't entered data, otherwise preserve their input
-            if (hasUserEnteredData) {
-                console.log('🚫 Switching leads but user has entered data - preserving user input');
-                setFormData(prevFormData => ({
-                    ...parsedLead,
-                    // Preserve user-entered fields
-                    name: (prevFormData.name && prevFormData.name.trim()) ? prevFormData.name : (parsedLead.name || ''),
-                    notes: (prevFormData.notes && prevFormData.notes.trim()) ? prevFormData.notes : (parsedLead.notes || ''),
-                    industry: (prevFormData.industry && prevFormData.industry.trim()) ? prevFormData.industry : (parsedLead.industry || ''),
-                    source: (prevFormData.source && prevFormData.source.trim()) ? prevFormData.source : (parsedLead.source || '')
-                }));
+            // Only switch if user hasn't edited fields, otherwise preserve their input
+            if (hasUserEditedFields) {
+                console.log('🚫 Switching leads but user has edited fields - preserving user input');
+                setFormData(prevFormData => {
+                    const merged = {...parsedLead};
+                    // Preserve user-edited fields
+                    userEditedFieldsRef.current.forEach(fieldName => {
+                        if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
+                            merged[fieldName] = prevFormData[fieldName];
+                        }
+                    });
+                    return merged;
+                });
             } else {
                 setFormData(parsedLead);
+                // Reset edited fields tracking when switching to different lead
+                userEditedFieldsRef.current.clear();
             }
         } else if (lead && currentFormData.id === lead.id) {
             // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has entered data
@@ -1875,11 +1876,25 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                            
+                                            // Preserve cursor position
+                                            const textarea = e.target;
+                                            const cursorPos = textarea.selectionStart;
+                                            const newValue = e.target.value;
+                                            
                                             setFormData(prev => {
-                                                const updated = {...prev, notes: e.target.value};
+                                                const updated = {...prev, notes: newValue};
                                                 // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
+                                            });
+                                            
+                                            // Restore cursor position after React update
+                                            requestAnimationFrame(() => {
+                                                if (notesTextareaRef.current && notesTextareaRef.current.value === newValue) {
+                                                    const newCursorPos = Math.min(cursorPos, newValue.length);
+                                                    notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                }
                                             });
                                         }}
                                         onKeyDown={(e) => {
@@ -1896,12 +1911,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Restore cursor position after space
+                                                // Restore cursor position after React re-renders - use double RAF to ensure it's after render
                                                 requestAnimationFrame(() => {
-                                                    if (notesTextareaRef.current) {
-                                                        notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
-                                                        notesTextareaRef.current.focus();
-                                                    }
+                                                    requestAnimationFrame(() => {
+                                                        if (notesTextareaRef.current) {
+                                                            notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                            notesTextareaRef.current.focus();
+                                                        }
+                                                    });
                                                 });
                                             }
                                         }}

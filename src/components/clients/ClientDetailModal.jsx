@@ -82,6 +82,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isEditingRef = useRef(false);
     const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
     
+    // Track which fields the user has actually entered data into - NEVER overwrite these
+    const userEditedFieldsRef = useRef(new Set()); // Set of field names user has edited
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
@@ -131,14 +134,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // CRITICAL: Only use formDataRef.current or defaultFormData - NEVER access formData directly here
         const currentFormData = formDataRef.current || {};
         
-        // CRITICAL: Check if user has entered ANY data - if so, NEVER overwrite with blank/null values
-        const hasUserEnteredData = Boolean(
-            (currentFormData.name && currentFormData.name.trim()) ||
-            (currentFormData.notes && currentFormData.notes.trim()) ||
-            (currentFormData.industry && currentFormData.industry.trim()) ||
-            (currentFormData.address && currentFormData.address.trim()) ||
-            (currentFormData.website && currentFormData.website.trim())
-        );
+        // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
+        const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
         
         if (client) {
             // Only reset formData if:
@@ -147,15 +144,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const clientIdChanged = client.id !== lastSavedClientId.current;
             const isNewClient = !lastSavedClientId.current && client.id; // New client getting an ID for the first time
             
-            // CRITICAL: If user is editing OR has entered ANY data, NEVER reset formData
+            // CRITICAL: If user is editing OR has edited any fields, NEVER reset formData
             // This prevents ANY updates (including blank values) from overwriting user input
-            if (isEditingRef.current || hasUserEnteredData) {
-                console.log('🚫 useEffect blocked: user is editing or has entered data', {
+            if (isEditingRef.current || hasUserEditedFields) {
+                console.log('🚫 useEffect blocked: user is editing or has edited fields', {
                     isEditing: isEditingRef.current,
-                    hasUserEnteredData,
-                    hasName: !!(currentFormData.name && currentFormData.name.trim()),
-                    hasNotes: !!(currentFormData.notes && currentFormData.notes.trim()),
-                    hasIndustry: !!(currentFormData.industry && currentFormData.industry.trim()),
+                    hasUserEditedFields,
+                    editedFields: Array.from(userEditedFieldsRef.current),
                     currentName: currentFormData.name
                 });
                 // Still update the lastSavedClientId to prevent repeated checks
@@ -222,10 +217,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         });
                         setFormData(parsedClient);
                     }
+                if (clientIdChanged) {
+                    // New client - CRITICAL: Only set formData fresh if user hasn't edited any fields
+                    // If user has edited fields, preserve those fields instead of overwriting with API data
+                    if (hasUserEditedFields) {
+                        console.log('🚫 New client detected but user has edited fields - preserving user input', {
+                            editedFields: Array.from(userEditedFieldsRef.current)
+                        });
+                        // Merge API data but preserve user-edited fields
+                        setFormData(prevFormData => {
+                            const merged = {...parsedClient};
+                            // CRITICAL: NEVER overwrite user-edited fields with blank/null API values
+                            userEditedFieldsRef.current.forEach(fieldName => {
+                                if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
+                                    merged[fieldName] = prevFormData[fieldName];
+                                }
+                            });
+                            return merged;
+                        });
+                    } else {
+                        // User hasn't edited any fields - safe to set fresh from API
+                        console.log('🔄 New client - setting formData fresh:', {
+                            contactsCount: parsedClient.contacts?.length,
+                            sitesCount: parsedClient.sites?.length
+                        });
+                        setFormData(parsedClient);
+                        // Reset edited fields tracking when loading new client
+                        userEditedFieldsRef.current.clear();
+                    }
                 } else if (client.id === currentFormData.id) {
-                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has entered data
-                    if (isEditingRef.current || hasUserEnteredData) {
-                        console.log('🚫 Skipping formData update: user is editing or has entered data');
+                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields
+                    if (isEditingRef.current || hasUserEditedFields) {
+                        console.log('🚫 Skipping formData update: user is editing or has edited fields');
                         return;
                     }
                     
@@ -243,7 +266,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     }
                     
                     // Update ONLY status and stage from client prop (fields that might change externally)
-                    // CRITICAL: NEVER update user-editable fields (name, notes, industry, address, website) 
+                    // CRITICAL: NEVER update user-edited fields (name, notes, industry, address, website) 
                     // even if they're blank in the API response - preserve user input
                     setFormData(prevFormData => {
                         const newFormData = {
@@ -260,19 +283,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 : parsedClient.sites,
                             opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
                                 ? prevFormData.opportunities 
-                                : parsedClient.opportunities,
-                            // CRITICAL: ALWAYS preserve user-editable fields - never overwrite with API values (even if blank)
-                            name: prevFormData.name || '',
-                            notes: prevFormData.notes || '',
-                            industry: prevFormData.industry || '',
-                            address: prevFormData.address || '',
-                            website: prevFormData.website || ''
+                                : parsedClient.opportunities
                         };
+                        // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
+                        userEditedFieldsRef.current.forEach(fieldName => {
+                            if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
+                                newFormData[fieldName] = prevFormData[fieldName];
+                            }
+                        });
                         console.log('🔄 Preserving local changes:', {
                             contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
                             contactsCount: newFormData.contacts?.length,
-                            notesPreserved: prevFormData.notes || '',
-                            namePreserved: prevFormData.name || ''
+                            preservedFields: Array.from(userEditedFieldsRef.current)
                         });
                         return newFormData;
                     });
@@ -1904,6 +1926,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 hasUserEditedForm.current = true; // Mark that user has edited
+                                                userEditedFieldsRef.current.add('name'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
@@ -1930,6 +1953,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         onChange={(e) => {
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
+                                            userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
@@ -1964,6 +1988,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         onChange={(e) => {
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
+                                            userEditedFieldsRef.current.add('status'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
@@ -1994,6 +2019,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 hasUserEditedForm.current = true; // Mark that user has edited
+                                                userEditedFieldsRef.current.add('website'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
@@ -2022,6 +2048,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         onChange={(e) => {
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
+                                            userEditedFieldsRef.current.add('address'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
@@ -2051,15 +2078,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         onChange={(e) => {
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
+                                            userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                            
+                                            // Preserve cursor position
+                                            const textarea = e.target;
+                                            const cursorPos = textarea.selectionStart;
+                                            const newValue = e.target.value;
+                                            
                                             setFormData(prev => {
-                                                const updated = {...prev, notes: e.target.value};
+                                                const updated = {...prev, notes: newValue};
                                                 // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
+                                            });
+                                            
+                                            // Restore cursor position after React update
+                                            requestAnimationFrame(() => {
+                                                if (notesTextareaRef.current && notesTextareaRef.current.value === newValue) {
+                                                    const newCursorPos = Math.min(cursorPos, newValue.length);
+                                                    notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                }
                                             });
                                         }}
                                         onKeyDown={(e) => {
@@ -2076,12 +2118,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Restore cursor position after space
+                                                // Restore cursor position after React re-renders - use double RAF to ensure it's after render
                                                 requestAnimationFrame(() => {
-                                                    if (notesTextareaRef.current) {
-                                                        notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
-                                                        notesTextareaRef.current.focus();
-                                                    }
+                                                    requestAnimationFrame(() => {
+                                                        if (notesTextareaRef.current) {
+                                                            notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                            notesTextareaRef.current.focus();
+                                                        }
+                                                    });
                                                 });
                                             }
                                         }}

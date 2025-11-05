@@ -1388,6 +1388,8 @@ const Clients = React.memo(() => {
             // This ensures database is the source of truth
             console.log('Preparing to save client with all fields:', comprehensiveClient);
             
+            let apiResponse = null; // Declare outside if/else so we can use it for return value
+            
             if (!token) {
                 // No token, save to localStorage only
                 console.log('No token, saving to localStorage only');
@@ -1397,6 +1399,8 @@ const Clients = React.memo(() => {
                     safeStorage.setClients(updated);
                     setSelectedClient(comprehensiveClient); // Update selectedClient to show new data immediately
                     console.log('✅ Updated client in localStorage, new count:', updated.length);
+                    // Return comprehensiveClient for localStorage-only saves
+                    return comprehensiveClient;
                 } else {
                     const newClients = [...clients, comprehensiveClient];
                     setClients(newClients);
@@ -1407,14 +1411,14 @@ const Clients = React.memo(() => {
                     setViewMode('clients');
                     setSelectedClient(null);
                     setCurrentTab('overview');
+                    // Return comprehensiveClient for localStorage-only saves
+                    return comprehensiveClient;
                 }
-                } else {
+            } else {
                 // Use API - database is source of truth
                 try {
                     console.log('🔧 About to call API with selectedClient ID:', selectedClient?.id);
                     console.log('🔧 comprehensiveClient ID:', comprehensiveClient.id);
-                    
-                    let apiResponse = null; // Declare outside try block so we can use it for return value
                     
                     if (selectedClient) {
                         // For updates, send ALL comprehensive data to API
@@ -1481,7 +1485,7 @@ const Clients = React.memo(() => {
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,
                             website: comprehensiveClient.website,
-                            notes: comprehensiveClient.notes,
+                            notes: comprehensiveClient.notes || '', // Ensure notes is always sent
                             contacts: comprehensiveClient.contacts,
                             followUps: comprehensiveClient.followUps,
                             projectIds: comprehensiveClient.projectIds,
