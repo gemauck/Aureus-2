@@ -78,6 +78,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const isAutoSavingRef = useRef(false);
     const lastSavedDataRef = useRef(null); // Track last saved state
     
+    // Track when user is actively typing/editing in an input field
+    const isEditingRef = useRef(false);
+    const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
@@ -87,28 +91,69 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         formDataRef.current = formData;
     }, [formData]);
     
+    // Cleanup editing timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+        };
+    }, []);
+    
     // Update tab when initialTab prop changes
     useEffect(() => {
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // Update formData when client prop changes - but only if user hasn't edited the form
+    // Update formData when client prop changes - but only when client ID changes
+    // NOTE: formData is intentionally NOT in dependency array to prevent loops
+    // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
+    // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
-        // Don't reset formData if we're in the middle of auto-saving OR just finished
-        if (isAutoSavingRef.current) {
-            console.log('⚠️ Skipping formData reset - auto-save in progress');
+        // CRITICAL: Check editing flag FIRST before any other logic
+        if (isEditingRef.current) {
+            console.log('🚫 useEffect blocked: user is actively editing');
             return;
         }
+        
+        // Don't reset formData if we're in the middle of auto-saving
+        if (isAutoSavingRef.current) {
+            console.log('🚫 useEffect blocked: auto-save in progress');
+            return;
+        }
+        
+        // CRITICAL: Only use formDataRef.current or defaultFormData - NEVER access formData directly here
+        const currentFormData = formDataRef.current || {};
         
         if (client) {
             // Only reset formData if:
             // 1. Client ID changed (viewing a different client), OR
             // 2. User hasn't edited the form yet
             const clientIdChanged = client.id !== lastSavedClientId.current;
+            const isNewClient = !lastSavedClientId.current && client.id; // New client getting an ID for the first time
+            const hasUserData = currentFormData.name || currentFormData.notes || currentFormData.industry;
+            
+            // CRITICAL: If user is editing or has entered data, don't reset even if ID changed
+            // This prevents new records from being reset when they get an ID after saving
+            if (isEditingRef.current || (isNewClient && hasUserData)) {
+                console.log('🚫 useEffect blocked: user is editing or has entered data', {
+                    isEditing: isEditingRef.current,
+                    isNewClient,
+                    hasUserData,
+                    currentName: currentFormData.name
+                });
+                // Still update the lastSavedClientId to prevent repeated checks
+                if (client.id) {
+                    lastSavedClientId.current = client.id;
+                }
+                return;
+            }
             
             if (clientIdChanged) {
-                // Reset the edit flag when switching to a different client
-                hasUserEditedForm.current = false;
+                // Reset the edit flag when switching to a different client (but not if user is editing)
+                if (!isEditingRef.current) {
+                    hasUserEditedForm.current = false;
+                }
                 lastSavedClientId.current = client.id;
             }
             
@@ -142,11 +187,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         sitesCount: parsedClient.sites?.length
                     });
                     setFormData(parsedClient);
-                } else {
-                    // Same client, form not edited - preserve contacts/sites/opportunities if local has more
+                } else if (client.id === currentFormData.id) {
+                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing
+                    if (isEditingRef.current) {
+                        console.log('🚫 Skipping formData update: user is actively editing');
+                        return;
+                    }
+                    
+                    // Check if data actually changed before updating
+                    const dataChanged = 
+                        client.status !== currentFormData.status ||
+                        client.stage !== currentFormData.stage ||
+                        JSON.stringify(client.contacts) !== JSON.stringify(currentFormData.contacts) ||
+                        JSON.stringify(client.sites) !== JSON.stringify(currentFormData.sites) ||
+                        JSON.stringify(client.opportunities) !== JSON.stringify(currentFormData.opportunities);
+                    
+                    if (!dataChanged) {
+                        console.log('🚫 Skipping formData update: client data unchanged');
+                        return;
+                    }
+                    
+                    // Update ONLY status and stage from client prop (fields that might change externally)
+                    // CRITICAL: Do NOT update name, notes, industry, address, website, or other fields that user might be editing
                     setFormData(prevFormData => {
                         const newFormData = {
-                            ...parsedClient,
+                            ...prevFormData,
+                            // Only update fields that can't be edited by user OR are safe to update
+                            status: client.status || prevFormData.status,
+                            stage: client.stage || prevFormData.stage,
                             // Preserve contacts, sites, opportunities if local state has more items
                             contacts: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0) 
                                 ? prevFormData.contacts 
@@ -157,6 +225,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                             opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
                                 ? prevFormData.opportunities 
                                 : parsedClient.opportunities
+                            // DO NOT update: name, notes, industry, address, website - these might be actively edited
                         };
                         console.log('🔄 Preserving local changes:', {
                             contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
@@ -169,7 +238,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 console.log('⏭️ Skipping formData reset - user has edited the form and client ID unchanged');
             }
         }
-    }, [client]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [client?.id]); // Only re-run when client ID changes, not when client properties change
     
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
@@ -540,12 +610,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             // This prevents overwriting optimistic updates
             if (shouldLoadFromDatabase) {
                 console.log('📡 Loading data from database (client changed or form not edited)');
+                // Stagger API calls to prevent rate limiting (429 errors)
+                // Each call waits for the previous one with a delay
                 loadOpportunitiesFromDatabase(client.id);
-                loadContactsFromDatabase(client.id);
-                loadSitesFromDatabase(client.id);
+                setTimeout(() => {
+                    loadContactsFromDatabase(client.id);
+                }, 300); // Delay 300ms
+                setTimeout(() => {
+                    loadSitesFromDatabase(client.id);
+                }, 600); // Delay 600ms
                 
                 // Reload the full client data from database to get comments, followUps, activityLog
-                loadClientFromDatabase(client.id);
+                setTimeout(() => {
+                    loadClientFromDatabase(client.id);
+                }, 900); // Delay 900ms
             } else {
                 console.log('⏭️ Skipping database load - form has been edited and client ID unchanged');
             }
@@ -1776,7 +1854,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <input 
                                             type="text" 
                                             value={formData.name}
-                                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 1000); // Clear editing flag 1 second after user stops typing
+                                                setFormData(prev => ({...prev, name: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                             required 
                                         />
@@ -1785,7 +1879,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
                                         <select
                                             value={formData.industry}
-                                            onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                                setFormData(prev => ({...prev, industry: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="">Select Industry</option>
@@ -1802,7 +1912,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
                                         <select 
                                             value={formData.status}
-                                            onChange={(e) => setFormData({...formData, status: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                                setFormData(prev => ({...prev, status: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option>Active</option>
@@ -1815,7 +1941,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         <input 
                                             type="url" 
                                             value={formData.website || ''}
-                                            onChange={(e) => setFormData({...formData, website: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 1000);
+                                                setFormData(prev => ({...prev, website: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             placeholder="https://example.com"
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         />
@@ -1826,7 +1968,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Address</label>
                                     <textarea 
                                         value={formData.address}
-                                        onChange={(e) => setFormData({...formData, address: e.target.value})}
+                                        onFocus={() => {
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                        }}
+                                        onChange={(e) => {
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            editingTimeoutRef.current = setTimeout(() => {
+                                                isEditingRef.current = false;
+                                            }, 1000);
+                                            setFormData(prev => ({...prev, address: e.target.value}));
+                                        }}
+                                        onBlur={() => {
+                                            setTimeout(() => {
+                                                isEditingRef.current = false;
+                                            }, 500);
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         rows="2"
                                         placeholder="Street address, City, Province, Postal Code"
@@ -1837,9 +1995,40 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">General Notes</label>
                                     <textarea 
                                         value={formData.notes}
+                                        onFocus={() => {
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                        }}
                                         onChange={(e) => {
-                                            hasUserEditedForm.current = true;
-                                            setFormData({...formData, notes: e.target.value});
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            editingTimeoutRef.current = setTimeout(() => {
+                                                isEditingRef.current = false;
+                                            }, 1000); // Clear editing flag 1 second after user stops typing
+                                            setFormData(prev => {
+                                                const updated = {...prev, notes: e.target.value};
+                                                // Update ref immediately with latest value
+                                                formDataRef.current = updated;
+                                                return updated;
+                                            });
+                                        }}
+                                        onBlur={(e) => {
+                                            isEditingRef.current = false; // Clear editing flag when user leaves field
+                                            // Auto-save notes when user leaves the field
+                                            // Use the current textarea value to ensure we have the latest data
+                                            if (client) {
+                                                // Get latest formData including the notes value from the textarea
+                                                setFormData(prev => {
+                                                    const latest = {...prev, notes: e.target.value};
+                                                    // Update ref immediately
+                                                    formDataRef.current = latest;
+                                                    // Save the latest data
+                                                    setTimeout(() => {
+                                                        onSave(latest, true);
+                                                    }, 0);
+                                                    return latest;
+                                                });
+                                            }
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                         rows="3"

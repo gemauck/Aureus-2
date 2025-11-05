@@ -54,6 +54,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const lastSavedDataRef = useRef(null); // Track last saved state
     const isSavingProposalsRef = useRef(false); // Track when proposals are being saved
     const isCreatingProposalRef = useRef(false); // Track when a proposal is being created (use ref for immediate updates)
+    const isEditingRef = useRef(false); // Track when user is actively typing/editing
+    const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
     
     // Initialize formDataRef after formData is declared
     useEffect(() => {
@@ -69,6 +71,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
     }, [formData]);
     
+    // Cleanup editing timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+        };
+    }, []);
+    
     // Update tab when initialTab prop changes
     useEffect(() => {
         setActiveTab(initialTab);
@@ -79,12 +90,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
     // Use formDataRef.current which is synced via a separate useEffect
     useEffect(() => {
-        // Don't reset formData if we're in the middle of auto-saving OR saving proposals OR creating a proposal
-        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
-            console.log('🚫 useEffect blocked: saving in progress', {
+        // Don't reset formData if we're in the middle of auto-saving OR saving proposals OR creating a proposal OR user is editing
+        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current || isEditingRef.current) {
+            console.log('🚫 useEffect blocked: saving/editing in progress', {
                 isAutoSaving: isAutoSavingRef.current,
                 isSavingProposals: isSavingProposalsRef.current,
-                isCreatingProposal: isCreatingProposalRef.current
+                isCreatingProposal: isCreatingProposalRef.current,
+                isEditing: isEditingRef.current
             });
             return;
         }
@@ -93,6 +105,21 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // formDataRef.current is updated by a separate useEffect that runs after formData is set
         // On first render, formDataRef.current may be null, so we use defaultFormData
         const currentFormData = formDataRef.current || defaultFormData;
+        
+        // CRITICAL: If user is editing or has entered data, don't reset even if ID changed
+        // This prevents new records from being reset when they get an ID after saving
+        const isNewLead = !currentFormData.id && lead?.id;
+        const hasUserData = currentFormData.name || currentFormData.notes || currentFormData.industry;
+        
+        if (isEditingRef.current || (isNewLead && hasUserData)) {
+            console.log('🚫 useEffect blocked: user is editing or has entered data', {
+                isEditing: isEditingRef.current,
+                isNewLead,
+                hasUserData,
+                currentName: currentFormData.name
+            });
+            return;
+        }
         
         // ONLY initialize formData when switching to a different lead (different ID)
         // Do NOT reinitialize when the same lead is updated
@@ -131,10 +158,27 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             setFormData(parsedLead);
         } else if (lead && currentFormData.id === lead.id) {
             // Same lead reloaded - Merge only fields that aren't being actively edited
+            // CRITICAL: Skip ALL updates if user is editing to prevent overwriting user input
+            if (isEditingRef.current) {
+                console.log('🚫 Skipping formData update: user is actively editing');
+                return;
+            }
+            
             // CRITICAL: ALWAYS preserve proposals from current formData - NEVER overwrite from lead prop
             // The lead prop might have stale or incomplete proposals from API responses
             const currentProposals = currentFormData.proposals || [];
             const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
+            
+            // Check if data actually changed before updating
+            const dataChanged = 
+                lead.status !== currentFormData.status ||
+                lead.stage !== currentFormData.stage ||
+                JSON.stringify(leadProposals) !== JSON.stringify(currentProposals);
+            
+            if (!dataChanged) {
+                console.log('🚫 Skipping formData update: lead data unchanged');
+                return;
+            }
             
             console.log('🔄 Same lead reloaded - ALWAYS preserving proposals:', {
                 currentProposalsCount: currentProposals.length,
@@ -163,14 +207,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 ids: proposalsToUse.map(p => p.id)
             });
             
-            // Update other fields from lead prop, but ALWAYS preserve proposals from formData
-                    setFormData(prev => ({
-                        ...prev,
-                // Update other fields that might have changed externally
+            // Update ONLY status and stage from lead prop (fields that might change externally)
+            // CRITICAL: Do NOT update name, notes, or other fields that user might be editing
+            setFormData(prev => ({
+                ...prev,
+                // Only update fields that can't be edited by user OR are safe to update
                 status: lead.status || prev.status,
                 stage: lead.stage || prev.stage,
                 // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
                 proposals: proposalsToUse
+                // DO NOT update: name, notes, industry, source, etc. - these might be actively edited
             }));
             
             return; // Don't process further updates
@@ -484,9 +530,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             if (response.ok) {
                 const data = await response.json();
                 setLeadTags(data.data?.tags || []);
+            } else if (response.status === 404) {
+                // Lead was deleted or doesn't exist - clear tags silently
+                setLeadTags([]);
             }
         } catch (error) {
-            console.error('Error loading lead tags:', error);
+            // Only log non-404 errors to avoid console spam
+            if (error.message && !error.message.includes('404')) {
+                console.error('Error loading lead tags:', error);
+            }
+            setLeadTags([]);
         }
     };
     
@@ -1570,7 +1623,24 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <input 
                                             type="text" 
                                             value={formData.name}
-                                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 1000); // Clear editing flag 1 second after user stops typing
+                                                setFormData(prev => ({...prev, name: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                // Clear editing flag after a delay to allow for final keystrokes
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                             required 
                                         />
@@ -1579,7 +1649,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
                                         <select
                                             value={formData.industry}
-                                            onChange={(e) => setFormData({...formData, industry: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                                setFormData(prev => ({...prev, industry: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="">Select Industry</option>
@@ -1597,7 +1683,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <input 
                                             type="date" 
                                             value={formData.firstContactDate || new Date().toISOString().split('T')[0]}
-                                            onChange={(e) => setFormData({...formData, firstContactDate: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                                setFormData(prev => ({...prev, firstContactDate: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
                                             required
                                         />
@@ -1615,7 +1717,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
                                         <select 
                                             value={formData.source}
-                                            onChange={(e) => setFormData({...formData, source: e.target.value})}
+                                            onFocus={() => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            }}
+                                            onChange={(e) => {
+                                                isEditingRef.current = true;
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                                setFormData(prev => ({...prev, source: e.target.value}));
+                                            }}
+                                            onBlur={() => {
+                                                setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                }, 500);
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option>Website</option>
@@ -1692,16 +1810,39 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
                                         value={formData.notes}
-                                        onChange={(e) => {
-                                            const updated = {...formData, notes: e.target.value};
-                                            setFormData(updated);
-                                            formDataRef.current = updated;
+                                        onFocus={() => {
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
-                                        onBlur={() => {
+                                        onChange={(e) => {
+                                            isEditingRef.current = true;
+                                            if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                            editingTimeoutRef.current = setTimeout(() => {
+                                                isEditingRef.current = false;
+                                            }, 1000); // Clear editing flag 1 second after user stops typing
+                                            setFormData(prev => {
+                                                const updated = {...prev, notes: e.target.value};
+                                                // Update ref immediately with latest value
+                                                formDataRef.current = updated;
+                                                return updated;
+                                            });
+                                        }}
+                                        onBlur={(e) => {
+                                            isEditingRef.current = false; // Clear editing flag when user leaves field
                                             // Auto-save notes when user leaves the field
-                                            if (lead && formDataRef.current) {
-                                                const latest = {...formDataRef.current};
-                                                onSave(latest, true);
+                                            // Use the current textarea value to ensure we have the latest data
+                                            if (lead) {
+                                                // Get latest formData including the notes value from the textarea
+                                                setFormData(prev => {
+                                                    const latest = {...prev, notes: e.target.value};
+                                                    // Update ref immediately
+                                                    formDataRef.current = latest;
+                                                    // Save the latest data
+                                                    setTimeout(() => {
+                                                        onSave(latest, true);
+                                                    }, 0);
+                                                    return latest;
+                                                });
                                             }
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
