@@ -119,31 +119,38 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // CRITICAL: NEVER update formData from prop if user has started typing
-    // Once user types, formData is completely controlled by user input
+    // MANUFACTURING PATTERN: Only sync formData when lead ID changes (switching to different lead)
+    // Once modal is open, formData is completely user-controlled - no automatic syncing from props
+    // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
     useEffect(() => {
-        // CRITICAL: Skip if this is the exact same lead object we just processed
-        if (lead === lastProcessedLeadRef.current) {
+        const currentLeadId = lead?.id || null;
+        const previousLeadId = lastProcessedLeadRef.current?.id || null;
+        
+        // Skip if same lead (by ID) - no need to sync
+        if (currentLeadId === previousLeadId && lead === lastProcessedLeadRef.current) {
             return;
         }
         
-        // CRITICAL: If user has started typing, NEVER update formData from prop - PERMANENTLY BLOCKED
-        if (userHasStartedTypingRef.current) {
-            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled (PERMANENT)');
-            lastProcessedLeadRef.current = lead;
-            return;
-        }
-        
-        // CRITICAL: If user has edited ANY fields, NEVER update formData from prop
-        if (userEditedFieldsRef.current.size > 0) {
-            console.log('🚫 useEffect BLOCKED: user has edited fields - formData is user-controlled', {
-                editedFields: Array.from(userEditedFieldsRef.current)
+        // CRITICAL: If user has started typing or edited fields, NEVER update formData from prop
+        if (userHasStartedTypingRef.current || userEditedFieldsRef.current.size > 0) {
+            console.log('🚫 useEffect BLOCKED: user has typed/edited - formData is user-controlled', {
+                hasStartedTyping: userHasStartedTypingRef.current,
+                editedFields: Array.from(userEditedFieldsRef.current),
+                currentLeadId,
+                previousLeadId
             });
             lastProcessedLeadRef.current = lead;
             return;
         }
         
-        // CRITICAL: Check DOM values directly - they are the source of truth for uncontrolled inputs
+        // CRITICAL: Block if user is currently editing or saving
+        if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+            console.log('🚫 useEffect BLOCKED: user is editing or saving');
+            lastProcessedLeadRef.current = lead;
+            return;
+        }
+        
+        // CRITICAL: Check DOM values directly - if user has typed in DOM, don't overwrite
         const hasDomContent = Boolean(
             (nameInputRef.current && nameInputRef.current.value && nameInputRef.current.value.trim()) ||
             (notesTextareaRef.current && notesTextareaRef.current.value && notesTextareaRef.current.value.trim()) ||
@@ -151,7 +158,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             (sourceSelectRef.current && sourceSelectRef.current.value && sourceSelectRef.current.value.trim() && sourceSelectRef.current.value !== 'Website')
         );
         
-        // Also check editing flags and formData content
+        // Check if formData has user-entered content
         const currentFormData = formDataRef.current || defaultFormData;
         const formDataHasContent = Boolean(
             (currentFormData.name && currentFormData.name.trim()) ||
@@ -160,43 +167,26 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website')
         );
         
-        // CRITICAL: Block if DOM has content OR formData has content
+        // Block if DOM or formData has content (user has entered something)
         if (hasDomContent || formDataHasContent) {
             console.log('🚫 useEffect BLOCKED: DOM or formData has content', {
                 hasDomContent,
                 formDataHasContent,
-                domName: nameInputRef.current?.value,
-                domNotes: notesTextareaRef.current?.value?.substring(0, 20)
+                currentLeadId,
+                previousLeadId
             });
             lastProcessedLeadRef.current = lead;
             return;
         }
         
-        if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
-            console.log('🚫 useEffect BLOCKED: user is editing or saving');
-            lastProcessedLeadRef.current = lead;
-            return;
-        }
+        // Only sync when:
+        // 1. Switching to a different lead (different ID) AND form is empty, OR
+        // 2. Opening a lead for the first time (lead exists but previousLeadId is null)
+        // This matches Manufacturing pattern: only set formData when opening a new item
+        const isDifferentLead = currentLeadId !== previousLeadId;
+        const isFirstTimeOpening = lead && previousLeadId === null && lastProcessedLeadRef.current === null;
         
-        // CRITICAL: Check if incoming lead would overwrite user input with blank/empty values
-        // If current formData has content but incoming lead has empty fields, block the update
-        if (lead && formDataHasContent) {
-            const wouldOverwriteWithBlank = Boolean(
-                (currentFormData.name && currentFormData.name.trim() && (!lead.name || !lead.name.trim())) ||
-                (currentFormData.notes && currentFormData.notes.trim() && (!lead.notes || !lead.notes.trim())) ||
-                (currentFormData.industry && currentFormData.industry.trim() && (!lead.industry || !lead.industry.trim())) ||
-                (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website' && (!lead.source || lead.source === 'Website'))
-            );
-            
-            if (wouldOverwriteWithBlank) {
-                console.log('🚫 useEffect BLOCKED: would overwrite user input with blank values');
-                lastProcessedLeadRef.current = lead;
-                return;
-            }
-        }
-        
-        // Only initialize if formData is empty AND user hasn't started typing AND DOM is empty AND no fields edited
-        if (lead && !formDataHasContent && !hasDomContent && userEditedFieldsRef.current.size === 0) {
+        if (lead && (isDifferentLead || isFirstTimeOpening) && !formDataHasContent && !hasDomContent) {
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
@@ -211,7 +201,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 thumbnail: lead.thumbnail || ''
             };
             
-            console.log('✅ Initializing formData from lead prop (form is empty and user has not typed)');
+            console.log('✅ Syncing formData: switching to different lead (Manufacturing pattern)', {
+                previousLeadId,
+                currentLeadId,
+                formWasEmpty: !formDataHasContent && !hasDomContent
+            });
             setFormData(parsedLead);
             // Also update input refs if they exist
             if (nameInputRef.current && parsedLead.name) {
@@ -224,7 +218,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         
         lastProcessedLeadRef.current = lead;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lead]);
+    }, [lead?.id]); // Only watch lead.id, not entire lead object - matches Manufacturing pattern
     
     // Track previous lead ID to detect when a new lead gets an ID after save
     const previousLeadIdRef = useRef(lead?.id || null);

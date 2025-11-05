@@ -137,31 +137,38 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // CRITICAL: NEVER update formData from prop if user has started typing
-    // Once user types, formData is completely controlled by user input
+    // MANUFACTURING PATTERN: Only sync formData when client ID changes (switching to different client)
+    // Once modal is open, formData is completely user-controlled - no automatic syncing from props
+    // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
     useEffect(() => {
-        // CRITICAL: Skip if this is the exact same client object we just processed
-        if (client === lastProcessedClientRef.current) {
+        const currentClientId = client?.id || null;
+        const previousClientId = lastProcessedClientRef.current?.id || null;
+        
+        // Skip if same client (by ID) - no need to sync
+        if (currentClientId === previousClientId && client === lastProcessedClientRef.current) {
             return;
         }
         
-        // CRITICAL: If user has started typing, NEVER update formData from prop - PERMANENTLY BLOCKED
-        if (userHasStartedTypingRef.current) {
-            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled (PERMANENT)');
-            lastProcessedClientRef.current = client;
-            return;
-        }
-        
-        // CRITICAL: If user has edited ANY fields, NEVER update formData from prop
-        if (userEditedFieldsRef.current.size > 0) {
-            console.log('🚫 useEffect BLOCKED: user has edited fields - formData is user-controlled', {
-                editedFields: Array.from(userEditedFieldsRef.current)
+        // CRITICAL: If user has started typing or edited fields, NEVER update formData from prop
+        if (userHasStartedTypingRef.current || userEditedFieldsRef.current.size > 0) {
+            console.log('🚫 useEffect BLOCKED: user has typed/edited - formData is user-controlled', {
+                hasStartedTyping: userHasStartedTypingRef.current,
+                editedFields: Array.from(userEditedFieldsRef.current),
+                currentClientId,
+                previousClientId
             });
             lastProcessedClientRef.current = client;
             return;
         }
         
-        // Also check editing flags and formData content
+        // CRITICAL: Block if user is currently editing or saving
+        if (isEditingRef.current || isAutoSavingRef.current || hasUserEditedForm.current) {
+            console.log('🚫 useEffect BLOCKED: user is editing or saving');
+            lastProcessedClientRef.current = client;
+            return;
+        }
+        
+        // Check if formData has user-entered content
         const currentFormData = formDataRef.current || {};
         const formDataHasContent = Boolean(
             (currentFormData.name && currentFormData.name.trim()) ||
@@ -171,42 +178,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             (currentFormData.website && currentFormData.website.trim())
         );
         
-        // CRITICAL: Block if formData has content
-        if (formDataHasContent || hasUserEditedForm.current) {
+        // Block if formData has content (user has entered something)
+        if (formDataHasContent) {
             console.log('🚫 useEffect BLOCKED: formData has content', {
                 formDataHasContent,
-                hasUserEditedForm: hasUserEditedForm.current
+                currentClientId,
+                previousClientId
             });
             lastProcessedClientRef.current = client;
             return;
         }
         
-        if (isEditingRef.current || isAutoSavingRef.current) {
-            console.log('🚫 useEffect BLOCKED: user is editing or saving');
-            lastProcessedClientRef.current = client;
-            return;
-        }
+        // Only sync when:
+        // 1. Switching to a different client (different ID) AND form is empty, OR
+        // 2. Opening a client for the first time (client exists but previousClientId is null)
+        // This matches Manufacturing pattern: only set formData when opening a new item
+        const isDifferentClient = currentClientId !== previousClientId;
+        const isFirstTimeOpening = client && previousClientId === null && lastProcessedClientRef.current === null;
         
-        // CRITICAL: Check if incoming client would overwrite user input with blank/empty values
-        // If current formData has content but incoming client has empty fields, block the update
-        if (client && formDataHasContent) {
-            const wouldOverwriteWithBlank = Boolean(
-                (currentFormData.name && currentFormData.name.trim() && (!client.name || !client.name.trim())) ||
-                (currentFormData.notes && currentFormData.notes.trim() && (!client.notes || !client.notes.trim())) ||
-                (currentFormData.industry && currentFormData.industry.trim() && (!client.industry || !client.industry.trim())) ||
-                (currentFormData.address && currentFormData.address.trim() && (!client.address || !client.address.trim())) ||
-                (currentFormData.website && currentFormData.website.trim() && (!client.website || !client.website.trim()))
-            );
-            
-            if (wouldOverwriteWithBlank) {
-                console.log('🚫 useEffect BLOCKED: would overwrite user input with blank values');
-                lastProcessedClientRef.current = client;
-                return;
-            }
-        }
-        
-        // Only initialize if formData is empty AND user hasn't started typing
-        if (client && !formDataHasContent) {
+        if (client && (isDifferentClient || isFirstTimeOpening) && !formDataHasContent) {
             const parsedClient = {
                 ...client,
                 contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
@@ -227,13 +217,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 })
             };
             
-            console.log('✅ Initializing formData from client prop');
+            console.log('✅ Syncing formData: switching to different client (Manufacturing pattern)', {
+                previousClientId,
+                currentClientId,
+                formWasEmpty: !formDataHasContent
+            });
             setFormData(parsedClient);
         }
         
         lastProcessedClientRef.current = client;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client]);
+    }, [client?.id]); // Only watch client.id, not entire client object - matches Manufacturing pattern
     
     // Track previous client ID to detect when a new client gets an ID after save
     const previousClientIdRef = useRef(client?.id || null);
