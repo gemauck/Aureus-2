@@ -185,11 +185,57 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [lead]);
     
-    // Reset typing flag when switching to different lead
+    // Track previous lead ID to detect when a new lead gets an ID after save
+    const previousLeadIdRef = useRef(lead?.id || null);
+    
+    // Track the "original" lead ID when component first mounts - use this for stable keys
+    // This prevents inputs from remounting when a new lead gets an ID
+    const originalLeadIdRef = useRef(lead?.id || 'new');
+    
+    // Update original lead ID only when switching to a completely different lead
     useEffect(() => {
-        if (lead?.id && lead.id !== formDataRef.current?.id) {
-            userHasStartedTypingRef.current = false;
+        const currentLeadId = lead?.id || null;
+        const originalLeadId = originalLeadIdRef.current;
+        
+        // Only update originalLeadId if:
+        // 1. We're switching to a different lead (different ID)
+        // 2. AND it's not the same lead getting an ID (original was 'new', current is real ID)
+        if (currentLeadId && currentLeadId !== originalLeadId && originalLeadId !== 'new') {
+            console.log('🔄 Updating originalLeadId: switching to different lead', {
+                original: originalLeadId,
+                current: currentLeadId
+            });
+            originalLeadIdRef.current = currentLeadId;
+        } else if (originalLeadId === 'new' && currentLeadId) {
+            // This is a new lead getting an ID - keep 'new' as the key to prevent remounting
+            console.log('🛡️ Keeping originalLeadId as "new": same lead getting ID');
         }
+    }, [lead?.id]);
+    
+    // Reset typing flag when switching to different lead
+    // BUT: Don't reset if we're saving a new lead (null -> ID) and user is typing
+    useEffect(() => {
+        const currentLeadId = lead?.id || null;
+        const previousLeadId = previousLeadIdRef.current;
+        const currentFormDataId = formDataRef.current?.id || null;
+        
+        // If switching to a completely different lead (different ID), reset typing flag
+        if (currentLeadId && currentLeadId !== currentFormDataId && currentLeadId !== previousLeadId) {
+            // Only reset if it's truly a different lead (not the same lead getting an ID)
+            const isSameLeadGettingId = !previousLeadId && currentLeadId && userHasStartedTypingRef.current;
+            if (!isSameLeadGettingId) {
+                console.log('🔄 Resetting typing flag: switching to different lead', {
+                    previousId: previousLeadId,
+                    currentId: currentLeadId,
+                    formDataId: currentFormDataId
+                });
+                userHasStartedTypingRef.current = false;
+            } else {
+                console.log('🛡️ Preserving typing flag: same lead getting ID after save');
+            }
+        }
+        
+        previousLeadIdRef.current = currentLeadId;
     }, [lead?.id]);
     
     // DISABLED: This was causing status/stage to be overwritten from stale parent data
@@ -1599,7 +1645,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             type="text" 
                                             ref={nameInputRef}
                                             defaultValue={formData.name || ''}
-                                            key={`name-${lead?.id || 'new'}`}
+                                            key={`name-${originalLeadIdRef.current}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1635,7 +1681,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <select
                                             ref={industrySelectRef}
                                             defaultValue={formData.industry || ''}
-                                            key={`industry-${lead?.id || 'new'}`}
+                                            key={`industry-${originalLeadIdRef.current}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1714,7 +1760,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <select 
                                             ref={sourceSelectRef}
                                             defaultValue={formData.source || 'Website'}
-                                            key={`source-${lead?.id || 'new'}`}
+                                            key={`source-${originalLeadIdRef.current}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1817,7 +1863,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <textarea 
                                         ref={notesTextareaRef}
                                         defaultValue={formData.notes || ''}
-                                        key={`notes-${lead?.id || 'new'}`}
+                                        key={`notes-${originalLeadIdRef.current}`}
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
