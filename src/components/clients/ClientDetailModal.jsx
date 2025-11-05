@@ -2144,13 +2144,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         }}
                                         onKeyDown={(e) => {
                                             // Handle spacebar specially to prevent cursor jumping
-                                            if (e.key === ' ') {
+                                            if (e.key === ' ' || e.keyCode === 32) {
                                                 e.preventDefault();
                                                 e.stopPropagation();
+                                                e.stopImmediatePropagation();
+                                                
                                                 const textarea = e.target;
                                                 const start = textarea.selectionStart;
                                                 const end = textarea.selectionEnd;
-                                                const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
+                                                const currentValue = textarea.value || formData.notes || '';
+                                                const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
+                                                
+                                                // Directly update the textarea value first (before React re-render)
+                                                textarea.value = newValue;
                                                 
                                                 // Mark that spacebar was pressed to prevent onChange from interfering
                                                 isSpacebarPressedRef.current = true;
@@ -2158,12 +2164,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 // Store cursor position for restoration
                                                 notesCursorPositionRef.current = start + 1;
                                                 
+                                                // Update React state
                                                 setFormData(prev => {
                                                     const updated = {...prev, notes: newValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Cursor will be restored by useLayoutEffect hook
+                                                
+                                                // Immediately restore cursor position in the DOM element
+                                                requestAnimationFrame(() => {
+                                                    if (textarea && textarea === notesTextareaRef.current) {
+                                                        textarea.setSelectionRange(start + 1, start + 1);
+                                                        textarea.focus();
+                                                    }
+                                                });
+                                                
+                                                return false;
                                             }
                                         }}
                                         onBlur={(e) => {
