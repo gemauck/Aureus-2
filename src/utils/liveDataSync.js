@@ -218,10 +218,10 @@ class LiveDataSync {
     async syncData(dataType, fetchFunction, bypassCache = false) {
         // Wrap entire function to ensure it never throws
         try {
+            const now = Date.now(); // Get timestamp once for use throughout the function
             // Check if we recently synced this data type (unless bypassing cache)
             if (!bypassCache) {
                 const cacheEntry = this.dataCache.get(dataType);
-                const now = Date.now();
                 const CACHE_DURATION = 5000; // 5 seconds per data type - shorter cache for faster updates
                 
                 if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
