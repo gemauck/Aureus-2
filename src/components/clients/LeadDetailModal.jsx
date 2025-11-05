@@ -1871,47 +1871,52 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <select 
                                             value={formData.stage}
                                             onChange={async (e) => {
-                                                const newStage = e.target.value;
-                                                
-                                                // Update state and get the updated formData
-                                                setFormData(prev => {
-                                                    const updated = {...prev, stage: newStage};
-                                                    
-                                                    // Auto-save immediately with the updated data
-                                                    if (lead && onSave) {
-                                                        // Use setTimeout to ensure state is updated
-                                                        setTimeout(async () => {
-                                                            try {
-                                                                // Get the latest formData from ref (updated by useEffect)
-                                                        const latest = {...formDataRef.current, stage: newStage};
-                                                                
-                                                                // Explicitly ensure stage is included
-                                                                latest.stage = newStage;
-                                                        
-                                                        // Save this as the last saved state
-                                                        lastSavedDataRef.current = latest;
-                                                        isAutoSavingRef.current = true;
-                                                        
-                                                                // Save to API - ensure it's awaited
-                                                                await onSave(latest, true);
-                                                                
-                                                                console.log('✅ Stage saved successfully:', newStage);
-                                                        
-                                                        // Clear the flag after a longer delay to allow API response to propagate
-                                                        setTimeout(() => {
-                                                            isAutoSavingRef.current = false;
-                                                        }, 3000);
-                                                            } catch (error) {
-                                                                console.error('❌ Error saving stage:', error);
-                                                                isAutoSavingRef.current = false;
-                                                                alert('Failed to save stage change. Please try again.');
-                                                }
+                                            const newStage = e.target.value;
+                                            
+                                            // Update state and get the updated formData
+                                            setFormData(prev => {
+                                            const updated = {...prev, stage: newStage};
+                                            
+                                            // Auto-save immediately with the updated data
+                                            if (lead && onSave) {
+                                            // Use setTimeout to ensure state is updated
+                                            setTimeout(async () => {
+                                            try {
+                                            // Notify parent that auto-save is starting
+                                            isAutoSavingRef.current = true;
+                                            if (onEditingChange) onEditingChange(false, true);
+                                            
+                                            // Get the latest formData from ref (updated by useEffect)
+                                            const latest = {...formDataRef.current, stage: newStage};
+                                            
+                                            // Explicitly ensure stage is included
+                                            latest.stage = newStage;
+                                            
+                                            // Save this as the last saved state
+                                            lastSavedDataRef.current = latest;
+                                            
+                                            // Save to API - ensure it's awaited
+                                            await onSave(latest, true);
+                                            
+                                            console.log('✅ Stage saved successfully:', newStage);
+                                            
+                                            // Clear the flag and notify parent after save completes
+                                                setTimeout(() => {
+                                                isAutoSavingRef.current = false;
+                                                if (onEditingChange) onEditingChange(false, false);
+                                            }, 3000);
+                                            } catch (error) {
+                                                    console.error('❌ Error saving stage:', error);
+                                                        isAutoSavingRef.current = false;
+                                                        if (onEditingChange) onEditingChange(false, false);
+                                                        alert('Failed to save stage change. Please try again.');
+                                                        }
                                                         }, 100); // Small delay to ensure state update is processed
-                                                    }
-                                                    
-                                                    return updated;
-                                                });
-                                            }}
+                                                }
+                                                
+                                                return updated;
+                                            });
+                                        }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="Awareness">Awareness - Lead knows about us</option>
@@ -4244,6 +4249,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 // Save this as the last saved state
                                                                 lastSavedDataRef.current = latest;
                                                                 isAutoSavingRef.current = true;
+                                                                if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
                                                                 
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
@@ -4252,11 +4258,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 
                                                                 // Clear the flag after a longer delay to allow API response to propagate
                                                                 setTimeout(() => {
-                                                                    isAutoSavingRef.current = false;
-                                                                }, 3000);
+                                                                isAutoSavingRef.current = false;
+                                                                    if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
+                                                        }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
                                                                 isAutoSavingRef.current = false;
+                                                                if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save failed
                                                                 alert('Failed to save stage change. Please try again.');
                                                             }
                                                         }, 100); // Small delay to ensure state update is processed
