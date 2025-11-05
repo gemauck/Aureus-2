@@ -528,20 +528,20 @@ const MainLayout = () => {
         <div className={`flex h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Sidebar - Always visible at ALL screen sizes (including 300px, 772px, etc.) - responsive width */}
             <div className={`
-                ${isMobile && !sidebarOpen ? 'hidden' : sidebarOpen ? 'w-64 lg:w-48' : 'w-16 lg:w-16'} 
+                ${sidebarOpen ? 'w-64 lg:w-48' : 'w-16 lg:w-16'} 
                 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                 border-r transition-all duration-300 flex flex-col
                 relative z-40
                 flex-shrink-0
-                ${isMobile && !sidebarOpen ? '' : 'min-w-[64px]'}
+                min-w-[64px]
             `}
             style={{ 
-                display: isMobile && !sidebarOpen ? 'none' : 'flex', 
-                position: isMobile && sidebarOpen ? 'fixed' : 'relative', 
+                display: (isMobile && !sidebarOpen) ? 'none' : 'flex', 
+                position: (isMobile && sidebarOpen) ? 'fixed' : 'relative', 
                 height: '100vh', 
                 left: 0, 
                 top: 0,
-                zIndex: isMobile && sidebarOpen ? 40 : 'auto',
+                zIndex: (isMobile && sidebarOpen) ? 40 : 'auto',
                 ...(isMobile && sidebarOpen ? { 
                     maxWidth: '280px',
                     width: '280px'
