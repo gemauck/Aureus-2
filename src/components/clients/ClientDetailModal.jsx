@@ -101,10 +101,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         if (notesCursorPositionRef.current !== null && notesTextareaRef.current) {
             const pos = notesCursorPositionRef.current;
             const textarea = notesTextareaRef.current;
-            // Only restore if textarea is focused and position is valid
-            if (document.activeElement === textarea && textarea.value.length >= pos) {
+            // Always restore cursor position if valid
+            if (textarea.value.length >= pos) {
                 textarea.setSelectionRange(pos, pos);
-                // Ensure focus is maintained
                 textarea.focus();
             }
         }
@@ -2202,10 +2201,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     }).catch((error) => {
                                                         console.error('❌ Error saving notes:', error);
                                                     }).finally(() => {
-                                                        // Clear auto-saving flag after save completes
-                                                        isAutoSavingRef.current = false;
+                                                        // Clear auto-saving flag after save completes AND a delay to prevent useEffect from running
+                                                        setTimeout(() => {
+                                                            isAutoSavingRef.current = false;
+                                                            console.log('🔓 Auto-saving flag cleared');
+                                                        }, 500); // Additional 500ms delay to ensure useEffect doesn't run
                                                     });
-                                                }, 100);
+                                                }, 200); // Increased delay to ensure state is updated
                                             }
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 

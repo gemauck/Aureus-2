@@ -1113,14 +1113,18 @@ const Clients = React.memo(() => {
             }
             
             // Use DatabaseAPI.getLeads if available (supports forceRefresh), otherwise fall back to api.getLeads
-            const apiMethod = window.DatabaseAPI?.getLeads || window.api?.getLeads;
-            if (!apiMethod) {
+            // CRITICAL: Bind the method to preserve 'this' context, or call it directly on the object
+            let apiResponse;
+            if (window.DatabaseAPI?.getLeads) {
+                console.log('📡 Calling DatabaseAPI.getLeads API...');
+                apiResponse = await window.DatabaseAPI.getLeads(forceRefresh);
+            } else if (window.api?.getLeads) {
+                console.log('📡 Calling api.getLeads API...');
+                apiResponse = await window.api.getLeads();
+            } else {
                 console.warn('⚠️ No API method available for fetching leads');
                 return;
             }
-            
-            console.log('📡 Calling getLeads API...');
-            const apiResponse = await apiMethod(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             console.log(`📥 Received ${rawLeads.length} leads from API`);
             
@@ -1393,27 +1397,24 @@ const Clients = React.memo(() => {
             if (!token) {
                 // No token, save to localStorage only
                 console.log('No token, saving to localStorage only');
-                if (selectedClient) {
-                    const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
-                    setClients(updated);
-                    safeStorage.setClients(updated);
-                    setSelectedClient(comprehensiveClient); // Update selectedClient to show new data immediately
-                    console.log('✅ Updated client in localStorage, new count:', updated.length);
-                    // Return comprehensiveClient for localStorage-only saves
+                    if (selectedClient) {
+                        const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
+                        setClients(updated);
+                        safeStorage.setClients(updated);
+                        // CRITICAL: Always use comprehensiveClient (which has latest notes) instead of API response
+                        // This ensures notes typed by user are never lost
+                        setSelectedClient(comprehensiveClient); // Update selectedClient with comprehensiveClient (has latest notes)
+                        console.log('✅ Updated client in localStorage, new count:', updated.length);
+                        console.log('📝 Notes in comprehensiveClient:', comprehensiveClient.notes?.substring(0, 50) || 'none');
+                    } else {
+                        const newClients = [...clients, comprehensiveClient];
+                        setClients(newClients);
+                        safeStorage.setClients(newClients);
+                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        console.log('✅ Added new client to localStorage, new count:', newClients.length);
+                    }
+                    // Return comprehensiveClient (has latest notes) for localStorage-only saves
                     return comprehensiveClient;
-                } else {
-                    const newClients = [...clients, comprehensiveClient];
-                    setClients(newClients);
-                    safeStorage.setClients(newClients);
-                    console.log('✅ Added new client to localStorage, new count:', newClients.length);
-                    
-                    // For new clients, redirect to main clients view to show the newly added client
-                    setViewMode('clients');
-                    setSelectedClient(null);
-                    setCurrentTab('overview');
-                    // Return comprehensiveClient for localStorage-only saves
-                    return comprehensiveClient;
-                }
             } else {
                 // Use API - database is source of truth
                 try {
@@ -1571,7 +1572,13 @@ const Clients = React.memo(() => {
                         setClients(updated);
                         safeStorage.setClients(updated);
                         // Update selectedClient with API response if available (includes notes), otherwise use comprehensiveClient
+                        // CRITICAL: Always merge notes from comprehensiveClient to ensure latest typed notes are preserved
                         const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+                        // Ensure notes from comprehensiveClient are preserved (in case API response has stale/empty notes)
+                        if (savedClient && comprehensiveClient.notes && comprehensiveClient.notes.trim().length > 0) {
+                            savedClient.notes = comprehensiveClient.notes;
+                            console.log('🛡️ Preserved notes from comprehensiveClient in savedClient:', comprehensiveClient.notes.substring(0, 50));
+                        }
                         setSelectedClient(savedClient); // Update selectedClient to show new data
                         console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
                         console.log('📝 Saved client notes:', savedClient.notes?.substring(0, 50) || 'none');
