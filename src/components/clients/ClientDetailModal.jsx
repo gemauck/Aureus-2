@@ -257,7 +257,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 : parsedClient.sites,
                             opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
                                 ? prevFormData.opportunities 
-                                : parsedClient.opportunities
+                                : parsedClient.opportunities,
+                            // CRITICAL: ALWAYS preserve user-editable fields - never overwrite with API values (even if blank)
+                            // Only use client prop notes if local state has no notes at all
+                            notes: (prevFormData.notes && prevFormData.notes.trim().length > 0) 
+                                ? prevFormData.notes 
+                                : (client.notes && client.notes.trim().length > 0) 
+                                    ? client.notes 
+                                    : ''
                         };
                         // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
                         userEditedFieldsRef.current.forEach(fieldName => {
