@@ -683,12 +683,66 @@ const Clients = React.memo(() => {
         setLeadsCount(leads.length);
     }, [leads.length]);
 
+    // AUTOMATIC CACHE CLEARING: Clear all caches on mount to ensure fresh data across users
+    useEffect(() => {
+        console.log('🧹 AUTOMATIC: Clearing all caches on component mount to ensure fresh data...');
+        
+        // Clear ClientCache
+        if (window.ClientCache?.clearCache) {
+            window.ClientCache.clearCache();
+            console.log('   ✅ ClientCache cleared');
+        }
+        
+        // Clear DatabaseAPI cache
+        if (window.DatabaseAPI?.clearCache) {
+            window.DatabaseAPI.clearCache('/leads');
+            window.DatabaseAPI.clearCache('/clients');
+            console.log('   ✅ DatabaseAPI cache cleared');
+        }
+        
+        // Clear localStorage to prevent stale data
+        if (window.storage?.removeLeads) {
+            window.storage.removeLeads();
+            console.log('   ✅ localStorage leads cleared');
+        }
+        if (window.storage?.removeClients) {
+            window.storage.removeClients();
+            console.log('   ✅ localStorage clients cleared');
+        }
+        
+        // Reset API call timestamps to force fresh fetch
+        lastApiCallTimestamp = 0;
+        lastLeadsApiCallTimestamp = 0;
+        
+        console.log('✅ All caches cleared - fresh data will be fetched automatically');
+        
+        // Trigger initial data load after clearing cache
+        setTimeout(() => {
+            if (viewMode === 'leads') {
+                loadLeads(true);
+            } else if (viewMode === 'clients') {
+                loadClients(true);
+            }
+        }, 500);
+    }, []); // Only run once on mount
+
     // Force refresh leads when switching to leads view to ensure fresh data across users
     useEffect(() => {
         if (viewMode === 'leads') {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
-            console.log(`🔄 Switching to leads view (${userEmail}) - refreshing leads to ensure visibility...`);
+            console.log(`🔄 Switching to leads view (${userEmail}) - clearing caches and refreshing...`);
+            
+            // Clear all caches before loading
+            if (window.ClientCache?.clearLeadsCache) {
+                window.ClientCache.clearLeadsCache();
+            }
+            if (window.DatabaseAPI?.clearCache) {
+                window.DatabaseAPI.clearCache('/leads');
+            }
+            if (window.storage?.removeLeads) {
+                window.storage.removeLeads();
+            }
             
             // Immediately refresh and trigger sync
             setTimeout(async () => {
@@ -709,7 +763,18 @@ const Clients = React.memo(() => {
         if (viewMode === 'clients') {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
-            console.log(`🔄 Switching to clients view (${userEmail}) - refreshing clients to ensure visibility...`);
+            console.log(`🔄 Switching to clients view (${userEmail}) - clearing caches and refreshing...`);
+            
+            // Clear all caches before loading
+            if (window.ClientCache?.clearClientsCache) {
+                window.ClientCache.clearClientsCache();
+            }
+            if (window.DatabaseAPI?.clearCache) {
+                window.DatabaseAPI.clearCache('/clients');
+            }
+            if (window.storage?.removeClients) {
+                window.storage.removeClients();
+            }
             
             // Immediately refresh and trigger sync
             setTimeout(async () => {
@@ -1349,6 +1414,8 @@ const Clients = React.memo(() => {
                     console.log('🔧 About to call API with selectedClient ID:', selectedClient?.id);
                     console.log('🔧 comprehensiveClient ID:', comprehensiveClient.id);
                     
+                    let apiResponse = null; // Declare outside try block so we can use it for return value
+                    
                     if (selectedClient) {
                         // For updates, send ALL comprehensive data to API
                         const apiUpdateData = {
@@ -1361,7 +1428,7 @@ const Clients = React.memo(() => {
                             lastContact: comprehensiveClient.lastContact,
                             address: comprehensiveClient.address,
                             website: comprehensiveClient.website,
-                            notes: comprehensiveClient.notes,
+                            notes: comprehensiveClient.notes || '', // Ensure notes is always sent (even if empty string)
                             contacts: comprehensiveClient.contacts,
                             followUps: comprehensiveClient.followUps,
                             projectIds: comprehensiveClient.projectIds,
@@ -1376,10 +1443,12 @@ const Clients = React.memo(() => {
                         
                         console.log('🚀 Calling updateClient API with ID:', selectedClient.id);
                         console.log('📦 Update data payload:', JSON.stringify(apiUpdateData, null, 2));
+                        console.log('📝 Notes being sent:', apiUpdateData.notes?.substring(0, 50) || 'empty');
                         try {
-                            const apiResponse = await window.api.updateClient(selectedClient.id, apiUpdateData);
+                            apiResponse = await window.api.updateClient(selectedClient.id, apiUpdateData);
                             console.log('✅ Client updated via API with ALL data');
                             console.log('📥 API Response:', apiResponse);
+                            console.log('📝 Notes in API response:', apiResponse?.data?.client?.notes?.substring(0, 50) || apiResponse?.client?.notes?.substring(0, 50) || 'none');
                             
                             // Clear all caches to ensure updates appear immediately
                             if (window.ClientCache?.clearCache) {
@@ -1426,16 +1495,16 @@ const Clients = React.memo(() => {
                         };
                         
                         console.log('🚀 Creating client via API:', apiCreateData);
-                        const created = await window.api.createClient(apiCreateData);
-                        console.log('✅ Client created via API:', created);
+                        apiResponse = await window.api.createClient(apiCreateData);
+                        console.log('✅ Client created via API:', apiResponse);
                         
                         // Update comprehensive client with API response
-                        if (created?.data?.client?.id) {
-                            comprehensiveClient.id = created.data.client.id;
+                        if (apiResponse?.data?.client?.id) {
+                            comprehensiveClient.id = apiResponse.data.client.id;
                             console.log('✅ Updated client ID from API:', comprehensiveClient.id);
                         } else {
                             console.error('❌ No client ID in API response!');
-                            console.log('Full API response:', created);
+                            console.log('Full API response:', apiResponse);
                         }
                         
                         // Trigger immediate LiveDataSync to ensure all users see the new client
@@ -1445,10 +1514,24 @@ const Clients = React.memo(() => {
                         // Clear all caches first
                         if (window.ClientCache?.clearCache) {
                             window.ClientCache.clearCache();
+                            console.log('🗑️ Cleared ClientCache after client save');
                         }
                         if (window.DatabaseAPI?.clearCache) {
                             window.DatabaseAPI.clearCache('/clients');
+                            window.DatabaseAPI.clearCache('/leads'); // Also clear leads since they're related
+                            console.log('🗑️ Cleared DatabaseAPI cache after client save');
                         }
+                        
+                        // Clear localStorage to prevent stale data
+                        if (window.storage?.removeClients) {
+                            window.storage.removeClients();
+                            console.log('🗑️ Cleared localStorage clients after client save');
+                        }
+                        if (window.storage?.removeLeads) {
+                            window.storage.removeLeads();
+                            console.log('🗑️ Cleared localStorage leads after client save');
+                        }
+                        
                         if (window.dataManager?.invalidate) {
                             window.dataManager.invalidate('clients');
                         }
@@ -1483,8 +1566,11 @@ const Clients = React.memo(() => {
                         }
                         setClients(updated);
                         safeStorage.setClients(updated);
-                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        // Update selectedClient with API response if available (includes notes), otherwise use comprehensiveClient
+                        const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+                        setSelectedClient(savedClient); // Update selectedClient to show new data
                         console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
+                        console.log('📝 Saved client notes:', savedClient.notes?.substring(0, 50) || 'none');
                     } else {
                         const newClients = [...clients, comprehensiveClient];
                         console.log('Before API add - clients count:', clients.length, 'new count:', newClients.length);
@@ -1532,11 +1618,20 @@ const Clients = React.memo(() => {
                 }
             }
             
-            // Silent save - no alert, just refresh and stay in view
+            // Return the saved client (with notes from API response if available)
+            const savedClient = apiResponse?.data?.client || apiResponse?.client || comprehensiveClient;
+            console.log('📤 Returning saved client from handleSaveClient:', {
+                id: savedClient.id,
+                notesLength: savedClient.notes?.length || 0,
+                notesPreview: savedClient.notes?.substring(0, 50) || 'none'
+            });
+            return savedClient;
             
         } catch (error) {
             console.error('Failed to save client:', error);
             alert('Failed to save client: ' + error.message);
+            // Return comprehensiveClient even on error so modal can preserve local state
+            return comprehensiveClient;
         }
         
         if (!stayInEditMode) {
@@ -1814,13 +1909,24 @@ const Clients = React.memo(() => {
                         // Clear ClientCache
                         if (window.ClientCache?.clearCache) {
                             window.ClientCache.clearCache();
-                            console.log('🗑️ Cleared ClientCache for immediate lead visibility');
+                            console.log('🗑️ Cleared ClientCache after lead save');
                         }
                         
                         // Clear DatabaseAPI cache
                         if (window.DatabaseAPI?.clearCache) {
                             window.DatabaseAPI.clearCache('/leads');
-                            console.log('🗑️ Cleared DatabaseAPI cache for leads');
+                            window.DatabaseAPI.clearCache('/clients'); // Also clear clients since they're related
+                            console.log('🗑️ Cleared DatabaseAPI cache after lead save');
+                        }
+                        
+                        // Clear localStorage to prevent stale data
+                        if (window.storage?.removeLeads) {
+                            window.storage.removeLeads();
+                            console.log('🗑️ Cleared localStorage leads after lead save');
+                        }
+                        if (window.storage?.removeClients) {
+                            window.storage.removeClients();
+                            console.log('🗑️ Cleared localStorage clients after lead save');
                         }
                         
                         // Clear localStorage cache timestamp to force refresh
