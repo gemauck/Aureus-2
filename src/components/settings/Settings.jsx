@@ -35,13 +35,38 @@ const Settings = () => {
         setSaveStatus('Saving...');
         
         try {
-            // Save to database via API
+            // Save to database via API - try multiple methods
+            let saved = false;
+            
             if (window.DatabaseAPI?.updateSettings) {
                 await window.DatabaseAPI.updateSettings(settings);
+                saved = true;
+            } else if (window.api?.updateSettings) {
+                await window.api.updateSettings(settings);
+                saved = true;
+            } else {
+                // Fallback: save to localStorage
+                localStorage.setItem('systemSettings', JSON.stringify(settings));
+                saved = true;
+                console.warn('Settings saved to localStorage (API not available)');
+            }
+            
+            if (saved) {
+                // Store settings in localStorage for quick access
+                localStorage.setItem('systemSettings', JSON.stringify(settings));
+                
+                // Apply settings to global context if available
+                if (window.setSystemSettings) {
+                    window.setSystemSettings(settings);
+                }
+                
+                // Dispatch event so other components can react to settings changes
+                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { 
+                    detail: settings 
+                }));
+                
                 setSaveStatus('Settings saved successfully!');
                 setTimeout(() => setSaveStatus(''), 3000);
-            } else {
-                throw new Error('DatabaseAPI not available');
             }
         } catch (error) {
             console.error('Error saving settings:', error);
@@ -52,9 +77,9 @@ const Settings = () => {
         }
     };
 
-    const handleReset = () => {
+    const handleReset = async () => {
         if (confirm('Are you sure you want to reset all settings to default?')) {
-            setSettings({
+            const defaultSettings = {
                 companyName: 'Abcotronics',
                 timezone: 'Africa/Johannesburg',
                 currency: 'ZAR',
@@ -68,25 +93,298 @@ const Settings = () => {
                 googleCalendar: false,
                 quickbooks: false,
                 slack: false
-            });
+            };
+            
+            setSettings(defaultSettings);
+            
+            // Also save the reset to database
+            try {
+                if (window.DatabaseAPI?.updateSettings) {
+                    await window.DatabaseAPI.updateSettings(defaultSettings);
+                } else if (window.api?.updateSettings) {
+                    await window.api.updateSettings(defaultSettings);
+                }
+                localStorage.setItem('systemSettings', JSON.stringify(defaultSettings));
+                if (window.setSystemSettings) {
+                    window.setSystemSettings(defaultSettings);
+                }
+                
+                // Dispatch event so other components can react to settings changes
+                window.dispatchEvent(new CustomEvent('systemSettingsChanged', { 
+                    detail: defaultSettings 
+                }));
+                
+                setSaveStatus('Settings reset to default!');
+                setTimeout(() => setSaveStatus(''), 3000);
+            } catch (error) {
+                console.error('Error resetting settings:', error);
+            }
         }
     };
 
-    const handleDataExport = () => {
-        // Export all data functionality
-        alert('Data export functionality will be implemented');
+    const handleDataExport = async () => {
+        setIsLoading(true);
+        setSaveStatus('Exporting data...');
+        
+        try {
+            // Collect all data from database
+            const exportData = {
+                exportDate: new Date().toISOString(),
+                version: '1.0',
+                settings: settings,
+                data: {}
+            };
+            
+            // Fetch all data types in parallel
+            const dataPromises = [];
+            
+            // Clients
+            if (window.DatabaseAPI?.getClients || window.api?.getClients) {
+                const getClients = window.DatabaseAPI?.getClients || window.api?.getClients;
+                dataPromises.push(
+                    getClients().then(res => ({
+                        key: 'clients',
+                        data: res?.data?.clients || res?.clients || []
+                    })).catch(err => {
+                        console.warn('Failed to export clients:', err);
+                        return { key: 'clients', data: [] };
+                    })
+                );
+            }
+            
+            // Projects
+            if (window.DatabaseAPI?.getProjects || window.api?.getProjects) {
+                const getProjects = window.DatabaseAPI?.getProjects || window.api?.getProjects;
+                dataPromises.push(
+                    getProjects().then(res => ({
+                        key: 'projects',
+                        data: res?.data?.projects || res?.projects || []
+                    })).catch(err => {
+                        console.warn('Failed to export projects:', err);
+                        return { key: 'projects', data: [] };
+                    })
+                );
+            }
+            
+            // Time Entries
+            if (window.DatabaseAPI?.getTimeEntries || window.api?.getTimeEntries) {
+                const getTimeEntries = window.DatabaseAPI?.getTimeEntries || window.api?.getTimeEntries;
+                dataPromises.push(
+                    getTimeEntries().then(res => ({
+                        key: 'timeEntries',
+                        data: res?.data?.timeEntries || res?.timeEntries || []
+                    })).catch(err => {
+                        console.warn('Failed to export time entries:', err);
+                        return { key: 'timeEntries', data: [] };
+                    })
+                );
+            }
+            
+            // Leads
+            if (window.DatabaseAPI?.getLeads || window.api?.getLeads) {
+                const getLeads = window.DatabaseAPI?.getLeads || window.api?.getLeads;
+                dataPromises.push(
+                    getLeads().then(res => ({
+                        key: 'leads',
+                        data: res?.data?.leads || res?.leads || []
+                    })).catch(err => {
+                        console.warn('Failed to export leads:', err);
+                        return { key: 'leads', data: [] };
+                    })
+                );
+            }
+            
+            // Wait for all data to load
+            const results = await Promise.all(dataPromises);
+            
+            // Organize data
+            results.forEach(({ key, data }) => {
+                exportData.data[key] = data;
+            });
+            
+            // Create and download JSON file
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `abcotronics_export_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            setSaveStatus('Data exported successfully!');
+            setTimeout(() => setSaveStatus(''), 3000);
+        } catch (error) {
+            console.error('Error exporting data:', error);
+            setSaveStatus('Error exporting data: ' + error.message);
+            setTimeout(() => setSaveStatus(''), 5000);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleDataImport = () => {
-        // Import data functionality
-        alert('Data import functionality will be implemented');
+        // Create file input
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.style.display = 'none';
+        
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            setIsLoading(true);
+            setSaveStatus('Importing data...');
+            
+            try {
+                const text = await file.text();
+                const importData = JSON.parse(text);
+                
+                if (!importData.data) {
+                    throw new Error('Invalid export file format');
+                }
+                
+                // Import each data type
+                const importPromises = [];
+                let importedCount = 0;
+                
+                // Import Clients
+                if (importData.data.clients && Array.isArray(importData.data.clients)) {
+                    if (window.DatabaseAPI?.createClient || window.api?.createClient) {
+                        const createClient = window.DatabaseAPI?.createClient || window.api?.createClient;
+                        for (const client of importData.data.clients) {
+                            importPromises.push(
+                                createClient(client).then(() => {
+                                    importedCount++;
+                                }).catch(err => {
+                                    console.warn('Failed to import client:', client.name || client.id, err);
+                                })
+                            );
+                        }
+                    }
+                }
+                
+                // Import Projects
+                if (importData.data.projects && Array.isArray(importData.data.projects)) {
+                    if (window.DatabaseAPI?.createProject || window.api?.createProject) {
+                        const createProject = window.DatabaseAPI?.createProject || window.api?.createProject;
+                        for (const project of importData.data.projects) {
+                            importPromises.push(
+                                createProject(project).then(() => {
+                                    importedCount++;
+                                }).catch(err => {
+                                    console.warn('Failed to import project:', project.name || project.id, err);
+                                })
+                            );
+                        }
+                    }
+                }
+                
+                // Import Time Entries
+                if (importData.data.timeEntries && Array.isArray(importData.data.timeEntries)) {
+                    if (window.DatabaseAPI?.createTimeEntry || window.api?.createTimeEntry) {
+                        const createTimeEntry = window.DatabaseAPI?.createTimeEntry || window.api?.createTimeEntry;
+                        for (const entry of importData.data.timeEntries) {
+                            importPromises.push(
+                                createTimeEntry(entry).then(() => {
+                                    importedCount++;
+                                }).catch(err => {
+                                    console.warn('Failed to import time entry:', err);
+                                })
+                            );
+                        }
+                    }
+                }
+                
+                // Import Leads
+                if (importData.data.leads && Array.isArray(importData.data.leads)) {
+                    if (window.DatabaseAPI?.createLead || window.api?.createLead) {
+                        const createLead = window.DatabaseAPI?.createLead || window.api?.createLead;
+                        for (const lead of importData.data.leads) {
+                            importPromises.push(
+                                createLead(lead).then(() => {
+                                    importedCount++;
+                                }).catch(err => {
+                                    console.warn('Failed to import lead:', err);
+                                })
+                            );
+                        }
+                    }
+                }
+                
+                // Import Settings if present
+                if (importData.settings && confirm('Do you want to import settings as well?')) {
+                    setSettings(importData.settings);
+                    await handleSave();
+                }
+                
+                // Wait for all imports
+                await Promise.all(importPromises);
+                
+                setSaveStatus(`Successfully imported ${importedCount} records!`);
+                setTimeout(() => setSaveStatus(''), 5000);
+                
+                // Reload page to refresh data
+                if (importedCount > 0) {
+                    setTimeout(() => {
+                        if (confirm('Data imported successfully. Reload page to see changes?')) {
+                            window.location.reload();
+                        }
+                    }, 2000);
+                }
+            } catch (error) {
+                console.error('Error importing data:', error);
+                setSaveStatus('Error importing data: ' + error.message);
+                setTimeout(() => setSaveStatus(''), 5000);
+            } finally {
+                setIsLoading(false);
+                document.body.removeChild(input);
+            }
+        };
+        
+        document.body.appendChild(input);
+        input.click();
     };
 
-    const handleClearCache = () => {
-        if (confirm('Are you sure you want to clear all cached data?')) {
-            localStorage.clear();
-            sessionStorage.clear();
-            alert('Cache cleared successfully');
+    const handleClearCache = async () => {
+        if (confirm('Are you sure you want to clear all cached data? This will log you out and require you to log in again.')) {
+            setIsLoading(true);
+            setSaveStatus('Clearing cache...');
+            
+            try {
+                // Clear all localStorage except auth token and settings
+                const token = localStorage.getItem('token');
+                const systemSettings = localStorage.getItem('systemSettings');
+                
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // Restore essential items
+                if (token) {
+                    localStorage.setItem('token', token);
+                }
+                if (systemSettings) {
+                    localStorage.setItem('systemSettings', systemSettings);
+                }
+                
+                setSaveStatus('Cache cleared successfully!');
+                setTimeout(() => {
+                    setSaveStatus('');
+                    // Reload to refresh all data
+                    if (confirm('Cache cleared. Reload page to see changes?')) {
+                        window.location.reload();
+                    }
+                }, 2000);
+            } catch (error) {
+                console.error('Error clearing cache:', error);
+                setSaveStatus('Error clearing cache: ' + error.message);
+                setTimeout(() => setSaveStatus(''), 5000);
+            } finally {
+                setIsLoading(false);
+            }
         }
     };
 
@@ -95,13 +393,67 @@ const Settings = () => {
         const loadSettings = async () => {
             setIsLoadingData(true);
             try {
+                // Try to load from database first
+                let dbSettings = null;
+                
                 if (window.DatabaseAPI?.getSettings) {
-                    const response = await window.DatabaseAPI.getSettings();
-                    const dbSettings = response?.data?.settings;
-                    if (dbSettings) {
-                        setSettings(dbSettings);
+                    try {
+                        const response = await window.DatabaseAPI.getSettings();
+                        dbSettings = response?.data?.settings;
+                    } catch (err) {
+                        console.warn('Failed to load settings from DatabaseAPI:', err);
+                    }
+                } else if (window.api?.getSettings) {
+                    try {
+                        const response = await window.api.getSettings();
+                        dbSettings = response?.data?.settings;
+                    } catch (err) {
+                        console.warn('Failed to load settings from api:', err);
                     }
                 }
+                
+                // If database settings found, use them
+                if (dbSettings) {
+                    setSettings(dbSettings);
+                    localStorage.setItem('systemSettings', JSON.stringify(dbSettings));
+                } else {
+                    // Fallback: try localStorage
+                    const localSettings = localStorage.getItem('systemSettings');
+                    if (localSettings) {
+                        try {
+                            const parsed = JSON.parse(localSettings);
+                            setSettings(parsed);
+                        } catch (err) {
+                            console.warn('Failed to parse localStorage settings:', err);
+                        }
+                    }
+                }
+                
+                // Apply settings to global context if available
+                const finalSettings = dbSettings || (localStorage.getItem('systemSettings') ? JSON.parse(localStorage.getItem('systemSettings')) : {});
+                if (Object.keys(finalSettings).length > 0 && window.setSystemSettings) {
+                    window.setSystemSettings(finalSettings);
+                }
+                
+                // Dispatch event so other components can react to settings loaded
+                if (Object.keys(finalSettings).length > 0) {
+                    window.dispatchEvent(new CustomEvent('systemSettingsLoaded', { 
+                        detail: finalSettings 
+                    }));
+                }
+                
+                // Expose global getter function for settings
+                window.getSystemSettings = () => {
+                    const stored = localStorage.getItem('systemSettings');
+                    if (stored) {
+                        try {
+                            return JSON.parse(stored);
+                        } catch (e) {
+                            console.warn('Failed to parse stored settings:', e);
+                        }
+                    }
+                    return finalSettings;
+                };
             } catch (error) {
                 console.error('Error loading settings:', error);
             } finally {
@@ -177,6 +529,24 @@ const Settings = () => {
                     <option value="DD/MM/YYYY">DD/MM/YYYY</option>
                     <option value="MM/DD/YYYY">MM/DD/YYYY</option>
                     <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                </select>
+            </div>
+
+            <div>
+                <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>
+                    Language
+                </label>
+                <select
+                    value={settings.language}
+                    onChange={(e) => setSettings(prev => ({ ...prev, language: e.target.value }))}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
+                        isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'
+                    }`}
+                >
+                    <option value="en">English</option>
+                    <option value="af">Afrikaans</option>
+                    <option value="zu">Zulu</option>
+                    <option value="xh">Xhosa</option>
                 </select>
             </div>
         </div>
