@@ -106,16 +106,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // On first render, formDataRef.current may be null, so we use defaultFormData
         const currentFormData = formDataRef.current || defaultFormData;
         
-        // CRITICAL: If user is editing or has entered data, don't reset even if ID changed
-        // This prevents new records from being reset when they get an ID after saving
-        const isNewLead = !currentFormData.id && lead?.id;
-        const hasUserData = currentFormData.name || currentFormData.notes || currentFormData.industry;
+        // CRITICAL: Check if user has entered ANY data - if so, NEVER overwrite with blank/null values
+        const hasUserEnteredData = Boolean(
+            (currentFormData.name && currentFormData.name.trim()) ||
+            (currentFormData.notes && currentFormData.notes.trim()) ||
+            (currentFormData.industry && currentFormData.industry.trim()) ||
+            (currentFormData.source && currentFormData.source.trim())
+        );
         
-        if (isEditingRef.current || (isNewLead && hasUserData)) {
+        // CRITICAL: If user is editing OR has entered ANY data, NEVER reset formData
+        // This prevents ANY updates (including blank values) from overwriting user input
+        if (isEditingRef.current || hasUserEnteredData) {
             console.log('🚫 useEffect blocked: user is editing or has entered data', {
                 isEditing: isEditingRef.current,
-                isNewLead,
-                hasUserData,
+                hasUserEnteredData,
+                hasName: !!(currentFormData.name && currentFormData.name.trim()),
+                hasNotes: !!(currentFormData.notes && currentFormData.notes.trim()),
+                hasIndustry: !!(currentFormData.industry && currentFormData.industry.trim()),
                 currentName: currentFormData.name
             });
             return;
