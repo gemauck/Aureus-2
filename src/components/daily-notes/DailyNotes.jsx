@@ -469,11 +469,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 // Update note content and save
                 updateNoteContent();
                 
-                // Save after recognizing
+                // Save immediately after recognizing (also saves canvas drawing)
                 setTimeout(() => {
-                    console.log('💾 Saving after recognition...');
+                    console.log('💾 Saving after recognition (includes drawing)...');
                     saveNote().catch(err => console.error('Error saving after recognition:', err));
-                }, 500);
+                }, 200); // Faster save after recognition
+            } else {
+                // Even if no text recognized, save the drawing itself
+                setTimeout(() => {
+                    console.log('💾 Saving drawing after recognition attempt...');
+                    saveNote().catch(err => console.error('Error saving drawing:', err));
+                }, 200);
             }
 
             await worker.terminate();
@@ -595,44 +601,68 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 noteContent = '';
             }
             
-            // If handwriting canvas has content, save it as an image in the note
-            if (showHandwriting && canvasRef.current) {
-                const canvas = canvasRef.current;
-                // Check if canvas has any drawing (not empty)
+            // ALWAYS check for handwriting canvas content and save it
+            // Check both when handwriting is enabled AND when disabled (to catch all drawings)
+            const canvas = canvasRef.current;
+            if (canvas) {
                 const ctx = canvas.getContext('2d');
+                // Check if canvas has any drawing (more thorough check)
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const hasDrawing = imageData.data.some((channel, index) => {
                     return index % 4 !== 3 && channel !== 0; // Check non-alpha channels for non-zero values
                 });
                 
                 if (hasDrawing) {
+                    console.log('🎨 Found handwriting/drawing content, saving to note...');
                     // Convert canvas to data URL
                     const canvasDataUrl = canvas.toDataURL('image/png');
-                    // Insert image into note content
+                    // Create image tag
                     const imgTag = `<img src="${canvasDataUrl}" alt="Handwriting" style="max-width: 100%; height: auto; margin: 10px 0;" />`;
                     
-                    // Update note content with image
-                    if (editorRef.current) {
-                        // Insert image at cursor position or append
-                        const selection = window.getSelection();
-                        if (selection.rangeCount > 0) {
-                            const range = selection.getRangeAt(0);
-                            const img = document.createElement('img');
-                            img.src = canvasDataUrl;
-                            img.alt = 'Handwriting';
-                            img.style.maxWidth = '100%';
-                            img.style.height = 'auto';
-                            img.style.margin = '10px 0';
-                            range.insertNode(img);
-                            range.setStartAfter(img);
-                            selection.removeAllRanges();
-                            selection.addRange(range);
-                        }
-                        // Update content after inserting image
-                        noteContent = editorRef.current.innerHTML;
+                    // Check if image already exists in note content (to avoid duplicates)
+                    const existingImgPattern = /<img[^>]*alt="Handwriting"[^>]*>/gi;
+                    if (existingImgPattern.test(noteContent)) {
+                        // Replace existing handwriting image
+                        noteContent = noteContent.replace(existingImgPattern, imgTag);
+                        console.log('🔄 Replaced existing handwriting image');
                     } else {
-                        // Fallback: append image to content
-                        noteContent = noteContent + imgTag;
+                        // Append handwriting image to content
+                        noteContent = noteContent + (noteContent ? '<br/>' : '') + imgTag;
+                        console.log('➕ Added handwriting image to note');
+                    }
+                    
+                    // Update editor content with image
+                    if (editorRef.current) {
+                        // Check if editor already has the image
+                        const editorHasImage = editorRef.current.innerHTML.includes(canvasDataUrl.substring(0, 50));
+                        if (!editorHasImage) {
+                            // Insert image at cursor position or append
+                            const selection = window.getSelection();
+                            if (selection.rangeCount > 0) {
+                                const range = selection.getRangeAt(0);
+                                const img = document.createElement('img');
+                                img.src = canvasDataUrl;
+                                img.alt = 'Handwriting';
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.margin = '10px 0';
+                                range.insertNode(img);
+                                range.setStartAfter(img);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                            } else {
+                                // Append to end
+                                const img = document.createElement('img');
+                                img.src = canvasDataUrl;
+                                img.alt = 'Handwriting';
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.margin = '10px 0';
+                                editorRef.current.appendChild(img);
+                            }
+                            // Update content after inserting image
+                            noteContent = editorRef.current.innerHTML;
+                        }
                     }
                 }
             }
@@ -886,14 +916,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             }
         };
         
-        // Debounced save function
+        // Debounced save function - more instant
         const debouncedSave = () => {
             if (debounceTimer) {
                 clearTimeout(debounceTimer);
             }
             debounceTimer = setTimeout(() => {
                 checkAndSave();
-            }, 500); // Save 500ms after typing stops (faster response)
+            }, 200); // Save 200ms after typing stops (very fast, almost instant)
         };
         
         // Set up MutationObserver to watch for editor changes
@@ -990,11 +1020,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const hasEditorContent = editorContent && editorContent.trim().length > 0;
             
             if (hasDrawing || hasEditorContent) {
-                // Wait a bit then save
+                // Save immediately when handwriting is disabled (if there was drawing)
                 setTimeout(() => {
                     console.log('💾 Saving after handwriting disabled...', { hasDrawing, hasEditorContent, editorLength: editorContent.length });
                     saveNote().catch(err => console.error('Error saving after handwriting:', err));
-                }, 500);
+                }, 200); // Faster save - 200ms after disabling handwriting
             } else {
                 console.log('⚠️ Skipping save after handwriting disabled - no drawing or editor content');
             }
@@ -1030,7 +1060,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 drawingTimeoutRef.current = setTimeout(() => {
                     console.log('💾 Auto-saving drawing...', { hasDrawing, hasEditorContent, editorLength: editorContent.length });
                     saveNote().catch(err => console.error('Error saving drawing:', err));
-                }, 2000);
+                }, 300); // Faster save for drawings - 300ms after drawing stops
             } else {
                 console.log('⚠️ Skipping drawing auto-save - no drawing or editor content');
             }
@@ -1074,6 +1104,88 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [currentNoteHtml, currentDate, showListView, currentNote]);
 
+    // Delete note function
+    const deleteNote = async () => {
+        const dateString = formatDateString(currentDate);
+        const confirmDelete = window.confirm(`Are you sure you want to delete the note for ${formatDateDisplay(dateString)}?`);
+        
+        if (!confirmDelete) {
+            return;
+        }
+        
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('Not authenticated - cannot delete note');
+                return;
+            }
+            
+            console.log('🗑️ Deleting note for date:', dateString);
+            
+            const res = await fetch(`/api/calendar-notes/${dateString}`, {
+                method: 'DELETE',
+                headers: {
+                    Authorization: `Bearer ${token}`
+                },
+                credentials: 'include'
+            });
+            
+            if (res.ok) {
+                console.log('✅ Note deleted successfully');
+                
+                // Update local state
+                setNotes(prev => {
+                    const updated = { ...prev };
+                    delete updated[dateString];
+                    return updated;
+                });
+                
+                // Update localStorage
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                delete savedNotes[dateString];
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                
+                // Clear editor
+                setCurrentNote('');
+                setCurrentNoteHtml('');
+                if (editorRef.current) {
+                    editorRef.current.innerHTML = '';
+                }
+                
+                // Show notification
+                if (window.showNotification) {
+                    window.showNotification('Note deleted successfully', 'success');
+                }
+            } else {
+                const errorText = await res.text();
+                console.error('❌ Failed to delete note:', res.status, errorText);
+                alert('Failed to delete note. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error deleting note:', error);
+            alert('Error deleting note: ' + error.message);
+        }
+    };
+    
+    // Navigate to previous day
+    const goToPreviousDay = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() - 1);
+        const dateString = formatDateString(newDate);
+        openNote(dateString);
+    };
+    
+    // Navigate to next day
+    const goToNextDay = () => {
+        const newDate = new Date(currentDate);
+        newDate.setDate(newDate.getDate() + 1);
+        const dateString = formatDateString(newDate);
+        openNote(dateString);
+    };
+    
     // Open note for editing
     const openNote = async (dateString) => {
         const date = new Date(dateString + 'T00:00:00Z');
@@ -1184,15 +1296,15 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             
-            // Trigger auto-save more aggressively (500ms debounce for faster saves)
+            // Trigger auto-save instantly (200ms debounce for very fast saves)
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
             saveTimeoutRef.current = setTimeout(() => {
                 if (editorRef.current) {
-                    // Check initialization timeout (only skip first 500ms)
+                    // Check initialization timeout (only skip first 300ms)
                     const initTime = window._dailyNotesInitTime || 0;
-                    if (Date.now() - initTime < 500) {
+                    if (Date.now() - initTime < 300) {
                         console.log('⏸️ Input handler auto-save skipped - still initializing');
                         return;
                     }
@@ -1205,14 +1317,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     });
                     saveNote().catch(err => {
                         console.error('❌ Auto-save error from input handler:', err);
-                        // Retry once after 1 second
+                        // Retry once after 500ms
                         setTimeout(() => {
                             console.log('🔄 Retrying auto-save after error...');
                             saveNote().catch(retryErr => console.error('❌ Retry auto-save failed:', retryErr));
-                        }, 1000);
+                        }, 500);
                     });
                 }
-            }, 500); // Reduced to 500ms for faster auto-save
+            }, 200); // Very fast auto-save - 200ms after typing stops
         }
     };
 
@@ -1338,10 +1450,21 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     <button
                         onClick={() => setShowListView(true)}
                         className={`${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                        title="Back to list"
                     >
                         <i className="fas fa-arrow-left"></i>
                     </button>
-                    <div>
+                    
+                    {/* Date Navigation */}
+                    <button
+                        onClick={goToPreviousDay}
+                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
+                        title="Previous day"
+                    >
+                        <i className="fas fa-chevron-left"></i>
+                    </button>
+                    
+                    <div className="text-center">
                         <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                             {formatDateDisplay(formatDateString(currentDate))}
                         </h1>
@@ -1349,6 +1472,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             {formatDateString(currentDate)}
                         </p>
                     </div>
+                    
+                    <button
+                        onClick={goToNextDay}
+                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
+                        title="Next day"
+                    >
+                        <i className="fas fa-chevron-right"></i>
+                    </button>
                 </div>
                 <div className="flex items-center space-x-2">
                     {isSaving && (
@@ -1357,6 +1488,21 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             <span>Auto-saving...</span>
                         </div>
                     )}
+                    <button
+                        onClick={() => {
+                            const dateString = formatDateString(currentDate);
+                            const hasNote = notes[dateString] && notes[dateString].trim().length > 0;
+                            if (hasNote || currentNoteHtml || (editorRef.current && editorRef.current.innerHTML.trim().length > 0)) {
+                                deleteNote();
+                            } else {
+                                alert('No note to delete for this date.');
+                            }
+                        }}
+                        className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} p-2 rounded-lg transition-colors`}
+                        title="Delete note"
+                    >
+                        <i className="fas fa-trash"></i>
+                    </button>
                 </div>
             </div>
 
