@@ -29,8 +29,10 @@ let lastApiCallTimestamp = 0;
 let lastLeadsApiCallTimestamp = 0;
 let lastLiveDataSyncTime = 0;
 let lastLiveDataClientsHash = null;
+let isLeadsLoading = false; // Prevent concurrent loadLeads calls
 const CACHE_DURATION = 60000; // 60 seconds
 const API_CALL_INTERVAL = 10000; // Only call API every 10 seconds max (reduced for faster updates)
+const FORCE_REFRESH_MIN_INTERVAL = 2000; // Minimum 2 seconds between force refresh calls
 const LIVE_SYNC_THROTTLE = 2000; // Skip LiveDataSync updates if data hasn't changed in 2 seconds
 
 function processClientData(rawClients, cacheKey) {
@@ -218,6 +220,17 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
 const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
     const [clients, setClients] = useState([]);
+    const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
+    const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
+    
+    // Keep refs in sync with state
+    useEffect(() => {
+        clientsRef.current = clients;
+    }, [clients]);
+    
+    useEffect(() => {
+        viewModeRef.current = viewMode;
+    }, [viewMode]);
 
     // Utility function to calculate time since first contact
     const getTimeSinceFirstContact = (firstContactDate) => {
@@ -810,38 +823,70 @@ const Clients = React.memo(() => {
                     const processed = message.data.map(mapDbClient).filter(c => c.type === 'client');
                     console.log(`📥 LiveDataSync: Processed ${processed.length} clients after filtering`);
                     
+                    // CRITICAL: Preserve opportunities from current clients state to prevent them from disappearing
+                    // This ensures opportunities loaded from Pipeline tab don't get wiped by LiveDataSync updates
+                    // Use ref to get the latest clients state (not stale closure)
+                    const currentClients = clientsRef.current.length > 0 ? clientsRef.current : (safeStorage.getClients() || []);
+                    const opportunitiesByClientId = {};
+                    currentClients.forEach(client => {
+                        if (client.opportunities && Array.isArray(client.opportunities) && client.opportunities.length > 0) {
+                            opportunitiesByClientId[client.id] = client.opportunities;
+                        }
+                    });
+                    
                     // Load opportunities for clients from LiveDataSync
                     // Use bulk fetch for much better performance when Pipeline view is active
-                    if (viewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
+                    // CRITICAL: Use viewModeRef.current to get the current viewMode (not stale closure value)
+                    const currentViewMode = viewModeRef.current;
+                    if (currentViewMode === 'pipeline' && window.DatabaseAPI?.getOpportunities) {
                         try {
                             const oppResponse = await window.DatabaseAPI.getOpportunities();
                             const allOpportunities = oppResponse?.data?.opportunities || [];
-                            const opportunitiesByClient = {};
+                            const newOpportunitiesByClient = {};
                             allOpportunities.forEach(opp => {
                                 const clientId = opp.clientId || opp.client?.id;
                                 if (clientId) {
-                                    if (!opportunitiesByClient[clientId]) {
-                                        opportunitiesByClient[clientId] = [];
+                                    if (!newOpportunitiesByClient[clientId]) {
+                                        newOpportunitiesByClient[clientId] = [];
                                     }
-                                    opportunitiesByClient[clientId].push(opp);
+                                    newOpportunitiesByClient[clientId].push(opp);
                                 }
                             });
+                            // Merge: use new opportunities if available, otherwise preserve existing ones
+                            // CRITICAL: Always preserve existing opportunities even if API returns empty/fewer
                             const clientsWithOpportunities = processed.map(client => ({
                                 ...client,
-                                opportunities: opportunitiesByClient[client.id] || []
+                                opportunities: newOpportunitiesByClient[client.id]?.length > 0 
+                                    ? newOpportunitiesByClient[client.id] 
+                                    : (opportunitiesByClientId[client.id] || [])
                             }));
                             const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients (bulk)`);
+                            console.log(`✅ LiveDataSync: Loaded ${totalOpps} opportunities for ${clientsWithOpportunities.length} clients (bulk, viewMode: ${currentViewMode})`);
                             setClients(clientsWithOpportunities);
                             safeStorage.setClients(clientsWithOpportunities);
                         } catch (error) {
-                            console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, using clients without opportunities:', error);
-                            setClients(processed);
-                            safeStorage.setClients(processed);
+                            console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, preserving existing opportunities:', error);
+                            // Preserve existing opportunities even when API call fails
+                            const clientsWithPreservedOpps = processed.map(client => ({
+                                ...client,
+                                opportunities: opportunitiesByClientId[client.id] || []
+                            }));
+                            setClients(clientsWithPreservedOpps);
+                            safeStorage.setClients(clientsWithPreservedOpps);
                         }
                     } else {
-                        setClients(processed);
-                        safeStorage.setClients(processed);
+                        // Not in pipeline mode - preserve opportunities from current state
+                        // CRITICAL: Always preserve opportunities to prevent them from disappearing
+                        const clientsWithPreservedOpps = processed.map(client => ({
+                            ...client,
+                            opportunities: opportunitiesByClientId[client.id] || []
+                        }));
+                        const totalPreservedOpps = clientsWithPreservedOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                        if (totalPreservedOpps > 0) {
+                            console.log(`📌 LiveDataSync: Preserved ${totalPreservedOpps} opportunities (viewMode: ${currentViewMode})`);
+                        }
+                        setClients(clientsWithPreservedOpps);
+                        safeStorage.setClients(clientsWithPreservedOpps);
                     }
                     
                     lastLiveDataClientsHash = dataHash;
@@ -909,8 +954,26 @@ const Clients = React.memo(() => {
 
     // Load leads from database only
     const loadLeads = async (forceRefresh = false) => {
+        // Prevent concurrent calls
+        if (isLeadsLoading) {
+            console.log('⏸️ loadLeads already in progress, skipping duplicate call');
+            return;
+        }
+        
         try {
+            isLeadsLoading = true;
             console.log('🔍 loadLeads() called, forceRefresh:', forceRefresh, 'current leads.length:', leads.length);
+            
+            // Even for force refresh, respect minimum interval to prevent rate limiting
+            if (forceRefresh) {
+                const now = Date.now();
+                const timeSinceLastCall = now - lastLeadsApiCallTimestamp;
+                if (timeSinceLastCall < FORCE_REFRESH_MIN_INTERVAL) {
+                    console.log(`⏸️ Force refresh throttled (${(timeSinceLastCall / 1000).toFixed(1)}s since last call, min ${FORCE_REFRESH_MIN_INTERVAL / 1000}s)`);
+                    // Wait for the remaining time
+                    await new Promise(resolve => setTimeout(resolve, FORCE_REFRESH_MIN_INTERVAL - timeSinceLastCall));
+                }
+            }
             
             // Check localStorage first to avoid unnecessary API calls if data is already loaded
             if (!forceRefresh) {
@@ -976,20 +1039,23 @@ const Clients = React.memo(() => {
             
             // Skip if not authenticated or API not ready
             if (!token || !hasApi) {
+                isLeadsLoading = false;
                 return;
-            }
-            
-            // Update last API call timestamp if not force refresh
-            if (!forceRefresh) {
-                lastLeadsApiCallTimestamp = Date.now();
             }
             
             if (forceRefresh) {
                 console.log('🔍 Loading leads from API... (FORCED REFRESH - bypassing all caches)');
             }
             
+            // Use DatabaseAPI.getLeads if available (supports forceRefresh), otherwise fall back to api.getLeads
+            const apiMethod = window.DatabaseAPI?.getLeads || window.api?.getLeads;
+            if (!apiMethod) {
+                console.warn('⚠️ No API method available for fetching leads');
+                return;
+            }
+            
             console.log('📡 Calling getLeads API...');
-            const apiResponse = await window.api.getLeads(forceRefresh);
+            const apiResponse = await apiMethod(forceRefresh);
             const rawLeads = apiResponse?.data?.leads || apiResponse?.leads || [];
             console.log(`📥 Received ${rawLeads.length} leads from API`);
             
@@ -1077,9 +1143,16 @@ const Clients = React.memo(() => {
                 }, {});
                 console.log(`✅ Force refresh complete for ${userEmail}: ${mappedLeads.length} total leads (${Object.entries(statusCounts).map(([status, count]) => `${count} ${status}`).join(', ')})`);
             }
+            
+            // Update timestamp after successful API call
+            lastLeadsApiCallTimestamp = Date.now();
         } catch (error) {
             // Keep existing leads on error, don't clear them
             console.error('❌ Error loading leads:', error);
+            // Still update timestamp to prevent immediate retry spam
+            lastLeadsApiCallTimestamp = Date.now();
+        } finally {
+            isLeadsLoading = false;
         }
     };
 
@@ -1127,15 +1200,32 @@ const Clients = React.memo(() => {
                     }
                 });
                 
-                // Attach opportunities to clients
-                const clientsWithOpportunities = clients.map(client => ({
-                    ...client,
-                    opportunities: opportunitiesByClient[client.id] || client.opportunities || []
-                }));
+                // Attach opportunities to clients (merge with existing)
+                const clientsWithOpportunities = clients.map(client => {
+                    const existingOpps = client.opportunities || [];
+                    const newOpps = opportunitiesByClient[client.id] || [];
+                    
+                    // Merge: combine existing and new opportunities, avoiding duplicates
+                    const oppsById = {};
+                    [...existingOpps, ...newOpps].forEach(opp => {
+                        if (opp.id) {
+                            oppsById[opp.id] = opp;
+                        }
+                    });
+                    const mergedOpps = Object.values(oppsById);
+                    
+                    return {
+                        ...client,
+                        opportunities: mergedOpps
+                    };
+                });
                 
-                console.log(`✅ Pipeline view: Attached opportunities from bulk load`);
+                const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                console.log(`✅ Pipeline view: Attached ${totalOpps} opportunities from bulk load (merged with existing)`);
                 setClients(clientsWithOpportunities);
                 safeStorage.setClients(clientsWithOpportunities);
+                // Update ref immediately so LiveDataSync can see the opportunities
+                clientsRef.current = clientsWithOpportunities;
             } catch (error) {
                 console.error('❌ Pipeline: Failed to load opportunities in bulk:', error);
                 // Keep existing opportunities on error
@@ -1927,32 +2017,48 @@ const Clients = React.memo(() => {
             console.log('Current leads before deletion:', leads.length);
             
             const token = window.storage?.getToken?.();
+            let apiDeleteSuccess = false;
             
             if (token && window.api?.deleteLead) {
                 try {
                     // Delete from database
                     await window.api.deleteLead(leadId);
                     console.log('✅ Lead deleted from database');
+                    apiDeleteSuccess = true;
                 } catch (apiError) {
-                    console.error('❌ API error deleting lead:', apiError);
-                    // Continue with local deletion even if API fails
+                    // Check if it's a 404 (lead already deleted)
+                    const errorMessage = apiError?.message || String(apiError);
+                    const is404 = errorMessage.includes('404') || errorMessage.includes('Not found') || errorMessage.includes('not found');
+                    
+                    if (is404) {
+                        console.log('ℹ️ Lead already deleted (404) - continuing with local cleanup');
+                        apiDeleteSuccess = true; // Treat 404 as success since lead is already gone
+                    } else {
+                        console.error('❌ API error deleting lead:', apiError);
+                        // For other errors, still try to remove locally but warn user
+                        alert('Failed to delete lead from server: ' + errorMessage + '. The lead will be removed from your view.');
+                    }
                 }
             } else {
                 console.log('⚠️ No authentication token or API available, deleting locally only');
+                apiDeleteSuccess = true; // No API = local only delete
             }
             
-            // Update local state
-            const updatedLeads = leads.filter(l => l.id !== leadId);
-            setLeads(updatedLeads);
-            setLeadsCount(updatedLeads.length); // Update count immediately
-            console.log('✅ Lead deleted, new count:', updatedLeads.length);
-            
-            // Force a refresh to ensure API data is loaded (if authenticated)
-            if (token) {
-                setTimeout(() => {
-                    console.log('🔄 Refreshing leads after deletion...');
-                    loadLeads(true); // Force refresh to bypass API throttling
-                }, 100);
+            // Update local state only if deletion was successful or already deleted
+            if (apiDeleteSuccess) {
+                const updatedLeads = leads.filter(l => l.id !== leadId);
+                setLeads(updatedLeads);
+                setLeadsCount(updatedLeads.length); // Update count immediately
+                console.log('✅ Lead deleted, new count:', updatedLeads.length);
+                
+                // Only refresh if we successfully deleted (not if it was already deleted)
+                // Also add a delay to prevent rate limiting
+                if (token && apiDeleteSuccess) {
+                    setTimeout(() => {
+                        console.log('🔄 Refreshing leads after deletion...');
+                        loadLeads(true); // Force refresh to bypass API throttling
+                    }, 500); // Increased delay to prevent rate limiting
+                }
             }
             
         } catch (error) {
@@ -3218,20 +3324,32 @@ const Clients = React.memo(() => {
                                 }
                             });
                             
-                            // Attach opportunities to clients (preserve existing if API doesn't have them)
+                            // Attach opportunities to clients (merge with existing, avoid duplicates)
                             const clientsWithOpps = clients.map(client => {
-                                if (client.opportunities && client.opportunities.length > 0) {
-                                    return client; // Keep existing
-                                }
+                                const existingOpps = client.opportunities || [];
+                                const newOpps = opportunitiesByClient[client.id] || [];
+                                
+                                // Merge: combine existing and new opportunities, avoiding duplicates by ID
+                                const oppsById = {};
+                                [...existingOpps, ...newOpps].forEach(opp => {
+                                    if (opp.id) {
+                                        oppsById[opp.id] = opp;
+                                    }
+                                });
+                                const mergedOpps = Object.values(oppsById);
+                                
                                 return {
                                     ...client,
-                                    opportunities: opportunitiesByClient[client.id] || []
+                                    opportunities: mergedOpps
                                 };
                             });
                             
-                            console.log(`✅ Pipeline tab: Attached opportunities from bulk load`);
+                            const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                            console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from bulk load (merged with existing)`);
                             setClients(clientsWithOpps);
                             safeStorage.setClients(clientsWithOpps);
+                            // Update ref immediately so LiveDataSync can see the opportunities
+                            clientsRef.current = clientsWithOpps;
                         } catch (error) {
                             console.error('❌ Error loading opportunities:', error);
                         }

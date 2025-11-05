@@ -22,20 +22,33 @@ const DatabaseAPI = {
         
         // Normalize endpoint - remove query params for cache key (but keep them for actual request)
         const cacheKey = endpoint.split('?')[0];
-        const forceRefresh = options.forceRefresh === true || endpoint.includes('?_t=');
+        
+        // forceRefresh from options takes precedence over timestamp in URL
+        const forceRefresh = options.forceRefresh === true;
         
         const log = window.debug?.log || (() => {});
         
-        // Handle force refresh FIRST - clear cache and skip check
+        // Handle force refresh FIRST - clear cache and skip check completely
         if (forceRefresh) {
             log(`🔄 Force refresh: clearing cache and bypassing for ${cacheKey}`);
             this.cache.delete(cacheKey);
+            // Also clear related caches
+            if (cacheKey === '/leads' || cacheKey === '/clients') {
+                this.cache.delete('/leads');
+                this.cache.delete('/clients');
+                log(`🔄 Also cleared related cache: ${cacheKey === '/leads' ? '/clients' : '/leads'}`);
+            }
+            // Don't check cache at all - go straight to API
         } else if (isGetRequest && this.cache.has(cacheKey)) {
             // Only check cache if NOT force refresh
             const cached = this.cache.get(cacheKey);
             if (Date.now() - cached.timestamp < this.CACHE_DURATION) {
                 log(`⚡ Using cached ${cacheKey} (${Math.round((Date.now() - cached.timestamp) / 1000)}s old)`);
                 return cached.data;
+            } else {
+                // Cache expired, remove it
+                log(`⏰ Cache expired for ${cacheKey}, removing`);
+                this.cache.delete(cacheKey);
             }
         }
         
@@ -188,8 +201,9 @@ const DatabaseAPI = {
     async getClients() {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching clients from database...');
-        // Add cache-busting timestamp to ensure fresh data
-        return this.makeRequest('/clients?_t=' + Date.now(), { forceRefresh: true });
+        // Always use cache-busting timestamp but allow cache for performance
+        // Use forceRefresh: false to allow cache if it's fresh
+        return this.makeRequest('/clients?_t=' + Date.now(), { forceRefresh: false });
     },
 
     async getClient(id) {
@@ -203,8 +217,10 @@ const DatabaseAPI = {
             method: 'POST',
             body: JSON.stringify(clientData)
         });
-        // Clear clients cache after creation to ensure fresh data on next fetch
+        // CRITICAL: Clear ALL caches immediately after creation
         this.clearCache('/clients');
+        this.clearCache('/leads'); // Clients and leads are related
+        console.log('🗑️ Cleared ALL caches after client creation');
         return result;
     },
 
@@ -213,10 +229,10 @@ const DatabaseAPI = {
             method: 'PATCH',
             body: JSON.stringify(clientData)
         });
-        // Clear clients cache after update to ensure fresh data on next fetch
+        // CRITICAL: Clear ALL caches immediately after update
         this.clearCache('/clients');
-        const log = window.debug?.log || (() => {});
-        log('✅ Client cache cleared after update');
+        this.clearCache('/leads'); // Clients and leads are related
+        console.log('🗑️ Cleared ALL caches after client update');
         return result;
     },
 
@@ -233,14 +249,16 @@ const DatabaseAPI = {
     async getLeads(forceRefresh = false) {
         const log = window.debug?.log || (() => {});
         log('📡 Fetching leads from database...', forceRefresh ? '(FORCE REFRESH)' : '');
+        
+        // Always clear cache first when force refresh is requested
         if (forceRefresh) {
-            // Clear the cache before making the request
             this.clearCache('/leads');
-            log('🗑️ Lead cache cleared before force refresh');
             // Add timestamp to bypass any other caches
             return this.makeRequest(`/leads?_t=${Date.now()}`, { forceRefresh: true });
         }
-        return this.makeRequest('/leads', { forceRefresh });
+        
+        // For regular requests, still use cache-busting but allow cache
+        return this.makeRequest(`/leads?_t=${Date.now()}`, { forceRefresh: false });
     },
 
     async getLead(id) {
@@ -254,8 +272,10 @@ const DatabaseAPI = {
             method: 'POST',
             body: JSON.stringify(leadData)
         });
-        // Clear leads cache after creation to ensure fresh data on next fetch
+        // CRITICAL: Clear ALL caches immediately after creation
         this.clearCache('/leads');
+        this.clearCache('/clients'); // Leads are in clients table too
+        console.log('🗑️ Cleared ALL caches after lead creation');
         return result;
     },
 

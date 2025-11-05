@@ -2,13 +2,14 @@
 class LiveDataSync {
     constructor() {
         this.subscribers = new Map();
-        this.refreshInterval = 5000; // 5 seconds - very frequent sync for real-time updates
+        this.refreshInterval = 15000; // 15 seconds - reduced frequency to prevent rate limiting
         this.isRunning = false;
         this.lastSync = null;
         this.syncInProgress = false;
         this.connectionStatus = 'disconnected';
         this.errorCount = 0;
         this.maxErrors = 3;
+        this.rateLimitBackoff = 0; // Backoff delay in milliseconds when rate limited
         
         // Cache for each data type
         this.dataCache = new Map();
@@ -93,10 +94,25 @@ class LiveDataSync {
         // Additional check to prevent rapid sync calls (skip if force sync)
         if (!this._forceSyncInProgress) {
             const now = Date.now();
-            if (this.lastSync && (now - this.lastSync.getTime()) < 2000) { // 2 seconds minimum to prevent excessive calls
+            const minInterval = 3000 + this.rateLimitBackoff; // 3 seconds minimum + backoff
+            if (this.lastSync && (now - this.lastSync.getTime()) < minInterval) {
                 log(`⏳ Sync too recent (${Math.round((now - this.lastSync.getTime()) / 1000)}s ago), skipping...`);
                 return;
             }
+        }
+        
+        // Check if we're in rate limit backoff period
+        if (this.rateLimitBackoff > 0) {
+            const now = Date.now();
+            const backoffEnd = this._rateLimitBackoffEnd || 0;
+            if (now < backoffEnd) {
+                const remainingSeconds = Math.ceil((backoffEnd - now) / 1000);
+                log(`⏳ Rate limit backoff active, waiting ${remainingSeconds}s more...`);
+                return;
+            }
+            // Backoff period ended, reset
+            this.rateLimitBackoff = 0;
+            this._rateLimitBackoffEnd = null;
         }
         
         this.syncInProgress = true;
@@ -119,23 +135,55 @@ class LiveDataSync {
 
             log('🔄 Syncing live data...');
             
-            // Sync core data types - ensure promises never reject by catching all errors
-            // syncData handles errors internally, but add extra safety layer
+            // Sync core data types - stagger calls to prevent rate limiting
             // Check if this is a forced sync (bypassCache parameter)
             const bypassCache = this._forceSyncInProgress || false;
-            const syncPromises = [
-                this.syncData('clients', () => window.DatabaseAPI.getClients(), bypassCache).catch(() => ({ dataType: 'clients', success: false })),
-                this.syncData('leads', () => window.DatabaseAPI.getLeads(), bypassCache).catch(() => ({ dataType: 'leads', success: false })),
-                this.syncData('projects', () => window.DatabaseAPI.getProjects(), bypassCache).catch(() => ({ dataType: 'projects', success: false })),
-                this.syncData('invoices', () => window.DatabaseAPI.getInvoices(), bypassCache).catch(() => ({ dataType: 'invoices', success: false })),
-                this.syncData('timeEntries', () => window.DatabaseAPI.getTimeEntries(), bypassCache).catch(() => ({ dataType: 'timeEntries', success: false }))
+            
+            // Stagger API calls to prevent hitting rate limits
+            // Start with most important data types first
+            const syncPromises = [];
+            const syncCalls = [
+                { type: 'clients', fn: () => window.DatabaseAPI.getClients() },
+                { type: 'leads', fn: () => window.DatabaseAPI.getLeads() },
+                { type: 'projects', fn: () => window.DatabaseAPI.getProjects() },
+                { type: 'invoices', fn: () => window.DatabaseAPI.getInvoices() },
+                { type: 'timeEntries', fn: () => window.DatabaseAPI.getTimeEntries() }
             ];
+            
+            // Execute calls with delays between them
+            for (let i = 0; i < syncCalls.length; i++) {
+                const call = syncCalls[i];
+                const delay = i * 200; // 200ms delay between each call
+                const promise = new Promise(resolve => {
+                    setTimeout(async () => {
+                        try {
+                            const result = await this.syncData(call.type, call.fn, bypassCache);
+                            resolve(result);
+                        } catch (error) {
+                            resolve({ dataType: call.type, success: false });
+                        }
+                    }, delay);
+                });
+                syncPromises.push(promise);
+            }
 
             // Only sync users if admin to avoid unnecessary 401s and extra load
             try {
                 const role = window.storage?.getUser?.()?.role?.toLowerCase?.();
                 if (role === 'admin') {
-                    syncPromises.push(this.syncData('users', () => window.DatabaseAPI.getUsers(), bypassCache).catch(() => ({ dataType: 'users', success: false })));
+                    // Add users sync with delay after other calls
+                    const usersDelay = syncCalls.length * 200; // After all other calls
+                    const usersPromise = new Promise(resolve => {
+                        setTimeout(async () => {
+                            try {
+                                const result = await this.syncData('users', () => window.DatabaseAPI.getUsers(), bypassCache);
+                                resolve(result);
+                            } catch (error) {
+                                resolve({ dataType: 'users', success: false });
+                            }
+                        }, usersDelay);
+                    });
+                    syncPromises.push(usersPromise);
                 }
             } catch (_) {
                 // Ignore role check errors
@@ -153,9 +201,30 @@ class LiveDataSync {
                 return false;
             });
             
+            // Check for rate limiting errors
+            const rateLimitErrors = results.filter(result => {
+                if (result.status === 'fulfilled' && result.value && result.value.error) {
+                    const errorMsg = result.value.error.toLowerCase();
+                    return errorMsg.includes('too many requests') || errorMsg.includes('429') || errorMsg.includes('rate limit');
+                }
+                return false;
+            });
+            
             const successful = results.length - failures.length;
             
-            if (failures.length > 0) {
+            // If we hit rate limits, increase backoff exponentially
+            if (rateLimitErrors.length > 0) {
+                this.rateLimitBackoff = Math.min(this.rateLimitBackoff * 2 || 10000, 60000); // Max 60 seconds
+                this._rateLimitBackoffEnd = Date.now() + this.rateLimitBackoff;
+                log(`🚫 Rate limit detected, backing off for ${Math.round(this.rateLimitBackoff / 1000)}s`);
+                // Increase refresh interval temporarily
+                const originalInterval = this.refreshInterval;
+                this.refreshInterval = Math.min(originalInterval * 2, 60000); // Max 60 seconds
+                // Reset interval after backoff period
+                setTimeout(() => {
+                    this.refreshInterval = originalInterval;
+                }, this.rateLimitBackoff);
+            } else if (failures.length > 0) {
                 if (successful > 0) {
                     log(`⚠️ ${failures.length} sync operations failed, ${successful} succeeded`);
                 } else {
@@ -164,6 +233,11 @@ class LiveDataSync {
                 this.errorCount++;
             } else {
                 this.errorCount = 0; // Reset error count on success
+                // Reset backoff on success
+                if (this.rateLimitBackoff > 0) {
+                    this.rateLimitBackoff = 0;
+                    this._rateLimitBackoffEnd = null;
+                }
                 log(`✅ All ${successful} sync operations succeeded`);
             }
 
@@ -222,7 +296,7 @@ class LiveDataSync {
             // Check if we recently synced this data type (unless bypassing cache)
             if (!bypassCache) {
                 const cacheEntry = this.dataCache.get(dataType);
-                const CACHE_DURATION = 5000; // 5 seconds per data type - shorter cache for faster updates
+                const CACHE_DURATION = 15000; // 15 seconds per data type - longer cache to reduce API calls
                 
                 if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_DURATION) {
                     const getLog = () => window.debug?.log || (() => {});
@@ -300,7 +374,15 @@ class LiveDataSync {
                                  errorMessage.includes('ECONNREFUSED') ||
                                  errorMessage.includes('ETIMEDOUT');
             
-            if (isNetworkError) {
+            // Check if it's a rate limit error
+            const isRateLimit = errorMessage.includes('Too many requests') || 
+                              errorMessage.includes('429') || 
+                              errorMessage.includes('rate limit') ||
+                              errorMessage.toLowerCase().includes('too many requests');
+            
+            if (isRateLimit) {
+                log(`🚫 Rate limit error syncing ${dataType} - API is throttling requests`);
+            } else if (isNetworkError) {
                 log(`⚠️ Network/database error syncing ${dataType} - API may be unavailable`);
             } else {
                 // Only log non-network errors to console (network errors are expected)
@@ -312,7 +394,8 @@ class LiveDataSync {
                 dataType, 
                 success: false, 
                 error: errorMessage,
-                cached: false
+                cached: false,
+                isRateLimit
             };
         }
     }

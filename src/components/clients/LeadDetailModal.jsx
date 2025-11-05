@@ -3640,6 +3640,12 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <textarea
                                         value={newComment}
                                         onChange={(e) => setNewComment(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            // Prevent form submission or focus loss when pressing spacebar
+                                            if (e.key === ' ') {
+                                                e.stopPropagation();
+                                            }
+                                        }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-2"
                                         rows="3"
                                         placeholder="Add a comment or note..."
