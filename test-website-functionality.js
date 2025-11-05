@@ -152,13 +152,17 @@ async function testLogin() {
         password: 'password123'
     })
     
-    const loginSuccess = loginResult.ok && loginResult.data?.accessToken
+    // Handle nested response structure: { data: { accessToken, user, ... } }
+    const accessToken = loginResult.data?.data?.accessToken || loginResult.data?.accessToken
+    const user = loginResult.data?.data?.user || loginResult.data?.user
+    const loginSuccess = loginResult.ok && accessToken
+    
     logTest('Login API', loginSuccess, loginResult.error || 'Login successful')
     
     if (loginSuccess) {
-        logTest('Access Token Received', !!loginResult.data.accessToken, 'Token generated')
-        logTest('User Data Returned', !!loginResult.data.user, 'User object returned')
-        return loginResult.data.accessToken
+        logTest('Access Token Received', !!accessToken, 'Token generated')
+        logTest('User Data Returned', !!user, 'User object returned')
+        return accessToken
     } else {
         // Try alternative login endpoint
         console.log('  Trying alternative login endpoint...')
@@ -166,10 +170,11 @@ async function testLogin() {
             email: 'admin@example.com',
             password: 'password123'
         })
-        const altSuccess = altLoginResult.ok && altLoginResult.data?.accessToken
+        const altAccessToken = altLoginResult.data?.data?.accessToken || altLoginResult.data?.accessToken
+        const altSuccess = altLoginResult.ok && altAccessToken
         if (altSuccess) {
             logTest('Login API (alt endpoint)', true, 'Login successful via /api/login')
-            return altLoginResult.data.accessToken
+            return altAccessToken
         }
     }
     
