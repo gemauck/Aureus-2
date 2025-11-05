@@ -10,6 +10,8 @@ class LiveDataSync {
         this.errorCount = 0;
         this.maxErrors = 3;
         this.rateLimitBackoff = 0; // Backoff delay in milliseconds when rate limited
+        this.isPaused = false; // Pause state to prevent syncing when modals are open
+        this.pauseCount = 0; // Track number of pause requests (for nested pauses)
         
         // Cache for each data type
         this.dataCache = new Map();
@@ -21,6 +23,8 @@ class LiveDataSync {
         this.subscribe = this.subscribe.bind(this);
         this.unsubscribe = this.unsubscribe.bind(this);
         this.notifySubscribers = this.notifySubscribers.bind(this);
+        this.pause = this.pause.bind(this);
+        this.resume = this.resume.bind(this);
     }
 
     // Start the live sync service
@@ -80,11 +84,52 @@ class LiveDataSync {
         this.notifySubscribers({ type: 'connection', status: 'disconnected' });
     }
 
+    // Pause syncing (e.g., when modal is open)
+    pause() {
+        this.pauseCount++;
+        this.isPaused = true;
+        const getLog = () => window.debug?.log || (() => {});
+        const log = getLog();
+        log(`⏸️ Pausing live data sync (pause count: ${this.pauseCount})`);
+        this.notifySubscribers({ type: 'connection', status: 'paused' });
+    }
+
+    // Resume syncing (e.g., when modal is closed)
+    resume() {
+        if (this.pauseCount > 0) {
+            this.pauseCount--;
+        }
+        if (this.pauseCount === 0) {
+            this.isPaused = false;
+            const getLog = () => window.debug?.log || (() => {});
+            const log = getLog();
+            log('▶️ Resuming live data sync');
+            this.notifySubscribers({ 
+                type: 'connection', 
+                status: this.isRunning ? 'connected' : 'disconnected' 
+            });
+            // Trigger immediate sync when resuming if running
+            if (this.isRunning) {
+                this.sync();
+            }
+        } else {
+            const getLog = () => window.debug?.log || (() => {});
+            const log = getLog();
+            log(`⏸️ Live data sync still paused (pause count: ${this.pauseCount})`);
+        }
+    }
+
     // Perform data synchronization
     async sync() {
         // Define log function at the top and ensure it's always available
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
+        
+        // Check if paused - skip sync if paused
+        if (this.isPaused) {
+            log('⏸️ Sync paused, skipping...');
+            return;
+        }
         
         if (this.syncInProgress) {
             log('⏳ Sync already in progress, skipping...');
@@ -448,7 +493,9 @@ class LiveDataSync {
             lastSync: this.lastSync,
             errorCount: this.errorCount,
             subscriberCount: this.subscribers.size,
-            syncInProgress: this.syncInProgress
+            syncInProgress: this.syncInProgress,
+            isPaused: this.isPaused,
+            pauseCount: this.pauseCount
         };
     }
 

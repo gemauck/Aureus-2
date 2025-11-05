@@ -279,6 +279,17 @@ const Clients = React.memo(() => {
     const isAutoSavingRef = useRef(false); // Track auto-save state to prevent overwrites
     const editingTimeoutRef = useRef(null);
     
+    // Pause/resume LiveDataSync for modals
+    const handlePauseSync = useCallback((shouldPause) => {
+        if (window.LiveDataSync) {
+            if (shouldPause) {
+                window.LiveDataSync.pause();
+            } else {
+                window.LiveDataSync.resume();
+            }
+        }
+    }, []);
+    
     // Removed expensive state tracking logging
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
@@ -3426,6 +3437,7 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
+                        onPauseSync={handlePauseSync}
                         onEditingChange={(editing, autoSaving) => {
                             console.log('📝 ClientDetailModal state changed:', { editing, autoSaving });
                             isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
@@ -3525,6 +3537,7 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
+                        onPauseSync={handlePauseSync}
                         onEditingChange={(editing, autoSaving) => {
                             console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
                             isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)

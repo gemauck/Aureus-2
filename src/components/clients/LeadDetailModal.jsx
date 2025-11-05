@@ -2,7 +2,7 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange, onEditingChange }) => {
+const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange, onEditingChange, onPauseSync }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     
     // CRITICAL: Initialize formData FIRST with a safe default, before any other hooks or refs
@@ -113,6 +113,23 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             }
         };
     }, []);
+    
+    // Pause LiveDataSync when modal is open, resume when closed
+    useEffect(() => {
+        if (!onPauseSync) return;
+        
+        // Pause sync when modal opens (lead exists)
+        if (lead) {
+            onPauseSync(true);
+            console.log('⏸️ LeadDetailModal opened - pausing LiveDataSync');
+            
+            // Resume sync when modal closes (lead becomes null or component unmounts)
+            return () => {
+                onPauseSync(false);
+                console.log('▶️ LeadDetailModal closed - resuming LiveDataSync');
+            };
+        }
+    }, [lead, onPauseSync]);
     
     // NOTE: No useEffect to watch ref values - refs don't trigger effects!
     // onEditingChange is called directly in onChange/onFocus/onBlur handlers instead

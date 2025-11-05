@@ -6,7 +6,7 @@
 const { useState, useEffect, useRef } = React;
 const GoogleCalendarSync = window.GoogleCalendarSync;
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const [formData, setFormData] = useState(() => {
@@ -131,6 +131,23 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             }
         };
     }, []);
+    
+    // Pause LiveDataSync when modal is open, resume when closed
+    useEffect(() => {
+        if (!onPauseSync) return;
+        
+        // Pause sync when modal opens (client exists)
+        if (client) {
+            onPauseSync(true);
+            console.log('⏸️ ClientDetailModal opened - pausing LiveDataSync');
+            
+            // Resume sync when modal closes (client becomes null or component unmounts)
+            return () => {
+                onPauseSync(false);
+                console.log('▶️ ClientDetailModal closed - resuming LiveDataSync');
+            };
+        }
+    }, [client, onPauseSync]);
     
     // Update tab when initialTab prop changes
     useEffect(() => {
