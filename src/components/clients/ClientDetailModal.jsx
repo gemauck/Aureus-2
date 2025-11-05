@@ -203,11 +203,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [client]);
     
+    // Track previous client ID to detect when a new client gets an ID after save
+    const previousClientIdRef = useRef(client?.id || null);
+    
     // Reset typing flag when switching to different client
+    // BUT: Don't reset if we're saving a new client (null -> ID) and user is typing
     useEffect(() => {
-        if (client?.id && client.id !== formDataRef.current?.id) {
-            userHasStartedTypingRef.current = false;
+        const currentClientId = client?.id || null;
+        const previousClientId = previousClientIdRef.current;
+        const currentFormDataId = formDataRef.current?.id || null;
+        
+        // If switching to a completely different client (different ID), reset typing flag
+        if (currentClientId && currentClientId !== currentFormDataId && currentClientId !== previousClientId) {
+            // Only reset if it's truly a different client (not the same client getting an ID)
+            const isSameClientGettingId = !previousClientId && currentClientId && userHasStartedTypingRef.current;
+            if (!isSameClientGettingId) {
+                console.log('🔄 Resetting typing flag: switching to different client', {
+                    previousId: previousClientId,
+                    currentId: currentClientId,
+                    formDataId: currentFormDataId
+                });
+                userHasStartedTypingRef.current = false;
+            } else {
+                console.log('🛡️ Preserving typing flag: same client getting ID after save');
+            }
         }
+        
+        previousClientIdRef.current = currentClientId;
     }, [client?.id]);
     
     // Handle tab change and notify parent
