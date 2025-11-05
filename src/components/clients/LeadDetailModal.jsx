@@ -131,24 +131,51 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // ONLY initialize formData when switching to a different lead (different ID)
         // Do NOT reinitialize when the same lead is updated
         if (lead && !currentFormData.id) {
-            // First load - initialize formData
-            const parsedLead = {
-                ...lead,
-                // Ensure stage and status are preserved
-                stage: lead.stage || 'Awareness',
-                status: 'active', // Status is hardcoded as 'active'
-                contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-                followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-                projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-                comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-                activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-                thumbnail: lead.thumbnail || ''
-            };
-            setFormData(parsedLead);
+            // First load - CRITICAL: Only initialize if user hasn't entered any data
+            // If user has entered data, preserve it instead of overwriting with API data
+            if (hasUserEnteredData) {
+                console.log('🚫 First load but user has entered data - preserving user input');
+                const parsedLead = {
+                    ...lead,
+                    stage: lead.stage || 'Awareness',
+                    status: 'active',
+                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+                    proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+                    thumbnail: lead.thumbnail || ''
+                };
+                // Merge but preserve user-entered fields
+                setFormData(prevFormData => ({
+                    ...parsedLead,
+                    // CRITICAL: NEVER overwrite user-entered fields with blank/null API values
+                    name: (prevFormData.name && prevFormData.name.trim()) ? prevFormData.name : (parsedLead.name || ''),
+                    notes: (prevFormData.notes && prevFormData.notes.trim()) ? prevFormData.notes : (parsedLead.notes || ''),
+                    industry: (prevFormData.industry && prevFormData.industry.trim()) ? prevFormData.industry : (parsedLead.industry || ''),
+                    source: (prevFormData.source && prevFormData.source.trim()) ? prevFormData.source : (parsedLead.source || '')
+                }));
+            } else {
+                // User hasn't entered data - safe to initialize fresh
+                const parsedLead = {
+                    ...lead,
+                    stage: lead.stage || 'Awareness',
+                    status: 'active',
+                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
+                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
+                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
+                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
+                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
+                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
+                    proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
+                    thumbnail: lead.thumbnail || ''
+                };
+                setFormData(parsedLead);
+            }
         } else if (lead && currentFormData.id && lead.id !== currentFormData.id) {
-            // Switching to a different lead - reinitialize
+            // Switching to a different lead - CRITICAL: Preserve user data if entered
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
@@ -162,12 +189,24 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                 thumbnail: lead.thumbnail || ''
             };
-            setFormData(parsedLead);
+            // Only switch if user hasn't entered data, otherwise preserve their input
+            if (hasUserEnteredData) {
+                console.log('🚫 Switching leads but user has entered data - preserving user input');
+                setFormData(prevFormData => ({
+                    ...parsedLead,
+                    // Preserve user-entered fields
+                    name: (prevFormData.name && prevFormData.name.trim()) ? prevFormData.name : (parsedLead.name || ''),
+                    notes: (prevFormData.notes && prevFormData.notes.trim()) ? prevFormData.notes : (parsedLead.notes || ''),
+                    industry: (prevFormData.industry && prevFormData.industry.trim()) ? prevFormData.industry : (parsedLead.industry || ''),
+                    source: (prevFormData.source && prevFormData.source.trim()) ? prevFormData.source : (parsedLead.source || '')
+                }));
+            } else {
+                setFormData(parsedLead);
+            }
         } else if (lead && currentFormData.id === lead.id) {
-            // Same lead reloaded - Merge only fields that aren't being actively edited
-            // CRITICAL: Skip ALL updates if user is editing to prevent overwriting user input
-            if (isEditingRef.current) {
-                console.log('🚫 Skipping formData update: user is actively editing');
+            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has entered data
+            if (isEditingRef.current || hasUserEnteredData) {
+                console.log('🚫 Skipping formData update: user is editing or has entered data');
                 return;
             }
             
@@ -215,18 +254,17 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             });
             
             // Update ONLY status and stage from lead prop (fields that might change externally)
-            // CRITICAL: Do NOT update name, notes, or other fields that user might be editing
+            // CRITICAL: NEVER update user-editable fields (name, notes, industry, source) 
+            // even if they're blank in the API response - preserve user input
             setFormData(prev => ({
                 ...prev,
                 // Only update fields that can't be edited by user OR are safe to update
                 status: lead.status || prev.status,
                 stage: lead.stage || prev.stage,
                 // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
-                proposals: proposalsToUse,
-                // CRITICAL: Always preserve notes from local state - never overwrite with lead prop
-                // This ensures user's typing is never lost
-                notes: prev.notes || ''
-                // DO NOT update: name, industry, source, etc. - these might be actively edited
+                proposals: proposalsToUse
+                // CRITICAL: ALWAYS preserve user-editable fields - never overwrite with API values (even if blank)
+                // name, notes, industry, source are preserved from prev
             }));
             
             return; // Don't process further updates
@@ -264,6 +302,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     
     // Ref for comment textarea to preserve cursor position
     const commentTextareaRef = useRef(null);
+    
+    // Ref for notes textarea to preserve cursor position
+    const notesTextareaRef = useRef(null);
     
     // Auto-scroll to last comment when notes tab is opened
     // CRITICAL FIX: Cannot use formData in dependency array as it causes TDZ error
@@ -1645,7 +1686,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                }, 1000); // Clear editing flag 1 second after user stops typing
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => ({...prev, name: e.target.value}));
                                             }}
                                             onBlur={() => {
@@ -1671,7 +1712,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                }, 500);
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => ({...prev, industry: e.target.value}));
                                             }}
                                             onBlur={() => {
@@ -1705,7 +1746,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                }, 500);
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => ({...prev, firstContactDate: e.target.value}));
                                             }}
                                             onBlur={() => {
@@ -1739,7 +1780,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                }, 500);
+                                                }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => ({...prev, source: e.target.value}));
                                             }}
                                             onBlur={() => {
@@ -1822,6 +1863,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
+                                        ref={notesTextareaRef}
                                         value={formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
@@ -1832,13 +1874,36 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
-                                            }, 1000); // Clear editing flag 1 second after user stops typing
+                                            }, 5000); // Clear editing flag 5 seconds after user stops typing
                                             setFormData(prev => {
                                                 const updated = {...prev, notes: e.target.value};
                                                 // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
                                             });
+                                        }}
+                                        onKeyDown={(e) => {
+                                            // Handle spacebar specially to prevent cursor jumping
+                                            if (e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const textarea = e.target;
+                                                const start = textarea.selectionStart;
+                                                const end = textarea.selectionEnd;
+                                                const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
+                                                setFormData(prev => {
+                                                    const updated = {...prev, notes: newValue};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                                // Restore cursor position after space
+                                                requestAnimationFrame(() => {
+                                                    if (notesTextareaRef.current) {
+                                                        notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                        notesTextareaRef.current.focus();
+                                                    }
+                                                });
+                                            }
                                         }}
                                         onBlur={(e) => {
                                             isEditingRef.current = false; // Clear editing flag when user leaves field

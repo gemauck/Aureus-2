@@ -89,6 +89,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Ref for comment textarea to preserve cursor position
     const commentTextareaRef = useRef(null);
     
+    // Ref for notes textarea to preserve cursor position
+    const notesTextareaRef = useRef(null);
+    
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
@@ -2039,6 +2042,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">General Notes</label>
                                     <textarea 
+                                        ref={notesTextareaRef}
                                         value={formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
@@ -2058,32 +2062,87 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 return updated;
                                             });
                                         }}
+                                        onKeyDown={(e) => {
+                                            // Handle spacebar specially to prevent cursor jumping
+                                            if (e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                const textarea = e.target;
+                                                const start = textarea.selectionStart;
+                                                const end = textarea.selectionEnd;
+                                                const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
+                                                setFormData(prev => {
+                                                    const updated = {...prev, notes: newValue};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                                // Restore cursor position after space
+                                                requestAnimationFrame(() => {
+                                                    if (notesTextareaRef.current) {
+                                                        notesTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                        notesTextareaRef.current.focus();
+                                                    }
+                                                });
+                                            }
+                                        }}
                                         onBlur={(e) => {
                                             isEditingRef.current = false; // Clear editing flag when user leaves field
                                             // Auto-save notes when user leaves the field
                                             // Use the current textarea value to ensure we have the latest data
                                             if (client) {
+                                                const latestNotes = e.target.value;
+                                                console.log('💾 Notes onBlur triggered:', {
+                                                    notesLength: latestNotes.length,
+                                                    notesPreview: latestNotes.substring(0, 50),
+                                                    clientId: client.id
+                                                });
+                                                
                                                 // Mark form as edited to prevent useEffect from resetting
                                                 hasUserEditedForm.current = true;
                                                 isAutoSavingRef.current = true;
                                                 
                                                 // Get latest formData including the notes value from the textarea
-                                                const latestNotes = e.target.value;
                                                 setFormData(prev => {
                                                     const latest = {...prev, notes: latestNotes};
+                                                    console.log('🔄 Updated formData with notes:', {
+                                                        notesLength: latest.notes.length,
+                                                        notesPreview: latest.notes.substring(0, 50)
+                                                    });
                                                     // Update ref immediately
                                                     formDataRef.current = latest;
                                                     return latest;
                                                 });
                                                 
-                                                // Update ref immediately with notes
-                                                const currentFormData = formDataRef.current || {};
-                                                const latest = {...currentFormData, notes: latestNotes};
+                                                // Update ref immediately with notes - use latest from textarea
+                                                const latest = {...(formDataRef.current || {}), notes: latestNotes};
                                                 formDataRef.current = latest;
+                                                
+                                                console.log('📤 Preparing to save notes:', {
+                                                    notesLength: latest.notes.length,
+                                                    notesPreview: latest.notes.substring(0, 50),
+                                                    allFields: Object.keys(latest)
+                                                });
                                                 
                                                 // Save the latest data after a small delay to ensure state is updated
                                                 setTimeout(() => {
-                                                    onSave(latest, true).finally(() => {
+                                                    onSave(latest, true).then((savedClient) => {
+                                                        console.log('✅ Notes saved successfully:', {
+                                                            savedNotesLength: savedClient?.notes?.length || 0,
+                                                            savedNotesPreview: savedClient?.notes?.substring(0, 50) || 'none'
+                                                        });
+                                                        // Update formData with saved notes to ensure they persist
+                                                        if (savedClient && savedClient.notes !== undefined) {
+                                                            setFormData(prev => {
+                                                                // Only update if saved notes are different (to preserve user's current typing)
+                                                                if (prev.notes !== savedClient.notes && savedClient.notes) {
+                                                                    return {...prev, notes: savedClient.notes};
+                                                                }
+                                                                return prev;
+                                                            });
+                                                        }
+                                                    }).catch((error) => {
+                                                        console.error('❌ Error saving notes:', error);
+                                                    }).finally(() => {
                                                         // Clear auto-saving flag after save completes
                                                         isAutoSavingRef.current = false;
                                                     });
