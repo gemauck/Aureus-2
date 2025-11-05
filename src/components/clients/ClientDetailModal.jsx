@@ -96,17 +96,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     
-    // Restore cursor position after formData.notes changes
-    useEffect(() => {
+    // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
+    React.useLayoutEffect(() => {
         if (notesCursorPositionRef.current !== null && notesTextareaRef.current) {
             const pos = notesCursorPositionRef.current;
-            // Use setTimeout to ensure DOM is updated
-            setTimeout(() => {
-                if (notesTextareaRef.current && notesTextareaRef.current.value.length >= pos) {
-                    notesTextareaRef.current.setSelectionRange(pos, pos);
-                    notesTextareaRef.current.focus();
-                }
-            }, 0);
+            const textarea = notesTextareaRef.current;
+            // Only restore if textarea is focused and position is valid
+            if (document.activeElement === textarea && textarea.value.length >= pos) {
+                textarea.setSelectionRange(pos, pos);
+                // Ensure focus is maintained
+                textarea.focus();
+            }
         }
     }, [formData.notes]);
     
@@ -2142,6 +2142,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             }
                                         }}
                                         onBlur={(e) => {
+                                            // Clear cursor position tracking when user leaves field
+                                            notesCursorPositionRef.current = null;
+                                            
                                             isEditingRef.current = false; // Clear editing flag when user leaves field
                                             // Auto-save notes when user leaves the field
                                             // Use the current textarea value to ensure we have the latest data
