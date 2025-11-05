@@ -64,6 +64,27 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // This helps us run the guard even when the ID hasn't changed but the object reference has
     const lastProcessedLeadRef = useRef(null);
     
+    // CRITICAL: Track input values separately from formData to prevent overwrites
+    // These refs hold the actual DOM values that the user types
+    const nameInputRef = useRef(null);
+    const notesTextareaRef = useRef(null);
+    const industrySelectRef = useRef(null);
+    const sourceSelectRef = useRef(null);
+    
+    // Ref for notes textarea to preserve cursor position
+    const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
+    const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
+    
+    // Track when user has started typing - once they start, NEVER update inputs from prop
+    const userHasStartedTypingRef = useRef(false);
+    
+    // Refs for auto-scrolling comments
+    const commentsContainerRef = useRef(null);
+    const contentScrollableRef = useRef(null);
+    
+    // Ref for comment textarea to preserve cursor position
+    const commentTextareaRef = useRef(null);
+    
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
@@ -194,23 +215,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             onTabChange(tab);
         }
     };
-    
-    // Refs for auto-scrolling comments
-    const commentsContainerRef = useRef(null);
-    const contentScrollableRef = useRef(null);
-    
-    // Ref for comment textarea to preserve cursor position
-    const commentTextareaRef = useRef(null);
-    
-    // CRITICAL: Track input values separately from formData to prevent overwrites
-    // These refs hold the actual DOM values that the user types
-    const nameInputRef = useRef(null);
-    const notesTextareaRef = useRef(null);
-    const industrySelectRef = useRef(null);
-    const sourceSelectRef = useRef(null);
-    
-    // Track when user has started typing - once they start, NEVER update inputs from prop
-    const userHasStartedTypingRef = useRef(false);
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
