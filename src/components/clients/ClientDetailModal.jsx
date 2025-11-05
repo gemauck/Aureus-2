@@ -189,13 +189,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
+        // CRITICAL: If same client ID (and not first time), NEVER sync - user might be typing
+        // Only sync when switching to a completely different client (different ID)
+        const isDifferentClient = currentClientId !== previousClientId && currentClientId !== null && previousClientId !== null;
+        const isFirstTimeOpening = client && previousClientId === null && lastProcessedClientRef.current === null;
+        
+        // CRITICAL: If same client ID (and not first time opening), NEVER sync even if form is empty (might be mid-edit)
+        if (currentClientId === previousClientId && currentClientId !== null && !isFirstTimeOpening) {
+            console.log('🚫 useEffect BLOCKED: same client ID - never overwrite formData');
+            lastProcessedClientRef.current = client;
+            return;
+        }
+        
         // Only sync when:
         // 1. Switching to a different client (different ID) AND form is empty, OR
         // 2. Opening a client for the first time (client exists but previousClientId is null)
         // This matches Manufacturing pattern: only set formData when opening a new item
-        const isDifferentClient = currentClientId !== previousClientId;
-        const isFirstTimeOpening = client && previousClientId === null && lastProcessedClientRef.current === null;
-        
         if (client && (isDifferentClient || isFirstTimeOpening) && !formDataHasContent) {
             const parsedClient = {
                 ...client,

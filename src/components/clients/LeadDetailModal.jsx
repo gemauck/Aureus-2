@@ -179,13 +179,22 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             return;
         }
         
+        // CRITICAL: If same lead ID (and not first time), NEVER sync - user might be typing
+        // Only sync when switching to a completely different lead (different ID)
+        const isDifferentLead = currentLeadId !== previousLeadId && currentLeadId !== null && previousLeadId !== null;
+        const isFirstTimeOpening = lead && previousLeadId === null && lastProcessedLeadRef.current === null;
+        
+        // CRITICAL: If same lead ID (and not first time opening), NEVER sync even if form is empty (might be mid-edit)
+        if (currentLeadId === previousLeadId && currentLeadId !== null && !isFirstTimeOpening) {
+            console.log('🚫 useEffect BLOCKED: same lead ID - never overwrite formData');
+            lastProcessedLeadRef.current = lead;
+            return;
+        }
+        
         // Only sync when:
         // 1. Switching to a different lead (different ID) AND form is empty, OR
         // 2. Opening a lead for the first time (lead exists but previousLeadId is null)
         // This matches Manufacturing pattern: only set formData when opening a new item
-        const isDifferentLead = currentLeadId !== previousLeadId;
-        const isFirstTimeOpening = lead && previousLeadId === null && lastProcessedLeadRef.current === null;
-        
         if (lead && (isDifferentLead || isFirstTimeOpening) && !formDataHasContent && !hasDomContent) {
             const parsedLead = {
                 ...lead,
@@ -1691,8 +1700,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <input 
                                             type="text" 
                                             ref={nameInputRef}
-                                            defaultValue={formData.name || ''}
-                                            key={`name-${originalLeadIdRef.current}`}
+                                            value={formData.name || ''}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1727,8 +1735,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
                                         <select
                                             ref={industrySelectRef}
-                                            defaultValue={formData.industry || ''}
-                                            key={`industry-${originalLeadIdRef.current}`}
+                                            value={formData.industry || ''}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1806,8 +1813,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
                                         <select 
                                             ref={sourceSelectRef}
-                                            defaultValue={formData.source || 'Website'}
-                                            key={`source-${originalLeadIdRef.current}`}
+                                            value={formData.source || 'Website'}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
@@ -1910,7 +1916,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <textarea 
                                         ref={notesTextareaRef}
                                         value={isHandlingSpacebarRef.current ? (notesTextareaRef.current?.value || formData.notes) : formData.notes}
-                                        key={`notes-${originalLeadIdRef.current}`}
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
