@@ -67,7 +67,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // CRITICAL: Track input values separately from formData to prevent overwrites
     // These refs hold the actual DOM values that the user types
     const nameInputRef = useRef(null);
-    const notesTextareaRef = useRef(null);
     const industrySelectRef = useRef(null);
     const sourceSelectRef = useRef(null);
     
@@ -1916,7 +1915,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
                                         ref={notesTextareaRef}
-                                        defaultValue={formData.notes || ''}
+                                        value={isHandlingSpacebarRef.current ? (notesTextareaRef.current?.value || formData.notes) : formData.notes}
                                         key={`notes-${originalLeadIdRef.current}`}
                                         onFocus={() => {
                                             isEditingRef.current = true;
@@ -1972,7 +1971,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
                                                 const newCursorPos = start + 1;
                                                 
-                                                // Mark that spacebar was pressed to prevent onChange from interfering
+                                                // Mark that we're handling spacebar - prevent React from updating value prop
+                                                isHandlingSpacebarRef.current = true;
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
@@ -1991,13 +1991,17 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 textarea.setSelectionRange(newCursorPos, newCursorPos);
                                                 
                                                 // 2. After React render (useLayoutEffect will also handle this)
-                                                // 3. Double RAF to catch any late renders
+                                                // 3. Double RAF to catch any late renders, then clear handling flag
                                                 requestAnimationFrame(() => {
                                                     requestAnimationFrame(() => {
                                                         if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
                                                             notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
                                                             notesTextareaRef.current.focus();
                                                         }
+                                                        // Clear handling flag after React has finished rendering
+                                                        setTimeout(() => {
+                                                            isHandlingSpacebarRef.current = false;
+                                                        }, 0);
                                                     });
                                                 });
                                                 

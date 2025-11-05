@@ -145,9 +145,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        // CRITICAL: If user has started typing, NEVER update formData from prop
+        // CRITICAL: If user has started typing, NEVER update formData from prop - PERMANENTLY BLOCKED
         if (userHasStartedTypingRef.current) {
-            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled');
+            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled (PERMANENT)');
+            lastProcessedClientRef.current = client;
+            return;
+        }
+        
+        // CRITICAL: If user has edited ANY fields, NEVER update formData from prop
+        if (userEditedFieldsRef.current.size > 0) {
+            console.log('🚫 useEffect BLOCKED: user has edited fields - formData is user-controlled', {
+                editedFields: Array.from(userEditedFieldsRef.current)
+            });
             lastProcessedClientRef.current = client;
             return;
         }
@@ -162,11 +171,10 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             (currentFormData.website && currentFormData.website.trim())
         );
         
-        // CRITICAL: Block if formData has content OR user has edited fields
-        if (formDataHasContent || userEditedFieldsRef.current.size > 0 || hasUserEditedForm.current) {
-            console.log('🚫 useEffect BLOCKED: formData has content or user has edited fields', {
+        // CRITICAL: Block if formData has content
+        if (formDataHasContent || hasUserEditedForm.current) {
+            console.log('🚫 useEffect BLOCKED: formData has content', {
                 formDataHasContent,
-                editedFields: Array.from(userEditedFieldsRef.current),
                 hasUserEditedForm: hasUserEditedForm.current
             });
             lastProcessedClientRef.current = client;
@@ -232,10 +240,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Reset typing flag when switching to different client
     // BUT: Don't reset if we're saving a new client (null -> ID) and user is typing
+    // CRITICAL: NEVER reset if user has edited fields - preserve them permanently
     useEffect(() => {
         const currentClientId = client?.id || null;
         const previousClientId = previousClientIdRef.current;
         const currentFormDataId = formDataRef.current?.id || null;
+        
+        // CRITICAL: NEVER reset if user has edited any fields
+        if (userEditedFieldsRef.current.size > 0) {
+            console.log('🛡️ Preserving typing flag and edited fields: user has edited', {
+                editedFields: Array.from(userEditedFieldsRef.current),
+                currentClientId,
+                previousClientId
+            });
+            previousClientIdRef.current = currentClientId;
+            return; // Don't reset anything if user has edited fields
+        }
         
         // If switching to a completely different client (different ID), reset typing flag
         if (currentClientId && currentClientId !== currentFormDataId && currentClientId !== previousClientId) {
