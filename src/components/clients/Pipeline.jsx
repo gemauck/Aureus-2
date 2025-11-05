@@ -544,13 +544,29 @@ const Pipeline = () => {
                     // If we get here without an error being thrown, the API call succeeded
                     // The request() function throws on error, so no error = success
                     console.log('✅ Pipeline: Opportunity stage updated in API (no error thrown):', targetStage);
+                    console.log('✅ Pipeline: Full API response:', JSON.stringify(response, null, 2));
                     
-                    // CRITICAL: Force refresh from API immediately to ensure we get fresh data
-                    // Don't rely on cached data - always fetch from API after update
-                    console.log('🔄 Pipeline: Forcing immediate API refresh to verify update...');
-                    setRefreshKey(k => k + 1);
+                    // Verify the response contains the updated opportunity
+                    const updatedOpp = response?.data?.data?.opportunity || response?.data?.opportunity;
+                    if (updatedOpp) {
+                        console.log('✅ Pipeline: Confirmed updated opportunity:', {
+                            id: updatedOpp.id,
+                            stage: updatedOpp.stage,
+                            title: updatedOpp.title
+                        });
+                        
+                        if (updatedOpp.stage !== targetStage) {
+                            console.error('❌ Pipeline: CRITICAL - API returned different stage!', {
+                                expected: targetStage,
+                                actual: updatedOpp.stage
+                            });
+                            alert(`Warning: Stage mismatch. Expected ${targetStage}, got ${updatedOpp.stage}. Please refresh and try again.`);
+                        }
+                    } else {
+                        console.warn('⚠️ Pipeline: API response did not contain updated opportunity data');
+                    }
                     
-                    // Update local state optimistically (will be overwritten by API refresh)
+                    // Update local state optimistically
                     const updatedClients = clients.map(client => {
                         if (client.id === draggedItem.clientId) {
                             const updatedOpportunities = client.opportunities.map(opp =>
@@ -561,7 +577,15 @@ const Pipeline = () => {
                         return client;
                     });
                     setClients(updatedClients);
-                    // DON'T save to localStorage - let API refresh overwrite it with fresh data
+                    
+                    // Wait a bit for database to commit, then refresh from API
+                    console.log('🔄 Pipeline: Waiting 1.5s for DB commit, then refreshing from API...');
+                    setTimeout(() => {
+                        console.log('🔄 Pipeline: Forcing API refresh to verify update persisted...');
+                        // Clear cache first to force fresh load
+                        storage.setClients([]);
+                        setRefreshKey(k => k + 1);
+                    }, 1500);
                 } catch (error) {
                     console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
                     console.error('❌ Pipeline: Error details:', {
@@ -585,13 +609,29 @@ const Pipeline = () => {
                     // If we get here without an error being thrown, the API call succeeded
                     // DatabaseAPI throws on error, so no error = success
                     console.log('✅ Pipeline: Opportunity stage updated via DatabaseAPI (no error thrown):', targetStage);
+                    console.log('✅ Pipeline: Full DatabaseAPI response:', JSON.stringify(response, null, 2));
                     
-                    // CRITICAL: Force refresh from API immediately to ensure we get fresh data
-                    // Don't rely on cached data - always fetch from API after update
-                    console.log('🔄 Pipeline: Forcing immediate API refresh to verify update...');
-                    setRefreshKey(k => k + 1);
+                    // Verify the response contains the updated opportunity
+                    const updatedOpp = response?.data?.opportunity;
+                    if (updatedOpp) {
+                        console.log('✅ Pipeline: Confirmed updated opportunity:', {
+                            id: updatedOpp.id,
+                            stage: updatedOpp.stage,
+                            title: updatedOpp.title
+                        });
+                        
+                        if (updatedOpp.stage !== targetStage) {
+                            console.error('❌ Pipeline: CRITICAL - API returned different stage!', {
+                                expected: targetStage,
+                                actual: updatedOpp.stage
+                            });
+                            alert(`Warning: Stage mismatch. Expected ${targetStage}, got ${updatedOpp.stage}. Please refresh and try again.`);
+                        }
+                    } else {
+                        console.warn('⚠️ Pipeline: DatabaseAPI response did not contain updated opportunity data');
+                    }
                     
-                    // Update local state optimistically (will be overwritten by API refresh)
+                    // Update local state optimistically
                     const updatedClients = clients.map(client => {
                         if (client.id === draggedItem.clientId) {
                             const updatedOpportunities = client.opportunities.map(opp =>
@@ -602,7 +642,15 @@ const Pipeline = () => {
                         return client;
                     });
                     setClients(updatedClients);
-                    // DON'T save to localStorage - let API refresh overwrite it with fresh data
+                    
+                    // Wait a bit for database to commit, then refresh from API
+                    console.log('🔄 Pipeline: Waiting 1.5s for DB commit, then refreshing from API...');
+                    setTimeout(() => {
+                        console.log('🔄 Pipeline: Forcing API refresh to verify update persisted...');
+                        // Clear cache first to force fresh load
+                        storage.setClients([]);
+                        setRefreshKey(k => k + 1);
+                    }, 1500);
                 } catch (error) {
                     console.error('❌ Pipeline: Failed to update opportunity via DatabaseAPI:', error);
                     console.error('❌ Pipeline: Error details:', {

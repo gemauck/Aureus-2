@@ -48,6 +48,15 @@ async function handler(req, res) {
     
     if (req.method === 'PUT') {
       const body = req.body || {}
+      console.log('🔍 [ID] PUT Request received:', {
+        id,
+        body,
+        bodyKeys: Object.keys(body),
+        stage: body.stage,
+        stageType: typeof body.stage,
+        rawBody: JSON.stringify(body)
+      })
+      
       const updateData = {
         title: body.title,
         stage: body.stage,
@@ -63,15 +72,39 @@ async function handler(req, res) {
       })
       
       console.log('🔍 Updating opportunity with data:', updateData)
+      console.log('🔍 Final updateData keys:', Object.keys(updateData))
+      
       try {
+        // First, check if opportunity exists
+        const existing = await prisma.opportunity.findUnique({ where: { id } })
+        if (!existing) {
+          console.error('❌ Opportunity not found:', id)
+          return notFound(res, `Opportunity with ID ${id} not found`)
+        }
+        console.log('✅ Opportunity found:', {
+          id: existing.id,
+          currentStage: existing.stage,
+          newStage: updateData.stage
+        })
+        
         const opportunity = await prisma.opportunity.update({ 
           where: { id }, 
           data: updateData 
         })
-        console.log('✅ Opportunity updated successfully:', opportunity.id)
+        console.log('✅ Opportunity updated successfully:', {
+          id: opportunity.id,
+          oldStage: existing.stage,
+          newStage: opportunity.stage,
+          title: opportunity.title
+        })
         return ok(res, { opportunity })
       } catch (dbError) {
         console.error('❌ Database error updating opportunity:', dbError)
+        console.error('❌ Error details:', {
+          message: dbError.message,
+          code: dbError.code,
+          meta: dbError.meta
+        })
         return serverError(res, 'Failed to update opportunity', dbError.message)
       }
     }
