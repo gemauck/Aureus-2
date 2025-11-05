@@ -625,20 +625,32 @@
   }
   
   /* Notification badge positioning fix for mobile */
-  button:has(.fa-bell) {
+  button:has(.fa-bell),
+  button[title="Notifications"] {
     position: relative !important;
     overflow: visible !important;
   }
   
-  button:has(.fa-bell) > span[class*="absolute"] {
+  button:has(.fa-bell) > span[class*="relative"],
+  button[title="Notifications"] > span[class*="relative"] {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: visible !important;
+  }
+  
+  button:has(.fa-bell) > span[class*="relative"] > span[class*="absolute"],
+  button[title="Notifications"] > span[class*="relative"] > span[class*="absolute"] {
     position: absolute !important;
     top: -2px !important;
     right: -2px !important;
     min-width: 18px !important;
-    min-height: 18px !important;
+    height: 18px !important;
     border: 2px solid white !important;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
     z-index: 10 !important;
+    transform: translate(25%, -25%) !important;
   }
   
   /* Mobile status badges */
@@ -2890,4 +2902,5 @@
     font-size: 0.875rem !important;
   }
 }
+
 
