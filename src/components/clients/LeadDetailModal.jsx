@@ -215,8 +215,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 status: lead.status || prev.status,
                 stage: lead.stage || prev.stage,
                 // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
-                proposals: proposalsToUse
-                // DO NOT update: name, notes, industry, source, etc. - these might be actively edited
+                proposals: proposalsToUse,
+                // CRITICAL: Always preserve notes from local state - never overwrite with lead prop
+                // This ensures user's typing is never lost
+                notes: prev.notes || ''
+                // DO NOT update: name, industry, source, etc. - these might be actively edited
             }));
             
             return; // Don't process further updates
@@ -1835,8 +1838,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             // Auto-save notes when user leaves the field
                                             // Use the current textarea value to ensure we have the latest data
                                             if (lead) {
-                                                // Mark form as edited to prevent useEffect from resetting
-                                                hasUserEditedForm.current = true;
+                                                // Mark as auto-saving to prevent useEffect from resetting
                                                 isAutoSavingRef.current = true;
                                                 
                                                 // Get latest formData including the notes value from the textarea

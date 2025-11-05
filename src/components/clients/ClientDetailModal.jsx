@@ -227,12 +227,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 : parsedClient.sites,
                             opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
                                 ? prevFormData.opportunities 
-                                : parsedClient.opportunities
-                            // DO NOT update: name, notes, industry, address, website - these might be actively edited
+                                : parsedClient.opportunities,
+                            // CRITICAL: Always preserve notes from local state - never overwrite with client prop
+                            // This ensures user's typing is never lost
+                            notes: prevFormData.notes || ''
+                            // DO NOT update: name, industry, address, website - these might be actively edited
                         };
                         console.log('🔄 Preserving local changes:', {
                             contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
-                            contactsCount: newFormData.contacts?.length
+                            contactsCount: newFormData.contacts?.length,
+                            notesPreserved: prevFormData.notes || ''
                         });
                         return newFormData;
                     });
