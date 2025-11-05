@@ -581,15 +581,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 }
             }
             
-            // Only skip save if content is truly empty AND we're still initializing
-            // After initialization, always save (even empty content if user cleared it)
-            if ((!noteContent || noteContent.trim().length === 0) && isInitializingRef.current) {
-                console.log('⚠️ Skipping save during initialization - content is empty');
+            // Always save content, even if empty (user might have cleared it)
+            // Only skip if we're in the very first 500ms of initialization to prevent saving initial empty state
+            const initTime = window._dailyNotesInitTime || 0;
+            if ((!noteContent || noteContent.trim().length === 0) && (Date.now() - initTime < 500)) {
+                console.log('⚠️ Skipping save during first 500ms - content is empty (initialization)');
                 setIsSaving(false);
                 return;
             }
             
-            // If content is empty after initialization, that means user cleared it - save it
+            // If content is empty, that means user cleared it - save it
             if (!noteContent) {
                 noteContent = '';
             }
@@ -811,24 +812,24 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             window._dailyNotesInitTime = Date.now();
             console.log('🔒 Initialization started - auto-save will enable quickly');
             
-            // Wait for editor to be ready and content to be set (reduced delay)
+            // Wait for editor to be ready and content to be set (very short delay)
             const checkEditorReady = () => {
                 if (editorRef.current) {
-                    // Editor is ready - enable auto-save quickly (500ms)
+                    // Editor is ready - enable auto-save very quickly (300ms)
                     setTimeout(() => {
                         isInitializingRef.current = false;
                         console.log('✅ Initialization complete - editor ready, auto-save enabled');
-                    }, 500); // Reduced from 1500ms to 500ms
+                    }, 300); // Reduced to 300ms for faster auto-save
                 } else {
-                    // Fallback: disable initialization after 1 second (much faster)
+                    // Fallback: disable initialization after 500ms (very fast)
                     setTimeout(() => {
                         isInitializingRef.current = false;
                         console.log('✅ Initialization timeout - auto-save enabled');
-                    }, 1000); // Reduced from 3000ms to 1000ms
+                    }, 500); // Reduced to 500ms
                 }
             };
             
-            const timer = setTimeout(checkEditorReady, 200); // Reduced from 500ms
+            const timer = setTimeout(checkEditorReady, 100); // Reduced to 100ms
             return () => clearTimeout(timer);
         } else {
             // If switching to list view, reset initialization flag
@@ -846,13 +847,18 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         let lastSavedContent = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
         let lastCheckedContent = '';
         let saveInProgress = false;
+        let debounceTimer = null;
         
         // Function to check and save if needed
         const checkAndSave = () => {
-            if (!editorRef.current || saveInProgress || isInitializingRef.current) {
-                if (isInitializingRef.current) {
-                    console.log('⏸️ Auto-save check skipped - still initializing');
-                }
+            if (!editorRef.current || saveInProgress) {
+                return;
+            }
+            
+            // Check if we're still initializing (with shorter timeout)
+            const initTime = window._dailyNotesInitTime || 0;
+            if (Date.now() - initTime < 500) {
+                // Only skip during first 500ms of initialization
                 return;
             }
             
@@ -877,19 +883,23 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     console.error('❌ Auto-save error:', err);
                     saveInProgress = false;
                 });
-            } else {
-                console.log('⏭️ Auto-save check - no changes detected', {
-                    editorLength: editorContent.length,
-                    lastSavedLength: lastSavedContent.length,
-                    areEqual: editorContent === lastSavedContent
-                });
             }
+        };
+        
+        // Debounced save function
+        const debouncedSave = () => {
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
+            debounceTimer = setTimeout(() => {
+                checkAndSave();
+            }, 500); // Save 500ms after typing stops (faster response)
         };
         
         // Set up MutationObserver to watch for editor changes
         const observer = new MutationObserver(() => {
-            // More aggressive: check immediately on mutation (with minimal debounce)
-            setTimeout(checkAndSave, 800); // Reduced from 1000ms to 800ms
+            // Trigger debounced save on any change
+            debouncedSave();
         });
         
         // Observe the editor for changes
@@ -900,20 +910,23 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             attributes: false
         });
         
-        // Also set up interval as backup (every 2 seconds for faster saves)
+        // Also set up interval as backup (every 3 seconds to catch any missed changes)
         const autoSaveInterval = setInterval(() => {
-            // Reduced initialization wait time - only skip first 1 second
+            // Only skip first 500ms of initialization
             const initTime = window._dailyNotesInitTime || 0;
-            if (Date.now() - initTime < 1000) {
+            if (Date.now() - initTime < 500) {
                 return;
             }
             
             checkAndSave();
-        }, 2000); // Reduced from 3000ms to 2000ms for more frequent checks
+        }, 3000); // Check every 3 seconds as backup
         
         return () => {
             observer.disconnect();
             clearInterval(autoSaveInterval);
+            if (debounceTimer) {
+                clearTimeout(debounceTimer);
+            }
         };
     }, [currentDate, showListView, saveNote]);
     
@@ -923,9 +936,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Reduced initialization wait - only skip first 1 second
+        // Reduced initialization wait - only skip first 500ms
         const initTime = window._dailyNotesInitTime || 0;
-        if (Date.now() - initTime < 1000) {
+        if (Date.now() - initTime < 500) {
             return;
         }
         
@@ -943,11 +956,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Set new timeout for auto-save (1.5 seconds after last change for faster saves)
+        // Set new timeout for auto-save (1 second after last change for faster saves)
         saveTimeoutRef.current = setTimeout(() => {
             console.log('💾 Auto-saving note (state change backup)...');
             saveNote().catch(err => console.error('Auto-save error:', err));
-        }, 2000);
+        }, 1000); // Reduced to 1 second for faster saves
         
         return () => {
             if (saveTimeoutRef.current) {
@@ -1170,14 +1183,20 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             // Strip HTML for plain text version (for search)
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
-            console.log('📝 Editor input detected, content length:', html.length);
             
-            // Trigger auto-save more aggressively (1 second debounce for faster saves)
+            // Trigger auto-save more aggressively (500ms debounce for faster saves)
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
             saveTimeoutRef.current = setTimeout(() => {
-                if (editorRef.current && !isInitializingRef.current) {
+                if (editorRef.current) {
+                    // Check initialization timeout (only skip first 500ms)
+                    const initTime = window._dailyNotesInitTime || 0;
+                    if (Date.now() - initTime < 500) {
+                        console.log('⏸️ Input handler auto-save skipped - still initializing');
+                        return;
+                    }
+                    
                     const editorContent = editorRef.current.innerHTML || '';
                     // Always save if there's any change (even empty content after user clears)
                     console.log('💾 Auto-saving note (from input handler)...', { 
@@ -1192,10 +1211,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             saveNote().catch(retryErr => console.error('❌ Retry auto-save failed:', retryErr));
                         }, 1000);
                     });
-                } else if (isInitializingRef.current) {
-                    console.log('⏸️ Input handler auto-save skipped - still initializing');
                 }
-            }, 1000); // Reduced from 2000ms to 1000ms for faster auto-save
+            }, 500); // Reduced to 500ms for faster auto-save
         }
     };
 
@@ -1446,6 +1463,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         contentEditable
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
+                        onBlur={() => {
+                            // Save immediately when editor loses focus
+                            if (editorRef.current) {
+                                const initTime = window._dailyNotesInitTime || 0;
+                                if (Date.now() - initTime >= 500) {
+                                    console.log('💾 Auto-saving note (editor blur)...');
+                                    saveNote().catch(err => console.error('Auto-save error on blur:', err));
+                                }
+                            }
+                        }}
                         className={`w-full h-full min-h-[400px] p-4 rounded-lg border ${
                             isDark 
                                 ? 'bg-gray-800 border-gray-700 text-gray-100' 
