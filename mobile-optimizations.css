@@ -624,6 +624,23 @@
     gap: 12px;
   }
   
+  /* Notification badge positioning fix for mobile */
+  button:has(.fa-bell) {
+    position: relative !important;
+    overflow: visible !important;
+  }
+  
+  button:has(.fa-bell) > span[class*="absolute"] {
+    position: absolute !important;
+    top: -2px !important;
+    right: -2px !important;
+    min-width: 18px !important;
+    min-height: 18px !important;
+    border: 2px solid white !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+    z-index: 10 !important;
+  }
+  
   /* Mobile status badges */
   .mobile-status-badge {
     display: inline-flex;
