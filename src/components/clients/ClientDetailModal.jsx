@@ -103,6 +103,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
+    const isHandlingSpacebarRef = useRef(false); // Track if we're currently handling spacebar to prevent React from resetting value
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -2043,7 +2044,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">General Notes</label>
                                     <textarea 
                                         ref={notesTextareaRef}
-                                        value={formData.notes}
+                                        value={isHandlingSpacebarRef.current ? (notesTextareaRef.current?.value || formData.notes) : formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
@@ -2097,7 +2098,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
                                                 const newCursorPos = start + 1;
                                                 
-                                                // Mark that spacebar was pressed to prevent onChange from interfering
+                                                // Mark that we're handling spacebar - prevent React from updating value prop
+                                                isHandlingSpacebarRef.current = true;
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
@@ -2116,13 +2118,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 textarea.setSelectionRange(newCursorPos, newCursorPos);
                                                 
                                                 // 2. After React render (useLayoutEffect will also handle this)
-                                                // 3. Double RAF to catch any late renders
+                                                // 3. Double RAF to catch any late renders, then clear handling flag
                                                 requestAnimationFrame(() => {
                                                     requestAnimationFrame(() => {
                                                         if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
                                                             notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
                                                             notesTextareaRef.current.focus();
                                                         }
+                                                        // Clear handling flag after React has finished rendering
+                                                        setTimeout(() => {
+                                                            isHandlingSpacebarRef.current = false;
+                                                        }, 0);
                                                     });
                                                 });
                                                 

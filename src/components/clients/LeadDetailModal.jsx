@@ -72,8 +72,10 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const sourceSelectRef = useRef(null);
     
     // Ref for notes textarea to preserve cursor position
+    const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
+    const isHandlingSpacebarRef = useRef(false); // Track if we're currently handling spacebar to prevent React from resetting value
     
     // Track when user has started typing - once they start, NEVER update inputs from prop
     const userHasStartedTypingRef = useRef(false);
