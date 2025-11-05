@@ -916,14 +916,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             }
         };
         
-        // Debounced save function - more instant
+        // Debounced save function - ultra instant
         const debouncedSave = () => {
             if (debounceTimer) {
                 clearTimeout(debounceTimer);
             }
             debounceTimer = setTimeout(() => {
                 checkAndSave();
-            }, 200); // Save 200ms after typing stops (very fast, almost instant)
+            }, 100); // Save 100ms after typing stops (ultra instant, nearly real-time)
         };
         
         // Set up MutationObserver to watch for editor changes
@@ -940,16 +940,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             attributes: false
         });
         
-        // Also set up interval as backup (every 3 seconds to catch any missed changes)
+        // Also set up interval as backup (every 1 second to catch any missed changes)
         const autoSaveInterval = setInterval(() => {
-            // Only skip first 500ms of initialization
+            // Only skip first 300ms of initialization
             const initTime = window._dailyNotesInitTime || 0;
-            if (Date.now() - initTime < 500) {
+            if (Date.now() - initTime < 300) {
                 return;
             }
             
             checkAndSave();
-        }, 3000); // Check every 3 seconds as backup
+        }, 1000); // Check every 1 second as backup (very frequent)
         
         return () => {
             observer.disconnect();
@@ -966,9 +966,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Reduced initialization wait - only skip first 500ms
+        // Reduced initialization wait - only skip first 200ms
         const initTime = window._dailyNotesInitTime || 0;
-        if (Date.now() - initTime < 500) {
+        if (Date.now() - initTime < 200) {
             return;
         }
         
@@ -986,11 +986,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             return;
         }
         
-        // Set new timeout for auto-save (1 second after last change for faster saves)
+        // Set new timeout for auto-save (500ms after last change for ultra-fast saves)
         saveTimeoutRef.current = setTimeout(() => {
             console.log('💾 Auto-saving note (state change backup)...');
             saveNote().catch(err => console.error('Auto-save error:', err));
-        }, 1000); // Reduced to 1 second for faster saves
+        }, 500); // Ultra-fast - 500ms after state change
         
         return () => {
             if (saveTimeoutRef.current) {
@@ -1104,9 +1104,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, [currentNoteHtml, currentDate, showListView, currentNote]);
 
-    // Delete note function
-    const deleteNote = async () => {
-        const dateString = formatDateString(currentDate);
+    // Delete note function - can accept optional dateString parameter for list view
+    const deleteNote = async (dateStringParam = null) => {
+        const dateString = dateStringParam || formatDateString(currentDate);
         const confirmDelete = window.confirm(`Are you sure you want to delete the note for ${formatDateDisplay(dateString)}?`);
         
         if (!confirmDelete) {
@@ -1148,11 +1148,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 delete savedNotes[dateString];
                 localStorage.setItem(notesKey, JSON.stringify(savedNotes));
                 
-                // Clear editor
-                setCurrentNote('');
-                setCurrentNoteHtml('');
-                if (editorRef.current) {
-                    editorRef.current.innerHTML = '';
+                // Clear editor only if deleting current note
+                if (!dateStringParam || dateString === formatDateString(currentDate)) {
+                    setCurrentNote('');
+                    setCurrentNoteHtml('');
+                    if (editorRef.current) {
+                        editorRef.current.innerHTML = '';
+                    }
                 }
                 
                 // Show notification
@@ -1296,15 +1298,15 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             
-            // Trigger auto-save instantly (200ms debounce for very fast saves)
+            // Trigger auto-save ultra instantly (100ms debounce for nearly real-time saves)
             if (saveTimeoutRef.current) {
                 clearTimeout(saveTimeoutRef.current);
             }
             saveTimeoutRef.current = setTimeout(() => {
                 if (editorRef.current) {
-                    // Check initialization timeout (only skip first 300ms)
+                    // Check initialization timeout (only skip first 200ms)
                     const initTime = window._dailyNotesInitTime || 0;
-                    if (Date.now() - initTime < 300) {
+                    if (Date.now() - initTime < 200) {
                         console.log('⏸️ Input handler auto-save skipped - still initializing');
                         return;
                     }
@@ -1317,14 +1319,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     });
                     saveNote().catch(err => {
                         console.error('❌ Auto-save error from input handler:', err);
-                        // Retry once after 500ms
+                        // Retry once after 300ms
                         setTimeout(() => {
                             console.log('🔄 Retrying auto-save after error...');
                             saveNote().catch(retryErr => console.error('❌ Retry auto-save failed:', retryErr));
-                        }, 500);
+                        }, 300);
                     });
                 }
-            }, 200); // Very fast auto-save - 200ms after typing stops
+            }, 100); // Ultra instant auto-save - 100ms after typing stops (nearly real-time)
         }
     };
 
@@ -1418,20 +1420,41 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             {filteredNotes.map(({ dateString, date, note, noteHtml }) => (
                                 <div
                                     key={dateString}
-                                    onClick={() => openNote(dateString)}
-                                    className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-4 cursor-pointer transition-colors`}
+                                    className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-4 transition-colors`}
                                 >
                                     <div className="flex items-center justify-between mb-2">
-                                        <h3 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                                            {formatDateDisplay(dateString)}
-                                        </h3>
-                                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                            {dateString}
-                                        </span>
+                                        <div 
+                                            onClick={() => openNote(dateString)}
+                                            className="flex-1 cursor-pointer"
+                                        >
+                                            <h3 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                                {formatDateDisplay(dateString)}
+                                            </h3>
+                                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                                {dateString}
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (window.confirm(`Delete note for ${formatDateDisplay(dateString)}?`)) {
+                                                    deleteNote(dateString);
+                                                }
+                                            }}
+                                            className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} p-2 rounded-lg transition-colors ml-2`}
+                                            title="Delete note"
+                                        >
+                                            <i className="fas fa-trash"></i>
+                                        </button>
                                     </div>
-                                    <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} line-clamp-3`}>
-                                        {note.length > 200 ? note.substring(0, 200) + '...' : note}
-                                    </p>
+                                    <div 
+                                        onClick={() => openNote(dateString)}
+                                        className="cursor-pointer"
+                                    >
+                                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} line-clamp-3`}>
+                                            {note.length > 200 ? note.substring(0, 200) + '...' : note}
+                                        </p>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1498,10 +1521,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 alert('No note to delete for this date.');
                             }
                         }}
-                        className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} p-2 rounded-lg transition-colors`}
+                        className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} px-3 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2`}
                         title="Delete note"
                     >
                         <i className="fas fa-trash"></i>
+                        <span className="text-sm">Delete</span>
                     </button>
                 </div>
             </div>
@@ -1586,6 +1610,22 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     title={showHandwriting ? 'Disable Handwriting' : 'Enable Handwriting'}
                 >
                     <i className="fas fa-pen"></i>
+                </button>
+                <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
+                <button
+                    onClick={() => {
+                        const dateString = formatDateString(currentDate);
+                        const hasNote = notes[dateString] && notes[dateString].trim().length > 0;
+                        if (hasNote || currentNoteHtml || (editorRef.current && editorRef.current.innerHTML.trim().length > 0)) {
+                            deleteNote();
+                        } else {
+                            alert('No note to delete for this date.');
+                        }
+                    }}
+                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}
+                    title="Delete note"
+                >
+                    <i className="fas fa-trash"></i>
                 </button>
             </div>
 
