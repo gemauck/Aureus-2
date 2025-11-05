@@ -47,7 +47,7 @@ class LiveDataSync {
         
         // Listen for visibility changes to sync when tab becomes active
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && this.isRunning) {
+            if (!document.hidden && this.isRunning && !this.isPaused) {
                 log('👁️ Tab became visible, syncing data...');
                 this.sync();
             }
@@ -55,8 +55,10 @@ class LiveDataSync {
         
         // Listen for online/offline events
         window.addEventListener('online', () => {
-            log('🌐 Network online, syncing data...');
-            this.sync();
+            if (this.isRunning && !this.isPaused) {
+                log('🌐 Network online, syncing data...');
+                this.sync();
+            }
         });
         
         window.addEventListener('offline', () => {
@@ -91,6 +93,14 @@ class LiveDataSync {
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
         log(`⏸️ Pausing live data sync (pause count: ${this.pauseCount})`);
+        
+        // Clear interval timer to stop scheduled syncs
+        if (this.intervalId && this.pauseCount === 1) {
+            clearInterval(this.intervalId);
+            this.intervalId = null;
+            log('⏸️ Cleared sync interval timer');
+        }
+        
         this.notifySubscribers({ type: 'connection', status: 'paused' });
     }
 
@@ -104,6 +114,15 @@ class LiveDataSync {
             const getLog = () => window.debug?.log || (() => {});
             const log = getLog();
             log('▶️ Resuming live data sync');
+            
+            // Restart interval timer if sync service is running
+            if (this.isRunning && !this.intervalId) {
+                this.intervalId = setInterval(() => {
+                    this.sync();
+                }, this.refreshInterval);
+                log('▶️ Restarted sync interval timer');
+            }
+            
             this.notifySubscribers({ 
                 type: 'connection', 
                 status: this.isRunning ? 'connected' : 'disconnected' 
@@ -513,6 +532,13 @@ class LiveDataSync {
     async forceSync() {
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
+        
+        // Respect pause state - don't force sync if paused
+        if (this.isPaused) {
+            log('⏸️ Force sync skipped - LiveDataSync is paused');
+            return;
+        }
+        
         log('🔄 Force sync requested (bypassing cache)...');
         
         // Clear cache for leads and clients to ensure fresh data
