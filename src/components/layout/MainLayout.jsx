@@ -683,6 +683,17 @@ const MainLayout = () => {
                                     <window.NotificationCenter />
                                 ) : null}
                                 
+                                {/* Settings Button */}
+                                <button
+                                    onClick={() => {
+                                        navigateToPage('settings');
+                                    }}
+                                    className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1.5 sm:p-2 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[36px] min-h-[36px] sm:min-w-[40px] sm:min-h-[40px] md:min-w-[44px] md:min-h-[44px] flex items-center justify-center`}
+                                    title="Settings"
+                                >
+                                    <i className="fas fa-cog text-xs sm:text-sm"></i>
+                                </button>
+                                
                                 {/* Theme Selector Dropdown */}
                                 <div className="relative theme-selector">
                                     <button 
@@ -773,6 +784,22 @@ const MainLayout = () => {
                             {notificationCenterReady && window.NotificationCenter ? (
                                 <window.NotificationCenter />
                             ) : null}
+                            
+                            {/* Settings Button */}
+                            <button
+                                onClick={() => {
+                                    navigateToPage('settings');
+                                }}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 lg:p-1.5 rounded-lg transition-all duration-200 touch-target border ${isDark ? 'border-gray-600 hover:border-gray-500' : 'border-gray-200 hover:border-gray-300'} min-w-[44px] min-h-[44px] flex items-center justify-center`}
+                                title="Settings"
+                            >
+                                <div className="flex items-center space-x-1 sm:space-x-2">
+                                    <i className="fas fa-cog text-sm"></i>
+                                    <span className="text-xs font-medium hidden lg:block">
+                                        Settings
+                                    </span>
+                                </div>
+                            </button>
                             
                             {/* Theme Selector Dropdown */}
                             <div className="relative theme-selector">

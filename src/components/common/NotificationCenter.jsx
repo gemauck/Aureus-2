@@ -389,24 +389,6 @@ const NotificationCenter = () => {
                             </div>
                         )}
                     </div>
-                    
-                    {/* Footer */}
-                    <div className={`px-4 py-3 border-t ${isDark ? 'border-gray-700' : 'border-gray-200'} text-center`}>
-                        <button
-                            onClick={() => {
-                                // Navigate to settings page using MainLayout navigation system
-                                const event = new CustomEvent('navigateToPage', {
-                                    detail: { page: 'settings' }
-                                });
-                                window.dispatchEvent(event);
-                                setIsOpen(false);
-                            }}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                        >
-                            <i className="fas fa-cog mr-1"></i>
-                            Notification Settings
-                        </button>
-                    </div>
                 </div>
             )}
         </div>
