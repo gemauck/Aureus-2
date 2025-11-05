@@ -114,21 +114,21 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         };
     }, []);
     
-    // Pause LiveDataSync when modal is open (whether new or existing lead), resume when closed
+    // Completely stop LiveDataSync when modal is open (whether new or existing lead), restart when closed
     useEffect(() => {
         if (!onPauseSync) return;
         
-        // Pause sync whenever modal is open (both new lead form and existing lead)
-        // This prevents LiveDataSync from interfering with form data
+        // Completely stop LiveDataSync whenever modal is open (both new lead form and existing lead)
+        // This prevents LiveDataSync from making ANY API calls while form is open
         onPauseSync(true);
-        console.log('⏸️ LeadDetailModal opened - pausing LiveDataSync', lead ? '(existing lead)' : '(new lead)');
+        console.log('🛑 LeadDetailModal opened - stopping LiveDataSync completely', lead ? '(existing lead)' : '(new lead)');
         
-        // Resume sync when modal closes
+        // Restart LiveDataSync when modal closes
         return () => {
             onPauseSync(false);
-            console.log('▶️ LeadDetailModal closed - resuming LiveDataSync');
+            console.log('▶️ LeadDetailModal closed - restarting LiveDataSync');
         };
-    }, [onPauseSync]); // Removed lead from dependencies - pause/resume based on modal mount/unmount only
+    }, [onPauseSync]); // Removed lead from dependencies - stop/start based on modal mount/unmount only
     
     // NOTE: No useEffect to watch ref values - refs don't trigger effects!
     // onEditingChange is called directly in onChange/onFocus/onBlur handlers instead

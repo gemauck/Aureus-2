@@ -290,35 +290,44 @@ const Clients = React.memo(() => {
     const isAutoSavingRef = useRef(false); // Track auto-save state to prevent overwrites
     const editingTimeoutRef = useRef(null);
     
-    // Pause/resume LiveDataSync for modals
-    const handlePauseSync = useCallback((shouldPause) => {
+    // Stop/start LiveDataSync completely for modals (especially Add Client/Lead forms)
+    const handlePauseSync = useCallback((shouldStop) => {
         if (window.LiveDataSync) {
-            if (shouldPause) {
-                window.LiveDataSync.pause();
+            if (shouldStop) {
+                // Completely stop LiveDataSync when forms are open
+                window.LiveDataSync.stop();
+                console.log('🛑 LiveDataSync completely stopped for form');
             } else {
-                window.LiveDataSync.resume();
+                // Restart LiveDataSync when forms close
+                window.LiveDataSync.start();
+                console.log('▶️ LiveDataSync restarted after form closed');
             }
         }
     }, []);
     
-    // Pause LiveDataSync when viewing client/lead list, keep paused in detail views (modals handle their own pause)
+    // Stop LiveDataSync when viewing client/lead list, restart when entering detail views
+    // Note: Detail views (client-detail, lead-detail) will stop LiveDataSync completely via modals
     useEffect(() => {
         if (!window.LiveDataSync) return;
         
-        // Pause sync when viewing list views (clients or leads)
+        // Stop sync when viewing list views (clients or leads)
         const isListView = viewMode === 'clients' || viewMode === 'leads' || viewMode === 'pipeline';
         
         if (isListView) {
-            window.LiveDataSync.pause();
-            console.log('⏸️ Clients component: Pausing LiveDataSync (viewing list)');
+            // Only stop if not already stopped (avoid duplicate stops)
+            if (window.LiveDataSync.isRunning) {
+                window.LiveDataSync.stop();
+                console.log('⏸️ Clients component: Stopping LiveDataSync (viewing list)');
+            }
+        } else {
+            // Detail views - modals will handle stopping LiveDataSync
+            // Don't restart here - let modals handle it
         }
-        // Note: Detail views (client-detail, lead-detail) keep sync paused - modals handle their own pause/resume
-        // This prevents LiveDataSync from interfering with form data during add/edit operations
         
-        // Cleanup: resume when component unmounts
+        // Cleanup: restart when component unmounts if we stopped it
         return () => {
-            if (isListView) {
-                window.LiveDataSync?.resume();
+            if (isListView && !window.LiveDataSync.isRunning) {
+                window.LiveDataSync?.start();
             }
         };
     }, [viewMode]);
