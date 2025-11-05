@@ -137,6 +137,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
         const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
         
+        // CRITICAL: Also check if user has entered ANY data in editable fields (even if not marked as edited yet)
+        // This catches cases where the user is typing but the field hasn't been marked yet
+        const hasUserEnteredData = Boolean(
+            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
+            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
+            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '') ||
+            (currentFormData.address && currentFormData.address.trim() && currentFormData.address.trim() !== '') ||
+            (currentFormData.website && currentFormData.website.trim() && currentFormData.website.trim() !== '')
+        );
+        
         if (client) {
             // Only reset formData if:
             // 1. Client ID changed (viewing a different client), OR
@@ -144,14 +154,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const clientIdChanged = client.id !== lastSavedClientId.current;
             const isNewClient = !lastSavedClientId.current && client.id; // New client getting an ID for the first time
             
-            // CRITICAL: If user is editing OR has edited any fields, NEVER reset formData
+            // CRITICAL: If user is editing OR has edited any fields OR has entered any data, NEVER reset formData
             // This prevents ANY updates (including blank values) from overwriting user input
-            if (isEditingRef.current || hasUserEditedFields) {
-                console.log('🚫 useEffect blocked: user is editing or has edited fields', {
+            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
+                console.log('🚫 useEffect blocked: user is editing or has entered data', {
                     isEditing: isEditingRef.current,
                     hasUserEditedFields,
+                    hasUserEnteredData,
                     editedFields: Array.from(userEditedFieldsRef.current),
-                    currentName: currentFormData.name
+                    currentName: currentFormData.name,
+                    currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
+                    currentIndustry: currentFormData.industry
                 });
                 // Still update the lastSavedClientId to prevent repeated checks
                 if (client.id) {
@@ -192,9 +205,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 };
                 
                 if (clientIdChanged) {
-                    // New client - CRITICAL: Only set formData fresh if user hasn't edited any fields
-                    // If user has edited fields, preserve those fields instead of overwriting with API data
-                    if (hasUserEditedFields) {
+                    // New client - CRITICAL: Only set formData fresh if user hasn't edited any fields or entered data
+                    // If user has edited fields or entered data, preserve those fields instead of overwriting with API data
+                    if (hasUserEditedFields || hasUserEnteredData) {
                         console.log('🚫 New client detected but user has edited fields - preserving user input', {
                             editedFields: Array.from(userEditedFieldsRef.current)
                         });
@@ -220,8 +233,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         userEditedFieldsRef.current.clear();
                 }
                 } else if (client.id === currentFormData.id) {
-                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields
-                    if (isEditingRef.current || hasUserEditedFields) {
+                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields OR has entered data
+                    if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
                         console.log('🚫 Skipping formData update: user is editing or has edited fields');
                         return;
                     }

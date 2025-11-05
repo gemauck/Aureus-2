@@ -112,14 +112,26 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
         const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
         
-        // CRITICAL: If user is editing OR has edited any fields, NEVER reset formData
+        // CRITICAL: Also check if user has entered ANY data in editable fields (even if not marked as edited yet)
+        // This catches cases where the user is typing but the field hasn't been marked yet
+        const hasUserEnteredData = Boolean(
+            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
+            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
+            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '') ||
+            (currentFormData.source && currentFormData.source.trim() && currentFormData.source.trim() !== '' && currentFormData.source !== 'Website')
+        );
+        
+        // CRITICAL: If user is editing OR has edited any fields OR has entered any data, NEVER reset formData
         // This prevents ANY updates (including blank values) from overwriting user input
-        if (isEditingRef.current || hasUserEditedFields) {
-            console.log('🚫 useEffect blocked: user is editing or has edited fields', {
+        if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
+            console.log('🚫 useEffect blocked: user is editing or has entered data', {
                 isEditing: isEditingRef.current,
                 hasUserEditedFields,
+                hasUserEnteredData,
                 editedFields: Array.from(userEditedFieldsRef.current),
-                currentName: currentFormData.name
+                currentName: currentFormData.name,
+                currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
+                currentIndustry: currentFormData.industry
             });
             return;
         }
@@ -127,9 +139,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         // ONLY initialize formData when switching to a different lead (different ID)
         // Do NOT reinitialize when the same lead is updated
         if (lead && !currentFormData.id) {
-            // First load - CRITICAL: Only initialize if user hasn't edited any fields
-            // If user has edited fields, preserve those fields instead of overwriting with API data
-            if (hasUserEditedFields) {
+            // First load - CRITICAL: Only initialize if user hasn't edited any fields or entered data
+            // If user has edited fields or entered data, preserve those fields instead of overwriting with API data
+            if (hasUserEditedFields || hasUserEnteredData) {
                 console.log('🚫 First load but user has edited fields - preserving user input');
                 const parsedLead = {
                     ...lead,
@@ -189,8 +201,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                 thumbnail: lead.thumbnail || ''
             };
-            // Only switch if user hasn't edited fields, otherwise preserve their input
-            if (hasUserEditedFields) {
+            // Only switch if user hasn't edited fields or entered data, otherwise preserve their input
+            if (hasUserEditedFields || hasUserEnteredData) {
                 console.log('🚫 Switching leads but user has edited fields - preserving user input');
                 setFormData(prevFormData => {
                     const merged = {...parsedLead};
@@ -208,8 +220,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 userEditedFieldsRef.current.clear();
             }
         } else if (lead && currentFormData.id === lead.id) {
-            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields
-            if (isEditingRef.current || hasUserEditedFields) {
+            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields OR has entered data
+            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
                 console.log('🚫 Skipping formData update: user is editing or has edited fields');
                 return;
             }
@@ -1886,6 +1898,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         }}
                                         onChange={(e) => {
                                             isEditingRef.current = true;
+                                            userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
