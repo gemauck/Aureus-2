@@ -276,6 +276,7 @@ const Clients = React.memo(() => {
     // Use BOTH state (for UI) and ref (for synchronous checks in useEffects)
     const [isUserEditing, setIsUserEditing] = useState(false);
     const isUserEditingRef = useRef(false); // Synchronous flag for immediate checks
+    const isAutoSavingRef = useRef(false); // Track auto-save state to prevent overwrites
     const editingTimeoutRef = useRef(null);
     
     // Removed expensive state tracking logging
@@ -834,11 +835,11 @@ const Clients = React.memo(() => {
     useEffect(() => {
         if (!selectedClient || !selectedClient.id) return;
         
-        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing
+        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
         // Use REF for synchronous check (state might not be updated yet)
-        if (isUserEditingRef.current || isUserEditing) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - user is editing');
+        if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - user is editing or auto-saving');
             return;
         }
         
@@ -929,11 +930,11 @@ const Clients = React.memo(() => {
     useEffect(() => {
         if (!selectedLead || !selectedLead.id) return;
         
-        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing
+        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
         // Use REF for synchronous check (state might not be updated yet)
-        if (isUserEditingRef.current || isUserEditing) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - user is editing');
+        if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - user is editing or auto-saving');
             return;
         }
         
@@ -1059,10 +1060,10 @@ const Clients = React.memo(() => {
 
         const subscriberId = 'clients-screen-live-sync';
         const handler = async (message) => {
-            // CRITICAL: Skip LiveDataSync updates if user is editing
+            // CRITICAL: Skip LiveDataSync updates if user is editing OR auto-saving
             // Use REF for synchronous check (state might lag)
-            if (isUserEditingRef.current || isUserEditing) {
-                console.log('⏸️ LiveDataSync: Skipping update - user is editing (ref:', isUserEditingRef.current, 'state:', isUserEditing, ')');
+            if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
+                console.log('⏸️ LiveDataSync: Skipping update - user is editing or auto-saving (editing:', isUserEditingRef.current, 'autoSaving:', isAutoSavingRef.current, ')');
                 return;
             }
             if (message?.type === 'data' && Array.isArray(message.data)) {
@@ -3425,9 +3426,10 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
-                        onEditingChange={(editing) => {
-                            console.log('📝 ClientDetailModal editing state changed:', editing);
+                        onEditingChange={(editing, autoSaving) => {
+                            console.log('📝 ClientDetailModal state changed:', { editing, autoSaving });
                             isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+                            isAutoSavingRef.current = autoSaving || false; // Track auto-save state
                             setIsUserEditing(editing);
                             if (editing) {
                                 console.log('✏️ User started editing - blocking LiveDataSync updates');
@@ -3438,15 +3440,19 @@ const Clients = React.memo(() => {
                                 // Set timeout to mark editing as done after 5 seconds of no changes
                                 editingTimeoutRef.current = setTimeout(() => {
                                     console.log('⏸️ User stopped editing - allowing LiveDataSync updates');
+                                    isUserEditingRef.current = false;
                                     setIsUserEditing(false);
                                 }, 5000);
-                            } else {
-                                console.log('✅ User finished editing - allowing LiveDataSync updates');
+                            } else if (!autoSaving) {
+                                console.log('✅ User finished editing and save complete - allowing LiveDataSync updates');
                                 // Clear timeout if user explicitly stopped editing
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
+                                isUserEditingRef.current = false;
                                 setIsUserEditing(false);
+                            } else {
+                                console.log('💾 Auto-save in progress - keeping LiveDataSync blocked');
                             }
                         }}
                     />
@@ -3519,9 +3525,10 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
-                        onEditingChange={(editing) => {
-                            console.log('📝 LeadDetailModal editing state changed:', editing);
+                        onEditingChange={(editing, autoSaving) => {
+                            console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
                             isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+                            isAutoSavingRef.current = autoSaving || false; // Track auto-save state
                             setIsUserEditing(editing);
                             if (editing) {
                                 console.log('✏️ User started editing lead - blocking LiveDataSync updates');
@@ -3532,15 +3539,19 @@ const Clients = React.memo(() => {
                                 // Set timeout to mark editing as done after 5 seconds of no changes
                                 editingTimeoutRef.current = setTimeout(() => {
                                     console.log('⏸️ User stopped editing lead - allowing LiveDataSync updates');
+                                    isUserEditingRef.current = false;
                                     setIsUserEditing(false);
                                 }, 5000);
-                            } else {
-                                console.log('✅ User finished editing lead - allowing LiveDataSync updates');
+                            } else if (!autoSaving) {
+                                console.log('✅ User finished editing lead and save complete - allowing LiveDataSync updates');
                                 // Clear timeout if user explicitly stopped editing
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
+                                isUserEditingRef.current = false;
                                 setIsUserEditing(false);
+                            } else {
+                                console.log('💾 Auto-save in progress - keeping LiveDataSync blocked');
                             }
                         }}
                     />

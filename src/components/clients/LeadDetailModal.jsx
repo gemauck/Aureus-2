@@ -1707,7 +1707,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                if (onEditingChange) onEditingChange(true, isAutoSavingRef.current);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
@@ -1731,7 +1731,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 // Clear editing flag after a delay to allow for final keystrokes
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    if (onEditingChange) onEditingChange(false, isAutoSavingRef.current);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
@@ -2026,36 +2026,38 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }
                                         }}
                                         onBlur={(e) => {
-                                            // Clear cursor position tracking when user leaves field
-                                            notesCursorPositionRef.current = null;
-                                            
-                                            isEditingRef.current = false; // Clear editing flag when user leaves field
-                                            // Auto-save notes when user leaves the field
-                                            // Use the current textarea value to ensure we have the latest data
-                                            if (lead) {
-                                                // Mark as auto-saving to prevent useEffect from resetting
-                                                isAutoSavingRef.current = true;
-                                                
-                                                // Get latest formData including the notes value from the textarea
-                                                const latestNotes = e.target.value;
-                                                setFormData(prev => {
-                                                    const latest = {...prev, notes: latestNotes};
-                                                    // Update ref immediately
-                                                    formDataRef.current = latest;
-                                                    return latest;
+                                        // Clear cursor position tracking when user leaves field
+                                        notesCursorPositionRef.current = null;
+                                        
+                                        isEditingRef.current = false; // Clear editing flag when user leaves field
+                                        // Auto-save notes when user leaves the field
+                                        // Use the current textarea value to ensure we have the latest data
+                                        if (lead) {
+                                        // Mark as auto-saving to prevent useEffect from resetting
+                                        isAutoSavingRef.current = true;
+                                        if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
+                                        
+                                        // Get latest formData including the notes value from the textarea
+                                        const latestNotes = e.target.value;
+                                        setFormData(prev => {
+                                        const latest = {...prev, notes: latestNotes};
+                                        // Update ref immediately
+                                        formDataRef.current = latest;
+                                            return latest;
+                                        });
+                                        
+                                        // Update ref immediately with notes
+                                        const currentFormData = formDataRef.current || {};
+                                        const latest = {...currentFormData, notes: latestNotes};
+                                        formDataRef.current = latest;
+                                        
+                                        // Save the latest data after a small delay to ensure state is updated
+                                        setTimeout(() => {
+                                        onSave(latest, true).finally(() => {
+                                        // Clear auto-saving flag after save completes
+                                            isAutoSavingRef.current = false;
+                                                if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
                                                 });
-                                                
-                                                // Update ref immediately with notes
-                                                const currentFormData = formDataRef.current || {};
-                                                const latest = {...currentFormData, notes: latestNotes};
-                                                formDataRef.current = latest;
-                                                
-                                                // Save the latest data after a small delay to ensure state is updated
-                                                setTimeout(() => {
-                                                    onSave(latest, true).finally(() => {
-                                                        // Clear auto-saving flag after save completes
-                                                        isAutoSavingRef.current = false;
-                                                    });
                                                 }, 100);
                                             }
                                         }}
