@@ -95,6 +95,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Ref for notes textarea to preserve cursor position
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
+    const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -245,6 +246,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                     // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields OR has entered data
                     if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
                         console.log('🚫 Skipping formData update: user is editing or has edited fields');
+                        return;
+                    }
+                    
+                    // CRITICAL: Also check if formDataRef has notes but client prop doesn't - protect user's typing
+                    const refHasNotes = formDataRef.current?.notes && formDataRef.current.notes.trim().length > 0;
+                    const clientHasNotes = client.notes && client.notes.trim().length > 0;
+                    if (refHasNotes && !clientHasNotes) {
+                        console.log('🚫 Skipping formData update: formDataRef has notes but client prop does not - protecting user input', {
+                            refNotesLength: formDataRef.current.notes.length,
+                            refNotesPreview: formDataRef.current.notes.substring(0, 50)
+                        });
                         return;
                     }
                     
@@ -2096,6 +2108,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
+                                            // Skip cursor position update if spacebar was just pressed (handled in onKeyDown)
+                                            const skipCursorUpdate = isSpacebarPressedRef.current;
+                                            if (skipCursorUpdate) {
+                                                isSpacebarPressedRef.current = false;
+                                            }
+                                            
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
                                             userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
@@ -2103,6 +2121,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
+                                            
+                                            // Only update formData if spacebar wasn't pressed (onKeyDown already updated it)
+                                            if (skipCursorUpdate) {
+                                                return; // Skip - onKeyDown already updated formData
+                                            }
                                             
                                             // Preserve cursor position
                                             const textarea = e.target;
@@ -2129,6 +2152,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const end = textarea.selectionEnd;
                                                 const newValue = formData.notes.substring(0, start) + ' ' + formData.notes.substring(end);
                                                 
+                                                // Mark that spacebar was pressed to prevent onChange from interfering
+                                                isSpacebarPressedRef.current = true;
+                                                
                                                 // Store cursor position for restoration
                                                 notesCursorPositionRef.current = start + 1;
                                                 
@@ -2137,7 +2163,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
-                                                // Cursor will be restored by useEffect hook
+                                                // Cursor will be restored by useLayoutEffect hook
                                             }
                                         }}
                                         onBlur={(e) => {
