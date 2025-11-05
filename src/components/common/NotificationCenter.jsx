@@ -290,10 +290,10 @@ const NotificationCenter = () => {
                 title="Notifications"
                 style={{ overflow: 'hidden', position: 'relative' }}
             >
-                <span className="relative inline-flex items-center justify-center notification-icon-wrapper" style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden' }}>
+                <span className="relative inline-flex items-center justify-center notification-icon-wrapper" style={{ width: '100%', height: '100%', position: 'relative' }}>
                     <i className="fas fa-bell text-sm"></i>
                     {unreadCount > 0 && (
-                        <span className="absolute notification-badge bg-red-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center border-2 border-white shadow-sm z-10" style={{ top: '2px', right: '2px', position: 'absolute' }}>
+                        <span className="absolute notification-badge bg-red-600 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center z-10" style={{ top: '4px', right: '4px', position: 'absolute' }}>
                             {unreadCount > 9 ? '9+' : unreadCount}
                         </span>
                     )}
