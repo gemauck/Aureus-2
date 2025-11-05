@@ -74,6 +74,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
     }, [formData]);
     
+    // CRITICAL: Sync formDataRef with formData so guards can check current values
+    useEffect(() => {
+        formDataRef.current = formData;
+    }, [formData]);
+    
     // Cleanup editing timeout on unmount
     useEffect(() => {
         return () => {
@@ -104,7 +109,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             return;
         }
         
-        // CRITICAL: Only use formDataRef.current or defaultFormData - NEVER access formData directly here
+        // CRITICAL: Use formDataRef.current (synced via useEffect) - this is the latest formData state
         // formDataRef.current is updated by a separate useEffect that runs after formData is set
         // On first render, formDataRef.current may be null, so we use defaultFormData
         const currentFormData = formDataRef.current || defaultFormData;
@@ -121,17 +126,30 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             (currentFormData.source && currentFormData.source.trim() && currentFormData.source.trim() !== '' && currentFormData.source !== 'Website')
         );
         
-        // CRITICAL: If user is editing OR has edited any fields OR has entered any data, NEVER reset formData
+        // CRITICAL: Additional check - if formDataRef has content but lead prop is empty/blank, protect user input
+        // This handles race conditions where API response arrives before user input is tracked
+        const refHasContent = Boolean(
+            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
+            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
+            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '')
+        );
+        const leadHasNoContent = lead && !lead.name && !lead.notes && !lead.industry;
+        const protectUserInput = refHasContent && leadHasNoContent;
+        
+        // CRITICAL: If user is editing OR has edited any fields OR has entered any data OR ref has content but lead doesn't, NEVER reset formData
         // This prevents ANY updates (including blank values) from overwriting user input
-        if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
+        if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData || protectUserInput) {
             console.log('🚫 useEffect blocked: user is editing or has entered data', {
                 isEditing: isEditingRef.current,
                 hasUserEditedFields,
                 hasUserEnteredData,
+                protectUserInput,
                 editedFields: Array.from(userEditedFieldsRef.current),
                 currentName: currentFormData.name,
                 currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
-                currentIndustry: currentFormData.industry
+                currentIndustry: currentFormData.industry,
+                refHasContent,
+                leadHasNoContent
             });
             return;
         }
@@ -1955,15 +1973,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 const end = textarea.selectionEnd;
                                                 const currentValue = textarea.value || formData.notes || '';
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
-                                                
-                                                // Directly update the textarea value first (before React re-render)
-                                                textarea.value = newValue;
+                                                const newCursorPos = start + 1;
                                                 
                                                 // Mark that spacebar was pressed to prevent onChange from interfering
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
-                                                notesCursorPositionRef.current = start + 1;
+                                                notesCursorPositionRef.current = newCursorPos;
                                                 
                                                 // Update React state
                                                 setFormData(prev => {
@@ -1972,12 +1988,20 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     return updated;
                                                 });
                                                 
-                                                // Immediately restore cursor position in the DOM element
+                                                // Use multiple strategies to ensure cursor is restored:
+                                                // 1. Immediate DOM update
+                                                textarea.value = newValue;
+                                                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                                                
+                                                // 2. After React render (useLayoutEffect will also handle this)
+                                                // 3. Double RAF to catch any late renders
                                                 requestAnimationFrame(() => {
-                                                    if (textarea && textarea === notesTextareaRef.current) {
-                                                        textarea.setSelectionRange(start + 1, start + 1);
-                                                        textarea.focus();
-                                                    }
+                                                    requestAnimationFrame(() => {
+                                                        if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
+                                                            notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                            notesTextareaRef.current.focus();
+                                                        }
+                                                    });
                                                 });
                                                 
                                                 return false;

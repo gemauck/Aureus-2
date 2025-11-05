@@ -110,6 +110,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [formData.notes]);
     
+    // CRITICAL: Sync formDataRef with formData so guards can check current values
+    useEffect(() => {
+        formDataRef.current = formData;
+    }, [formData]);
+    
     // Cleanup editing timeout on unmount
     useEffect(() => {
         return () => {
@@ -141,7 +146,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             return;
         }
         
-        // CRITICAL: Only use formDataRef.current or defaultFormData - NEVER access formData directly here
+        // CRITICAL: Use formDataRef.current (synced via useEffect) - this is the latest formData state
+        // If formDataRef.current is null, formData hasn't been set yet, so use empty object
         const currentFormData = formDataRef.current || {};
         
         // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
@@ -149,6 +155,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         // CRITICAL: Also check if user has entered ANY data in editable fields (even if not marked as edited yet)
         // This catches cases where the user is typing but the field hasn't been marked yet
+        // Check both formDataRef.current AND formData via functional setState to ensure we get latest values
         const hasUserEnteredData = Boolean(
             (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
             (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
@@ -157,6 +164,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             (currentFormData.website && currentFormData.website.trim() && currentFormData.website.trim() !== '')
         );
         
+        // CRITICAL: Additional check - if formDataRef has content but client prop is empty/blank, protect user input
+        // This handles race conditions where API response arrives before user input is tracked
+        const refHasContent = Boolean(
+            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
+            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
+            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '')
+        );
+        const clientHasNoContent = client && !client.name && !client.notes && !client.industry;
+        const protectUserInput = refHasContent && clientHasNoContent;
+        
         if (client) {
             // Only reset formData if:
             // 1. Client ID changed (viewing a different client), OR
@@ -164,17 +181,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             const clientIdChanged = client.id !== lastSavedClientId.current;
             const isNewClient = !lastSavedClientId.current && client.id; // New client getting an ID for the first time
             
-            // CRITICAL: If user is editing OR has edited any fields OR has entered any data, NEVER reset formData
+            // CRITICAL: If user is editing OR has edited any fields OR has entered any data OR ref has content but client doesn't, NEVER reset formData
             // This prevents ANY updates (including blank values) from overwriting user input
-            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
+            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData || protectUserInput) {
                 console.log('🚫 useEffect blocked: user is editing or has entered data', {
                     isEditing: isEditingRef.current,
                     hasUserEditedFields,
                     hasUserEnteredData,
+                    protectUserInput,
                     editedFields: Array.from(userEditedFieldsRef.current),
                     currentName: currentFormData.name,
                     currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
-                    currentIndustry: currentFormData.industry
+                    currentIndustry: currentFormData.industry,
+                    refHasContent,
+                    clientHasNoContent
                 });
                 // Still update the lastSavedClientId to prevent repeated checks
                 if (client.id) {
@@ -2154,15 +2174,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const end = textarea.selectionEnd;
                                                 const currentValue = textarea.value || formData.notes || '';
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
-                                                
-                                                // Directly update the textarea value first (before React re-render)
-                                                textarea.value = newValue;
+                                                const newCursorPos = start + 1;
                                                 
                                                 // Mark that spacebar was pressed to prevent onChange from interfering
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
-                                                notesCursorPositionRef.current = start + 1;
+                                                notesCursorPositionRef.current = newCursorPos;
                                                 
                                                 // Update React state
                                                 setFormData(prev => {
@@ -2171,12 +2189,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     return updated;
                                                 });
                                                 
-                                                // Immediately restore cursor position in the DOM element
+                                                // Use multiple strategies to ensure cursor is restored:
+                                                // 1. Immediate DOM update
+                                                textarea.value = newValue;
+                                                textarea.setSelectionRange(newCursorPos, newCursorPos);
+                                                
+                                                // 2. After React render (useLayoutEffect will also handle this)
+                                                // 3. Double RAF to catch any late renders
                                                 requestAnimationFrame(() => {
-                                                    if (textarea && textarea === notesTextareaRef.current) {
-                                                        textarea.setSelectionRange(start + 1, start + 1);
-                                                        textarea.focus();
-                                                    }
+                                                    requestAnimationFrame(() => {
+                                                        if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
+                                                            notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                            notesTextareaRef.current.focus();
+                                                        }
+                                                    });
                                                 });
                                                 
                                                 return false;
