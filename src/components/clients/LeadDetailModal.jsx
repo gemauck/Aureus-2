@@ -3239,76 +3239,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                 <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
                                                                                     <i className="fas fa-check mr-1"></i>Approved
                                                                                 </span>
-                                                                                    {(currentUser.role === 'admin' || stage.approvedBy === currentUser.name || stage.approvedBy === currentUser.email) && (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={async () => {
-                                                                                                const reason = prompt('Please provide a reason for changing to rejected:');
-                                                                                                if (reason !== null && reason.trim()) {
-                                                                                                    let updater = currentUser.name || currentUser.email || 'Unknown';
-                                                                                                    const updaterId = currentUserId;
-                                                                                                    
-                                                                                                    const commentText = stageCommentInput[stageKey] || '';
-                                                                                                    const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
-                                                                                                    if (commentText.trim()) {
-                                                                                                        updatedComments.push({
-                                                                                                            id: Date.now(),
-                                                                                                            text: commentText.trim(),
-                                                                                                            author: updater,
-                                                                                                            authorId: updaterId,
-                                                                                                            timestamp: new Date().toISOString()
-                                                                                                        });
-                                                                                                    }
-                                                                                                    
-                                                                                                    const updatedStages = proposal.stages.map((s, idx) => 
-                                                                                                        idx === stageIndex ? { 
-                                                                                                            ...s, 
-                                                                                                            status: 'rejected',
-                                                                                                            comments: updatedComments,
-                                                                                                            rejectedBy: updater,
-                                                                                                            rejectedAt: new Date().toISOString(),
-                                                                                                            rejectedReason: reason.trim(),
-                                                                                                            approvedBy: null,
-                                                                                                            approvedAt: null
-                                                                                                        } : s
-                                                                                                    );
-                                                                                                    
-                                                                                                    const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                                        idx === proposalIndex ? { ...p, stages: updatedStages } : p
-                                                                                                    );
-                                                                                                    setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
-                                                                                                    await saveProposals(updatedProposals);
-                                                                                                    
-                                                                                                    // Notify all assigned parties of the status change from approved to rejected
-                                                                                                    await notifyAllAssignedParties(
-                                                                                                        updatedProposals[proposalIndex],
-                                                                                                        `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
-                                                                                                        `Stage "${stage.name}" has been changed from approved to rejected by ${updater}. Reason: ${reason.trim()}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
-                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
-                                                                                                    );
-                                                                                                }
-                                                                                            }}
-                                                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                                                                                            title="Change to Rejected"
-                                                                                        >
-                                                                                            <i className="fas fa-times mr-1"></i>Reject
-                                                                                        </button>
-                                                                                    )}
-                                                                                </div>
-                                                                            )}
-                                                                            {stage.status === 'rejected' && (
-                                                                                <div className="flex flex-col gap-1">
-                                                                                    <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
-                                                                                        <i className="fas fa-times mr-1"></i>Rejected
-                                                                                    </span>
-                                                                                    {(currentUser.role === 'admin' || stage.rejectedBy === currentUser.name || stage.rejectedBy === currentUser.email) && (
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={async () => {
-                                                                                                const commentText = stageCommentInput[stageKey] || '';
+                                                                                    {/* Allow any user to change status */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={async () => {
+                                                                                            const reason = prompt('Please provide a reason for changing to rejected:');
+                                                                                            if (reason !== null && reason.trim()) {
                                                                                                 let updater = currentUser.name || currentUser.email || 'Unknown';
                                                                                                 const updaterId = currentUserId;
                                                                                                 
+                                                                                                const commentText = stageCommentInput[stageKey] || '';
                                                                                                 const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
                                                                                                 if (commentText.trim()) {
                                                                                                     updatedComments.push({
@@ -3320,23 +3260,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                     });
                                                                                                 }
                                                                                                 
-                                                                                                const updatedStages = proposal.stages.map((s, idx) => {
-                                                                                                    if (idx === stageIndex) {
-                                                                                                        return { 
-                                                                                                            ...s, 
-                                                                                                            status: 'approved', 
-                                                                                                            comments: updatedComments,
-                                                                                                            approvedBy: updater,
-                                                                                                            approvedAt: new Date().toISOString(),
-                                                                                                            rejectedBy: null,
-                                                                                                            rejectedAt: null,
-                                                                                                            rejectedReason: ''
-                                                                                                        };
-                                                                                                    } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
-                                                                                                        return { ...s, status: 'in-progress' };
-                                                                                                    }
-                                                                                                    return s;
-                                                                                                });
+                                                                                                const updatedStages = proposal.stages.map((s, idx) => 
+                                                                                                    idx === stageIndex ? { 
+                                                                                                        ...s, 
+                                                                                                        status: 'rejected',
+                                                                                                        comments: updatedComments,
+                                                                                                        rejectedBy: updater,
+                                                                                                        rejectedAt: new Date().toISOString(),
+                                                                                                        rejectedReason: reason.trim(),
+                                                                                                        approvedBy: null,
+                                                                                                        approvedAt: null
+                                                                                                    } : s
+                                                                                                );
                                                                                                 
                                                                                                 const updatedProposals = formData.proposals.map((p, idx) => 
                                                                                                     idx === proposalIndex ? { ...p, stages: updatedStages } : p
@@ -3344,33 +3279,96 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                 setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
                                                                                                 await saveProposals(updatedProposals);
                                                                                                 
-                                                                                                // Notify all assigned parties of the status change from rejected to approved
+                                                                                                // Notify all assigned parties of the status change from approved to rejected
                                                                                                 await notifyAllAssignedParties(
                                                                                                     updatedProposals[proposalIndex],
                                                                                                     `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
-                                                                                                    `Stage "${stage.name}" has been changed from rejected to approved by ${updater}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                    `Stage "${stage.name}" has been changed from approved to rejected by ${updater}. Reason: ${reason.trim()}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
                                                                                                     `#/clients?lead=${lead.id}&tab=proposals`
                                                                                                 );
-                                                                                                
-                                                                                                // Notify assigned users of next stage
-                                                                                                if (stageIndex + 1 < proposal.stages.length) {
-                                                                                                    const nextStage = updatedStages[stageIndex + 1];
-                                                                                                    if (nextStage.assigneeId) {
-                                                                                                        await sendNotification(
-                                                                                                            nextStage.assigneeId,
-                                                                                                            `Proposal Stage Ready: ${proposal.title || proposal.name}`,
-                                                                                                            `Stage "${nextStage.name}" is now ready for your review.`,
-                                                                                                            `#/clients?lead=${lead.id}&tab=proposals`
-                                                                                                        );
-                                                                                                    }
+                                                                                            }
+                                                                                        }}
+                                                                                        className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                                                                                        title="Change to Rejected"
+                                                                                    >
+                                                                                        <i className="fas fa-times mr-1"></i>Reject
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
+                                                                            {stage.status === 'rejected' && (
+                                                                                <div className="flex flex-col gap-1">
+                                                                                    <span className="px-2 py-1 text-xs bg-red-200 text-red-800 rounded">
+                                                                                        <i className="fas fa-times mr-1"></i>Rejected
+                                                                                    </span>
+                                                                                    {/* Allow any user to change status */}
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={async () => {
+                                                                                            const commentText = stageCommentInput[stageKey] || '';
+                                                                                            let updater = currentUser.name || currentUser.email || 'Unknown';
+                                                                                            const updaterId = currentUserId;
+                                                                                            
+                                                                                            const updatedComments = Array.isArray(stage.comments) ? stage.comments : [];
+                                                                                            if (commentText.trim()) {
+                                                                                                updatedComments.push({
+                                                                                                    id: Date.now(),
+                                                                                                    text: commentText.trim(),
+                                                                                                    author: updater,
+                                                                                                    authorId: updaterId,
+                                                                                                    timestamp: new Date().toISOString()
+                                                                                                });
+                                                                                            }
+                                                                                            
+                                                                                            const updatedStages = proposal.stages.map((s, idx) => {
+                                                                                                if (idx === stageIndex) {
+                                                                                                    return { 
+                                                                                                        ...s, 
+                                                                                                        status: 'approved', 
+                                                                                                        comments: updatedComments,
+                                                                                                        approvedBy: updater,
+                                                                                                        approvedAt: new Date().toISOString(),
+                                                                                                        rejectedBy: null,
+                                                                                                        rejectedAt: null,
+                                                                                                        rejectedReason: ''
+                                                                                                    };
+                                                                                                } else if (idx === stageIndex + 1 && idx < proposal.stages.length) {
+                                                                                                    return { ...s, status: 'in-progress' };
                                                                                                 }
-                                                                                            }}
-                                                                                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-                                                                                            title="Change to Approved"
-                                                                                        >
-                                                                                            <i className="fas fa-check mr-1"></i>Approve
-                                                                                        </button>
-                                                                                    )}
+                                                                                                return s;
+                                                                                            });
+                                                                                            
+                                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                                idx === proposalIndex ? { ...p, stages: updatedStages } : p
+                                                                                            );
+                                                                                            setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
+                                                                                            await saveProposals(updatedProposals);
+                                                                                            
+                                                                                            // Notify all assigned parties of the status change from rejected to approved
+                                                                                            await notifyAllAssignedParties(
+                                                                                                updatedProposals[proposalIndex],
+                                                                                                `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
+                                                                                                `Stage "${stage.name}" has been changed from rejected to approved by ${updater}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                            );
+                                                                                            
+                                                                                            // Notify assigned users of next stage
+                                                                                            if (stageIndex + 1 < proposal.stages.length) {
+                                                                                                const nextStage = updatedStages[stageIndex + 1];
+                                                                                                if (nextStage.assigneeId) {
+                                                                                                    await sendNotification(
+                                                                                                        nextStage.assigneeId,
+                                                                                                        `Proposal Stage Ready: ${proposal.title || proposal.name}`,
+                                                                                                        `Stage "${nextStage.name}" is now ready for your review.`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    );
+                                                                                                }
+                                                                                            }
+                                                                                        }}
+                                                                                        className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                                                                                        title="Change to Approved"
+                                                                                    >
+                                                                                        <i className="fas fa-check mr-1"></i>Approve
+                                                                                    </button>
                                                                                 </div>
                                                                             )}
                                                                             {stage.status === 'in-progress' && (
