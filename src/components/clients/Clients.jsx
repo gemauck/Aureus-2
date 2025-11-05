@@ -253,6 +253,17 @@ const Clients = React.memo(() => {
     const [projects, setProjects] = useState([]);
     const [selectedClient, setSelectedClient] = useState(null);
     const [selectedLead, setSelectedLead] = useState(null);
+    const selectedClientRef = useRef(null);
+    const selectedLeadRef = useRef(null);
+    
+    // Keep refs in sync with state for LiveDataSync handler
+    useEffect(() => {
+        selectedClientRef.current = selectedClient;
+    }, [selectedClient]);
+    
+    useEffect(() => {
+        selectedLeadRef.current = selectedLead;
+    }, [selectedLead]);
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     // Removed isEditing state - always allow editing
@@ -1100,6 +1111,22 @@ const Clients = React.memo(() => {
                 return;
             }
             if (message?.type === 'data' && Array.isArray(message.data)) {
+                // CRITICAL: Ignore LiveDataSync updates when Add Client/Lead forms are open
+                const currentViewMode = viewModeRef.current;
+                const isAddClientForm = currentViewMode === 'client-detail' && selectedClientRef.current === null;
+                const isAddLeadForm = currentViewMode === 'lead-detail' && selectedLeadRef.current === null;
+                const isDetailView = currentViewMode === 'client-detail' || currentViewMode === 'lead-detail';
+                
+                if (isAddClientForm || isAddLeadForm || isDetailView) {
+                    console.log('🚫 LiveDataSync: Ignoring update - form is open', {
+                        viewMode: currentViewMode,
+                        isAddClientForm,
+                        isAddLeadForm,
+                        isDetailView
+                    });
+                    return; // Ignore all updates when forms are open
+                }
+                
                 if (message.dataType === 'clients') {
                     // Check if data changed to prevent unnecessary updates
                     const dataHash = JSON.stringify(message.data);
