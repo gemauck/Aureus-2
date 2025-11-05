@@ -57,6 +57,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const isEditingRef = useRef(false); // Track when user is actively typing/editing
     const editingTimeoutRef = useRef(null); // Track timeout to clear editing flag
     
+    // Track which fields the user has actually entered data into - NEVER overwrite these
+    const userEditedFieldsRef = useRef(new Set()); // Set of field names user has edited
+    
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
@@ -205,9 +208,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 userEditedFieldsRef.current.clear();
             }
         } else if (lead && currentFormData.id === lead.id) {
-            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has entered data
-            if (isEditingRef.current || hasUserEnteredData) {
-                console.log('🚫 Skipping formData update: user is editing or has entered data');
+            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields
+            if (isEditingRef.current || hasUserEditedFields) {
+                console.log('🚫 Skipping formData update: user is editing or has edited fields');
                 return;
             }
             
@@ -255,18 +258,25 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             });
             
             // Update ONLY status and stage from lead prop (fields that might change externally)
-            // CRITICAL: NEVER update user-editable fields (name, notes, industry, source) 
+            // CRITICAL: NEVER update user-edited fields (name, notes, industry, source) 
             // even if they're blank in the API response - preserve user input
-            setFormData(prev => ({
-                ...prev,
-                // Only update fields that can't be edited by user OR are safe to update
-                status: lead.status || prev.status,
-                stage: lead.stage || prev.stage,
-                // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
-                proposals: proposalsToUse
-                // CRITICAL: ALWAYS preserve user-editable fields - never overwrite with API values (even if blank)
-                // name, notes, industry, source are preserved from prev
-            }));
+            setFormData(prev => {
+                const updated = {
+                    ...prev,
+                    // Only update fields that can't be edited by user OR are safe to update
+                    status: lead.status || prev.status,
+                    stage: lead.stage || prev.stage,
+                    // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
+                    proposals: proposalsToUse
+                };
+                // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
+                userEditedFieldsRef.current.forEach(fieldName => {
+                    if (prev[fieldName] !== undefined && prev[fieldName] !== null) {
+                        updated[fieldName] = prev[fieldName];
+                    }
+                });
+                return updated;
+            });
             
             return; // Don't process further updates
         }
@@ -1684,6 +1694,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userEditedFieldsRef.current.add('name'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
@@ -1710,6 +1721,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
@@ -1744,6 +1756,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userEditedFieldsRef.current.add('firstContactDate'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
@@ -1778,6 +1791,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userEditedFieldsRef.current.add('source'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;

@@ -192,32 +192,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 };
                 
                 if (clientIdChanged) {
-                    // New client - CRITICAL: Only set formData fresh if user hasn't entered any data
-                    // If user has entered data, preserve it instead of overwriting with API data
-                    if (hasUserEnteredData) {
-                        console.log('🚫 New client detected but user has entered data - preserving user input', {
-                            hasName: !!(currentFormData.name && currentFormData.name.trim()),
-                            hasNotes: !!(currentFormData.notes && currentFormData.notes.trim())
-                        });
-                        // Merge API data but preserve user-entered fields
-                        setFormData(prevFormData => ({
-                            ...parsedClient,
-                            // CRITICAL: NEVER overwrite user-entered fields with blank/null API values
-                            name: (prevFormData.name && prevFormData.name.trim()) ? prevFormData.name : (parsedClient.name || ''),
-                            notes: (prevFormData.notes && prevFormData.notes.trim()) ? prevFormData.notes : (parsedClient.notes || ''),
-                            industry: (prevFormData.industry && prevFormData.industry.trim()) ? prevFormData.industry : (parsedClient.industry || ''),
-                            address: (prevFormData.address && prevFormData.address.trim()) ? prevFormData.address : (parsedClient.address || ''),
-                            website: (prevFormData.website && prevFormData.website.trim()) ? prevFormData.website : (parsedClient.website || '')
-                        }));
-                    } else {
-                        // User hasn't entered data - safe to set fresh from API
-                        console.log('🔄 New client - setting formData fresh:', {
-                            contactsCount: parsedClient.contacts?.length,
-                            sitesCount: parsedClient.sites?.length
-                        });
-                        setFormData(parsedClient);
-                    }
-                if (clientIdChanged) {
                     // New client - CRITICAL: Only set formData fresh if user hasn't edited any fields
                     // If user has edited fields, preserve those fields instead of overwriting with API data
                     if (hasUserEditedFields) {
@@ -244,7 +218,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         setFormData(parsedClient);
                         // Reset edited fields tracking when loading new client
                         userEditedFieldsRef.current.clear();
-                    }
+                }
                 } else if (client.id === currentFormData.id) {
                     // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields
                     if (isEditingRef.current || hasUserEditedFields) {
