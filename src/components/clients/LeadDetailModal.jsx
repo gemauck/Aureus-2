@@ -1873,6 +1873,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onChange={async (e) => {
                                             const newStage = e.target.value;
                                             
+                                            // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                                            // This prevents LiveDataSync from overwriting during the delay
+                                            isAutoSavingRef.current = true;
+                                            if (onEditingChange) onEditingChange(false, true);
+                                            
+                                            console.log('🔒 Stage change: auto-save guards set immediately', newStage);
+                                            
                                             // Update state and get the updated formData
                                             setFormData(prev => {
                                             const updated = {...prev, stage: newStage};
@@ -1882,10 +1889,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             // Use setTimeout to ensure state is updated
                                             setTimeout(async () => {
                                             try {
-                                            // Notify parent that auto-save is starting
-                                            isAutoSavingRef.current = true;
-                                            if (onEditingChange) onEditingChange(false, true);
-                                            
                                             // Get the latest formData from ref (updated by useEffect)
                                             const latest = {...formDataRef.current, stage: newStage};
                                             
@@ -1904,6 +1907,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 setTimeout(() => {
                                                 isAutoSavingRef.current = false;
                                                 if (onEditingChange) onEditingChange(false, false);
+                                                console.log('🔓 Stage change: auto-save guards released');
                                             }, 3000);
                                             } catch (error) {
                                                     console.error('❌ Error saving stage:', error);
@@ -4231,6 +4235,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onChange: async (e) => {
                                                 const newStage = e.target.value;
                                                 
+                                                // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
+                                                // This prevents LiveDataSync from overwriting during the delay
+                                                isAutoSavingRef.current = true;
+                                                if (onEditingChange) onEditingChange(false, true);
+                                                
+                                                console.log('🔒 Stage change: auto-save guards set immediately', newStage);
+                                                
                                                 // Update state and get the updated formData
                                                 setFormData(prev => {
                                                     const updated = {...prev, stage: newStage};
@@ -4248,8 +4259,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 
                                                                 // Save this as the last saved state
                                                                 lastSavedDataRef.current = latest;
-                                                                isAutoSavingRef.current = true;
-                                                                if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
                                                                 
                                                                 // Save to API - ensure it's awaited
                                                                 await onSave(latest, true);
@@ -4260,6 +4269,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 setTimeout(() => {
                                                                 isAutoSavingRef.current = false;
                                                                     if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
+                                                                    console.log('🔓 Stage change: auto-save guards released');
                                                         }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
