@@ -524,11 +524,13 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
         // Use more visible alternate color
         const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f3f4f6';
         const cellStyle = {
-            padding: '4px 6px',
+            padding: '2px 8px',
             border: '1px solid #d1d5db',
             backgroundColor: isWorking ? '#f0f9ff' : defaultBgColor,
-            minHeight: field === 'comments' ? '60px' : '32px',
-            verticalAlign: 'top'
+            minHeight: field === 'comments' ? '40px' : '24px',
+            verticalAlign: 'top',
+            width: field === 'comments' ? '150px' : field === 'compliance' ? '120px' : '120px',
+            minWidth: field === 'comments' ? '150px' : field === 'compliance' ? '120px' : '120px'
         };
         
         // Always show input boxes (spreadsheet style)
@@ -547,15 +549,15 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 style: {
                     width: '100%',
                     height: '100%',
-                    minHeight: '56px',
-                    padding: '4px 6px',
+                    minHeight: '36px',
+                    padding: '2px 6px',
                     fontSize: '11px',
                     fontFamily: 'inherit',
                     border: 'none',
                     outline: 'none',
                     backgroundColor: 'transparent',
                     resize: 'none',
-                    lineHeight: '1.4'
+                    lineHeight: '1.3'
                 },
                 className: isEditing ? 'ring-1 ring-blue-500' : ''
             }));
@@ -574,8 +576,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 placeholder: field === 'compliance' ? 'Link...' : 'Link...',
                 style: {
                     width: '100%',
-                    height: '24px',
-                    padding: '2px 4px',
+                    height: '20px',
+                    padding: '1px 4px',
                     fontSize: '11px',
                     fontFamily: 'inherit',
                     border: 'none',
@@ -647,7 +649,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             React.createElement('button', {
                 className: 'px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors',
                 style: { 
-                    width: '280px',
+                    width: '320px',
                     textAlign: 'left',
                     flexShrink: 0
                 }
@@ -668,7 +670,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '8px 10px',
+                                padding: '6px 10px',
                                 fontSize: '11px',
                                 fontWeight: '600',
                                 backgroundColor: '#f3f4f6',
@@ -677,8 +679,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 position: 'sticky',
                                 left: 0,
                                 zIndex: 10,
-                                minWidth: '280px',
-                                width: '280px'
+                                minWidth: '320px',
+                                width: '320px'
                             },
                             className: 'text-left sticky left-0 z-10'
                         }, 'Project'),
@@ -689,45 +691,53 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                 key: safeMonth + '-header',
                                 colSpan: 3,
                                 style: {
-                                    padding: '8px 10px',
+                                    padding: '6px 10px',
                                     fontSize: '11px',
                                     fontWeight: '600',
                                     textAlign: 'center',
                                     backgroundColor: isWorking ? '#eff6ff' : '#f3f4f6',
                                     border: '1px solid #9ca3af',
-                                    borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #9ca3af'
+                                    borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #9ca3af',
+                                    minWidth: '390px',
+                                    width: '390px'
                                 }
                             }, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2));
                         }),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '8px 10px',
+                                padding: '6px 10px',
                                 fontSize: '11px',
                                 fontWeight: '600',
                                 backgroundColor: '#f3f4f6',
                                 border: '1px solid #9ca3af',
-                                borderLeft: '2px solid #6b7280'
+                                borderLeft: '2px solid #6b7280',
+                                minWidth: '100px',
+                                width: '100px'
                             }
                         }, 'PM'),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '8px 10px',
+                                padding: '6px 10px',
                                 fontSize: '11px',
                                 fontWeight: '600',
                                 backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af'
+                                border: '1px solid #9ca3af',
+                                minWidth: '120px',
+                                width: '120px'
                             }
                         }, 'Type'),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '8px 10px',
+                                padding: '6px 10px',
                                 fontSize: '11px',
                                 fontWeight: '600',
                                 backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af'
+                                border: '1px solid #9ca3af',
+                                minWidth: '100px',
+                                width: '100px'
                             }
                         }, 'Status')
                     ),
@@ -739,36 +749,42 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '6px 8px',
+                                        padding: '4px 8px',
                                         fontSize: '10px',
                                         fontWeight: '500',
                                         textAlign: 'left',
                                         backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
                                         border: '1px solid #d1d5db',
                                         borderTop: 'none',
-                                        borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #d1d5db'
+                                        borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #d1d5db',
+                                        minWidth: '120px',
+                                        width: '120px'
                                     }
                                 }, 'Compliance'),
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '6px 8px',
+                                        padding: '4px 8px',
                                         fontSize: '10px',
                                         fontWeight: '500',
                                         textAlign: 'left',
                                         backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
                                         border: '1px solid #d1d5db',
-                                        borderTop: 'none'
+                                        borderTop: 'none',
+                                        minWidth: '120px',
+                                        width: '120px'
                                     }
                                 }, 'Data'),
                                 React.createElement('th', {
                                     style: {
-                                        padding: '6px 8px',
+                                        padding: '4px 8px',
                                         fontSize: '10px',
                                         fontWeight: '500',
                                         textAlign: 'left',
                                         backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
                                         border: '1px solid #d1d5db',
-                                        borderTop: 'none'
+                                        borderTop: 'none',
+                                        minWidth: '150px',
+                                        width: '150px'
                                     }
                                 }, 'Comments')
                             );
@@ -822,7 +838,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                         },
                             React.createElement('td', { 
                                 style: {
-                                    padding: '8px 10px',
+                                    padding: '4px 10px',
                                     fontSize: '11px',
                                     backgroundColor: rowBgColor,
                                     border: '1px solid #d1d5db',
@@ -830,8 +846,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     position: 'sticky',
                                     left: 0,
                                     zIndex: 9,
-                                    minWidth: '280px',
-                                    width: '280px'
+                                    minWidth: '320px',
+                                    width: '320px'
                                 },
                                 className: 'sticky left-0 z-10'
                             },
@@ -851,34 +867,40 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             }),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '4px 6px',
+                                    padding: '2px 6px',
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
                                     borderLeft: '2px solid #6b7280',
                                     backgroundColor: rowBgColor,
-                                    color: '#4b5563'
+                                    color: '#4b5563',
+                                    minWidth: '100px',
+                                    width: '100px'
                                 }
                             }, String(project.manager || '-')),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '4px 6px',
+                                    padding: '2px 6px',
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
                                     backgroundColor: rowBgColor,
-                                    color: '#4b5563'
+                                    color: '#4b5563',
+                                    minWidth: '120px',
+                                    width: '120px'
                                 }
                             }, String(project.type || '-')),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '4px 6px',
+                                    padding: '2px 6px',
                                     fontSize: '11px',
                                     border: '1px solid #d1d5db',
-                                    backgroundColor: rowBgColor
+                                    backgroundColor: rowBgColor,
+                                    minWidth: '100px',
+                                    width: '100px'
                                 }
                             },
                                 React.createElement('span', {
                                     style: {
-                                        padding: '2px 6px',
+                                        padding: '1px 6px',
                                         fontSize: '10px',
                                         borderRadius: '4px',
                                         fontWeight: '500',
