@@ -73,6 +73,9 @@ cd /var/www/abcotronics-erp
 
 echo "📥 Pulling latest code..."
 git fetch origin
+# Clean up any untracked files that might conflict with incoming changes
+git clean -fd || true
+git reset --hard HEAD || true
 git pull origin main || git pull origin master
 echo "✅ Code updated"
 
