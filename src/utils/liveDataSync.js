@@ -101,6 +101,11 @@ class LiveDataSync {
             log('⏸️ Cleared sync interval timer');
         }
         
+        // If sync is in progress, mark it to abort (results will be skipped)
+        if (this.syncInProgress) {
+            log('⏸️ Sync in progress - will abort when current operations complete');
+        }
+        
         this.notifySubscribers({ type: 'connection', status: 'paused' });
     }
 
@@ -220,6 +225,12 @@ class LiveDataSync {
                 const delay = i * 200; // 200ms delay between each call
                 const promise = new Promise(resolve => {
                     setTimeout(async () => {
+                        // Check if paused before making API call
+                        if (this.isPaused) {
+                            log(`⏸️ Sync paused, skipping ${call.type} API call`);
+                            resolve({ dataType: call.type, success: false, skipped: true });
+                            return;
+                        }
                         try {
                             const result = await this.syncData(call.type, call.fn, bypassCache);
                             resolve(result);
@@ -239,6 +250,12 @@ class LiveDataSync {
                     const usersDelay = syncCalls.length * 200; // After all other calls
                     const usersPromise = new Promise(resolve => {
                         setTimeout(async () => {
+                            // Check if paused before making API call
+                            if (this.isPaused) {
+                                log('⏸️ Sync paused, skipping users API call');
+                                resolve({ dataType: 'users', success: false, skipped: true });
+                                return;
+                            }
                             try {
                                 const result = await this.syncData('users', () => window.DatabaseAPI.getUsers(), bypassCache);
                                 resolve(result);
@@ -255,11 +272,20 @@ class LiveDataSync {
 
             const results = await Promise.allSettled(syncPromises);
             
+            // Check if paused after async operations complete - abort if paused
+            if (this.isPaused) {
+                log('⏸️ Sync paused during execution, aborting results processing');
+                this.syncInProgress = false;
+                this._forceSyncInProgress = false;
+                return;
+            }
+            
             // Check for failures - handle both rejected promises and failed syncData results
+            // Skip results that were skipped due to pause
             const failures = results.filter(result => {
                 if (result.status === 'rejected') return true;
-                // Check if the result itself indicates failure
-                if (result.status === 'fulfilled' && result.value && !result.value.success) {
+                // Check if the result itself indicates failure (but not skipped)
+                if (result.status === 'fulfilled' && result.value && !result.value.success && !result.value.skipped) {
                     return true;
                 }
                 return false;
@@ -356,6 +382,14 @@ class LiveDataSync {
     async syncData(dataType, fetchFunction, bypassCache = false) {
         // Wrap entire function to ensure it never throws
         try {
+            // Check if paused before making any API calls
+            if (this.isPaused) {
+                const getLog = () => window.debug?.log || (() => {});
+                const log = getLog();
+                log(`⏸️ Sync paused, skipping ${dataType} sync`);
+                return { dataType, success: false, skipped: true };
+            }
+            
             const now = Date.now(); // Get timestamp once for use throughout the function
             // Check if we recently synced this data type (unless bypassing cache)
             if (!bypassCache) {
