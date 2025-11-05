@@ -819,6 +819,129 @@ const Clients = React.memo(() => {
         }
     }, [clients.length]);
 
+    // CRITICAL: Sync selectedClient with clients array when LiveDataSync updates it
+    // BUT preserve user-edited fields to prevent overwriting user input
+    // IMPORTANT: We check selectedClient for user content, but the modal's formData might have more recent content
+    // So we ALWAYS preserve selectedClient's content if it exists, even if LiveDataSync tries to overwrite with blank
+    useEffect(() => {
+        if (!selectedClient || !selectedClient.id) return;
+        
+        // CRITICAL: Don't update selectedClient if the modal is open (user might be typing)
+        // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
+        // from overwriting selectedClient while the user is editing
+        if (viewMode === 'client-detail') {
+            // Modal is open - don't update selectedClient from LiveDataSync
+            // This prevents overwriting user input while they're typing
+            return;
+        }
+        
+        // Find the updated client in the clients array
+        const updatedClient = clients.find(c => c.id === selectedClient.id);
+        if (!updatedClient) return;
+        
+        // Check if updatedClient is different from selectedClient (new reference)
+        // If they're the same object reference, no update needed
+        if (updatedClient === selectedClient) return;
+        
+        // CRITICAL: ALWAYS preserve fields from selectedClient that have content
+        // This prevents LiveDataSync from overwriting user input with blank values
+        // Even if formData in the modal has newer content, preserving selectedClient prevents
+        // the modal from receiving a blank client prop that would trigger its useEffect
+        const hasUserContent = Boolean(
+            (selectedClient.name && selectedClient.name.trim() && selectedClient.name.trim() !== '') ||
+            (selectedClient.notes && selectedClient.notes.trim() && selectedClient.notes.trim() !== '') ||
+            (selectedClient.industry && selectedClient.industry.trim() && selectedClient.industry.trim() !== '') ||
+            (selectedClient.address && selectedClient.address.trim() && selectedClient.address.trim() !== '') ||
+            (selectedClient.website && selectedClient.website.trim() && selectedClient.website.trim() !== '')
+        );
+        
+        // CRITICAL: If user has content (regardless of whether LiveDataSync would overwrite), preserve it
+        // This ensures user input is NEVER overwritten by LiveDataSync updates
+        // The modal's useEffect will also block updates, but this provides an extra layer of protection
+        if (hasUserContent) {
+            // Merge: preserve user-edited fields, update other fields from LiveDataSync
+            const mergedClient = {
+                ...updatedClient,
+                // CRITICAL: ALWAYS preserve user-edited fields if they have content in selectedClient
+                // This prevents LiveDataSync from passing a blank client prop to the modal
+                name: selectedClient.name && selectedClient.name.trim() ? selectedClient.name : updatedClient.name,
+                notes: selectedClient.notes && selectedClient.notes.trim() ? selectedClient.notes : updatedClient.notes,
+                industry: selectedClient.industry && selectedClient.industry.trim() ? selectedClient.industry : updatedClient.industry,
+                address: selectedClient.address && selectedClient.address.trim() ? selectedClient.address : updatedClient.address,
+                website: selectedClient.website && selectedClient.website.trim() ? selectedClient.website : updatedClient.website
+            };
+            
+            // Only update if actually different to prevent unnecessary re-renders
+            const needsUpdate = JSON.stringify(mergedClient) !== JSON.stringify(selectedClient);
+            if (needsUpdate) {
+                console.log('🔄 Clients.jsx: Syncing selectedClient with LiveDataSync, preserving user content', {
+                    preservedName: selectedClient.name && selectedClient.name.trim() ? 'yes' : 'no',
+                    preservedNotes: selectedClient.notes && selectedClient.notes.trim() ? 'yes' : 'no',
+                    liveDataSyncName: updatedClient.name,
+                    liveDataSyncNotes: updatedClient.notes?.substring(0, 20)
+                });
+                setSelectedClient(mergedClient);
+            }
+        } else {
+            // No user content to preserve, safe to update
+            setSelectedClient(updatedClient);
+        }
+    }, [clients, selectedClient?.id, viewMode]); // Include viewMode to detect when modal opens/closes
+    
+    // CRITICAL: Same protection for selectedLead
+    useEffect(() => {
+        if (!selectedLead || !selectedLead.id) return;
+        
+        // CRITICAL: Don't update selectedLead if the modal is open (user might be typing)
+        // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
+        // from overwriting selectedLead while the user is editing
+        if (viewMode === 'lead-detail') {
+            // Modal is open - don't update selectedLead from LiveDataSync
+            // This prevents overwriting user input while they're typing
+            return;
+        }
+        
+        // Find the updated lead in the leads array
+        const updatedLead = leads.find(l => l.id === selectedLead.id);
+        if (!updatedLead) return;
+        
+        // Check if updatedLead is different from selectedLead (new reference)
+        if (updatedLead === selectedLead) return;
+        
+        // CRITICAL: ALWAYS preserve fields from selectedLead that have content
+        const hasUserContent = Boolean(
+            (selectedLead.name && selectedLead.name.trim() && selectedLead.name.trim() !== '') ||
+            (selectedLead.notes && selectedLead.notes.trim() && selectedLead.notes.trim() !== '') ||
+            (selectedLead.industry && selectedLead.industry.trim() && selectedLead.industry.trim() !== '') ||
+            (selectedLead.source && selectedLead.source.trim() && selectedLead.source.trim() !== '' && selectedLead.source !== 'Website')
+        );
+        
+        // CRITICAL: If user has content, preserve it
+        if (hasUserContent) {
+            // Merge: preserve user-edited fields
+            const mergedLead = {
+                ...updatedLead,
+                name: selectedLead.name && selectedLead.name.trim() ? selectedLead.name : updatedLead.name,
+                notes: selectedLead.notes && selectedLead.notes.trim() ? selectedLead.notes : updatedLead.notes,
+                industry: selectedLead.industry && selectedLead.industry.trim() ? selectedLead.industry : updatedLead.industry,
+                source: selectedLead.source && selectedLead.source.trim() && selectedLead.source !== 'Website' ? selectedLead.source : updatedLead.source
+            };
+            
+            // Only update if actually different to prevent unnecessary re-renders
+            const needsUpdate = JSON.stringify(mergedLead) !== JSON.stringify(selectedLead);
+            if (needsUpdate) {
+                console.log('🔄 Clients.jsx: Syncing selectedLead with LiveDataSync, preserving user content', {
+                    preservedName: selectedLead.name && selectedLead.name.trim() ? 'yes' : 'no',
+                    preservedNotes: selectedLead.notes && selectedLead.notes.trim() ? 'yes' : 'no'
+                });
+                setSelectedLead(mergedLead);
+            }
+        } else {
+            // No user content to preserve, safe to update
+            setSelectedLead(updatedLead);
+        }
+    }, [leads, selectedLead?.id, viewMode]); // Include viewMode to detect when modal opens/closes
+    
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     useEffect(() => {
         const mapDbClient = (c) => {

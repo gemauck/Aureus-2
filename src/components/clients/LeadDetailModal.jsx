@@ -60,6 +60,10 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Track which fields the user has actually entered data into - NEVER overwrite these
     const userEditedFieldsRef = useRef(new Set()); // Set of field names user has edited
     
+    // CRITICAL: Track the last lead object we processed to detect LiveDataSync updates
+    // This helps us run the guard even when the ID hasn't changed but the object reference has
+    const lastProcessedLeadRef = useRef(null);
+    
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
@@ -93,123 +97,48 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // Update formData when lead prop changes - but only when lead ID changes
-    // NOTE: formData is intentionally NOT in dependency array to prevent loops
-    // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
-    // Use formDataRef.current which is synced via a separate useEffect
+    // CRITICAL: NEVER update formData from prop if user has started typing
+    // Once user types, formData is completely controlled by user input
     useEffect(() => {
-        // Don't reset formData if we're in the middle of auto-saving OR saving proposals OR creating a proposal OR user is editing
-        if (isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current || isEditingRef.current) {
-            console.log('🚫 useEffect blocked: saving/editing in progress', {
-                isAutoSaving: isAutoSavingRef.current,
-                isSavingProposals: isSavingProposalsRef.current,
-                isCreatingProposal: isCreatingProposalRef.current,
-                isEditing: isEditingRef.current
-            });
+        // CRITICAL: Skip if this is the exact same lead object we just processed
+        if (lead === lastProcessedLeadRef.current) {
             return;
         }
         
-        // CRITICAL: Use formDataRef.current (synced via useEffect) - this is the latest formData state
-        // formDataRef.current is updated by a separate useEffect that runs after formData is set
-        // On first render, formDataRef.current may be null, so we use defaultFormData
+        // CRITICAL: If user has started typing, NEVER update formData from prop
+        if (userHasStartedTypingRef.current) {
+            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled');
+            lastProcessedLeadRef.current = lead;
+            return;
+        }
+        
+        // Also check editing flags and formData content
         const currentFormData = formDataRef.current || defaultFormData;
-        
-        // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
-        const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
-        
-        // CRITICAL: Also check if user has entered ANY data in editable fields (even if not marked as edited yet)
-        // This catches cases where the user is typing but the field hasn't been marked yet
-        const hasUserEnteredData = Boolean(
-            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
-            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
-            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '') ||
-            (currentFormData.source && currentFormData.source.trim() && currentFormData.source.trim() !== '' && currentFormData.source !== 'Website')
+        const formDataHasContent = Boolean(
+            (currentFormData.name && currentFormData.name.trim()) ||
+            (currentFormData.notes && currentFormData.notes.trim()) ||
+            (currentFormData.industry && currentFormData.industry.trim()) ||
+            (currentFormData.source && currentFormData.source.trim() && currentFormData.source !== 'Website')
         );
         
-        // CRITICAL: Additional check - if formDataRef has content but lead prop is empty/blank, protect user input
-        // This handles race conditions where API response arrives before user input is tracked
-        const refHasContent = Boolean(
-            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
-            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
-            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '')
-        );
-        const leadHasNoContent = lead && !lead.name && !lead.notes && !lead.industry;
-        const protectUserInput = refHasContent && leadHasNoContent;
-        
-        // CRITICAL: If user is editing OR has edited any fields OR has entered any data OR ref has content but lead doesn't, NEVER reset formData
-        // This prevents ANY updates (including blank values) from overwriting user input
-        if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData || protectUserInput) {
-            console.log('🚫 useEffect blocked: user is editing or has entered data', {
-                isEditing: isEditingRef.current,
-                hasUserEditedFields,
-                hasUserEnteredData,
-                protectUserInput,
-                editedFields: Array.from(userEditedFieldsRef.current),
-                currentName: currentFormData.name,
-                currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
-                currentIndustry: currentFormData.industry,
-                refHasContent,
-                leadHasNoContent
-            });
+        if (formDataHasContent) {
+            console.log('🚫 useEffect BLOCKED: formData has content');
+            lastProcessedLeadRef.current = lead;
             return;
         }
         
-        // ONLY initialize formData when switching to a different lead (different ID)
-        // Do NOT reinitialize when the same lead is updated
-        if (lead && !currentFormData.id) {
-            // First load - CRITICAL: Only initialize if user hasn't edited any fields or entered data
-            // If user has edited fields or entered data, preserve those fields instead of overwriting with API data
-            if (hasUserEditedFields || hasUserEnteredData) {
-                console.log('🚫 First load but user has edited fields - preserving user input');
-                const parsedLead = {
-                    ...lead,
-                    stage: lead.stage || 'Awareness',
-                    status: 'active',
-                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                    proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-                    thumbnail: lead.thumbnail || ''
-                };
-                // Merge but preserve user-edited fields
-                setFormData(prevFormData => {
-                    const merged = {...parsedLead};
-                    // CRITICAL: NEVER overwrite user-edited fields with blank/null API values
-                    userEditedFieldsRef.current.forEach(fieldName => {
-                        if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
-                            merged[fieldName] = prevFormData[fieldName];
-                        }
-                    });
-                    return merged;
-                });
-            } else {
-                // User hasn't edited any fields - safe to initialize fresh
-                const parsedLead = {
-                    ...lead,
-                    stage: lead.stage || 'Awareness',
-                    status: 'active',
-                    contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
-                    followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
-                    projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
-                    comments: typeof lead.comments === 'string' ? JSON.parse(lead.comments || '[]') : (lead.comments || []),
-                    activityLog: typeof lead.activityLog === 'string' ? JSON.parse(lead.activityLog || '[]') : (lead.activityLog || []),
-                    billingTerms: typeof lead.billingTerms === 'string' ? JSON.parse(lead.billingTerms || '{}') : (lead.billingTerms || {}),
-                    proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
-                    thumbnail: lead.thumbnail || ''
-                };
-                setFormData(parsedLead);
-                // Reset edited fields tracking when loading new lead
-                userEditedFieldsRef.current.clear();
-            }
-        } else if (lead && currentFormData.id && lead.id !== currentFormData.id) {
-            // Switching to a different lead - CRITICAL: Preserve user-edited fields
+        if (isEditingRef.current || isAutoSavingRef.current || isSavingProposalsRef.current || isCreatingProposalRef.current) {
+            console.log('🚫 useEffect BLOCKED: user is editing or saving');
+            lastProcessedLeadRef.current = lead;
+            return;
+        }
+        
+        // Only initialize if formData is empty AND user hasn't started typing
+        if (lead && !formDataHasContent) {
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
-                status: lead.status || 'Potential',
+                status: 'active',
                 contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
                 followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -219,99 +148,28 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 proposals: typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []),
                 thumbnail: lead.thumbnail || ''
             };
-            // Only switch if user hasn't edited fields or entered data, otherwise preserve their input
-            if (hasUserEditedFields || hasUserEnteredData) {
-                console.log('🚫 Switching leads but user has edited fields - preserving user input');
-                setFormData(prevFormData => {
-                    const merged = {...parsedLead};
-                    // Preserve user-edited fields
-                    userEditedFieldsRef.current.forEach(fieldName => {
-                        if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
-                            merged[fieldName] = prevFormData[fieldName];
-                        }
-                    });
-                    return merged;
-                });
-            } else {
-                setFormData(parsedLead);
-                // Reset edited fields tracking when switching to different lead
-                userEditedFieldsRef.current.clear();
+            
+            console.log('✅ Initializing formData from lead prop');
+            setFormData(parsedLead);
+            // Also update input refs if they exist
+            if (nameInputRef.current && parsedLead.name) {
+                nameInputRef.current.value = parsedLead.name;
             }
-        } else if (lead && currentFormData.id === lead.id) {
-            // Same lead reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields OR has entered data
-            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
-                console.log('🚫 Skipping formData update: user is editing or has edited fields');
-                return;
+            if (notesTextareaRef.current && parsedLead.notes) {
+                notesTextareaRef.current.value = parsedLead.notes;
             }
-            
-            // CRITICAL: ALWAYS preserve proposals from current formData - NEVER overwrite from lead prop
-            // The lead prop might have stale or incomplete proposals from API responses
-            const currentProposals = currentFormData.proposals || [];
-            const leadProposals = typeof lead.proposals === 'string' ? JSON.parse(lead.proposals || '[]') : (lead.proposals || []);
-            
-            // Check if data actually changed before updating
-            const dataChanged = 
-                lead.status !== currentFormData.status ||
-                lead.stage !== currentFormData.stage ||
-                JSON.stringify(leadProposals) !== JSON.stringify(currentProposals);
-            
-            if (!dataChanged) {
-                console.log('🚫 Skipping formData update: lead data unchanged');
-                return;
-            }
-            
-            console.log('🔄 Same lead reloaded - ALWAYS preserving proposals:', {
-                currentProposalsCount: currentProposals.length,
-                leadProposalsCount: leadProposals.length,
-                currentProposalIds: currentProposals.map(p => p.id),
-                leadProposalIds: leadProposals.map(p => p.id),
-                isSavingProposals: isSavingProposalsRef.current,
-                isCreatingProposal: isCreatingProposalRef.current,
-                hasLastSavedData: !!lastSavedDataRef.current
-            });
-            
-            // CRITICAL: If we have proposals in formData (even if empty), NEVER overwrite from lead prop
-            // This prevents API responses from clearing proposals that were just created
-            // Only use lead.proposals if formData has NO proposals at all (initial load)
-            const proposalsToUse = (Array.isArray(currentProposals) && currentProposals.length > 0) 
-                ? currentProposals 
-                : (lastSavedDataRef.current?.proposals && Array.isArray(lastSavedDataRef.current.proposals) && lastSavedDataRef.current.proposals.length > 0)
-                    ? lastSavedDataRef.current.proposals
-                    : leadProposals;
-            
-            console.log('✅ Using proposals:', {
-                source: (Array.isArray(currentProposals) && currentProposals.length > 0) ? 'currentFormData' 
-                    : (lastSavedDataRef.current?.proposals?.length > 0) ? 'lastSavedData' 
-                    : 'leadProp',
-                count: proposalsToUse.length,
-                ids: proposalsToUse.map(p => p.id)
-            });
-            
-            // Update ONLY status and stage from lead prop (fields that might change externally)
-            // CRITICAL: NEVER update user-edited fields (name, notes, industry, source) 
-            // even if they're blank in the API response - preserve user input
-            setFormData(prev => {
-                const updated = {
-                    ...prev,
-                    // Only update fields that can't be edited by user OR are safe to update
-                    status: lead.status || prev.status,
-                    stage: lead.stage || prev.stage,
-                    // CRITICAL: NEVER overwrite proposals from lead prop if we have any in formData
-                    proposals: proposalsToUse
-                };
-                // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
-                userEditedFieldsRef.current.forEach(fieldName => {
-                    if (prev[fieldName] !== undefined && prev[fieldName] !== null) {
-                        updated[fieldName] = prev[fieldName];
-                    }
-                });
-                return updated;
-            });
-            
-            return; // Don't process further updates
         }
+        
+        lastProcessedLeadRef.current = lead;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [lead?.id]); // Only re-run when lead ID changes, not when lead properties change
+    }, [lead]);
+    
+    // Reset typing flag when switching to different lead
+    useEffect(() => {
+        if (lead?.id && lead.id !== formDataRef.current?.id) {
+            userHasStartedTypingRef.current = false;
+        }
+    }, [lead?.id]);
     
     // DISABLED: This was causing status/stage to be overwritten from stale parent data
     // When auto-saving changes, the parent's lead prop wasn't updated fast enough,
@@ -344,10 +202,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Ref for comment textarea to preserve cursor position
     const commentTextareaRef = useRef(null);
     
-    // Ref for notes textarea to preserve cursor position
+    // CRITICAL: Track input values separately from formData to prevent overwrites
+    // These refs hold the actual DOM values that the user types
+    const nameInputRef = useRef(null);
     const notesTextareaRef = useRef(null);
-    const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
-    const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
+    const industrySelectRef = useRef(null);
+    const sourceSelectRef = useRef(null);
+    
+    // Track when user has started typing - once they start, NEVER update inputs from prop
+    const userHasStartedTypingRef = useRef(false);
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -1730,19 +1593,28 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         </label>
                                         <input 
                                             type="text" 
-                                            value={formData.name}
+                                            ref={nameInputRef}
+                                            defaultValue={formData.name || ''}
+                                            key={`name-${lead?.id || 'new'}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => ({...prev, name: e.target.value}));
+                                                setFormData(prev => {
+                                                    const updated = {...prev, name: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             onBlur={() => {
                                                 // Clear editing flag after a delay to allow for final keystrokes
@@ -1757,19 +1629,28 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Industry</label>
                                         <select
-                                            value={formData.industry}
+                                            ref={industrySelectRef}
+                                            defaultValue={formData.industry || ''}
+                                            key={`industry-${lead?.id || 'new'}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => ({...prev, industry: e.target.value}));
+                                                setFormData(prev => {
+                                                    const updated = {...prev, industry: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -1827,19 +1708,28 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
                                         <select 
-                                            value={formData.source}
+                                            ref={sourceSelectRef}
+                                            defaultValue={formData.source || 'Website'}
+                                            key={`source-${lead?.id || 'new'}`}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('source'); // Track that user has edited this field
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => ({...prev, source: e.target.value}));
+                                                setFormData(prev => {
+                                                    const updated = {...prev, source: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -1922,9 +1812,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
                                         ref={notesTextareaRef}
-                                        value={formData.notes}
+                                        defaultValue={formData.notes || ''}
+                                        key={`notes-${lead?.id || 'new'}`}
                                         onFocus={() => {
                                             isEditingRef.current = true;
+                                            userHasStartedTypingRef.current = true;
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
@@ -1935,6 +1827,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             }
                                             
                                             isEditingRef.current = true;
+                                            userHasStartedTypingRef.current = true;
                                             userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {

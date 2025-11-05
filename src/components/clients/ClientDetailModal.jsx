@@ -85,6 +85,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Track which fields the user has actually entered data into - NEVER overwrite these
     const userEditedFieldsRef = useRef(new Set()); // Set of field names user has edited
     
+    // CRITICAL: Track the last client object we processed to detect LiveDataSync updates
+    // This helps us run the guard even when the ID hasn't changed but the object reference has
+    const lastProcessedClientRef = useRef(null);
+    
+    // CRITICAL: Track when user has started typing - once they start, NEVER update formData from prop
+    const userHasStartedTypingRef = useRef(false);
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
@@ -129,234 +136,79 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         setActiveTab(initialTab);
     }, [initialTab]);
     
-    // Update formData when client prop changes - but only when client ID changes
-    // NOTE: formData is intentionally NOT in dependency array to prevent loops
-    // IMPORTANT: Never access formData directly in this useEffect to avoid TDZ errors
-    // Use formDataRef.current which is synced via a separate useEffect
+    // CRITICAL: NEVER update formData from prop if user has started typing
+    // Once user types, formData is completely controlled by user input
     useEffect(() => {
-        // CRITICAL: Check editing flag FIRST before any other logic
-        if (isEditingRef.current) {
-            console.log('🚫 useEffect blocked: user is actively editing');
+        // CRITICAL: Skip if this is the exact same client object we just processed
+        if (client === lastProcessedClientRef.current) {
             return;
         }
         
-        // Don't reset formData if we're in the middle of auto-saving
-        if (isAutoSavingRef.current) {
-            console.log('🚫 useEffect blocked: auto-save in progress');
+        // CRITICAL: If user has started typing, NEVER update formData from prop
+        if (userHasStartedTypingRef.current) {
+            console.log('🚫 useEffect BLOCKED: user has started typing - formData is user-controlled');
+            lastProcessedClientRef.current = client;
             return;
         }
         
-        // CRITICAL: Use formDataRef.current (synced via useEffect) - this is the latest formData state
-        // If formDataRef.current is null, formData hasn't been set yet, so use empty object
+        // Also check editing flags and formData content
         const currentFormData = formDataRef.current || {};
-        
-        // CRITICAL: Check if user has actually edited any fields - NEVER overwrite user-edited fields
-        const hasUserEditedFields = userEditedFieldsRef.current.size > 0;
-        
-        // CRITICAL: Also check if user has entered ANY data in editable fields (even if not marked as edited yet)
-        // This catches cases where the user is typing but the field hasn't been marked yet
-        // Check both formDataRef.current AND formData via functional setState to ensure we get latest values
-        const hasUserEnteredData = Boolean(
-            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
-            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
-            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '') ||
-            (currentFormData.address && currentFormData.address.trim() && currentFormData.address.trim() !== '') ||
-            (currentFormData.website && currentFormData.website.trim() && currentFormData.website.trim() !== '')
+        const formDataHasContent = Boolean(
+            (currentFormData.name && currentFormData.name.trim()) ||
+            (currentFormData.notes && currentFormData.notes.trim()) ||
+            (currentFormData.industry && currentFormData.industry.trim()) ||
+            (currentFormData.address && currentFormData.address.trim()) ||
+            (currentFormData.website && currentFormData.website.trim())
         );
         
-        // CRITICAL: Additional check - if formDataRef has content but client prop is empty/blank, protect user input
-        // This handles race conditions where API response arrives before user input is tracked
-        const refHasContent = Boolean(
-            (currentFormData.name && currentFormData.name.trim() && currentFormData.name.trim() !== '') ||
-            (currentFormData.notes && currentFormData.notes.trim() && currentFormData.notes.trim() !== '') ||
-            (currentFormData.industry && currentFormData.industry.trim() && currentFormData.industry.trim() !== '')
-        );
-        const clientHasNoContent = client && !client.name && !client.notes && !client.industry;
-        const protectUserInput = refHasContent && clientHasNoContent;
-        
-        if (client) {
-            // Only reset formData if:
-            // 1. Client ID changed (viewing a different client), OR
-            // 2. User hasn't edited the form yet
-            const clientIdChanged = client.id !== lastSavedClientId.current;
-            const isNewClient = !lastSavedClientId.current && client.id; // New client getting an ID for the first time
-            
-            // CRITICAL: If user is editing OR has edited any fields OR has entered any data OR ref has content but client doesn't, NEVER reset formData
-            // This prevents ANY updates (including blank values) from overwriting user input
-            if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData || protectUserInput) {
-                console.log('🚫 useEffect blocked: user is editing or has entered data', {
-                    isEditing: isEditingRef.current,
-                    hasUserEditedFields,
-                    hasUserEnteredData,
-                    protectUserInput,
-                    editedFields: Array.from(userEditedFieldsRef.current),
-                    currentName: currentFormData.name,
-                    currentNotes: currentFormData.notes ? currentFormData.notes.substring(0, 20) : '',
-                    currentIndustry: currentFormData.industry,
-                    refHasContent,
-                    clientHasNoContent
-                });
-                // Still update the lastSavedClientId to prevent repeated checks
-                if (client.id) {
-                    lastSavedClientId.current = client.id;
-                }
-                return;
-            }
-            
-            if (clientIdChanged) {
-                // Reset the edit flag when switching to a different client (but not if user is editing)
-                if (!isEditingRef.current) {
-                    hasUserEditedForm.current = false;
-                }
-                lastSavedClientId.current = client.id;
-            }
-            
-            // Only update formData if client ID changed (new client) OR form hasn't been edited
-            // If form has been edited and same client, completely skip to preserve optimistic updates
-            if (clientIdChanged || !hasUserEditedForm.current) {
-                const parsedClient = {
-                    ...client,
-                    contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
-                    followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
-                    projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
-                    comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
-                    contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
-                    sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
-                    opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
-                    activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
-                    billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
-                        paymentTerms: 'Net 30',
-                        billingFrequency: 'Monthly',
-                        currency: 'ZAR',
-                        retainerAmount: 0,
-                        taxExempt: false,
-                        notes: ''
-                    })
-                };
-                
-                if (clientIdChanged) {
-                    // New client - CRITICAL: Only set formData fresh if user hasn't edited any fields or entered data
-                    // If user has edited fields or entered data, preserve those fields instead of overwriting with API data
-                    if (hasUserEditedFields || hasUserEnteredData) {
-                        console.log('🚫 New client detected but user has edited fields - preserving user input', {
-                            editedFields: Array.from(userEditedFieldsRef.current)
-                        });
-                        // Merge API data but preserve user-edited fields
-                        setFormData(prevFormData => {
-                            const merged = {...parsedClient};
-                            // CRITICAL: NEVER overwrite user-edited fields with blank/null API values
-                            userEditedFieldsRef.current.forEach(fieldName => {
-                                if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
-                                    merged[fieldName] = prevFormData[fieldName];
-                                }
-                            });
-                            return merged;
-                        });
-                    } else {
-                        // User hasn't edited any fields - safe to set fresh from API
-                        console.log('🔄 New client - setting formData fresh:', {
-                            contactsCount: parsedClient.contacts?.length,
-                            sitesCount: parsedClient.sites?.length
-                        });
-                        setFormData(parsedClient);
-                        // Reset edited fields tracking when loading new client
-                        userEditedFieldsRef.current.clear();
-                }
-                } else if (client.id === currentFormData.id) {
-                    // Same client reloaded - CRITICAL: Skip ALL updates if user is editing OR has edited fields OR has entered data
-                    if (isEditingRef.current || hasUserEditedFields || hasUserEnteredData) {
-                        console.log('🚫 Skipping formData update: user is editing or has edited fields');
-                        return;
-                    }
-                    
-                    // CRITICAL: Also check if formDataRef has notes but client prop doesn't - protect user's typing
-                    const refHasNotes = formDataRef.current?.notes && formDataRef.current.notes.trim().length > 0;
-                    const clientHasNotes = client.notes && client.notes.trim().length > 0;
-                    if (refHasNotes && !clientHasNotes) {
-                        console.log('🚫 Skipping formData update: formDataRef has notes but client prop does not - protecting user input', {
-                            refNotesLength: formDataRef.current.notes.length,
-                            refNotesPreview: formDataRef.current.notes.substring(0, 50)
-                        });
-                        return;
-                    }
-                    
-                    // Check if data actually changed before updating
-                    const dataChanged = 
-                        client.status !== currentFormData.status ||
-                        client.stage !== currentFormData.stage ||
-                        JSON.stringify(client.contacts) !== JSON.stringify(currentFormData.contacts) ||
-                        JSON.stringify(client.sites) !== JSON.stringify(currentFormData.sites) ||
-                        JSON.stringify(client.opportunities) !== JSON.stringify(currentFormData.opportunities);
-                    
-                    if (!dataChanged) {
-                        console.log('🚫 Skipping formData update: client data unchanged');
-                        return;
-                    }
-                    
-                    // Update ONLY status and stage from client prop (fields that might change externally)
-                    // CRITICAL: NEVER update user-edited fields (name, notes, industry, address, website) 
-                    // even if they're blank in the API response - preserve user input
-                    setFormData(prevFormData => {
-                        // CRITICAL: Get latest notes from formDataRef FIRST (most up-to-date) before checking prevFormData
-                        // This ensures we use the notes that were just typed, even if React state hasn't updated yet
-                        const currentNotesFromRef = formDataRef.current?.notes || '';
-                        const notesToPreserve = (currentNotesFromRef && currentNotesFromRef.trim().length > 0) 
-                            ? currentNotesFromRef 
-                            : (prevFormData.notes && prevFormData.notes.trim().length > 0) 
-                                ? prevFormData.notes 
-                                : (client.notes && client.notes.trim().length > 0) 
-                                    ? client.notes 
-                                    : '';
-                        
-                        const newFormData = {
-                            ...prevFormData,
-                            // Only update fields that can't be edited by user OR are safe to update
-                            status: client.status || prevFormData.status,
-                            stage: client.stage || prevFormData.stage,
-                            // Preserve contacts, sites, opportunities if local state has more items
-                            contacts: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0) 
-                                ? prevFormData.contacts 
-                                : parsedClient.contacts,
-                            sites: (prevFormData?.sites?.length || 0) > (parsedClient.sites?.length || 0) 
-                                ? prevFormData.sites 
-                                : parsedClient.sites,
-                            opportunities: (prevFormData?.opportunities?.length || 0) > (parsedClient.opportunities?.length || 0) 
-                                ? prevFormData.opportunities 
-                                : parsedClient.opportunities,
-                            // CRITICAL: Use notes from ref first (most recent), then prevFormData, then client prop
-                            notes: notesToPreserve
-                        };
-                        // CRITICAL: ALWAYS preserve user-edited fields - never overwrite with API values (even if blank)
-                        // BUT: For notes specifically, use the computed notesToPreserve (from ref or prevFormData)
-                        userEditedFieldsRef.current.forEach(fieldName => {
-                            if (fieldName === 'notes') {
-                                // For notes, use the notes we already computed above (from ref or prevFormData)
-                                // Don't override with potentially empty prevFormData.notes
-                                newFormData[fieldName] = notesToPreserve;
-                                console.log('🛡️ Preserving notes from userEditedFieldsRef:', notesToPreserve.substring(0, 50));
-                            } else {
-                                // For other fields, preserve as-is
-                                if (prevFormData[fieldName] !== undefined && prevFormData[fieldName] !== null) {
-                                    newFormData[fieldName] = prevFormData[fieldName];
-                                }
-                            }
-                        });
-                        console.log('🔄 Preserving local changes:', {
-                            contactsPreserved: (prevFormData?.contacts?.length || 0) > (parsedClient.contacts?.length || 0),
-                            contactsCount: newFormData.contacts?.length,
-                            preservedFields: Array.from(userEditedFieldsRef.current),
-                            notesPreserved: notesToPreserve.substring(0, 50),
-                            notesSource: (currentNotesFromRef && currentNotesFromRef.trim().length > 0) ? 'ref' : (prevFormData.notes && prevFormData.notes.trim().length > 0) ? 'prevFormData' : 'client'
-                        });
-                        return newFormData;
-                    });
-                }
-            } else {
-                console.log('⏭️ Skipping formData reset - user has edited the form and client ID unchanged');
-            }
+        if (formDataHasContent) {
+            console.log('🚫 useEffect BLOCKED: formData has content');
+            lastProcessedClientRef.current = client;
+            return;
         }
+        
+        if (isEditingRef.current || isAutoSavingRef.current) {
+            console.log('🚫 useEffect BLOCKED: user is editing or saving');
+            lastProcessedClientRef.current = client;
+            return;
+        }
+        
+        // Only initialize if formData is empty AND user hasn't started typing
+        if (client && !formDataHasContent) {
+            const parsedClient = {
+                ...client,
+                contacts: typeof client.contacts === 'string' ? JSON.parse(client.contacts || '[]') : (client.contacts || []),
+                followUps: typeof client.followUps === 'string' ? JSON.parse(client.followUps || '[]') : (client.followUps || []),
+                projectIds: typeof client.projectIds === 'string' ? JSON.parse(client.projectIds || '[]') : (client.projectIds || []),
+                comments: typeof client.comments === 'string' ? JSON.parse(client.comments || '[]') : (client.comments || []),
+                contracts: typeof client.contracts === 'string' ? JSON.parse(client.contracts || '[]') : (client.contracts || []),
+                sites: typeof client.sites === 'string' ? JSON.parse(client.sites || '[]') : (client.sites || []),
+                opportunities: typeof client.opportunities === 'string' ? JSON.parse(client.opportunities || '[]') : (client.opportunities || []),
+                activityLog: typeof client.activityLog === 'string' ? JSON.parse(client.activityLog || '[]') : (client.activityLog || []),
+                billingTerms: typeof client.billingTerms === 'string' ? JSON.parse(client.billingTerms || '{}') : (client.billingTerms || {
+                    paymentTerms: 'Net 30',
+                    billingFrequency: 'Monthly',
+                    currency: 'ZAR',
+                    retainerAmount: 0,
+                    taxExempt: false,
+                    notes: ''
+                })
+            };
+            
+            console.log('✅ Initializing formData from client prop');
+            setFormData(parsedClient);
+        }
+        
+        lastProcessedClientRef.current = client;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [client?.id]); // Only re-run when client ID changes, not when client properties change
+    }, [client]);
+    
+    // Reset typing flag when switching to different client
+    useEffect(() => {
+        if (client?.id && client.id !== formDataRef.current?.id) {
+            userHasStartedTypingRef.current = false;
+        }
+    }, [client?.id]);
     
     // Handle tab change and notify parent
     const handleTabChange = (tab) => {
@@ -1973,6 +1825,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             value={formData.name}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
@@ -1983,7 +1836,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing (longer to prevent overwrites)
-                                                setFormData(prev => ({...prev, name: e.target.value}));
+                                                setFormData(prev => {
+                                                    const updated = {...prev, name: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -2000,6 +1858,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             value={formData.industry}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                         onChange={(e) => {
@@ -2010,7 +1869,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                            setFormData(prev => ({...prev, industry: e.target.value}));
+                                            setFormData(prev => {
+                                                const updated = {...prev, industry: e.target.value};
+                                                // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                formDataRef.current = updated;
+                                                return updated;
+                                            });
                                         }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -2035,6 +1899,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             value={formData.status}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                         onChange={(e) => {
@@ -2066,6 +1931,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             value={formData.website || ''}
                                             onFocus={() => {
                                                 isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
@@ -2076,7 +1942,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                                setFormData(prev => ({...prev, website: e.target.value}));
+                                                setFormData(prev => {
+                                                    const updated = {...prev, website: e.target.value};
+                                                    // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
                                             }}
                                             onBlur={() => {
                                                 setTimeout(() => {
@@ -2105,7 +1976,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                            setFormData(prev => ({...prev, address: e.target.value}));
+                                            setFormData(prev => {
+                                                const updated = {...prev, address: e.target.value};
+                                                // CRITICAL: Sync formDataRef IMMEDIATELY so guards can check current value
+                                                formDataRef.current = updated;
+                                                return updated;
+                                            });
                                         }}
                                         onBlur={() => {
                                             setTimeout(() => {
