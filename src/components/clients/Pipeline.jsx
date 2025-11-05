@@ -531,97 +531,85 @@ const Pipeline = () => {
             // Update opportunity directly in API if authenticated
             if (token && window.api?.updateOpportunity) {
                 try {
-                    console.log('📡 Pipeline: Calling window.api.updateOpportunity...');
+                    console.log('📡 Pipeline: Calling window.api.updateOpportunity...', {
+                        id: draggedItem.id,
+                        stage: targetStage
+                    });
                     // Update the opportunity's stage in the database
                     const response = await window.api.updateOpportunity(draggedItem.id, { 
                         stage: targetStage 
                     });
-                    console.log('✅ Pipeline: API response received:', response);
+                    console.log('✅ Pipeline: API response received:', JSON.stringify(response, null, 2));
                     
-                    // Check if response indicates success
-                    // Response format: { res: Response, data: { data: {...} } }
-                    const isSuccess = response && (
-                        (response.res && response.res.ok) || 
-                        (response.ok === true) ||
-                        (response.data && !response.data.error)
-                    );
+                    // If we get here without an error being thrown, the API call succeeded
+                    // The request() function throws on error, so no error = success
+                    console.log('✅ Pipeline: Opportunity stage updated in API (no error thrown):', targetStage);
                     
-                    if (isSuccess) {
-                        console.log('✅ Pipeline: Opportunity stage updated in API:', targetStage);
-                        updateSuccess = true;
-                        
-                        // Update local state after successful API call
-                        const updatedClients = clients.map(client => {
-                            if (client.id === draggedItem.clientId) {
-                                const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
-                                );
-                                return { ...client, opportunities: updatedOpportunities };
-                            }
-                            return client;
-                        });
-                        setClients(updatedClients);
-                        storage.setClients(updatedClients);
-                        
-                        // Refresh data from API to ensure consistency
-                        setTimeout(() => {
-                            setRefreshKey(k => k + 1);
-                        }, 500);
-                    } else {
-                        throw new Error(`API returned error: ${JSON.stringify(response)}`);
-                    }
+                    // CRITICAL: Force refresh from API immediately to ensure we get fresh data
+                    // Don't rely on cached data - always fetch from API after update
+                    console.log('🔄 Pipeline: Forcing immediate API refresh to verify update...');
+                    setRefreshKey(k => k + 1);
+                    
+                    // Update local state optimistically (will be overwritten by API refresh)
+                    const updatedClients = clients.map(client => {
+                        if (client.id === draggedItem.clientId) {
+                            const updatedOpportunities = client.opportunities.map(opp =>
+                                opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
+                            );
+                            return { ...client, opportunities: updatedOpportunities };
+                        }
+                        return client;
+                    });
+                    setClients(updatedClients);
+                    // DON'T save to localStorage - let API refresh overwrite it with fresh data
                 } catch (error) {
                     console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
                     console.error('❌ Pipeline: Error details:', {
                         message: error.message,
                         stack: error.stack,
-                        response: error.response
+                        response: error.response,
+                        fullError: error
                     });
                     alert(`Failed to save opportunity stage change: ${error.message || 'Unknown error'}. Please try again.`);
+                    // Don't update local state on error - revert to original
                 }
             } else if (token && window.DatabaseAPI?.updateOpportunity) {
                 try {
-                    console.log('📡 Pipeline: Calling window.DatabaseAPI.updateOpportunity...');
+                    console.log('📡 Pipeline: Calling window.DatabaseAPI.updateOpportunity...', {
+                        id: draggedItem.id,
+                        stage: targetStage
+                    });
                     const response = await window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: targetStage });
-                    console.log('✅ Pipeline: DatabaseAPI response received:', response);
+                    console.log('✅ Pipeline: DatabaseAPI response received:', JSON.stringify(response, null, 2));
                     
-                    // Check if response indicates success
-                    // DatabaseAPI returns parsed JSON: { data: {...} } or { error: {...} }
-                    const isSuccess = response && (
-                        (response.data && !response.error) ||
-                        (!response.error && response.data !== undefined)
-                    );
+                    // If we get here without an error being thrown, the API call succeeded
+                    // DatabaseAPI throws on error, so no error = success
+                    console.log('✅ Pipeline: Opportunity stage updated via DatabaseAPI (no error thrown):', targetStage);
                     
-                    if (isSuccess) {
-                        console.log('✅ Pipeline: Opportunity stage updated via DatabaseAPI');
-                        updateSuccess = true;
-                        
-                        // Update local state after successful API call
-                        const updatedClients = clients.map(client => {
-                            if (client.id === draggedItem.clientId) {
-                                const updatedOpportunities = client.opportunities.map(opp =>
-                                    opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
-                                );
-                                return { ...client, opportunities: updatedOpportunities };
-                            }
-                            return client;
-                        });
-                        setClients(updatedClients);
-                        storage.setClients(updatedClients);
-                        
-                        // Refresh data from API to ensure consistency
-                        setTimeout(() => {
-                            setRefreshKey(k => k + 1);
-                        }, 500);
-                    } else {
-                        throw new Error(`DatabaseAPI returned error: ${JSON.stringify(response)}`);
-                    }
+                    // CRITICAL: Force refresh from API immediately to ensure we get fresh data
+                    // Don't rely on cached data - always fetch from API after update
+                    console.log('🔄 Pipeline: Forcing immediate API refresh to verify update...');
+                    setRefreshKey(k => k + 1);
+                    
+                    // Update local state optimistically (will be overwritten by API refresh)
+                    const updatedClients = clients.map(client => {
+                        if (client.id === draggedItem.clientId) {
+                            const updatedOpportunities = client.opportunities.map(opp =>
+                                opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
+                            );
+                            return { ...client, opportunities: updatedOpportunities };
+                        }
+                        return client;
+                    });
+                    setClients(updatedClients);
+                    // DON'T save to localStorage - let API refresh overwrite it with fresh data
                 } catch (error) {
                     console.error('❌ Pipeline: Failed to update opportunity via DatabaseAPI:', error);
                     console.error('❌ Pipeline: Error details:', {
                         message: error.message,
                         stack: error.stack,
-                        response: error.response
+                        response: error.response,
+                        fullError: error
                     });
                     alert(`Failed to save opportunity stage change: ${error.message || 'Unknown error'}. Please try again.`);
                 }
