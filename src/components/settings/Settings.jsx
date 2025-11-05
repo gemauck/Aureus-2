@@ -452,7 +452,12 @@ const Settings = () => {
                             console.warn('Failed to parse stored settings:', e);
                         }
                     }
-                    return finalSettings;
+                    return finalSettings || {};
+                };
+                
+                // Expose helper to check if settings API is available
+                window.isSettingsAPIAvailable = () => {
+                    return !!(window.DatabaseAPI?.updateSettings || window.api?.updateSettings);
                 };
             } catch (error) {
                 console.error('Error loading settings:', error);
@@ -824,3 +829,6 @@ const Settings = () => {
 
 // Export the component
 window.Settings = Settings;
+
+// Log that Settings component is loaded
+console.log('✅ Settings component loaded and exported to window.Settings');
