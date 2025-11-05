@@ -434,6 +434,27 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
     };
     
+    // Helper function to get all unique assigned parties from proposal stages
+    const getAllAssignedParties = (proposal) => {
+        if (!proposal || !Array.isArray(proposal.stages)) return [];
+        const assigneeIds = new Set();
+        proposal.stages.forEach(stage => {
+            if (stage.assigneeId && stage.assigneeId.trim()) {
+                assigneeIds.add(stage.assigneeId);
+            }
+        });
+        return Array.from(assigneeIds);
+    };
+    
+    // Helper function to notify all assigned parties
+    const notifyAllAssignedParties = async (proposal, title, message, link) => {
+        const assigneeIds = getAllAssignedParties(proposal);
+        const notificationPromises = assigneeIds.map(userId => 
+            sendNotification(userId, title, message, link)
+        );
+        await Promise.all(notificationPromises);
+    };
+    
     // Tag management state
     const [leadTags, setLeadTags] = useState([]);
     const [allTags, setAllTags] = useState([]);
@@ -2332,7 +2353,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <button
                                         type="button"
                                         disabled={isCreatingProposal || isCreatingProposalRef.current}
-                                        onClick={() => {
+                                        onClick={async () => {
                                             // Use ref check for immediate guard (before state updates)
                                             if (isCreatingProposalRef.current || isCreatingProposal) {
                                                 console.warn('⚠️ Proposal creation already in progress, ignoring click');
@@ -2561,7 +2582,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             // Use functional update to merge with existing proposals properly
                                             const updatedProposals = [...existingProposals, newProposal];
                                             console.log('📝 Updated proposals count:', updatedProposals.length, 'IDs:', updatedProposals.map(p => p.id));
-                                            saveProposals(updatedProposals);
+                                            await saveProposals(updatedProposals);
+                                            
+                                            // Notify all assigned parties of the new proposal
+                                            await notifyAllAssignedParties(
+                                                newProposal,
+                                                `New Proposal Created: ${newProposal.title || newProposal.name}`,
+                                                `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.name || 'this lead'}.`,
+                                                `#/clients?lead=${lead.id}&tab=proposals`
+                                            );
                                             
                                             // Reset flags after a delay (longer to ensure save completes)
                                             setTimeout(() => {
@@ -2625,12 +2654,21 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                         type="text"
                                                                         value={proposalNameInput}
                                                                         onChange={(e) => setProposalNameInput(e.target.value)}
-                                                                        onBlur={() => {
-                                                                            if (proposalNameInput.trim()) {
+                                                                        onBlur={async () => {
+                                                                            if (proposalNameInput.trim() && proposalNameInput.trim() !== (proposal.title || proposal.name)) {
                                                                                 const updatedProposals = formData.proposals.map((p, idx) => 
                                                                                     idx === proposalIndex ? { ...p, title: proposalNameInput.trim(), name: proposalNameInput.trim() } : p
                                                                                 );
-                                                                                saveProposals(updatedProposals);
+                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                await saveProposals(updatedProposals);
+                                                                                
+                                                                                // Notify all assigned parties of the name change
+                                                                                await notifyAllAssignedParties(
+                                                                                    updatedProposal,
+                                                                                    `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                    `Proposal name has been changed to "${updatedProposal.title || updatedProposal.name}" by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                );
                                                                             }
                                                                             setEditingProposalName(null);
                                                                         }}
@@ -2673,18 +2711,31 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 <div className="flex items-center gap-2">
                                                                     <input
                                                                         type="text"
-                                                                        value={proposal.workingDocumentLink || ''}
+                                                                        defaultValue={proposal.workingDocumentLink || ''}
                                                                         onChange={(e) => {
                                                                             const updatedProposals = formData.proposals.map((p, idx) => 
                                                                                 idx === proposalIndex ? { ...p, workingDocumentLink: e.target.value } : p
                                                                             );
                                                                             setFormData({ ...formData, proposals: updatedProposals });
                                                                         }}
-                                                                        onBlur={() => {
-                                                                            const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: proposal.workingDocumentLink || '' } : p
-                                                                            );
-                                                                            saveProposals(updatedProposals);
+                                                                        onBlur={async (e) => {
+                                                                            const oldLink = proposal.workingDocumentLink || '';
+                                                                            const newLink = e.target.value || '';
+                                                                            if (oldLink !== newLink) {
+                                                                                const updatedProposals = formData.proposals.map((p, idx) => 
+                                                                                    idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
+                                                                                );
+                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                await saveProposals(updatedProposals);
+                                                                                
+                                                                                // Notify all assigned parties of the document link change
+                                                                                await notifyAllAssignedParties(
+                                                                                    updatedProposal,
+                                                                                    `Proposal Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                    `Working document link has been ${newLink ? `updated to: ${newLink}` : 'removed'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                );
+                                                                            }
                                                                         }}
                                                                         placeholder="https://..."
                                                                         className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -2705,8 +2756,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
+                                                        onClick={async () => {
                                                             if (confirm(`Are you sure you want to delete "${proposal.title || proposal.name}"? This action cannot be undone.`)) {
+                                                                // Notify all assigned parties before deletion
+                                                                await notifyAllAssignedParties(
+                                                                    proposal,
+                                                                    `Proposal Deleted: ${proposal.title || proposal.name}`,
+                                                                    `Proposal "${proposal.title || proposal.name}" has been deleted by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                );
+                                                                
                                                                 setFormData(prev => {
                                                                     const updatedProposals = (prev.proposals || []).filter(p => p.id !== proposal.id);
                                                                     saveProposals(updatedProposals);
@@ -2726,10 +2785,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     <h5 className="font-medium text-gray-900 text-sm">Approval Workflow</h5>
                                                     {proposal.stages.map((stage, stageIndex) => {
                                                             const previousStage = stageIndex > 0 ? proposal.stages[stageIndex - 1] : null;
-                                                        const canApprove = 
-                                                            (stage.status === 'pending' || stage.status === 'in-progress') &&
-                                                                (stageIndex === 0 || previousStage?.status === 'approved') &&
-                                                                (stage.assigneeId === currentUserId || currentUser.role === 'admin' || !stage.assigneeId);
+                                                        // Allow approval/rejection at any stage by any user
+                                                        // Also allow commenting at any stage
+                                                        const canApprove = true; // Any user can approve at any stage
+                                                        // Allow commenting at any stage - any user can comment
+                                                        const canComment = true; // Always allow commenting
                                                             const isAssigned = stage.assigneeId === currentUserId;
                                                         const statusColor = 
                                                             stage.status === 'approved' ? 'bg-green-100 text-green-700 border-green-300' :
@@ -2773,8 +2833,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                     {editingStageAssignee === stageKey ? (
                                                                                         <select
                                                                                             value={stage.assigneeId || ''}
-                                                                                            onChange={(e) => {
+                                                                                            onChange={async (e) => {
                                                                                                 const selectedUser = allUsers.find(u => u.id === e.target.value);
+                                                                                                const oldAssigneeId = stage.assigneeId;
                                                                                                 const updatedStages = proposal.stages.map((s, idx) => 
                                                                                                     idx === stageIndex ? { 
                                                                                                         ...s, 
@@ -2788,7 +2849,27 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                 );
                                                                                                 setFormData({ ...formData, proposals: updatedProposals });
                                                                                                 setEditingStageAssignee(null);
-                                                                                                saveProposals(updatedProposals);
+                                                                                                await saveProposals(updatedProposals);
+                                                                                                
+                                                                                                // Notify all assigned parties of the assignee change
+                                                                                                const updatedProposal = updatedProposals[proposalIndex];
+                                                                                                const updatedStage = updatedStages[stageIndex];
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposal,
+                                                                                                    `Proposal Assignment Updated: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                                    `Stage "${updatedStage.name}" has been ${updatedStage.assigneeId ? `assigned to ${selectedUser?.name || selectedUser?.email || 'a user'}` : 'unassigned'} by ${currentUser.name || currentUser.email || 'Unknown'}.`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                );
+                                                                                                
+                                                                                                // Also notify the newly assigned user if they were just assigned
+                                                                                                if (updatedStage.assigneeId && updatedStage.assigneeId !== oldAssigneeId) {
+                                                                                                    await sendNotification(
+                                                                                                        updatedStage.assigneeId,
+                                                                                                        `New Assignment: ${updatedProposal.title || updatedProposal.name}`,
+                                                                                                        `You have been assigned to stage "${updatedStage.name}" on proposal "${updatedProposal.title || updatedProposal.name}".`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    );
+                                                                                                }
                                                                                             }}
                                                                                             onBlur={() => setEditingStageAssignee(null)}
                                                                                             className="text-xs px-2 py-1 border border-gray-300 rounded"
@@ -2814,8 +2895,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                             )}
                                                                                 </div>
                                                                                 
-                                                                                {/* Comments Section */}
-                                                                                {showComments && (
+                                                                                {/* Comments Section - Always available for commenting */}
+                                                                                {(showComments || canComment) && (
                                                                                     <div className="mt-2 p-2 bg-white rounded border border-gray-200">
                                                                                         <div className="text-xs font-medium text-gray-700 mb-2">Comments:</div>
                                                                                         <div className="space-y-2 mb-2 max-h-32 overflow-y-auto">
@@ -2974,7 +3055,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                         </div>
                                                                                         <button
                                                                                             type="button"
-                                                                                            onClick={() => {
+                                                                                            onClick={async () => {
                                                                                                 if (stageCommentInput[stageKey]?.trim()) {
                                                                                                     const newComment = {
                                                                                                         id: Date.now(),
@@ -2991,7 +3072,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                         idx === proposalIndex ? { ...p, stages: updatedStages } : p
                                                                                                     );
                                                                                                     setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
-                                                                                                    saveProposals(updatedProposals);
+                                                                                                    await saveProposals(updatedProposals);
+                                                                                                    
+                                                                                                    // Notify all assigned parties of the new comment
+                                                                                                    await notifyAllAssignedParties(
+                                                                                                        updatedProposals[proposalIndex],
+                                                                                                        `New Comment on Proposal: ${proposal.title || proposal.name}`,
+                                                                                                        `${currentUser.name || currentUser.email || 'Unknown'} commented on stage "${stage.name}": ${newComment.text}`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    );
                                                                                                 }
                                                                                             }}
                                                                                             className="px-2 py-1 text-xs bg-primary-600 text-white rounded hover:bg-primary-700"
@@ -3059,7 +3148,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                 setShowStageComments({ ...showStageComments, [stageKey]: false });
                                                                                                 await saveProposals(updatedProposals);
                                                                                                 
-                                                                                                // Notify assigned users of next stage
+                                                                                                // Notify all assigned parties of the approval
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposals[proposalIndex],
+                                                                                                    `Proposal Stage Approved: ${proposal.title || proposal.name}`,
+                                                                                                    `Stage "${stage.name}" has been approved by ${approver}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                );
+                                                                                                
+                                                                                                // Also notify assigned user of next stage if it exists
                                                                                                 if (stageIndex + 1 < proposal.stages.length) {
                                                                                                     const nextStage = updatedStages[stageIndex + 1];
                                                                                                     if (nextStage.assigneeId) {
@@ -3113,6 +3210,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                     setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
                                                                                                     setShowStageComments({ ...showStageComments, [stageKey]: false });
                                                                                                     await saveProposals(updatedProposals);
+                                                                                                    
+                                                                                                    // Notify all assigned parties of the rejection
+                                                                                                    await notifyAllAssignedParties(
+                                                                                                        updatedProposals[proposalIndex],
+                                                                                                        `Proposal Stage Rejected: ${proposal.title || proposal.name}`,
+                                                                                                        `Stage "${stage.name}" has been rejected by ${rejector}. Reason: ${reason}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    );
                                                                                                 }
                                                                                             }}
                                                                                             className="px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
@@ -3131,9 +3236,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                             {/* Status display and update controls */}
                                                                             {stage.status === 'approved' && (
                                                                                 <div className="flex flex-col gap-1">
-                                                                                    <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
-                                                                                        <i className="fas fa-check mr-1"></i>Approved
-                                                                                    </span>
+                                                                                <span className="px-2 py-1 text-xs bg-green-200 text-green-800 rounded">
+                                                                                    <i className="fas fa-check mr-1"></i>Approved
+                                                                                </span>
                                                                                     {(currentUser.role === 'admin' || stage.approvedBy === currentUser.name || stage.approvedBy === currentUser.email) && (
                                                                                         <button
                                                                                             type="button"
@@ -3173,6 +3278,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                     );
                                                                                                     setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
                                                                                                     await saveProposals(updatedProposals);
+                                                                                                    
+                                                                                                    // Notify all assigned parties of the status change from approved to rejected
+                                                                                                    await notifyAllAssignedParties(
+                                                                                                        updatedProposals[proposalIndex],
+                                                                                                        `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
+                                                                                                        `Stage "${stage.name}" has been changed from approved to rejected by ${updater}. Reason: ${reason.trim()}${commentText.trim() ? ` Additional comment: ${commentText.trim()}` : ''}`,
+                                                                                                        `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                    );
                                                                                                 }
                                                                                             }}
                                                                                             className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
@@ -3231,6 +3344,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                                 setStageCommentInput({ ...stageCommentInput, [stageKey]: '' });
                                                                                                 await saveProposals(updatedProposals);
                                                                                                 
+                                                                                                // Notify all assigned parties of the status change from rejected to approved
+                                                                                                await notifyAllAssignedParties(
+                                                                                                    updatedProposals[proposalIndex],
+                                                                                                    `Proposal Stage Status Changed: ${proposal.title || proposal.name}`,
+                                                                                                    `Stage "${stage.name}" has been changed from rejected to approved by ${updater}.${commentText.trim() ? ` Comment: ${commentText.trim()}` : ''}`,
+                                                                                                    `#/clients?lead=${lead.id}&tab=proposals`
+                                                                                                );
+                                                                                                
                                                                                                 // Notify assigned users of next stage
                                                                                                 if (stageIndex + 1 < proposal.stages.length) {
                                                                                                     const nextStage = updatedStages[stageIndex + 1];
@@ -3257,13 +3378,14 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                                     <i className="fas fa-clock mr-1"></i>In Progress
                                                                                 </span>
                                                                             )}
-                                                                            {stage.status === 'pending' && !canApprove && (
+                                                                            {/* Always show comment button for any stage */}
+                                                                            {!showComments && (
                                                                                 <button
                                                                                     type="button"
-                                                                                    onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: !showComments })}
+                                                                                    onClick={() => setShowStageComments({ ...showStageComments, [stageKey]: true })}
                                                                                     className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                                                                                 >
-                                                                                    <i className="fas fa-comment mr-1"></i>View Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
+                                                                                    <i className="fas fa-comment mr-1"></i>Comments ({Array.isArray(stage.comments) ? stage.comments.length : 0})
                                                                                 </button>
                                                                             )}
                                                                         </div>
