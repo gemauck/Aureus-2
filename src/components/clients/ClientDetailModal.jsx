@@ -86,6 +86,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
     
+    // Ref for comment textarea to preserve cursor position
+    const commentTextareaRef = useRef(null);
+    
     // Initialize formDataRef after formData is declared
     useEffect(() => {
         formDataRef.current = formData;
@@ -2017,17 +2020,31 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             // Auto-save notes when user leaves the field
                                             // Use the current textarea value to ensure we have the latest data
                                             if (client) {
+                                                // Mark form as edited to prevent useEffect from resetting
+                                                hasUserEditedForm.current = true;
+                                                isAutoSavingRef.current = true;
+                                                
                                                 // Get latest formData including the notes value from the textarea
+                                                const latestNotes = e.target.value;
                                                 setFormData(prev => {
-                                                    const latest = {...prev, notes: e.target.value};
+                                                    const latest = {...prev, notes: latestNotes};
                                                     // Update ref immediately
                                                     formDataRef.current = latest;
-                                                    // Save the latest data
-                                                    setTimeout(() => {
-                                                        onSave(latest, true);
-                                                    }, 0);
                                                     return latest;
                                                 });
+                                                
+                                                // Update ref immediately with notes
+                                                const currentFormData = formDataRef.current || {};
+                                                const latest = {...currentFormData, notes: latestNotes};
+                                                formDataRef.current = latest;
+                                                
+                                                // Save the latest data after a small delay to ensure state is updated
+                                                setTimeout(() => {
+                                                    onSave(latest, true).finally(() => {
+                                                        // Clear auto-saving flag after save completes
+                                                        isAutoSavingRef.current = false;
+                                                    });
+                                                }, 100);
                                             }
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
@@ -3653,12 +3670,28 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                                 <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                                     <textarea
+                                        ref={commentTextareaRef}
                                         value={newComment}
-                                        onChange={(e) => setNewComment(e.target.value)}
+                                        onChange={(e) => {
+                                            setNewComment(e.target.value);
+                                        }}
                                         onKeyDown={(e) => {
-                                            // Prevent form submission or focus loss when pressing spacebar
+                                            // Handle spacebar specially to prevent cursor jumping
                                             if (e.key === ' ') {
+                                                e.preventDefault();
                                                 e.stopPropagation();
+                                                const textarea = e.target;
+                                                const start = textarea.selectionStart;
+                                                const end = textarea.selectionEnd;
+                                                const newValue = newComment.substring(0, start) + ' ' + newComment.substring(end);
+                                                setNewComment(newValue);
+                                                // Restore cursor position after space
+                                                setTimeout(() => {
+                                                    if (commentTextareaRef.current) {
+                                                        commentTextareaRef.current.setSelectionRange(start + 1, start + 1);
+                                                        commentTextareaRef.current.focus();
+                                                    }
+                                                }, 0);
                                             }
                                         }}
                                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg mb-2"
