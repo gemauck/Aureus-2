@@ -855,6 +855,26 @@ const Clients = React.memo(() => {
             (selectedClient.website && selectedClient.website.trim() && selectedClient.website.trim() !== '')
         );
         
+        // CRITICAL: Check if incoming client would overwrite user content with blank/empty values
+        const wouldOverwriteWithBlank = Boolean(
+            (selectedClient.name && selectedClient.name.trim() && (!updatedClient.name || !updatedClient.name.trim())) ||
+            (selectedClient.notes && selectedClient.notes.trim() && (!updatedClient.notes || !updatedClient.notes.trim())) ||
+            (selectedClient.industry && selectedClient.industry.trim() && (!updatedClient.industry || !updatedClient.industry.trim())) ||
+            (selectedClient.address && selectedClient.address.trim() && (!updatedClient.address || !updatedClient.address.trim())) ||
+            (selectedClient.website && selectedClient.website.trim() && (!updatedClient.website || !updatedClient.website.trim()))
+        );
+        
+        // CRITICAL: If user has content OR would overwrite with blank, NEVER update
+        if (hasUserContent || wouldOverwriteWithBlank) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - would overwrite user content', {
+                hasUserContent,
+                wouldOverwriteWithBlank,
+                selectedName: selectedClient.name,
+                updatedName: updatedClient.name
+            });
+            return;
+        }
+        
         // CRITICAL: If user has content (regardless of whether LiveDataSync would overwrite), preserve it
         // This ensures user input is NEVER overwritten by LiveDataSync updates
         // The modal's useEffect will also block updates, but this provides an extra layer of protection
@@ -915,6 +935,25 @@ const Clients = React.memo(() => {
             (selectedLead.industry && selectedLead.industry.trim() && selectedLead.industry.trim() !== '') ||
             (selectedLead.source && selectedLead.source.trim() && selectedLead.source.trim() !== '' && selectedLead.source !== 'Website')
         );
+        
+        // CRITICAL: Check if incoming lead would overwrite user content with blank/empty values
+        const wouldOverwriteWithBlank = Boolean(
+            (selectedLead.name && selectedLead.name.trim() && (!updatedLead.name || !updatedLead.name.trim())) ||
+            (selectedLead.notes && selectedLead.notes.trim() && (!updatedLead.notes || !updatedLead.notes.trim())) ||
+            (selectedLead.industry && selectedLead.industry.trim() && (!updatedLead.industry || !updatedLead.industry.trim())) ||
+            (selectedLead.source && selectedLead.source.trim() && selectedLead.source !== 'Website' && (!updatedLead.source || updatedLead.source === 'Website'))
+        );
+        
+        // CRITICAL: If user has content OR would overwrite with blank, NEVER update
+        if (hasUserContent || wouldOverwriteWithBlank) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - would overwrite user content', {
+                hasUserContent,
+                wouldOverwriteWithBlank,
+                selectedName: selectedLead.name,
+                updatedName: updatedLead.name
+            });
+            return;
+        }
         
         // CRITICAL: If user has content, preserve it
         if (hasUserContent) {
