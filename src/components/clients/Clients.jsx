@@ -290,7 +290,7 @@ const Clients = React.memo(() => {
         }
     }, []);
     
-    // Pause LiveDataSync when viewing client/lead list, resume when Add Client/Lead is clicked
+    // Pause LiveDataSync when viewing client/lead list, keep paused in detail views (modals handle their own pause)
     useEffect(() => {
         if (!window.LiveDataSync) return;
         
@@ -300,11 +300,9 @@ const Clients = React.memo(() => {
         if (isListView) {
             window.LiveDataSync.pause();
             console.log('⏸️ Clients component: Pausing LiveDataSync (viewing list)');
-        } else {
-            // Resume sync when viewing detail views (client-detail or lead-detail)
-            window.LiveDataSync.resume();
-            console.log('▶️ Clients component: Resuming LiveDataSync (viewing detail)');
         }
+        // Note: Detail views (client-detail, lead-detail) keep sync paused - modals handle their own pause/resume
+        // This prevents LiveDataSync from interfering with form data during add/edit operations
         
         // Cleanup: resume when component unmounts
         return () => {
@@ -2612,22 +2610,14 @@ const Clients = React.memo(() => {
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
     const handleOpenClient = (client) => {
-        // Resume sync when opening a client
-        if (window.LiveDataSync) {
-            window.LiveDataSync.resume();
-            console.log('▶️ Opening client - resuming LiveDataSync');
-        }
+        // Keep sync paused when opening a client - modal will handle pause
         setSelectedClient(client);
         setSelectedLead(null);
         setViewMode('client-detail');
     };
 
     const handleOpenLead = (lead) => {
-        // Resume sync when opening a lead
-        if (window.LiveDataSync) {
-            window.LiveDataSync.resume();
-            console.log('▶️ Opening lead - resuming LiveDataSync');
-        }
+        // Keep sync paused when opening a lead - modal will handle pause
         setSelectedLead(lead);
         setSelectedClient(null);
         setViewMode('lead-detail'); // Open in full detail view like clients
@@ -3657,11 +3647,7 @@ const Clients = React.memo(() => {
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={() => {
-                            // Resume sync when Add Client is clicked
-                            if (window.LiveDataSync) {
-                                window.LiveDataSync.resume();
-                                console.log('▶️ Add Client clicked - resuming LiveDataSync');
-                            }
+                            // Keep sync paused when Add Client is clicked - modal will handle pause
                             setSelectedClient(null);
                             setSelectedLead(null);
                             setCurrentTab('overview');
@@ -3684,11 +3670,7 @@ const Clients = React.memo(() => {
                     </button>
                     <button 
                         onClick={() => {
-                            // Resume sync when Add Lead is clicked
-                            if (window.LiveDataSync) {
-                                window.LiveDataSync.resume();
-                                console.log('▶️ Add Lead clicked - resuming LiveDataSync');
-                            }
+                            // Keep sync paused when Add Lead is clicked - modal will handle pause
                             setSelectedLead(null);
                             setSelectedClient(null);
                             setViewMode('lead-detail');

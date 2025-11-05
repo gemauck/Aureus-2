@@ -132,22 +132,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
     }, []);
     
-    // Pause LiveDataSync when modal is open, resume when closed
+    // Pause LiveDataSync when modal is open (whether new or existing client), resume when closed
     useEffect(() => {
         if (!onPauseSync) return;
         
-        // Pause sync when modal opens (client exists)
-        if (client) {
-            onPauseSync(true);
-            console.log('⏸️ ClientDetailModal opened - pausing LiveDataSync');
-            
-            // Resume sync when modal closes (client becomes null or component unmounts)
-            return () => {
-                onPauseSync(false);
-                console.log('▶️ ClientDetailModal closed - resuming LiveDataSync');
-            };
-        }
-    }, [client, onPauseSync]);
+        // Pause sync whenever modal is open (both new client form and existing client)
+        // This prevents LiveDataSync from interfering with form data
+        onPauseSync(true);
+        console.log('⏸️ ClientDetailModal opened - pausing LiveDataSync', client ? '(existing client)' : '(new client)');
+        
+        // Resume sync when modal closes
+        return () => {
+            onPauseSync(false);
+            console.log('▶️ ClientDetailModal closed - resuming LiveDataSync');
+        };
+    }, [onPauseSync]); // Removed client from dependencies - pause/resume based on modal mount/unmount only
     
     // Update tab when initialTab prop changes
     useEffect(() => {
