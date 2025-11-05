@@ -171,17 +171,23 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
             // Use absolute path for dist assets to avoid relative path issues on nested routes
             let scriptSrc = src.startsWith('./src/') ? src.replace('./src/', '/dist/src/').replace('.jsx', '.js') : src;
             
-            // Only add cache-busting in development mode or if explicitly needed
-            // Removing aggressive cache-busting improves performance significantly
-            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            // Log ProjectDetail loading attempts
+            if (src.includes('ProjectDetail')) {
+                console.log(`🔵 Lazy loader: Attempting to load ProjectDetail from ${src} → ${scriptSrc}`);
+            }
+            
+            // Add cache-busting for DailyNotes to ensure fresh version loads
+            // Use timestamp-based version for critical components that change frequently
+            if (scriptSrc.includes('DailyNotes') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
                 scriptSrc = scriptSrc + separator + 'v=' + Date.now();
             }
             
             // First, fetch the file to validate it's JavaScript before loading as script
             // This prevents HTML (404 pages) from being executed as JavaScript
-            // Use default cache policy for better performance (browser will cache)
-            fetch(scriptSrc, { cache: 'default' })
+            // Use no-cache for DailyNotes to ensure fresh version, default for others
+            const cachePolicy = scriptSrc.includes('DailyNotes') ? 'no-cache' : 'default';
+            fetch(scriptSrc, { cache: cachePolicy })
                 .then(response => {
                     if (!response.ok) {
                         // File doesn't exist - skip silently
@@ -213,6 +219,11 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                             return;
                         }
                         
+                        // Log ProjectDetail loading for debugging
+                        if (scriptSrc.includes('ProjectDetail')) {
+                            console.log(`🔵 Lazy loader: Fetching ProjectDetail from ${scriptSrc}, content length: ${text.length}, first 100 chars:`, text.substring(0, 100));
+                        }
+                        
                         // Content looks valid - load it as a script
                         const script = document.createElement('script');
                         script.type = 'text/javascript';
@@ -226,12 +237,30 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                         script.onload = () => {
                             URL.revokeObjectURL(blobUrl); // Clean up blob URL
                             loadedComponents++;
+                            // Check if ProjectDetail was just loaded
+                            if (scriptSrc.includes('ProjectDetail')) {
+                                console.log('🔵 Lazy loader: ProjectDetail script.onload fired');
+                                setTimeout(() => {
+                                    if (window.ProjectDetail) {
+                                        console.log('✅ ProjectDetail loaded and registered via lazy loader');
+                                    } else {
+                                        console.warn('⚠️ ProjectDetail script loaded but component not registered after 100ms');
+                                        console.warn('⚠️ Checking if script executed - window keys:', Object.keys(window).filter(k => k.includes('Project')));
+                                    }
+                                }, 500); // Increased timeout to 500ms to catch delayed registration
+                            }
                             resolve();
                         };
                         
-                        script.onerror = () => {
+                        script.onerror = (error) => {
                             URL.revokeObjectURL(blobUrl); // Clean up blob URL
-                            console.warn(`⚠️ Failed to execute component: ${scriptSrc}`);
+                            console.warn(`⚠️ Failed to execute component: ${scriptSrc}`, error);
+                            if (scriptSrc.includes('ProjectDetail')) {
+                                console.error('❌ CRITICAL: ProjectDetail script.onerror fired!');
+                                console.error('❌ Error details:', error);
+                                console.error('❌ Script src was:', scriptSrc);
+                                console.error('❌ Blob URL was:', blobUrl);
+                            }
                             resolve(); // Continue even if one fails
                         };
                         
@@ -345,7 +374,22 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                         const batch = componentFiles.slice(index, index + batchSize);
                         if (batch.length === 0) {
                             console.log(`✅ Lazy loading complete: ${loadedComponents} components loaded`);
+                            // Final check for ProjectDetail
+                            if (!window.ProjectDetail) {
+                                console.warn('⚠️ Lazy loading complete but ProjectDetail not loaded!');
+                                console.warn('⚠️ Checking if ProjectDetail was in the list...');
+                                const projectDetailInList = componentFiles.find(f => f.includes('ProjectDetail'));
+                                console.warn('⚠️ ProjectDetail in componentFiles:', projectDetailInList || 'NOT FOUND');
+                            } else {
+                                console.log('✅ ProjectDetail successfully loaded via lazy loader');
+                            }
                             return;
+                        }
+                        
+                        // Log if ProjectDetail is in this batch
+                        const hasProjectDetail = batch.some(f => f.includes('ProjectDetail'));
+                        if (hasProjectDetail) {
+                            console.log(`🔵 Lazy loader: ProjectDetail is in batch ${Math.floor(index / batchSize) + 1}, loading now...`);
                         }
                         
                         Promise.all(batch.map(loadComponent)).then(() => {
