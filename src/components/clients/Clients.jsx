@@ -272,6 +272,12 @@ const Clients = React.memo(() => {
     const ITEMS_PER_PAGE = 25;
     const { isDark } = window.useTheme();
     
+    // CRITICAL: Track if user is actively editing to prevent data overwrites
+    // Use BOTH state (for UI) and ref (for synchronous checks in useEffects)
+    const [isUserEditing, setIsUserEditing] = useState(false);
+    const isUserEditingRef = useRef(false); // Synchronous flag for immediate checks
+    const editingTimeoutRef = useRef(null);
+    
     // Removed expensive state tracking logging
     
     // Function to load clients (can be called to refresh) - MOVED BEFORE useEffects
@@ -727,8 +733,9 @@ const Clients = React.memo(() => {
     }, []); // Only run once on mount
 
     // Force refresh leads when switching to leads view to ensure fresh data across users
+    // CRITICAL: Skip if user is editing
     useEffect(() => {
-        if (viewMode === 'leads') {
+        if (viewMode === 'leads' && !isUserEditing) {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
             console.log(`🔄 Switching to leads view (${userEmail}) - clearing caches and refreshing...`);
@@ -759,8 +766,9 @@ const Clients = React.memo(() => {
     }, [viewMode]);
 
     // Force refresh clients when switching to clients view to ensure fresh data across users
+    // CRITICAL: Skip if user is editing
     useEffect(() => {
-        if (viewMode === 'clients') {
+        if (viewMode === 'clients' && !isUserEditing) {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
             console.log(`🔄 Switching to clients view (${userEmail}) - clearing caches and refreshing...`);
@@ -826,12 +834,21 @@ const Clients = React.memo(() => {
     useEffect(() => {
         if (!selectedClient || !selectedClient.id) return;
         
+        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing
+        // This is the PRIMARY guard to prevent overwriting user input
+        // Use REF for synchronous check (state might not be updated yet)
+        if (isUserEditingRef.current || isUserEditing) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - user is editing');
+            return;
+        }
+        
         // CRITICAL: Don't update selectedClient if the modal is open (user might be typing)
         // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
         // from overwriting selectedClient while the user is editing
         if (viewMode === 'client-detail') {
             // Modal is open - don't update selectedClient from LiveDataSync
             // This prevents overwriting user input while they're typing
+            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - modal is open');
             return;
         }
         
@@ -906,11 +923,19 @@ const Clients = React.memo(() => {
             // No user content to preserve, safe to update
             setSelectedClient(updatedClient);
         }
-    }, [clients, selectedClient?.id, viewMode]); // Include viewMode to detect when modal opens/closes
+    }, [clients, selectedClient?.id, viewMode, isUserEditing]); // Include isUserEditing to block during typing
     
     // CRITICAL: Same protection for selectedLead
     useEffect(() => {
         if (!selectedLead || !selectedLead.id) return;
+        
+        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing
+        // This is the PRIMARY guard to prevent overwriting user input
+        // Use REF for synchronous check (state might not be updated yet)
+        if (isUserEditingRef.current || isUserEditing) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - user is editing');
+            return;
+        }
         
         // CRITICAL: Don't update selectedLead if the modal is open (user might be typing)
         // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
@@ -918,6 +943,7 @@ const Clients = React.memo(() => {
         if (viewMode === 'lead-detail') {
             // Modal is open - don't update selectedLead from LiveDataSync
             // This prevents overwriting user input while they're typing
+            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - modal is open');
             return;
         }
         
@@ -979,9 +1005,10 @@ const Clients = React.memo(() => {
             // No user content to preserve, safe to update
             setSelectedLead(updatedLead);
         }
-    }, [leads, selectedLead?.id, viewMode]); // Include viewMode to detect when modal opens/closes
+    }, [leads, selectedLead?.id, viewMode, isUserEditing]); // Include isUserEditing to block during typing
     
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
+    // CRITICAL: Skip updates if user is actively editing to prevent overwriting input
     useEffect(() => {
         const mapDbClient = (c) => {
             const isLead = c.type === 'lead';
@@ -1032,6 +1059,12 @@ const Clients = React.memo(() => {
 
         const subscriberId = 'clients-screen-live-sync';
         const handler = async (message) => {
+            // CRITICAL: Skip LiveDataSync updates if user is editing
+            // Use REF for synchronous check (state might lag)
+            if (isUserEditingRef.current || isUserEditing) {
+                console.log('⏸️ LiveDataSync: Skipping update - user is editing (ref:', isUserEditingRef.current, 'state:', isUserEditing, ')');
+                return;
+            }
             if (message?.type === 'data' && Array.isArray(message.data)) {
                 if (message.dataType === 'clients') {
                     // Check if data changed to prevent unnecessary updates
@@ -3379,6 +3412,7 @@ const Clients = React.memo(() => {
                         onSave={handleSaveClient}
                         onUpdate={handleUpdateClient}
                         onClose={() => {
+                            setIsUserEditing(false);
                             setViewMode('clients');
                             setSelectedClient(null);
                             setCurrentTab('overview');
@@ -3391,6 +3425,30 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
+                        onEditingChange={(editing) => {
+                            console.log('📝 ClientDetailModal editing state changed:', editing);
+                            isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+                            setIsUserEditing(editing);
+                            if (editing) {
+                                console.log('✏️ User started editing - blocking LiveDataSync updates');
+                                // Clear any existing timeout
+                                if (editingTimeoutRef.current) {
+                                    clearTimeout(editingTimeoutRef.current);
+                                }
+                                // Set timeout to mark editing as done after 5 seconds of no changes
+                                editingTimeoutRef.current = setTimeout(() => {
+                                    console.log('⏸️ User stopped editing - allowing LiveDataSync updates');
+                                    setIsUserEditing(false);
+                                }, 5000);
+                            } else {
+                                console.log('✅ User finished editing - allowing LiveDataSync updates');
+                                // Clear timeout if user explicitly stopped editing
+                                if (editingTimeoutRef.current) {
+                                    clearTimeout(editingTimeoutRef.current);
+                                }
+                                setIsUserEditing(false);
+                            }
+                        }}
                     />
                     ) : (
                         <div className="text-center py-8 text-gray-500">
@@ -3445,6 +3503,7 @@ const Clients = React.memo(() => {
                         onSave={handleSaveLead}
                         onUpdate={handleUpdateLead}
                         onClose={async () => {
+                            setIsUserEditing(false);
                             // Refresh leads from database to ensure we have latest persisted data
                             console.log('🔄 Refreshing leads after closing modal...');
                             await loadLeads(true); // Force refresh to get latest data
@@ -3460,6 +3519,30 @@ const Clients = React.memo(() => {
                         hideSearchFilters={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
+                        onEditingChange={(editing) => {
+                            console.log('📝 LeadDetailModal editing state changed:', editing);
+                            isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+                            setIsUserEditing(editing);
+                            if (editing) {
+                                console.log('✏️ User started editing lead - blocking LiveDataSync updates');
+                                // Clear any existing timeout
+                                if (editingTimeoutRef.current) {
+                                    clearTimeout(editingTimeoutRef.current);
+                                }
+                                // Set timeout to mark editing as done after 5 seconds of no changes
+                                editingTimeoutRef.current = setTimeout(() => {
+                                    console.log('⏸️ User stopped editing lead - allowing LiveDataSync updates');
+                                    setIsUserEditing(false);
+                                }, 5000);
+                            } else {
+                                console.log('✅ User finished editing lead - allowing LiveDataSync updates');
+                                // Clear timeout if user explicitly stopped editing
+                                if (editingTimeoutRef.current) {
+                                    clearTimeout(editingTimeoutRef.current);
+                                }
+                                setIsUserEditing(false);
+                            }
+                        }}
                     />
                     ) : (
                         <div className="text-center py-8 text-gray-500">

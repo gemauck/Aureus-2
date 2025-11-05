@@ -2,7 +2,7 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange }) => {
+const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange, onEditingChange }) => {
     const [activeTab, setActiveTab] = useState(initialTab);
     
     // CRITICAL: Initialize formData FIRST with a safe default, before any other hooks or refs
@@ -113,6 +113,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             }
         };
     }, []);
+    
+    // NOTE: No useEffect to watch ref values - refs don't trigger effects!
+    // onEditingChange is called directly in onChange/onFocus/onBlur handlers instead
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -1704,15 +1707,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, name: e.target.value};
@@ -1725,6 +1731,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 // Clear editing flag after a delay to allow for final keystrokes
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
@@ -1739,15 +1746,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, industry: e.target.value};
@@ -1759,6 +1769,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onBlur={() => {
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1817,15 +1828,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('source'); // Track that user has edited this field
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, source: e.target.value};
@@ -1837,6 +1851,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onBlur={() => {
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1919,6 +1934,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
+                                            if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
@@ -1931,9 +1947,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
                                             userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
+                                            if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
+                                                if (onEditingChange) onEditingChange(false);
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
                                             
                                             // Only update formData if spacebar wasn't pressed (onKeyDown already updated it)
