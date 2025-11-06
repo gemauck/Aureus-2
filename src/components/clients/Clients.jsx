@@ -2777,13 +2777,30 @@ const Clients = React.memo(() => {
         }, []);
         
 
-        // Filter active leads and assign default stage if missing
+        // Filter active leads and normalize stages to match AIDA pipeline stages
         const activeLeads = leads.map(lead => {
-            // Assign default stage if missing
-            if (!lead.stage) {
-                return { ...lead, stage: 'Awareness' };
+            // Normalize lead stage to match AIDA pipeline stages (same as Pipeline.jsx)
+            let mappedStage = lead.stage || 'Awareness';
+            const originalStage = mappedStage;
+            
+            // Normalize stage value - trim whitespace and handle variations
+            if (mappedStage) {
+                mappedStage = mappedStage.trim();
             }
-            return lead;
+            
+            // Convert common stage values to AIDA stages
+            if (mappedStage === 'prospect' || mappedStage === 'new') {
+                mappedStage = 'Awareness';
+            } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
+                // If stage doesn't match AIDA stages, default to Awareness
+                mappedStage = 'Awareness';
+            }
+            
+            if (originalStage !== mappedStage) {
+                console.log(`🔄 PipelineView: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
+            }
+            
+            return { ...lead, stage: mappedStage };
         }).filter(lead => {
             // Filter out inactive leads
             return lead.status !== 'Inactive' && lead.status !== 'Disinterested';
