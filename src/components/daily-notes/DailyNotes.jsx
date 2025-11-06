@@ -1958,21 +1958,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 <div className="flex-1 p-4 overflow-y-auto relative">
                     <div
                         ref={(el) => {
+                            // CRITICAL: Only set ref, NEVER update content here - ref callback runs on every render!
+                            // Updating content here causes cursor to jump because it runs during typing
                             editorRef.current = el;
-                            // When editor ref is set, immediately set content if we have it
-                            // BUT NEVER if user is typing - it will reset cursor
-                            const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
-                            if (el && currentNoteHtml && currentNoteHtml.trim().length > 0) {
-                                // Only set if user is NOT typing
-                                if (!isUserTypingRef.current && !isUpdatingFromUserInputRef.current && timeSinceLastInput > 2000) {
-                                    const currentContent = el.innerHTML || '';
-                                    if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
-                                        console.log('🔧 Setting editor content via ref callback - editor:', currentContent.length, 'state:', currentNoteHtml.length);
-                                        setEditorContentSafely(currentNoteHtml);
-                                        console.log('✅ Editor content set via ref callback, length:', currentNoteHtml.length);
-                                    }
-                                }
-                            }
                         }}
                         contentEditable
                         onInput={handleEditorInput}
