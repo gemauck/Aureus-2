@@ -1505,14 +1505,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-supplier-input"
+                      ref={(el) => { if (el) filterInputRefs.current.supplierPart = el; }}
                       type="text"
                       placeholder="Filter Supplier..."
-                      value={columnFilters.supplierPart || ''}
+                      defaultValue={columnFilters.supplierPart || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('supplierPart', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1527,14 +1529,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-mfg-part-input"
+                      ref={(el) => { if (el) filterInputRefs.current.manufacturingPart = el; }}
                       type="text"
                       placeholder="Filter Mfg Part..."
-                      value={columnFilters.manufacturingPart || ''}
+                      defaultValue={columnFilters.manufacturingPart || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('manufacturingPart', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1549,14 +1553,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-legacy-part-input"
+                      ref={(el) => { if (el) filterInputRefs.current.legacyPart = el; }}
                       type="text"
                       placeholder="Filter Abcotronics Part..."
-                      value={columnFilters.legacyPart || ''}
+                      defaultValue={columnFilters.legacyPart || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('legacyPart', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1571,14 +1577,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-category-input"
+                      ref={(el) => { if (el) filterInputRefs.current.category = el; }}
                       type="text"
                       placeholder="Filter Category..."
-                      value={columnFilters.category || ''}
+                      defaultValue={columnFilters.category || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('category', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1593,14 +1601,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-type-input"
+                      ref={(el) => { if (el) filterInputRefs.current.type = el; }}
                       type="text"
                       placeholder="Filter Type..."
-                      value={columnFilters.type || ''}
+                      defaultValue={columnFilters.type || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('type', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1618,14 +1628,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-location-input"
+                      ref={(el) => { if (el) filterInputRefs.current.location = el; }}
                       type="text"
                       placeholder="Filter Location..."
-                      value={columnFilters.location || ''}
+                      defaultValue={columnFilters.location || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('location', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1642,14 +1654,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-status-input"
+                      ref={(el) => { if (el) filterInputRefs.current.status = el; }}
                       type="text"
                       placeholder="Filter Status..."
-                      value={columnFilters.status || ''}
+                      defaultValue={columnFilters.status || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('status', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
