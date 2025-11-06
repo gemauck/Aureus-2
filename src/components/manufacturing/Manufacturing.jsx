@@ -914,7 +914,7 @@ const Manufacturing = () => {
     }, 300);
   }, []);
 
-  const openAddItemModal = () => {
+  const openAddItemModal = useCallback(() => {
     // Set locationId based on selected location (or main warehouse as default)
     const locationId = selectedLocationId && selectedLocationId !== 'all' 
       ? selectedLocationId 
@@ -937,7 +937,7 @@ const Manufacturing = () => {
     });
     setModalType('add_item');
     setShowModal(true);
-  };
+  }, [selectedLocationId, stockLocations]);
 
   const InventoryView = () => {
     // Get unique categories from inventory items
