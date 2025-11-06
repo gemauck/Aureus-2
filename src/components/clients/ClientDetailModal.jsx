@@ -380,7 +380,26 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     }, [activeTab, formData]); // Use formData directly - it's already initialized at this point
     
-    const { isDark } = window.useTheme();
+    // Get theme with safe fallback - don't check system preference, only localStorage
+    let isDark = false;
+    try {
+        if (window.useTheme && typeof window.useTheme === 'function') {
+            const themeResult = window.useTheme();
+            isDark = themeResult?.isDark || false;
+        } else {
+            // Fallback: only check localStorage, NOT system preference
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            isDark = storedTheme === 'dark';
+        }
+    } catch (error) {
+        // Fallback: only check localStorage, NOT system preference
+        try {
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            isDark = storedTheme === 'dark';
+        } catch (e) {
+            isDark = false;
+        }
+    }
     
     // GPS coordinate parsing function
     const parseGPSCoordinates = (gpsString) => {

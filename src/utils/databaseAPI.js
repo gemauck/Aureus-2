@@ -798,6 +798,13 @@ const DatabaseAPI = {
         return response;
     },
 
+    async getOpportunity(id) {
+        console.log(`📡 Fetching opportunity ${id} from database...`);
+        const response = await this.makeRequest(`/opportunities/${id}`);
+        console.log('✅ Opportunity fetched from database');
+        return response;
+    },
+
     async createOpportunity(opportunityData) {
         console.log('📡 Creating opportunity in database...');
         const response = await this.makeRequest('/opportunities', {
@@ -1481,6 +1488,7 @@ if (window.api) {
     // Opportunities API methods
     window.api.getOpportunities = DatabaseAPI.getOpportunities.bind(DatabaseAPI);
     window.api.getOpportunitiesByClient = DatabaseAPI.getOpportunitiesByClient.bind(DatabaseAPI);
+    window.api.getOpportunity = DatabaseAPI.getOpportunity.bind(DatabaseAPI);
     window.api.createOpportunity = DatabaseAPI.createOpportunity.bind(DatabaseAPI);
     window.api.updateOpportunity = DatabaseAPI.updateOpportunity.bind(DatabaseAPI);
     window.api.deleteOpportunity = DatabaseAPI.deleteOpportunity.bind(DatabaseAPI);

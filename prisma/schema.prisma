@@ -202,6 +202,7 @@ model Opportunity {
   title     String
   stage     String   @default("Awareness") // AIDA pipeline stage
   value     Float    @default(0)
+  proposals String   @default("[]") // JSON array of proposals
   ownerId   String?
   client    Client   @relation(fields: [clientId], references: [id])
   createdAt DateTime @default(now())

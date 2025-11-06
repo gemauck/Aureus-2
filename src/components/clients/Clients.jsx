@@ -273,7 +273,27 @@ const Clients = React.memo(() => {
     const [clientsPage, setClientsPage] = useState(1);
     const [leadsPage, setLeadsPage] = useState(1);
     const ITEMS_PER_PAGE = 25;
-    const { isDark } = window.useTheme();
+    
+    // Get theme with safe fallback - don't check system preference, only localStorage
+    let isDark = false;
+    try {
+        if (window.useTheme && typeof window.useTheme === 'function') {
+            const themeResult = window.useTheme();
+            isDark = themeResult?.isDark || false;
+        } else {
+            // Fallback: only check localStorage, NOT system preference
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            isDark = storedTheme === 'dark';
+        }
+    } catch (error) {
+        // Fallback: only check localStorage, NOT system preference
+        try {
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            isDark = storedTheme === 'dark';
+        } catch (e) {
+            isDark = false;
+        }
+    }
     
     // Simple sync control - just stop/start
     const stopSync = () => {

@@ -19,7 +19,8 @@ const Calendar = () => {
         // Fallback: check localStorage
         try {
             const storedTheme = localStorage.getItem('abcotronics_theme');
-            themeResult.isDark = storedTheme === 'dark' || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            // Only check localStorage, NOT system preference - respect user's explicit theme choice
+            themeResult.isDark = storedTheme === 'dark';
         } catch (e) {
             themeResult.isDark = false;
         }

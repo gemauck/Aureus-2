@@ -1,4 +1,5 @@
 // Get dependencies from window
+const React = window.React;
 const { useState, useEffect } = React;
 const storage = window.storage;
 
@@ -1663,6 +1664,45 @@ const Pipeline = () => {
             {viewMode === 'kanban' && <KanbanView />}
             {viewMode === 'list' && <ListView />}
             {viewMode === 'forecast' && <ForecastView />}
+            
+            {/* Opportunity Detail Modal */}
+            {showDealModal && selectedDeal && selectedDeal.type === 'opportunity' && window.OpportunityDetailModal && (
+                React.createElement(window.OpportunityDetailModal, {
+                    opportunityId: selectedDeal.id,
+                    client: clients.find(c => c.id === selectedDeal.clientId),
+                    onClose: () => {
+                        setShowDealModal(false);
+                        setSelectedDeal(null);
+                    }
+                })
+            )}
+            
+            {/* Lead Detail Modal */}
+            {showDealModal && selectedDeal && selectedDeal.type === 'lead' && window.LeadDetailModal && (
+                React.createElement(window.LeadDetailModal, {
+                    leadId: selectedDeal.id,
+                    onClose: () => {
+                        setShowDealModal(false);
+                        setSelectedDeal(null);
+                    },
+                    onSave: async () => {
+                        // Refresh leads after save
+                        setRefreshKey(k => k + 1);
+                    },
+                    onDelete: async () => {
+                        // Refresh leads after delete
+                        setRefreshKey(k => k + 1);
+                        setShowDealModal(false);
+                        setSelectedDeal(null);
+                    },
+                    onConvertToClient: async () => {
+                        // Refresh data after conversion
+                        setRefreshKey(k => k + 1);
+                        setShowDealModal(false);
+                        setSelectedDeal(null);
+                    }
+                })
+            )}
         </div>
     );
 };

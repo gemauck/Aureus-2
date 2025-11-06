@@ -38,8 +38,22 @@ async function handler(req, res) {
           }
         })
         if (!opportunity) return notFound(res)
+        
+        // Parse JSON fields (proposals)
+        const parsedOpportunity = { ...opportunity }
+        if (typeof parsedOpportunity.proposals === 'string' && parsedOpportunity.proposals) {
+          try {
+            parsedOpportunity.proposals = JSON.parse(parsedOpportunity.proposals)
+          } catch (e) {
+            parsedOpportunity.proposals = []
+          }
+        } else if (!parsedOpportunity.proposals) {
+          parsedOpportunity.proposals = []
+        }
+        
         console.log('✅ Opportunity retrieved successfully:', opportunity.id)
-        return ok(res, { opportunity })
+        console.log('✅ Parsed proposals count:', Array.isArray(parsedOpportunity.proposals) ? parsedOpportunity.proposals.length : 'not an array')
+        return ok(res, { opportunity: parsedOpportunity })
       } catch (dbError) {
         console.error('❌ Database error getting opportunity:', dbError)
         return serverError(res, 'Failed to get opportunity', dbError.message)
@@ -61,6 +75,7 @@ async function handler(req, res) {
         title: body.title,
         stage: body.stage,
         value: body.value ? parseFloat(body.value) : undefined,
+        proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
         ownerId: body.ownerId
       }
       
@@ -97,7 +112,20 @@ async function handler(req, res) {
           newStage: opportunity.stage,
           title: opportunity.title
         })
-        return ok(res, { opportunity })
+        
+        // Parse proposals before returning
+        const parsedOpportunity = { ...opportunity }
+        if (typeof parsedOpportunity.proposals === 'string' && parsedOpportunity.proposals) {
+          try {
+            parsedOpportunity.proposals = JSON.parse(parsedOpportunity.proposals)
+          } catch (e) {
+            parsedOpportunity.proposals = []
+          }
+        } else if (!parsedOpportunity.proposals) {
+          parsedOpportunity.proposals = []
+        }
+        
+        return ok(res, { opportunity: parsedOpportunity })
       } catch (dbError) {
         console.error('❌ Database error updating opportunity:', dbError)
         console.error('❌ Error details:', {
