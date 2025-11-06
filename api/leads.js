@@ -284,6 +284,11 @@ async function handler(req, res) {
         console.log(`📤 Sending ${parsedLeads.length} leads to ${userEmail} (no filtering applied)`)
         if (parsedLeads.length > 0) {
           console.log(`📋 Response includes leads:`, parsedLeads.map(l => ({ id: l.id, name: l.name, ownerId: l.ownerId || 'null' })))
+          // Log stage field for ReitCoal specifically
+          const reitcoulLead = parsedLeads.find(l => l.name && l.name.toLowerCase().includes('reit'));
+          if (reitcoulLead) {
+            console.log(`🎯 ReitCoal lead stage in API response:`, { name: reitcoulLead.name, stage: reitcoulLead.stage, hasStage: reitcoulLead.stage !== undefined && reitcoulLead.stage !== null })
+          }
         }
         
         // CRITICAL: Double-check that we're not filtering by ownerId
@@ -546,6 +551,8 @@ async function handler(req, res) {
         console.log('🔍 Updating lead with data:', updateData)
         console.log('🔍 Update data contains status:', updateData.status)
         console.log('🔍 Update data contains stage:', updateData.stage)
+        console.log('🔍 Update data contains proposals:', updateData.proposals ? (typeof updateData.proposals === 'string' ? JSON.parse(updateData.proposals).length + ' proposals' : updateData.proposals.length + ' proposals') : 'NO PROPOSALS')
+        console.log('🔍 Raw body.proposals:', body.proposals ? (Array.isArray(body.proposals) ? body.proposals.length + ' proposals' : typeof body.proposals) : 'undefined')
         console.log('🔍 Lead ID to update:', id)
         
         try {
@@ -569,11 +576,13 @@ async function handler(req, res) {
           console.log('✅ Lead updated successfully:', lead.id)
           console.log('✅ Updated lead status:', lead.status, '(was:', existing.status, ')')
           console.log('✅ Updated lead stage:', lead.stage)
+          console.log('✅ Updated lead proposals:', lead.proposals ? (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals).length + ' proposals' : lead.proposals.length + ' proposals') : 'NO PROPOSALS')
           console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
           
         // CRITICAL DEBUG: Immediately re-query database to verify persistence
         const verifyLead = await prisma.client.findUnique({ where: { id } })
         console.log('🔍 VERIFY: Re-queried lead from DB:', verifyLead.id, 'status:', verifyLead.status, 'stage:', verifyLead.stage)
+        console.log('🔍 VERIFY: Re-queried proposals:', verifyLead.proposals ? (typeof verifyLead.proposals === 'string' ? JSON.parse(verifyLead.proposals).length + ' proposals' : verifyLead.proposals.length + ' proposals') : 'NO PROPOSALS')
         if (verifyLead.status !== updateData.status) {
           console.error('❌ CRITICAL: Database did not persist status change!')
           console.error('   Expected:', updateData.status, 'Got:', verifyLead.status)
