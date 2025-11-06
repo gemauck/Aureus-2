@@ -3650,7 +3650,7 @@ const Clients = React.memo(() => {
 
             {/* Full-page client detail content */}
             <div className="p-6">
-                {useMemo(() => {
+                {(() => {
                     const Modal = window.ClientDetailModal;
                     if (!Modal) {
                         return (
@@ -3690,7 +3690,7 @@ const Clients = React.memo(() => {
                         onEditingChange={handleClientEditingChange}
                     />
                     );
-                }, [selectedClient?.id, currentTab, handlePauseSync, handleSaveClient, handleUpdateClient, handleDeleteClient, handleNavigateToProject, projects, handleClientEditingChange])}
+                })()}
             </div>
         </div>
     );
@@ -3728,7 +3728,7 @@ const Clients = React.memo(() => {
 
             {/* Full-page lead detail content */}
             <div className="p-6">
-                {useMemo(() => {
+                {(() => {
                     const Modal = window.LeadDetailModal;
                     if (!Modal) {
                         return (
@@ -3771,7 +3771,7 @@ const Clients = React.memo(() => {
                         onEditingChange={handleLeadEditingChange}
                     />
                     );
-                }, [selectedLead?.id, currentLeadTab, handlePauseSync, handleSaveLead, handleUpdateLead, handleDeleteLead, convertLeadToClient, projects, loadLeads, handleLeadEditingChange])}
+                })()}
             </div>
         </div>
     );
