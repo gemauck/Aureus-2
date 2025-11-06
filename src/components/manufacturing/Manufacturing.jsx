@@ -3,7 +3,7 @@ console.log('🏭 Manufacturing.jsx: Starting to load...');
 console.log('🏭 React available:', typeof window.React !== 'undefined');
 console.log('🏭 useAuth available:', typeof window.useAuth !== 'undefined');
 
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
 const { useAuth } = window;
 
 const Manufacturing = () => {
@@ -54,6 +54,11 @@ const Manufacturing = () => {
   const [selectedLocationId, setSelectedLocationId] = useState('all'); // Location filter for inventory
   const [columnFilters, setColumnFilters] = useState({}); // Column-specific filters
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' }); // Sorting state
+  
+  // Track user input state to prevent data sync from interrupting typing
+  const isUserTypingRef = useRef(false);
+  const activeInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -278,9 +283,20 @@ const Manufacturing = () => {
               .then(movementsResponse => {
                 const movementsData = movementsResponse?.data?.movements || [];
                 const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+                
+                // Log type breakdown to verify all types are included
+                const typeBreakdown = processed.reduce((acc, m) => {
+                  acc[m.type] = (acc[m.type] || 0) + 1;
+                  return acc;
+                }, {});
+                console.log('✅ Manufacturing: Stock movements synced:', {
+                  total: processed.length,
+                  types: typeBreakdown,
+                  allMovements: processed.map(m => ({ id: m.id, type: m.type, quantity: m.quantity }))
+                });
+                
                 setMovements(processed);
                 localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
-                console.log('✅ Manufacturing: Stock movements synced:', processed.length);
                 return { type: 'movements', data: processed };
               })
               .catch(error => {
@@ -717,18 +733,61 @@ const Manufacturing = () => {
     );
   };
 
-  // Reload inventory when location changes
+  // Reload inventory when location changes - BUT NOT if user is actively typing
   useEffect(() => {
+    // CRITICAL: Skip reload if user is actively typing in an input field
+    if (isUserTypingRef.current) {
+      console.log('🚫 Skipping inventory reload - user is typing');
+      return;
+    }
+    
     if (activeTab === 'inventory' && window.DatabaseAPI?.getInventory) {
       const loadInventoryForLocation = async () => {
         try {
+          // Save the currently focused element before state update
+          const focusedElement = document.activeElement;
+          const wasInputFocused = focusedElement && (focusedElement.tagName === 'INPUT' || focusedElement.tagName === 'TEXTAREA');
+          const inputValue = wasInputFocused ? focusedElement.value : null;
+          const inputKey = wasInputFocused ? focusedElement.getAttribute('key') : null;
+          const inputPlaceholder = wasInputFocused ? focusedElement.placeholder : null;
+          
           const locationIdToLoad = selectedLocationId && selectedLocationId !== 'all' ? selectedLocationId : null;
           const invResponse = await window.DatabaseAPI.getInventory(locationIdToLoad);
           const invData = invResponse?.data?.inventory || [];
           const processed = invData.map(item => ({ ...item, id: item.id }));
+          
           setInventory(processed);
           localStorage.setItem('manufacturing_inventory', JSON.stringify(processed));
           console.log(`✅ Inventory loaded for location ${selectedLocationId}:`, processed.length);
+          
+          // Restore focus after state update if user was typing
+          if (wasInputFocused) {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                let inputToFocus = null;
+                if (inputKey) {
+                  inputToFocus = document.querySelector(`input[key="${inputKey}"]`);
+                }
+                if (!inputToFocus && inputPlaceholder) {
+                  // Try to find by placeholder
+                  const inputs = document.querySelectorAll('input[type="text"]');
+                  inputs.forEach(input => {
+                    if (input.placeholder === inputPlaceholder) {
+                      inputToFocus = input;
+                    }
+                  });
+                }
+                if (inputToFocus) {
+                  inputToFocus.focus();
+                  // Restore cursor position
+                  if (inputValue !== null) {
+                    const cursorPos = Math.min(inputValue.length, inputToFocus.value.length);
+                    inputToFocus.setSelectionRange(cursorPos, cursorPos);
+                  }
+                }
+              });
+            });
+          }
         } catch (error) {
           console.error('Error loading inventory for location:', error);
         }
@@ -770,6 +829,60 @@ const Manufacturing = () => {
     return () => {
       window.removeEventListener('stockLocationsUpdated', handleLocationUpdate);
     };
+  }, []);
+
+  // Handle column sorting - memoized to prevent recreation
+  const handleSort = useCallback((key, e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setSortConfig(prevConfig => {
+      if (prevConfig.key === key) {
+        // Toggle direction if same column
+        const newDirection = prevConfig.direction === 'asc' ? 'desc' : 'asc';
+        console.log('Sorting by', key, 'direction:', newDirection);
+        return { key, direction: newDirection };
+      } else {
+        // New column, default to ascending
+        console.log('Sorting by', key, 'direction: asc');
+        return { key, direction: 'asc' };
+      }
+    });
+  }, []);
+
+  // Handle column filter change - memoized to prevent recreation
+  const handleColumnFilterChange = useCallback((column, value, event) => {
+    // Mark that user is typing
+    isUserTypingRef.current = true;
+    if (event && event.target) {
+      activeInputRef.current = event.target;
+    }
+    
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    
+    // Clear typing flag after user stops typing (500ms delay)
+    typingTimeoutRef.current = setTimeout(() => {
+      isUserTypingRef.current = false;
+      activeInputRef.current = null;
+    }, 500);
+    
+    setColumnFilters(prev => {
+      const newFilters = {
+        ...prev,
+        [column]: value || undefined
+      };
+      // Remove undefined values
+      Object.keys(newFilters).forEach(k => {
+        if (newFilters[k] === undefined) {
+          delete newFilters[k];
+        }
+      });
+      return newFilters;
+    });
   }, []);
 
   const InventoryView = () => {
@@ -878,43 +991,6 @@ const Manufacturing = () => {
       });
     }
 
-    // Handle column sorting
-    const handleSort = (key, e) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-      setSortConfig(prevConfig => {
-        if (prevConfig.key === key) {
-          // Toggle direction if same column
-          const newDirection = prevConfig.direction === 'asc' ? 'desc' : 'asc';
-          console.log('Sorting by', key, 'direction:', newDirection);
-          return { key, direction: newDirection };
-        } else {
-          // New column, default to ascending
-          console.log('Sorting by', key, 'direction: asc');
-          return { key, direction: 'asc' };
-        }
-      });
-    };
-
-    // Handle column filter change
-    const handleColumnFilterChange = (column, value) => {
-      setColumnFilters(prev => {
-        const newFilters = {
-          ...prev,
-          [column]: value || undefined
-        };
-        // Remove undefined values
-        Object.keys(newFilters).forEach(k => {
-          if (newFilters[k] === undefined) {
-            delete newFilters[k];
-          }
-        });
-        return newFilters;
-      });
-    };
-
     // Get sort icon for column
     const getSortIcon = (columnKey) => {
       if (sortConfig.key !== columnKey) {
@@ -948,10 +1024,41 @@ const Manufacturing = () => {
               <div className="relative flex-1 max-w-md">
                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
                 <input
+                  key="inventory-search-input"
                   type="text"
                   placeholder="Search by name or SKU..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onFocus={(e) => {
+                    isUserTypingRef.current = true;
+                    activeInputRef.current = e.target;
+                  }}
+                  onBlur={() => {
+                    // Clear typing flag after a delay to allow for rapid re-focusing
+                    setTimeout(() => {
+                      if (document.activeElement !== activeInputRef.current) {
+                        isUserTypingRef.current = false;
+                        activeInputRef.current = null;
+                      }
+                    }, 100);
+                  }}
+                  onChange={(e) => {
+                    // Mark that user is typing
+                    isUserTypingRef.current = true;
+                    activeInputRef.current = e.target;
+                    
+                    // Clear existing timeout
+                    if (typingTimeoutRef.current) {
+                      clearTimeout(typingTimeoutRef.current);
+                    }
+                    
+                    // Clear typing flag after user stops typing (500ms delay)
+                    typingTimeoutRef.current = setTimeout(() => {
+                      isUserTypingRef.current = false;
+                      activeInputRef.current = null;
+                    }, 500);
+                    
+                    setSearchTerm(e.target.value);
+                  }}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
@@ -1339,68 +1446,159 @@ const Manufacturing = () => {
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Actions</th>
                 </tr>
                 {/* Filter Row */}
-                <tr className="bg-gray-50 border-b border-gray-200">
+                <tr key="inventory-filter-row" className="bg-gray-50 border-b border-gray-200">
                   <th className="px-3 py-2">
                     <input
+                      key="filter-sku-input"
                       type="text"
                       placeholder="Filter SKU..."
                       value={columnFilters.sku || ''}
-                      onChange={(e) => handleColumnFilterChange('sku', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('sku', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2"></th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-name-input"
                       type="text"
                       placeholder="Filter Name..."
                       value={columnFilters.name || ''}
-                      onChange={(e) => handleColumnFilterChange('name', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('name', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-supplier-input"
                       type="text"
                       placeholder="Filter Supplier..."
                       value={columnFilters.supplierPart || ''}
-                      onChange={(e) => handleColumnFilterChange('supplierPart', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('supplierPart', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-mfg-part-input"
                       type="text"
                       placeholder="Filter Mfg Part..."
                       value={columnFilters.manufacturingPart || ''}
-                      onChange={(e) => handleColumnFilterChange('manufacturingPart', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('manufacturingPart', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-legacy-part-input"
                       type="text"
                       placeholder="Filter Abcotronics Part..."
                       value={columnFilters.legacyPart || ''}
-                      onChange={(e) => handleColumnFilterChange('legacyPart', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('legacyPart', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-category-input"
                       type="text"
                       placeholder="Filter Category..."
                       value={columnFilters.category || ''}
-                      onChange={(e) => handleColumnFilterChange('category', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('category', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-type-input"
                       type="text"
                       placeholder="Filter Type..."
                       value={columnFilters.type || ''}
-                      onChange={(e) => handleColumnFilterChange('type', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('type', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
@@ -1409,10 +1607,23 @@ const Manufacturing = () => {
                   <th className="px-3 py-2"></th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-location-input"
                       type="text"
                       placeholder="Filter Location..."
                       value={columnFilters.location || ''}
-                      onChange={(e) => handleColumnFilterChange('location', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('location', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
@@ -1420,10 +1631,23 @@ const Manufacturing = () => {
                   <th className="px-3 py-2"></th>
                   <th className="px-3 py-2">
                     <input
+                      key="filter-status-input"
                       type="text"
                       placeholder="Filter Status..."
                       value={columnFilters.status || ''}
-                      onChange={(e) => handleColumnFilterChange('status', e.target.value)}
+                      onFocus={(e) => {
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
+                      onBlur={() => {
+                        setTimeout(() => {
+                          if (document.activeElement !== activeInputRef.current) {
+                            isUserTypingRef.current = false;
+                            activeInputRef.current = null;
+                          }
+                        }, 100);
+                      }}
+                      onChange={(e) => handleColumnFilterChange('status', e.target.value, e)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
@@ -3009,52 +3233,132 @@ const Manufacturing = () => {
 
   const handleSaveMovement = async () => {
     try {
-      // Allow negative quantities for adjustments, but still require quantity to be provided
+      // Robust validation
       const isValidQuantity = formData.quantity !== '' && formData.quantity !== null && formData.quantity !== undefined;
       const isAdjustment = formData.type === 'adjustment';
       
+      // Validate required fields
       if (!formData.sku || !formData.itemName || !isValidQuantity) {
         alert('Please provide SKU, Item Name, and Quantity');
         return;
       }
       
-      // For non-adjustment types, allow negative values as well (for corrections)
-      // Only validate that quantity is not zero for non-adjustments
-      if (!isAdjustment && parseFloat(formData.quantity) === 0) {
-        alert('Quantity cannot be zero');
+      // Validate SKU format (basic check)
+      if (formData.sku.trim().length === 0) {
+        alert('SKU cannot be empty');
         return;
+      }
+      
+      // Validate item name
+      if (formData.itemName.trim().length === 0) {
+        alert('Item Name cannot be empty');
+        return;
+      }
+      
+      // Parse and validate quantity
+      const quantity = parseFloat(formData.quantity);
+      if (isNaN(quantity)) {
+        alert('Quantity must be a valid number');
+        return;
+      }
+      
+      // For non-adjustment types, allow negative values but not zero
+      if (!isAdjustment && quantity === 0) {
+        alert('Quantity cannot be zero for non-adjustment movements');
+        return;
+      }
+      
+      // Validate unit cost if provided
+      let unitCost = undefined;
+      if (formData.unitCost && formData.unitCost !== '') {
+        unitCost = parseFloat(formData.unitCost);
+        if (isNaN(unitCost) || unitCost < 0) {
+          alert('Unit Cost must be a valid positive number');
+          return;
+        }
       }
 
       const movementData = {
         type: formData.type || 'receipt',
-        sku: formData.sku,
-        itemName: formData.itemName,
-        quantity: parseFloat(formData.quantity),
-        unitCost: formData.unitCost ? parseFloat(formData.unitCost) : undefined,
-        fromLocation: formData.fromLocation || '',
-        toLocation: formData.toLocation || '',
-        reference: formData.reference || '',
-        notes: formData.notes || '',
-        date: formData.date || new Date().toISOString()
+        sku: formData.sku.trim(),
+        itemName: formData.itemName.trim(),
+        quantity: quantity,
+        unitCost: unitCost,
+        fromLocation: (formData.fromLocation || '').trim(),
+        toLocation: (formData.toLocation || '').trim(),
+        reference: (formData.reference || '').trim(),
+        notes: (formData.notes || '').trim(),
+        date: formData.date || new Date().toISOString().split('T')[0]
       };
 
       console.log('📤 Creating stock movement:', movementData);
-      const response = await safeCallAPI('createStockMovement', movementData);
+      
+      // Retry logic for API call
+      let response;
+      let retries = 0;
+      const maxRetries = 3;
+      
+      while (retries < maxRetries) {
+        try {
+          response = await safeCallAPI('createStockMovement', movementData);
+          break; // Success, exit retry loop
+        } catch (apiError) {
+          retries++;
+          if (retries >= maxRetries) {
+            throw apiError;
+          }
+          console.warn(`⚠️ API call failed, retrying (${retries}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 500 * retries)); // Exponential backoff
+        }
+      }
+      
       console.log('📥 Stock movement response:', response);
       
-      // Check if movement was created successfully (response structure may vary)
+      // Check if movement was created successfully (handle various response structures)
       const createdMovement = response?.data?.movement || response?.movement || response?.data;
       
-      if (createdMovement || response?.data) {
+      if (createdMovement || response?.data || response?.success !== false) {
         console.log('✅ Stock movement created successfully, refreshing movements list...');
         
-        // Refresh movements list - wait a bit to ensure database commit
-        await new Promise(resolve => setTimeout(resolve, 300));
+        // Wait for database commit
+        await new Promise(resolve => setTimeout(resolve, 500));
         
-        const movementsResponse = await safeCallAPI('getStockMovements');
-        const movementsData = movementsResponse?.data?.movements || [];
+        // Refresh movements list with retry logic
+        let movementsData = [];
+        retries = 0;
+        while (retries < maxRetries) {
+          try {
+            const movementsResponse = await safeCallAPI('getStockMovements');
+            movementsData = movementsResponse?.data?.movements || [];
+            
+            // Verify the new movement is in the list
+            const newMovementFound = movementsData.some(m => 
+              m.sku === movementData.sku && 
+              m.type === movementData.type &&
+              Math.abs(m.quantity - movementData.quantity) < 0.01 &&
+              Math.abs(new Date(m.date).getTime() - new Date(movementData.date).getTime()) < 86400000 // Within 24 hours
+            );
+            
+            if (newMovementFound || movementsData.length > 0) {
+              break; // Success
+            }
+            
+            if (retries < maxRetries - 1) {
+              console.warn(`⚠️ New movement not found yet, retrying (${retries + 1}/${maxRetries})...`);
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            retries++;
+          } catch (error) {
+            retries++;
+            if (retries >= maxRetries) {
+              console.error('❌ Failed to refresh movements after retries:', error);
+              throw error;
+            }
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+        
         console.log('📋 Fetched movements:', movementsData.length, 'total movements');
-        console.log('📋 Movement types:', movementsData.map(m => ({ id: m.id, type: m.type, quantity: m.quantity })));
         
         const processedMovements = movementsData.map(movement => ({
           ...movement,
@@ -3064,11 +3368,15 @@ const Manufacturing = () => {
         localStorage.setItem('manufacturing_movements', JSON.stringify(processedMovements));
         
         // Refresh inventory
-        const invResponse = await safeCallAPI('getInventory');
-        const invData = invResponse?.data?.inventory || [];
-        const processedInventory = invData.map(item => ({ ...item, id: item.id }));
-        setInventory(processedInventory);
-        localStorage.setItem('manufacturing_inventory', JSON.stringify(processedInventory));
+        try {
+          const invResponse = await safeCallAPI('getInventory');
+          const invData = invResponse?.data?.inventory || [];
+          const processedInventory = invData.map(item => ({ ...item, id: item.id }));
+          setInventory(processedInventory);
+          localStorage.setItem('manufacturing_inventory', JSON.stringify(processedInventory));
+        } catch (invError) {
+          console.warn('⚠️ Failed to refresh inventory, but movement was saved:', invError);
+        }
         
         setShowModal(false);
         setFormData({});
@@ -3078,8 +3386,9 @@ const Manufacturing = () => {
         throw new Error('Invalid response from server');
       }
     } catch (error) {
-      console.error('Error creating stock movement:', error);
-      alert(error?.message || 'Failed to create stock movement. Please try again.');
+      console.error('❌ Error creating stock movement:', error);
+      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to create stock movement. Please try again.';
+      alert(`Error: ${errorMessage}`);
     }
   };
 
@@ -6994,11 +7303,22 @@ const Manufacturing = () => {
         if (window.DatabaseAPI?.getStockMovements) {
           const movementsResponse = await window.DatabaseAPI.getStockMovements();
           const movementsData = movementsResponse?.data?.movements || [];
-          console.log('📋 Refreshed movements:', movementsData.length, 'total');
+          
+          // Log breakdown to verify all types
+          const typeBreakdown = movementsData.reduce((acc, m) => {
+            acc[m.type] = (acc[m.type] || 0) + 1;
+            return acc;
+          }, {});
+          console.log('📋 Refreshed movements:', {
+            total: movementsData.length,
+            types: typeBreakdown,
+            allTypes: Object.keys(typeBreakdown)
+          });
+          
           const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
           setMovements(processed);
           localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
-          alert(`✅ Refreshed! Found ${movementsData.length} stock movements.`);
+          alert(`✅ Refreshed! Found ${movementsData.length} stock movements. Types: ${Object.keys(typeBreakdown).join(', ')}`);
         }
       } catch (error) {
         console.error('Error refreshing movements:', error);
@@ -7014,7 +7334,19 @@ const Manufacturing = () => {
             <h3 className="text-sm font-semibold text-gray-900">
               Stock Movements
               {movements.length > 0 && (
-                <span className="ml-2 text-xs font-normal text-gray-500">({movements.length} records)</span>
+                <span className="ml-2 text-xs font-normal text-gray-500">
+                  ({movements.length} records
+                  {(() => {
+                    const typeCounts = movements.reduce((acc, m) => {
+                      acc[m.type] = (acc[m.type] || 0) + 1;
+                      return acc;
+                    }, {});
+                    const breakdown = Object.entries(typeCounts)
+                      .map(([type, count]) => `${type}: ${count}`)
+                      .join(', ');
+                    return breakdown ? ` - ${breakdown}` : '';
+                  })()})
+                </span>
               )}
             </h3>
             <div className="flex items-center gap-2">
@@ -7077,47 +7409,58 @@ const Manufacturing = () => {
                     </td>
                   </tr>
                 ) : (
-                  movements.map(movement => (
-                    <tr key={movement.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.movementId || movement.id}</td>
-                      <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
-                          {movement.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
-                        <div className="text-xs text-gray-500">{movement.sku}</div>
-                      </td>
-                      <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
-                        {movement.quantity > 0 ? '+' : ''}{movement.quantity}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
-                      <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              console.log('🗑️ Delete button clicked for movement:', movement.id);
-                              handleDeleteMovement(movement.id);
-                            }}
-                            className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer border border-red-200"
-                            title="Delete Movement"
-                            type="button"
-                            style={{ minWidth: '32px', minHeight: '32px' }}
-                          >
-                            <i className="fas fa-trash text-sm"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  (() => {
+                    // Log all movements being displayed
+                    console.log('📊 Displaying movements in table:', {
+                      total: movements.length,
+                      types: movements.reduce((acc, m) => {
+                        acc[m.type] = (acc[m.type] || 0) + 1;
+                        return acc;
+                      }, {}),
+                      movements: movements.map(m => ({ id: m.id, type: m.type, quantity: m.quantity, itemName: m.itemName }))
+                    });
+                    return movements.map(movement => (
+                      <tr key={movement.id} className="hover:bg-gray-50">
+                        <td className="px-3 py-2 text-sm font-medium text-gray-900">{movement.movementId || movement.id}</td>
+                        <td className="px-3 py-2 text-sm text-gray-900">{movement.date}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
+                            {movement.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
+                          <div className="text-xs text-gray-500">{movement.sku}</div>
+                        </td>
+                        <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
+                          {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{movement.reference}</td>
+                        <td className="px-3 py-2 text-sm text-gray-600">{movement.performedBy}</td>
+                        <td className="px-3 py-2 text-sm text-gray-500">{movement.notes}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                console.log('🗑️ Delete button clicked for movement:', movement.id);
+                                handleDeleteMovement(movement.id);
+                              }}
+                              className="inline-flex items-center justify-center w-8 h-8 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors cursor-pointer border border-red-200"
+                              title="Delete Movement"
+                              type="button"
+                              style={{ minWidth: '32px', minHeight: '32px' }}
+                            >
+                              <i className="fas fa-trash text-sm"></i>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ));
+                  })()
                 )}
               </tbody>
             </table>
