@@ -1070,12 +1070,13 @@ const Teams = () => {
                                                     </div>
                                                 </div>
 												<p className={`text-sm mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{notice.content}</p>
-												<div className="flex items-center justify-between text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
+												<div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
                                                     <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
                                                     <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 </div>
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
