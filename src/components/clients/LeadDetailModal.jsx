@@ -2351,6 +2351,35 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                         </div>
                                     )}
                                 </div>
+
+                                {/* Delete Lead Section */}
+                                {lead && onDelete && (
+                                    <div className="pt-6 mt-6 border-t border-gray-200 dark:border-gray-700">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
+                                                    Danger Zone
+                                                </h3>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                    Once you delete a lead, there is no going back. Please be certain.
+                                                </p>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    if (confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+                                                        onDelete(lead.id);
+                                                        onClose();
+                                                    }
+                                                }}
+                                                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center gap-2"
+                                            >
+                                                <i className="fas fa-trash"></i>
+                                                Delete Lead
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 

@@ -3431,7 +3431,7 @@ const Clients = React.memo(() => {
                     return (
                         <Modal
                         key={editingClientId || 'new-client'}
-                        clientId={editingClientId}
+                        client={selectedClient}
                         onSave={handleSaveClient}
                         onClose={handleClientModalClose}
                         onDelete={handleDeleteClient}
