@@ -176,11 +176,21 @@
   body main,
   #root main,
   #root > div > main,
+  #root > div.flex main,
   div.flex-1 main,
-  [class*="flex-1"] main {
+  [class*="flex-1"] main,
+  main.flex-1,
+  main.overflow-y-auto,
+  main.overflow-x-hidden {
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+  }
+  
+  /* ULTRA-SPECIFIC: Override any inline styles or other CSS */
+  main[style*="display"],
+  main[style*="none"] {
+    display: block !important;
   }
   
   aside[style*="display: none"] {
