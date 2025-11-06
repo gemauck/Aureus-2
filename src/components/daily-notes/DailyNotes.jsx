@@ -1462,17 +1462,33 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const offset = preCaretRange.toString().length;
             
             editorCursorPositionRef.current = offset;
+            console.log('💾 Saved cursor position:', offset, 'editor length:', editorRef.current.innerText.length);
+        } else {
+            console.warn('⚠️ Could not save cursor position - no selection or selection outside editor');
         }
     };
     
     // Restore cursor position in contentEditable using text offset
     const restoreCursorPosition = () => {
-        if (!editorRef.current || editorCursorPositionRef.current === null || editorCursorPositionRef.current === undefined) return;
+        if (!editorRef.current || editorCursorPositionRef.current === null || editorCursorPositionRef.current === undefined) {
+            console.warn('⚠️ Cannot restore cursor - no ref or position:', {
+                hasRef: !!editorRef.current,
+                position: editorCursorPositionRef.current
+            });
+            return;
+        }
         
         try {
             const selection = window.getSelection();
             const range = document.createRange();
             const textOffset = editorCursorPositionRef.current;
+            const editorLength = editorRef.current.innerText.length;
+            
+            console.log('🔄 Attempting to restore cursor:', {
+                savedOffset: textOffset,
+                editorLength: editorLength,
+                canRestore: textOffset <= editorLength
+            });
             
             // Find the text node and offset that corresponds to the saved character position
             let currentOffset = 0;
@@ -1502,8 +1518,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 selection.removeAllRanges();
                 selection.addRange(range);
                 editorRef.current.focus();
+                console.log('✅ Cursor restored to position:', textOffset);
             } else {
                 // Fallback: place cursor at end
+                console.warn('⚠️ Target node not found, placing cursor at end');
                 range.selectNodeContents(editorRef.current);
                 range.collapse(false);
                 selection.removeAllRanges();
@@ -1511,7 +1529,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 editorRef.current.focus();
             }
         } catch (error) {
-            console.error('Error restoring cursor position:', error);
+            console.error('❌ Error restoring cursor position:', error);
             // If restoration fails, just focus the editor
             if (editorRef.current) {
                 editorRef.current.focus();
@@ -1962,6 +1980,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onKeyDown={(e) => {
                             // Handle spacebar specially to prevent cursor jumping
                             if (e.key === ' ' || e.keyCode === 32) {
+                                console.log('⌨️ SPACEBAR PRESSED - Starting spacebar handler');
                                 e.preventDefault();
                                 e.stopPropagation();
                                 
@@ -1972,11 +1991,15 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 isUserTypingRef.current = true;
                                 lastUserInputTimeRef.current = Date.now();
                                 isUpdatingFromUserInputRef.current = true;
+                                console.log('✅ Flags set - typing blocked for 3 seconds');
                                 
                                 // Manually insert space at cursor position
                                 const selection = window.getSelection();
                                 if (selection.rangeCount > 0 && editorRef.current.contains(selection.anchorNode)) {
                                     const range = selection.getRangeAt(0);
+                                    const beforeText = editorRef.current.innerText.substring(0, editorCursorPositionRef.current);
+                                    console.log('📍 Before insert - cursor at:', editorCursorPositionRef.current, 'text before:', beforeText);
+                                    
                                     range.deleteContents();
                                     const textNode = document.createTextNode(' ');
                                     range.insertNode(textNode);
@@ -1992,15 +2015,22 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                         editorCursorPositionRef.current += 1;
                                     }
                                     
+                                    const afterText = editorRef.current.innerText;
+                                    console.log('✅ Space inserted - cursor at:', editorCursorPositionRef.current, 'text after:', afterText);
+                                    
                                     // Trigger input event to update state
                                     const inputEvent = new Event('input', { bubbles: true });
                                     editorRef.current.dispatchEvent(inputEvent);
+                                    console.log('📤 Input event dispatched');
+                                } else {
+                                    console.error('❌ Cannot insert space - no valid selection');
                                 }
                                 
                                 // Clear flags after longer delay - give plenty of time for React to finish
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
                                     isUpdatingFromUserInputRef.current = false;
+                                    console.log('⏰ Typing flags cleared');
                                 }, 3000);
                             }
                         }}
