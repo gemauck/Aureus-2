@@ -141,6 +141,81 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         };
     }, [currentDate, showListView]);
     
+    // Load note when currentDate changes (when navigating back to a date)
+    useEffect(() => {
+        if (currentDate && !showListView) {
+            const dateString = formatDateString(currentDate);
+            const user = window.storage?.getUser?.();
+            const userId = user?.id || user?.email || 'default';
+            const notesKey = `user_notes_${userId}`;
+            const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+            let note = localNotes[dateString] || notes[dateString] || '';
+            
+            // Clean &nbsp; entities from loaded note
+            note = cleanHtmlContent(note);
+            
+            console.log('📝 Loading note for currentDate:', dateString, 'from localStorage length:', note.length);
+            
+            if (note) {
+                setCurrentNote(note);
+                setCurrentNoteHtml(note);
+                console.log('📝 Set note state for currentDate, length:', note.length);
+                
+                // Set editor content if available
+                if (editorRef.current) {
+                    setEditorContentSafely(note);
+                    console.log('✅ Set editor content for currentDate, length:', note.length);
+                } else {
+                    setTimeout(() => {
+                        if (editorRef.current) {
+                            setEditorContentSafely(note);
+                            console.log('✅ Set editor content for currentDate (delayed), length:', note.length);
+                        }
+                    }, 100);
+                }
+            } else {
+                // Clear if no note found
+                setCurrentNote('');
+                setCurrentNoteHtml('');
+                if (editorRef.current) {
+                    setEditorContentSafely('');
+                }
+            }
+            
+            // Also fetch from server
+            const token = window.storage?.getToken?.();
+            if (token) {
+                fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                    headers: { 
+                        Authorization: `Bearer ${token}`,
+                        'Cache-Control': 'no-cache'
+                    },
+                    credentials: 'include'
+                })
+                .then(res => res.json())
+                .then(data => {
+                    const serverNotes = data?.data?.notes || data?.notes || {};
+                    let serverNote = serverNotes[dateString] || '';
+                    serverNote = cleanHtmlContent(serverNote);
+                    
+                    if (serverNote && serverNote !== note) {
+                        console.log('📝 Found server note for currentDate, length:', serverNote.length);
+                        setCurrentNote(serverNote);
+                        setCurrentNoteHtml(serverNote);
+                        setNotes(prev => ({ ...prev, [dateString]: serverNote }));
+                        localNotes[dateString] = serverNote;
+                        localStorage.setItem(notesKey, JSON.stringify(localNotes));
+                        
+                        if (editorRef.current) {
+                            setEditorContentSafely(serverNote);
+                        }
+                    }
+                })
+                .catch(err => console.error('Error fetching note for currentDate:', err));
+            }
+        }
+    }, [currentDate, showListView]);
+    
     // Load notes
     useEffect(() => {
         const loadNotes = async () => {
