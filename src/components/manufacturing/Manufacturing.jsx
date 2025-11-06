@@ -8126,6 +8126,180 @@ const Manufacturing = () => {
             </div>
           </div>
         </div>
+
+        {/* Stock Ledger */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mt-4">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Ledger</h2>
+          {(() => {
+            // Filter movements for this item
+            const itemMovements = movements
+              .filter(m => m.sku === item.sku)
+              .sort((a, b) => {
+                // Sort by date (oldest first), then by createdAt if dates are equal
+                const dateA = new Date(a.date || a.createdAt || 0);
+                const dateB = new Date(b.date || b.createdAt || 0);
+                if (dateA.getTime() !== dateB.getTime()) {
+                  return dateA.getTime() - dateB.getTime();
+                }
+                return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+              });
+
+            // Calculate opening stock (quantity before first transaction)
+            // We'll start from 0 and show all transactions, or use the first transaction as opening
+            let runningBalance = 0;
+            
+            // If there are movements, calculate opening balance
+            if (itemMovements.length > 0) {
+              // Opening balance is current quantity minus sum of all movements
+              const totalMovementQty = itemMovements.reduce((sum, m) => sum + (parseFloat(m.quantity) || 0), 0);
+              runningBalance = (item.quantity || 0) - totalMovementQty;
+            } else {
+              // No movements, opening balance is current quantity
+              runningBalance = item.quantity || 0;
+            }
+
+            const formatMovementType = (type) => {
+              const typeMap = {
+                'receipt': 'Receipt',
+                'issue': 'Issue',
+                'transfer': 'Transfer',
+                'adjustment': 'Adjustment',
+                'sale': 'Sale',
+                'production': 'Production',
+                'consumption': 'Consumption'
+              };
+              return typeMap[type] || type.charAt(0).toUpperCase() + type.slice(1);
+            };
+
+            const getMovementDescription = (movement) => {
+              const type = formatMovementType(movement.type);
+              let desc = type;
+              
+              if (movement.reference) {
+                desc += ` - ${movement.reference}`;
+              }
+              
+              if (movement.fromLocation && movement.toLocation) {
+                desc += ` (${movement.fromLocation} → ${movement.toLocation})`;
+              } else if (movement.fromLocation) {
+                desc += ` (from ${movement.fromLocation})`;
+              } else if (movement.toLocation) {
+                desc += ` (to ${movement.toLocation})`;
+              }
+              
+              if (movement.notes) {
+                desc += ` - ${movement.notes}`;
+              }
+              
+              return desc;
+            };
+
+            return (
+              <div className="overflow-x-auto">
+                {itemMovements.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <i className="fas fa-inbox text-4xl mb-2 text-gray-300"></i>
+                    <p className="text-sm">No stock movements recorded for this item</p>
+                    <p className="text-xs text-gray-400 mt-1">Stock movements will appear here as they are recorded</p>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Date</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">In</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Out</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Balance</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Reference</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {/* Opening Balance Row */}
+                      <tr className="bg-blue-50 font-semibold">
+                        <td className="px-3 py-2 text-sm text-gray-700">
+                          {itemMovements.length > 0 
+                            ? new Date(itemMovements[0].date || itemMovements[0].createdAt).toLocaleDateString()
+                            : 'Opening'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-700">Opening Stock</td>
+                        <td className="px-3 py-2 text-sm text-gray-700">Initial stock balance</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-700">-</td>
+                        <td className="px-3 py-2 text-sm text-right text-gray-700">-</td>
+                        <td className="px-3 py-2 text-sm text-right font-bold text-gray-900">
+                          {runningBalance.toFixed(2)} {item.unit}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-700">-</td>
+                      </tr>
+                      
+                      {/* Transaction Rows */}
+                      {itemMovements.map((movement, index) => {
+                        const qty = parseFloat(movement.quantity) || 0;
+                        const isIncrease = qty > 0;
+                        const isDecrease = qty < 0;
+                        
+                        // Update running balance
+                        runningBalance += qty;
+                        
+                        return (
+                          <tr key={movement.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-sm text-gray-900">
+                              {movement.date || (movement.createdAt ? new Date(movement.createdAt).toLocaleDateString() : '-')}
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium capitalize ${getStatusColor(movement.type)}`}>
+                                {formatMovementType(movement.type)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-700">
+                              {getMovementDescription(movement)}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-right">
+                              {isIncrease ? (
+                                <span className="text-green-600 font-medium">+{Math.abs(qty).toFixed(2)}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-right">
+                              {isDecrease ? (
+                                <span className="text-red-600 font-medium">{qty.toFixed(2)}</span>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className={`px-3 py-2 text-sm text-right font-semibold ${
+                              runningBalance < 0 ? 'text-red-600' : runningBalance === 0 ? 'text-orange-600' : 'text-gray-900'
+                            }`}>
+                              {runningBalance.toFixed(2)} {item.unit}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-600">
+                              {movement.reference || movement.movementId || '-'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      
+                      {/* Closing Balance Row */}
+                      <tr className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                        <td className="px-3 py-2 text-sm text-gray-700" colSpan="5">
+                          <span className="text-gray-900">Closing Balance</span>
+                        </td>
+                        <td className={`px-3 py-2 text-sm text-right font-bold ${
+                          runningBalance < 0 ? 'text-red-600' : runningBalance === 0 ? 'text-orange-600' : 'text-blue-600'
+                        }`}>
+                          {runningBalance.toFixed(2)} {item.unit}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-700">-</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })()}
+        </div>
       </div>
     );
   };
