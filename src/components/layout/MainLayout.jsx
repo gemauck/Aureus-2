@@ -387,8 +387,8 @@ const MainLayout = () => {
                             <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
                                 <div className="text-center">
                                     <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
-                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access this page.</p>
+                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
+                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
                                 </div>
                             </div>
                         );
@@ -404,8 +404,8 @@ const MainLayout = () => {
                             <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
                                 <div className="text-center">
                                     <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
-                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access the HR page.</p>
+                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
+                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access the HR page.</p>
                                 </div>
                             </div>
                         );
@@ -462,6 +462,7 @@ const MainLayout = () => {
             
             {/* Sidebar - FIXED on mobile, RELATIVE on desktop */}
             <div 
+                data-theme={isDark ? 'dark' : 'light'}
                 className={`
                     ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                     border-r transition-all duration-300 flex flex-col
@@ -514,7 +515,9 @@ const MainLayout = () => {
                             }}
                             className={`w-full flex items-center ${sidebarOpen ? 'px-4 py-3 space-x-3' : 'px-2 py-3 justify-center'} transition-colors ${
                                 currentPage === item.id 
-                                    ? 'bg-primary-50 text-primary-600 border-r-2 border-primary-600 dark:bg-primary-900 dark:text-primary-200' 
+                                    ? isDark
+                                        ? 'bg-primary-900 text-primary-200 border-r-2 border-primary-400'
+                                        : 'bg-primary-50 text-primary-600 border-r-2 border-primary-600'
                                     : isDark 
                                         ? 'text-gray-200 hover:bg-gray-700' 
                                         : 'text-gray-700 hover:bg-gray-50'

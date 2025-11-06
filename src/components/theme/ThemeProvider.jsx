@@ -14,7 +14,15 @@ const ThemeProvider = ({ children }) => {
         setSystemPreference(mediaQuery.matches ? 'dark' : 'light');
         
         const handleChange = (e) => {
-            setSystemPreference(e.matches ? 'dark' : 'light');
+            const newSystemPref = e.matches ? 'dark' : 'light';
+            setSystemPreference(newSystemPref);
+            
+            // Only update theme if user is following system preference
+            const useSystemPreference = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+            if (useSystemPreference) {
+                setTheme(newSystemPref);
+                applyTheme(newSystemPref);
+            }
         };
         
         mediaQuery.addEventListener('change', handleChange);
@@ -28,10 +36,12 @@ const ThemeProvider = ({ children }) => {
         
         let initialTheme = 'light';
         
-        if (savedTheme) {
-            initialTheme = savedTheme;
-        } else if (useSystemPreference) {
+        if (useSystemPreference) {
+            // User wants to follow system - use system preference
             initialTheme = systemPreference;
+        } else if (savedTheme) {
+            // User has explicit preference - use it
+            initialTheme = savedTheme;
         } else {
             // First time user - default to light and do NOT follow system
             initialTheme = 'light';
@@ -42,12 +52,61 @@ const ThemeProvider = ({ children }) => {
         applyTheme(initialTheme);
     }, [systemPreference]);
 
-    // Apply theme to document
+    // Apply theme to document - CRITICAL: Never apply dark mode when user wants light mode
     const applyTheme = (newTheme) => {
+        const useSystemPreference = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+        const savedTheme = localStorage.getItem('abcotronics_theme');
+        
+        // CRITICAL FIX: If user explicitly chose light mode and is NOT following system,
+        // NEVER apply dark mode - force light mode always
+        if (!useSystemPreference && savedTheme === 'light') {
+            document.documentElement.classList.remove('light', 'dark');
+            document.documentElement.classList.add('light');
+            // Don't update localStorage here - it's already set correctly
+            return;
+        }
+        
+        // If user is following system, apply the requested theme (could be dark or light)
+        // If user explicitly chose dark mode, apply dark mode
         document.documentElement.classList.remove('light', 'dark');
         document.documentElement.classList.add(newTheme);
-        localStorage.setItem('abcotronics_theme', newTheme);
+        if (!useSystemPreference) {
+            localStorage.setItem('abcotronics_theme', newTheme);
+        }
     };
+    
+    // Continuous watcher: Ensure document root NEVER has .dark class when user wants light mode
+    useEffect(() => {
+        const checkAndFixTheme = () => {
+            const useSystemPreference = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+            const savedTheme = localStorage.getItem('abcotronics_theme');
+            const hasDarkClass = document.documentElement.classList.contains('dark');
+            
+            // If user explicitly wants light mode and document has .dark class, force remove it
+            if (!useSystemPreference && savedTheme === 'light' && hasDarkClass) {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            }
+        };
+        
+        // Check immediately
+        checkAndFixTheme();
+        
+        // Check periodically to catch any external changes
+        const interval = setInterval(checkAndFixTheme, 1000);
+        
+        // Also watch for DOM mutations
+        const observer = new MutationObserver(checkAndFixTheme);
+        observer.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+        
+        return () => {
+            clearInterval(interval);
+            observer.disconnect();
+        };
+    }, []);
 
     // Toggle theme
     const toggleTheme = () => {
@@ -60,12 +119,18 @@ const ThemeProvider = ({ children }) => {
     // Toggle system preference following
     const toggleSystemPreference = () => {
         const currentlyFollowing = localStorage.getItem('abcotronics_use_system_theme') === 'true';
-        localStorage.setItem('abcotronics_use_system_theme', (!currentlyFollowing).toString());
+        const newFollowingState = !currentlyFollowing;
+        localStorage.setItem('abcotronics_use_system_theme', newFollowingState.toString());
         
-        if (!currentlyFollowing) {
+        if (newFollowingState) {
             // Start following system preference
             setTheme(systemPreference);
             applyTheme(systemPreference);
+        } else {
+            // Stop following system - restore user's explicit theme choice
+            const savedTheme = localStorage.getItem('abcotronics_theme') || 'light';
+            setTheme(savedTheme);
+            applyTheme(savedTheme);
         }
     };
 

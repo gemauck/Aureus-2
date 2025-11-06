@@ -33,19 +33,40 @@
     <link rel="preconnect" href="https://unpkg.com" crossorigin>
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     
-    <!-- Early theme boot: default to light unless user chose dark or follow-system -->
+    <!-- Early theme boot: CRITICAL - Never apply dark mode when user wants light mode -->
     <script>
         (function() {
             try {
                 var root = document.documentElement;
                 var storedTheme = localStorage.getItem('abcotronics_theme');
-                // Enforce app-controlled theme by default: do NOT follow system
-                localStorage.setItem('abcotronics_use_system_theme', 'false');
-                var themeToApply = (storedTheme === 'dark' || storedTheme === 'light') ? storedTheme : 'light';
-                // Persist explicit theme so React uses same value
-                localStorage.setItem('abcotronics_theme', themeToApply);
+                var useSystemTheme = localStorage.getItem('abcotronics_use_system_theme') === 'true';
+                
+                // CRITICAL: If user explicitly chose light mode and is NOT following system,
+                // NEVER apply dark mode - force light mode always
+                if (!useSystemTheme && storedTheme === 'light') {
+                    root.classList.remove('light','dark');
+                    root.classList.add('light');
+                    localStorage.setItem('abcotronics_theme', 'light');
+                    localStorage.setItem('abcotronics_use_system_theme', 'false');
+                    return;
+                }
+                
+                // If following system, check system preference
+                if (useSystemTheme) {
+                    var systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    var themeToApply = systemPrefersDark ? 'dark' : 'light';
+                    root.classList.remove('light','dark');
+                    root.classList.add(themeToApply);
+                    localStorage.setItem('abcotronics_theme', themeToApply);
+                    return;
+                }
+                
+                // Default: light mode (first time user or no preference)
+                var themeToApply = (storedTheme === 'dark') ? 'dark' : 'light';
                 root.classList.remove('light','dark');
                 root.classList.add(themeToApply);
+                localStorage.setItem('abcotronics_theme', themeToApply);
+                localStorage.setItem('abcotronics_use_system_theme', 'false');
             } catch (e) {}
         })();
     </script>
