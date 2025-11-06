@@ -1370,7 +1370,7 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       type="text"
-                      placeholder="Filter Legacy..."
+                      placeholder="Filter Abcotronics Part..."
                       value={columnFilters.legacyPart || ''}
                       onChange={(e) => handleColumnFilterChange('legacyPart', e.target.value)}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
