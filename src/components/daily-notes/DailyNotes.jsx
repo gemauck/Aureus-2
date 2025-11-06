@@ -25,6 +25,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const toolbarRef = useRef(null);
     const editorCursorPositionRef = useRef(null); // Track cursor position to restore after updates
     const isUserTypingRef = useRef(false); // Track if user is actively typing to prevent sync interference
+    const lastUserInputTimeRef = useRef(0); // Track when user last typed to prevent sync
+    const isUpdatingFromUserInputRef = useRef(false); // Track if currentNoteHtml update is from user input
     
     // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
@@ -564,9 +566,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 (currentEditorContent.trim() !== currentNoteHtml.trim() || 
                                  (currentEditorContent.trim().length === 0 && currentNoteHtml.trim().length > 0));
             
-            // CRITICAL: Don't sync if user is currently typing - preserve their input
-            if (isUserTypingRef.current) {
-                console.log('⚠️ Skipping editor sync - user is actively typing');
+            // CRITICAL: Don't sync if user is currently typing or just typed - preserve their input
+            const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
+            if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 1500) {
+                console.log('⚠️ Skipping editor sync - user is actively typing or just typed', {
+                    isTyping: isUserTypingRef.current,
+                    isFromInput: isUpdatingFromUserInputRef.current,
+                    timeSinceInput: timeSinceLastInput
+                });
                 return;
             }
             
@@ -1529,28 +1536,39 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const handleEditorInput = () => {
         // Mark that user is actively typing - this prevents sync useEffect from interfering
         isUserTypingRef.current = true;
+        lastUserInputTimeRef.current = Date.now();
+        isUpdatingFromUserInputRef.current = true;
         
-        // Clear typing flag after a short delay
+        // Clear typing flag after a longer delay to ensure sync doesn't interfere
         setTimeout(() => {
             isUserTypingRef.current = false;
-        }, 500);
+            isUpdatingFromUserInputRef.current = false;
+        }, 1000);
         
         // Force update immediately - user typing should always work
         if (editorRef.current) {
-            // Save cursor position before updating
+            // Save cursor position BEFORE reading innerHTML (which might trigger re-render)
             saveCursorPosition();
             
             let html = editorRef.current.innerHTML;
             // Clean &nbsp; entities from editor content
             html = cleanHtmlContent(html);
+            
+            // Update state - mark that this is from user input
             setCurrentNoteHtml(html);
             // Strip HTML for plain text version (for search)
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             
-            // Restore cursor position after state update
+            // Restore cursor position after state update - use multiple attempts
             requestAnimationFrame(() => {
-                restoreCursorPosition();
+                requestAnimationFrame(() => {
+                    restoreCursorPosition();
+                    // Try again after a short delay to ensure it sticks
+                    setTimeout(() => {
+                        restoreCursorPosition();
+                    }, 10);
+                });
             });
             
             // Trigger auto-save ultra instantly (100ms debounce for nearly real-time saves)
@@ -1931,14 +1949,48 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                            // Save cursor position on spacebar to prevent cursor jumping
+                            // Handle spacebar specially to prevent cursor jumping
                             if (e.key === ' ' || e.keyCode === 32) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                
+                                // CRITICAL: Save cursor position BEFORE inserting space
                                 saveCursorPosition();
+                                
                                 // Mark user as typing to prevent sync interference
                                 isUserTypingRef.current = true;
+                                lastUserInputTimeRef.current = Date.now();
+                                isUpdatingFromUserInputRef.current = true;
+                                
+                                // Manually insert space at cursor position
+                                const selection = window.getSelection();
+                                if (selection.rangeCount > 0 && editorRef.current.contains(selection.anchorNode)) {
+                                    const range = selection.getRangeAt(0);
+                                    range.deleteContents();
+                                    const textNode = document.createTextNode(' ');
+                                    range.insertNode(textNode);
+                                    
+                                    // Move cursor after the inserted space
+                                    range.setStartAfter(textNode);
+                                    range.collapse(true);
+                                    selection.removeAllRanges();
+                                    selection.addRange(range);
+                                    
+                                    // Update cursor position ref to account for inserted space
+                                    if (editorCursorPositionRef.current !== null) {
+                                        editorCursorPositionRef.current += 1;
+                                    }
+                                    
+                                    // Trigger input event to update state
+                                    const inputEvent = new Event('input', { bubbles: true });
+                                    editorRef.current.dispatchEvent(inputEvent);
+                                }
+                                
+                                // Clear flags after longer delay
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
-                                }, 500);
+                                    isUpdatingFromUserInputRef.current = false;
+                                }, 1500);
                             }
                         }}
                         onBlur={() => {
