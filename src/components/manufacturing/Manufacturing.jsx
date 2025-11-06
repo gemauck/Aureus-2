@@ -63,6 +63,19 @@ const Manufacturing = () => {
   // Refs for input values to prevent re-renders from losing focus
   const searchInputRef = useRef(null);
   const filterInputRefs = useRef({});
+  
+  // Refs to store current filter values while typing (to prevent re-renders)
+  const searchTermRef = useRef('');
+  const columnFiltersRef = useRef({});
+  
+  // Sync refs with state
+  useEffect(() => {
+    searchTermRef.current = searchTerm;
+  }, [searchTerm]);
+  
+  useEffect(() => {
+    columnFiltersRef.current = columnFilters;
+  }, [columnFilters]);
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -864,6 +877,22 @@ const Manufacturing = () => {
       filterInputRefs.current[column] = event.target;
     }
     
+    // Update ref immediately for filtering
+    columnFiltersRef.current = {
+      ...columnFiltersRef.current,
+      [column]: value || undefined
+    };
+    // Remove undefined values
+    Object.keys(columnFiltersRef.current).forEach(k => {
+      if (columnFiltersRef.current[k] === undefined) {
+        delete columnFiltersRef.current[k];
+      }
+    });
+    
+    // Force re-render of InventoryView to show filtered results
+    // But don't update state yet - that happens after debounce
+    setColumnFilters(prev => ({ ...prev })); // Trigger re-render
+    
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
@@ -889,7 +918,11 @@ const Manufacturing = () => {
     }, 300);
   }, []);
 
-  const InventoryView = () => {
+  const InventoryView = useMemo(() => {
+    // Use ref values while typing to prevent re-renders, otherwise use state
+    const currentSearchTerm = isUserTypingRef.current ? searchTermRef.current : searchTerm;
+    const currentColumnFilters = isUserTypingRef.current ? columnFiltersRef.current : columnFilters;
+    
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
     
@@ -901,31 +934,31 @@ const Manufacturing = () => {
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
       const category = (item.category || '').toString();
-      const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
+      const matchesSearch = name.includes(currentSearchTerm.toLowerCase()) || sku.includes(currentSearchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || category === filterCategory;
       
       // Column-specific filters
-      const matchesSKU = !columnFilters.sku || (item.sku || '').toString().toLowerCase().includes(columnFilters.sku.toLowerCase());
-      const matchesName = !columnFilters.name || name.includes(columnFilters.name.toLowerCase());
-      const matchesSupplierPart = !columnFilters.supplierPart || (() => {
+      const matchesSKU = !currentColumnFilters.sku || (item.sku || '').toString().toLowerCase().includes(currentColumnFilters.sku.toLowerCase());
+      const matchesName = !currentColumnFilters.name || name.includes(currentColumnFilters.name.toLowerCase());
+      const matchesSupplierPart = !currentColumnFilters.supplierPart || (() => {
         try {
           const supplierParts = typeof item.supplierPartNumbers === 'string' 
             ? JSON.parse(item.supplierPartNumbers || '[]') 
             : (item.supplierPartNumbers || []);
           return supplierParts.some(sp => 
-            (sp.supplier || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase()) ||
-            (sp.partNumber || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase())
+            (sp.supplier || '').toLowerCase().includes(currentColumnFilters.supplierPart.toLowerCase()) ||
+            (sp.partNumber || '').toLowerCase().includes(currentColumnFilters.supplierPart.toLowerCase())
           );
         } catch {
           return false;
         }
       })();
-      const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
-      const matchesManufacturingPart = !columnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(columnFilters.manufacturingPart.toLowerCase()));
-      const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
-      const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
-      const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
-      const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
+      const matchesLegacyPart = !currentColumnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(currentColumnFilters.legacyPart.toLowerCase()));
+      const matchesManufacturingPart = !currentColumnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(currentColumnFilters.manufacturingPart.toLowerCase()));
+      const matchesCategoryFilter = !currentColumnFilters.category || category.toLowerCase().includes(currentColumnFilters.category.toLowerCase());
+      const matchesType = !currentColumnFilters.type || (item.type || '').toString().toLowerCase().includes(currentColumnFilters.type.toLowerCase());
+      const matchesStatus = !currentColumnFilters.status || (item.status || '').toString().toLowerCase().includes(currentColumnFilters.status.toLowerCase());
+      const matchesLocation = !currentColumnFilters.location || ((item.location || '').toString().toLowerCase().includes(currentColumnFilters.location.toLowerCase()));
       
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
              matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
@@ -1052,6 +1085,9 @@ const Manufacturing = () => {
                     // Mark that user is typing
                     isUserTypingRef.current = true;
                     activeInputRef.current = e.target;
+                    
+                    // Update ref immediately for filtering
+                    searchTermRef.current = e.target.value;
                     
                     // Clear existing timeout
                     if (typingTimeoutRef.current) {
@@ -1840,7 +1876,7 @@ const Manufacturing = () => {
         </div>
       </div>
     );
-  };
+  }, [inventory, stockLocations, filterCategory, sortConfig, selectedLocationId, isRefreshing, handleSort, handleColumnFilterChange, refreshAllManufacturingData, openAddItemModal]);
 
   const BOMView = () => {
     return (
@@ -7540,7 +7576,7 @@ const Manufacturing = () => {
       {/* Content Area */}
       <div>
         {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'inventory' && <InventoryView />}
+        {activeTab === 'inventory' && InventoryView}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'sales' && <SalesOrdersView />}
