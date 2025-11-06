@@ -23,6 +23,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const editorRef = useRef(null);
     const canvasRef = useRef(null);
     const toolbarRef = useRef(null);
+    const editorCursorPositionRef = useRef(null); // Track cursor position to restore after updates
     
     // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
@@ -562,10 +563,20 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 (currentEditorContent.trim() !== currentNoteHtml.trim() || 
                                  (currentEditorContent.trim().length === 0 && currentNoteHtml.trim().length > 0));
             
+            // CRITICAL: Don't sync if user is currently typing - preserve their input
+            // If we have a saved cursor position, user is typing and we shouldn't overwrite
+            if (editorCursorPositionRef.current) {
+                console.log('⚠️ Skipping editor sync - user is typing (cursor position saved)');
+                return;
+            }
+            
             // Always sync during initialization to ensure content is loaded
             // After initialization, only sync if not initializing to avoid overwriting user input
             if (shouldUpdate) {
                 console.log('🔄 Syncing editor - state has content, editor:', currentEditorContent.length, 'state:', currentNoteHtml.length, 'initializing:', isInitializingRef.current);
+                // Save cursor position before updating
+                saveCursorPosition();
+                
                 // Use requestAnimationFrame to ensure DOM is ready
                 requestAnimationFrame(() => {
                     if (editorRef.current && editorRef.current.innerHTML.trim() !== currentNoteHtml.trim()) {
@@ -574,6 +585,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         isInitializingRef.current = true;
                         editorRef.current.innerHTML = currentNoteHtml;
                         console.log('✅ Editor synced with state, length:', currentNoteHtml.length);
+                        
+                        // Restore cursor position after innerHTML update
+                        requestAnimationFrame(() => {
+                            restoreCursorPosition();
+                        });
+                        
                         // Re-enable after editor has time to update
                         setTimeout(() => {
                             isInitializingRef.current = wasInitializing;
@@ -1431,10 +1448,83 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         editorRef.current.dispatchEvent(inputEvent);
     };
 
+    // Save cursor position in contentEditable using text offset (more reliable than node references)
+    const saveCursorPosition = () => {
+        if (!editorRef.current) return;
+        const selection = window.getSelection();
+        if (selection.rangeCount > 0 && editorRef.current.contains(selection.anchorNode)) {
+            const range = selection.getRangeAt(0);
+            // Create a range from start of editor to cursor position to count characters
+            const preCaretRange = range.cloneRange();
+            preCaretRange.selectNodeContents(editorRef.current);
+            preCaretRange.setEnd(range.endContainer, range.endOffset);
+            const offset = preCaretRange.toString().length;
+            
+            editorCursorPositionRef.current = offset;
+        }
+    };
+    
+    // Restore cursor position in contentEditable using text offset
+    const restoreCursorPosition = () => {
+        if (!editorRef.current || editorCursorPositionRef.current === null || editorCursorPositionRef.current === undefined) return;
+        
+        try {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            const textOffset = editorCursorPositionRef.current;
+            
+            // Find the text node and offset that corresponds to the saved character position
+            let currentOffset = 0;
+            const walker = document.createTreeWalker(
+                editorRef.current,
+                NodeFilter.SHOW_TEXT,
+                null
+            );
+            
+            let node;
+            let targetNode = null;
+            let targetOffset = 0;
+            
+            while (node = walker.nextNode()) {
+                const nodeLength = node.textContent.length;
+                if (currentOffset + nodeLength >= textOffset) {
+                    targetNode = node;
+                    targetOffset = textOffset - currentOffset;
+                    break;
+                }
+                currentOffset += nodeLength;
+            }
+            
+            if (targetNode) {
+                range.setStart(targetNode, Math.min(targetOffset, targetNode.textContent.length));
+                range.setEnd(targetNode, Math.min(targetOffset, targetNode.textContent.length));
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editorRef.current.focus();
+            } else {
+                // Fallback: place cursor at end
+                range.selectNodeContents(editorRef.current);
+                range.collapse(false);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                editorRef.current.focus();
+            }
+        } catch (error) {
+            console.error('Error restoring cursor position:', error);
+            // If restoration fails, just focus the editor
+            if (editorRef.current) {
+                editorRef.current.focus();
+            }
+        }
+    };
+
     // Handle editor input - always update content and trigger auto-save immediately
     const handleEditorInput = () => {
         // Force update immediately - user typing should always work
         if (editorRef.current) {
+            // Save cursor position before updating
+            saveCursorPosition();
+            
             let html = editorRef.current.innerHTML;
             // Clean &nbsp; entities from editor content
             html = cleanHtmlContent(html);
@@ -1442,6 +1532,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             // Strip HTML for plain text version (for search)
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
+            
+            // Restore cursor position after state update
+            requestAnimationFrame(() => {
+                restoreCursorPosition();
+            });
             
             // Trigger auto-save ultra instantly (100ms debounce for nearly real-time saves)
             if (saveTimeoutRef.current) {
@@ -1820,7 +1915,23 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         contentEditable
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
+                        onKeyDown={(e) => {
+                            // Handle spacebar specially to prevent cursor jumping
+                            if (e.key === ' ' || e.keyCode === 32) {
+                                // Save cursor position before spacebar
+                                saveCursorPosition();
+                                
+                                // Don't prevent default - let the space insert normally
+                                // But we'll restore cursor position after React updates
+                                setTimeout(() => {
+                                    restoreCursorPosition();
+                                }, 0);
+                            }
+                        }}
                         onBlur={() => {
+                            // Clear cursor position tracking when user leaves field
+                            editorCursorPositionRef.current = null;
+                            
                             // Save immediately when editor loses focus
                             if (editorRef.current) {
                                 const initTime = window._dailyNotesInitTime || 0;
