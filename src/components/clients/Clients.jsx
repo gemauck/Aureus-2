@@ -3389,10 +3389,9 @@ const Clients = React.memo(() => {
 
     // Full-page Client Detail View
     const ClientDetailView = () => {
-        // Get the client from editingClientId, with fallback to selectedClientRef
-        const selectedClient = editingClientId 
-            ? (clients.find(c => c.id === editingClientId) || selectedClientRef.current)
-            : selectedClientRef.current;
+        // Prioritize selectedClientRef.current (set immediately on click), then try to find in clients array
+        const selectedClient = selectedClientRef.current || 
+            (editingClientId ? clients.find(c => c.id === editingClientId) : null);
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
