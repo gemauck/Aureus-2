@@ -316,6 +316,75 @@ const Clients = React.memo(() => {
             }
         }
     }, []);
+
+    // Memoized callback for client editing changes - prevents modal remounting
+    const handleClientEditingChange = useCallback((editing, autoSaving) => {
+        console.log('📝 ClientDetailModal state changed:', { editing, autoSaving });
+        isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+        isAutoSavingRef.current = autoSaving || false; // Track auto-save state
+        setIsUserEditing(editing);
+        if (editing) {
+            // CRITICAL: STOP LiveDataSync completely when user starts editing
+            console.log('🛑 User started editing - STOPPING LiveDataSync completely');
+            if (window.LiveDataSync && window.LiveDataSync.stop) {
+                window.LiveDataSync.stop();
+                console.log('🛑 LiveDataSync STOPPED due to editing');
+            }
+            // Also mark form as open for additional blocking
+            isFormOpenRef.current = true;
+            handlePauseSync(true);
+            // Clear any existing timeout
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+        } else if (!autoSaving) {
+            console.log('✅ User finished editing and save complete - LiveDataSync remains stopped until form closes');
+            // Clear timeout if user explicitly stopped editing
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+            isUserEditingRef.current = false;
+            setIsUserEditing(false);
+            // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
+        } else {
+            console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
+        }
+    }, [handlePauseSync]);
+
+    // Memoized callback for lead editing changes - prevents modal remounting
+    const handleLeadEditingChange = useCallback((editing, autoSaving) => {
+        console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
+        isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
+        isAutoSavingRef.current = autoSaving || false; // Track auto-save state
+        // Only update state if it actually changed to prevent unnecessary re-renders
+        setIsUserEditing(prev => prev !== editing ? editing : prev);
+        if (editing) {
+            // CRITICAL: STOP LiveDataSync completely when user starts editing
+            console.log('🛑 User started editing lead - STOPPING LiveDataSync completely');
+            if (window.LiveDataSync && window.LiveDataSync.stop) {
+                window.LiveDataSync.stop();
+                console.log('🛑 LiveDataSync STOPPED due to lead editing');
+            }
+            // Also mark form as open for additional blocking
+            isFormOpenRef.current = true;
+            handlePauseSync(true);
+            // Clear any existing timeout
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+        } else if (!autoSaving) {
+            console.log('✅ User finished editing lead and save complete - LiveDataSync remains stopped until form closes');
+            // Clear timeout if user explicitly stopped editing
+            if (editingTimeoutRef.current) {
+                clearTimeout(editingTimeoutRef.current);
+            }
+            isUserEditingRef.current = false;
+            setIsUserEditing(false);
+            // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
+        } else {
+            console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
+        }
+    }, [handlePauseSync]);
     
     // Stop LiveDataSync when viewing client/lead list, restart when entering detail views
     // Note: Detail views (client-detail, lead-detail) will stop LiveDataSync completely via modals
@@ -3618,41 +3687,10 @@ const Clients = React.memo(() => {
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
                         onPauseSync={handlePauseSync}
-                        onEditingChange={(editing, autoSaving) => {
-                            console.log('📝 ClientDetailModal state changed:', { editing, autoSaving });
-                            isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
-                            isAutoSavingRef.current = autoSaving || false; // Track auto-save state
-                            setIsUserEditing(editing);
-                            if (editing) {
-                                // CRITICAL: STOP LiveDataSync completely when user starts editing
-                                console.log('🛑 User started editing - STOPPING LiveDataSync completely');
-                                if (window.LiveDataSync && window.LiveDataSync.stop) {
-                                    window.LiveDataSync.stop();
-                                    console.log('🛑 LiveDataSync STOPPED due to editing');
-                                }
-                                // Also mark form as open for additional blocking
-                                isFormOpenRef.current = true;
-                                handlePauseSync(true);
-                                // Clear any existing timeout
-                                if (editingTimeoutRef.current) {
-                                    clearTimeout(editingTimeoutRef.current);
-                                }
-                            } else if (!autoSaving) {
-                                console.log('✅ User finished editing and save complete - LiveDataSync remains stopped until form closes');
-                                // Clear timeout if user explicitly stopped editing
-                                if (editingTimeoutRef.current) {
-                                    clearTimeout(editingTimeoutRef.current);
-                                }
-                                isUserEditingRef.current = false;
-                                setIsUserEditing(false);
-                                // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
-                            } else {
-                                console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
-                            }
-                        }}
+                        onEditingChange={handleClientEditingChange}
                     />
                     );
-                }, [selectedClient?.id, currentTab, handlePauseSync, handleSaveClient, handleUpdateClient, handleDeleteClient, handleNavigateToProject, projects])}
+                }, [selectedClient?.id, currentTab, handlePauseSync, handleSaveClient, handleUpdateClient, handleDeleteClient, handleNavigateToProject, projects, handleClientEditingChange])}
             </div>
         </div>
     );
@@ -3730,42 +3768,10 @@ const Clients = React.memo(() => {
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
                         onPauseSync={handlePauseSync}
-                        onEditingChange={(editing, autoSaving) => {
-                            console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
-                            isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
-                            isAutoSavingRef.current = autoSaving || false; // Track auto-save state
-                            // Only update state if it actually changed to prevent unnecessary re-renders
-                            setIsUserEditing(prev => prev !== editing ? editing : prev);
-                            if (editing) {
-                                // CRITICAL: STOP LiveDataSync completely when user starts editing
-                                console.log('🛑 User started editing lead - STOPPING LiveDataSync completely');
-                                if (window.LiveDataSync && window.LiveDataSync.stop) {
-                                    window.LiveDataSync.stop();
-                                    console.log('🛑 LiveDataSync STOPPED due to lead editing');
-                                }
-                                // Also mark form as open for additional blocking
-                                isFormOpenRef.current = true;
-                                handlePauseSync(true);
-                                // Clear any existing timeout
-                                if (editingTimeoutRef.current) {
-                                    clearTimeout(editingTimeoutRef.current);
-                                }
-                            } else if (!autoSaving) {
-                                console.log('✅ User finished editing lead and save complete - LiveDataSync remains stopped until form closes');
-                                // Clear timeout if user explicitly stopped editing
-                                if (editingTimeoutRef.current) {
-                                    clearTimeout(editingTimeoutRef.current);
-                                }
-                                isUserEditingRef.current = false;
-                                setIsUserEditing(false);
-                                // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
-                            } else {
-                                console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
-                            }
-                        }}
+                        onEditingChange={handleLeadEditingChange}
                     />
                     );
-                }, [selectedLead?.id, currentLeadTab, handlePauseSync, handleSaveLead, handleUpdateLead, handleDeleteLead, convertLeadToClient, projects, loadLeads])}
+                }, [selectedLead?.id, currentLeadTab, handlePauseSync, handleSaveLead, handleUpdateLead, handleDeleteLead, convertLeadToClient, projects, loadLeads, handleLeadEditingChange])}
             </div>
         </div>
     );

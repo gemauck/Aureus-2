@@ -1,19 +1,19 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 1018-projectdetail-blocked - Removed ProjectDetail to prevent race conditions (now has robust loader)
-console.log('🚀 lazy-load-components.js v1018-projectdetail-blocked loaded');
+// VERSION: 1019-projectdetail-fixed - Allow ProjectDetail to load via lazy-loader after dependencies
+console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
     
-    // CRITICAL: Filter out LeadDetailModal, ClientDetailModal, and ProjectDetail BEFORE creating componentFiles array
-    // This prevents them from being loaded even if they somehow get into the array
-    // ProjectDetail is now loaded with robust dependency checking and should not be loaded via lazy-loader
+    // CRITICAL: Filter out LeadDetailModal and ClientDetailModal BEFORE creating componentFiles array
+    // These are loaded early in index.html and must NOT be overwritten
+    // ProjectDetail CAN be loaded via lazy-loader (it has robust dependency checking)
     const shouldBlockComponent = (path) => {
         if (typeof path !== 'string') return false;
         const lowerPath = path.toLowerCase();
         return lowerPath.includes('leaddetailmodal') || 
-               lowerPath.includes('clientdetailmodal') ||
-               lowerPath.includes('projectdetail');
+               lowerPath.includes('clientdetailmodal');
+        // ProjectDetail is NOT blocked - it can be loaded via lazy-loader after dependencies
     };
     
     const componentFiles = [
@@ -162,7 +162,7 @@ console.log('🚀 lazy-load-components.js v1018-projectdetail-blocked loaded');
         return new Promise((resolve, reject) => {
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
             // They are loaded early in index.html and must NOT be overwritten
-            // ProjectDetail can be loaded via lazy-loader (handled in loadBatch after dependencies)
+            // ProjectDetail CAN be loaded via lazy-loader (it has robust dependency checking)
             if (shouldBlockComponent(src)) {
                 console.log(`⏭️ BLOCKED: ${src} must be loaded from index.html only - skipping lazy-loader`);
                 resolve();

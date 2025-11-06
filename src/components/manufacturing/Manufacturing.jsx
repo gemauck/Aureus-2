@@ -59,6 +59,10 @@ const Manufacturing = () => {
   const isUserTypingRef = useRef(false);
   const activeInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  
+  // Refs for input values to prevent re-renders from losing focus
+  const searchInputRef = useRef(null);
+  const filterInputRefs = useRef({});
   const [stockLocations, setStockLocations] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -857,6 +861,7 @@ const Manufacturing = () => {
     isUserTypingRef.current = true;
     if (event && event.target) {
       activeInputRef.current = event.target;
+      filterInputRefs.current[column] = event.target;
     }
     
     // Clear existing timeout
@@ -864,25 +869,24 @@ const Manufacturing = () => {
       clearTimeout(typingTimeoutRef.current);
     }
     
-    // Clear typing flag after user stops typing (500ms delay)
+    // Update state after user stops typing (debounced)
     typingTimeoutRef.current = setTimeout(() => {
+      setColumnFilters(prev => {
+        const newFilters = {
+          ...prev,
+          [column]: value || undefined
+        };
+        // Remove undefined values
+        Object.keys(newFilters).forEach(k => {
+          if (newFilters[k] === undefined) {
+            delete newFilters[k];
+          }
+        });
+        return newFilters;
+      });
       isUserTypingRef.current = false;
       activeInputRef.current = null;
-    }, 500);
-    
-    setColumnFilters(prev => {
-      const newFilters = {
-        ...prev,
-        [column]: value || undefined
-      };
-      // Remove undefined values
-      Object.keys(newFilters).forEach(k => {
-        if (newFilters[k] === undefined) {
-          delete newFilters[k];
-        }
-      });
-      return newFilters;
-    });
+    }, 300);
   }, []);
 
   const InventoryView = () => {
@@ -1025,15 +1029,18 @@ const Manufacturing = () => {
                 <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-xs"></i>
                 <input
                   key="inventory-search-input"
+                  ref={searchInputRef}
                   type="text"
                   placeholder="Search by name or SKU..."
-                  value={searchTerm}
+                  defaultValue={searchTerm}
                   onFocus={(e) => {
                     isUserTypingRef.current = true;
                     activeInputRef.current = e.target;
+                    searchInputRef.current = e.target;
                   }}
-                  onBlur={() => {
-                    // Clear typing flag after a delay to allow for rapid re-focusing
+                  onBlur={(e) => {
+                    // Sync value to state on blur
+                    setSearchTerm(e.target.value);
                     setTimeout(() => {
                       if (document.activeElement !== activeInputRef.current) {
                         isUserTypingRef.current = false;
@@ -1051,13 +1058,12 @@ const Manufacturing = () => {
                       clearTimeout(typingTimeoutRef.current);
                     }
                     
-                    // Clear typing flag after user stops typing (500ms delay)
+                    // Update state after user stops typing (debounced)
                     typingTimeoutRef.current = setTimeout(() => {
+                      setSearchTerm(e.target.value);
                       isUserTypingRef.current = false;
                       activeInputRef.current = null;
-                    }, 500);
-                    
-                    setSearchTerm(e.target.value);
+                    }, 300);
                   }}
                   className="w-full pl-9 pr-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
@@ -1450,14 +1456,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-sku-input"
+                      ref={(el) => { if (el) filterInputRefs.current.sku = el; }}
                       type="text"
                       placeholder="Filter SKU..."
-                      value={columnFilters.sku || ''}
+                      defaultValue={columnFilters.sku || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('sku', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
@@ -1473,14 +1481,16 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       key="filter-name-input"
+                      ref={(el) => { if (el) filterInputRefs.current.name = el; }}
                       type="text"
                       placeholder="Filter Name..."
-                      value={columnFilters.name || ''}
+                      defaultValue={columnFilters.name || ''}
                       onFocus={(e) => {
                         isUserTypingRef.current = true;
                         activeInputRef.current = e.target;
                       }}
-                      onBlur={() => {
+                      onBlur={(e) => {
+                        handleColumnFilterChange('name', e.target.value, e);
                         setTimeout(() => {
                           if (document.activeElement !== activeInputRef.current) {
                             isUserTypingRef.current = false;
