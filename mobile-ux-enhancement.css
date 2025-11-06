@@ -191,54 +191,42 @@
      6. ENHANCED CALENDAR VIEW
      ============================================ */
   
-  /* Calendar container */
-  main > div > div:has([class*="calendar"]) {
-    background: white !important;
+  /* Calendar container - target rounded-lg border containers */
+  main .rounded-lg.border {
     border-radius: 16px !important;
     padding: 20px !important;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
   }
   
-  .dark main > div > div:has([class*="calendar"]) {
-    background: #1f2937 !important;
-  }
-  
   /* Calendar header */
-  h2:contains("November"),
-  h2:contains("2025") {
+  main h2 {
     font-size: 1.25rem !important;
     font-weight: 700 !important;
-    color: #111827 !important;
     margin-bottom: 1rem !important;
   }
   
-  .dark h2:contains("November"),
-  .dark h2:contains("2025") {
-    color: #f9fafb !important;
-  }
-  
-  /* Calendar navigation buttons */
-  button:has(i.fa-chevron-left),
-  button:has(i.fa-chevron-right) {
-    width: 40px !important;
-    height: 40px !important;
+  /* Calendar navigation buttons - target buttons with chevron icons */
+  main button:has(.fa-chevron-left),
+  main button:has(.fa-chevron-right) {
+    min-width: 40px !important;
+    min-height: 40px !important;
     border-radius: 10px !important;
     background: #f3f4f6 !important;
     color: #374151 !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    padding: 8px !important;
   }
   
-  .dark button:has(i.fa-chevron-left),
-  .dark button:has(i.fa-chevron-right) {
+  .dark main button:has(.fa-chevron-left),
+  .dark main button:has(.fa-chevron-right) {
     background: #374151 !important;
     color: #e5e7eb !important;
   }
   
-  /* Calendar day buttons */
-  button[class*="calendar"] button,
-  button:has-text(/^[0-9]+$/) {
+  /* Calendar day buttons - target aspect-square buttons in grid */
+  main .grid.grid-cols-7 button.aspect-square {
     min-width: 44px !important;
     min-height: 44px !important;
     border-radius: 10px !important;
@@ -247,24 +235,20 @@
     transition: all 0.2s ease !important;
   }
   
-  button[class*="calendar"] button:hover,
-  button:has-text(/^[0-9]+$/):hover {
-    background: #eff6ff !important;
+  main .grid.grid-cols-7 button.aspect-square:hover {
     transform: scale(1.05) !important;
   }
   
-  .dark button[class*="calendar"] button:hover,
-  .dark button:has-text(/^[0-9]+$/):hover {
-    background: #1e3a8a !important;
-  }
-  
-  /* Calendar day names */
-  div:has-text(/^[SMTWF]$/) {
+  /* Calendar day names - target grid cells with single letters */
+  main .grid.grid-cols-7 > div:not(button) {
     font-weight: 600 !important;
     font-size: 0.8125rem !important;
     color: #6b7280 !important;
     text-transform: uppercase !important;
     letter-spacing: 0.05em !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
   }
   
   /* ============================================
@@ -423,8 +407,8 @@
      14. IMPROVED FEEDBACK BUTTON
      ============================================ */
   
-  button:has-text("Feedback"),
-  [class*="feedback"] button {
+  [class*="feedback"] button,
+  button[aria-label*="feedback" i] {
     position: fixed !important;
     bottom: 20px !important;
     right: 20px !important;
@@ -437,10 +421,10 @@
     font-weight: 600 !important;
   }
   
-  button:has-text("Feedback"):hover,
-  button:has-text("Feedback"):active,
   [class*="feedback"] button:hover,
-  [class*="feedback"] button:active {
+  [class*="feedback"] button:active,
+  button[aria-label*="feedback" i]:hover,
+  button[aria-label*="feedback" i]:active {
     transform: scale(1.05) !important;
     box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5) !important;
   }
