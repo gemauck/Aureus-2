@@ -127,6 +127,352 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return date.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     };
 
+    // Save note (including handwriting as image) - MUST be defined before useEffects that use it
+    const saveNote = useCallback(async () => {
+        setIsSaving(true);
+        try {
+            const dateString = formatDateString(currentDate);
+            
+            // Get content from editor first (most up-to-date)
+            let noteContent = '';
+            if (editorRef.current) {
+                noteContent = editorRef.current.innerHTML || '';
+                console.log('📝 Reading from editor for save, length:', noteContent.length);
+            } else {
+                noteContent = currentNoteHtml || currentNote || '';
+                console.log('📝 Reading from state for save (editor not available), length:', noteContent.length);
+            }
+            
+            // If editor is empty but state has content, use state (editor might not be synced yet)
+            if (!noteContent || noteContent.trim().length === 0) {
+                if (currentNoteHtml && currentNoteHtml.trim().length > 0) {
+                    console.log('⚠️ Editor empty but state has content, using state for save, length:', currentNoteHtml.length);
+                    noteContent = currentNoteHtml;
+                } else if (currentNote && currentNote.trim().length > 0) {
+                    console.log('⚠️ Editor empty but currentNote has content, using currentNote for save, length:', currentNote.length);
+                    noteContent = currentNote;
+                }
+            }
+            
+            // Always save content, even if empty (user might have cleared it)
+            // Only skip if we're in the very first 500ms of initialization to prevent saving initial empty state
+            const initTime = window._dailyNotesInitTime || 0;
+            if ((!noteContent || noteContent.trim().length === 0) && (Date.now() - initTime < 500)) {
+                console.log('⚠️ Skipping save during first 500ms - content is empty (initialization)');
+                setIsSaving(false);
+                return;
+            }
+            
+            // If content is empty, that means user cleared it - save it
+            if (!noteContent) {
+                noteContent = '';
+            }
+            
+            // ALWAYS check for handwriting canvas content and save it
+            // Check both when handwriting is enabled AND when disabled (to catch all drawings)
+            const canvas = canvasRef.current;
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                // Check if canvas has any drawing (more thorough check)
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const hasDrawing = imageData.data.some((channel, index) => {
+                    return index % 4 !== 3 && channel !== 0; // Check non-alpha channels for non-zero values
+                });
+                
+                if (hasDrawing) {
+                    console.log('🎨 Found handwriting/drawing content, saving to note...');
+                    // Convert canvas to data URL
+                    const canvasDataUrl = canvas.toDataURL('image/png');
+                    // Create image tag
+                    const imgTag = `<img src="${canvasDataUrl}" alt="Handwriting" style="max-width: 100%; height: auto; margin: 10px 0;" />`;
+                    
+                    // Check if image already exists in note content (to avoid duplicates)
+                    const existingImgPattern = /<img[^>]*alt="Handwriting"[^>]*>/gi;
+                    if (existingImgPattern.test(noteContent)) {
+                        // Replace existing handwriting image
+                        noteContent = noteContent.replace(existingImgPattern, imgTag);
+                        console.log('🔄 Replaced existing handwriting image');
+                    } else {
+                        // Append handwriting image to content
+                        noteContent = noteContent + (noteContent ? '<br/>' : '') + imgTag;
+                        console.log('➕ Added handwriting image to note');
+                    }
+                    
+                    // Update editor content with image
+                    if (editorRef.current) {
+                        // Check if editor already has the image
+                        const editorHasImage = editorRef.current.innerHTML.includes(canvasDataUrl.substring(0, 50));
+                        if (!editorHasImage) {
+                            // Insert image at cursor position or append
+                            const selection = window.getSelection();
+                            if (selection.rangeCount > 0) {
+                                const range = selection.getRangeAt(0);
+                                const img = document.createElement('img');
+                                img.src = canvasDataUrl;
+                                img.alt = 'Handwriting';
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.margin = '10px 0';
+                                range.insertNode(img);
+                                range.setStartAfter(img);
+                                selection.removeAllRanges();
+                                selection.addRange(range);
+                            } else {
+                                // Append to end
+                                const img = document.createElement('img');
+                                img.src = canvasDataUrl;
+                                img.alt = 'Handwriting';
+                                img.style.maxWidth = '100%';
+                                img.style.height = 'auto';
+                                img.style.margin = '10px 0';
+                                editorRef.current.appendChild(img);
+                            }
+                            // Update content after inserting image
+                            noteContent = editorRef.current.innerHTML;
+                        }
+                    }
+                }
+            }
+            
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                console.warn('Not authenticated - saving locally only');
+                // Save to localStorage as fallback
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                setIsSaving(false);
+                return;
+            }
+
+            console.log('💾 Saving note:', { dateString, contentLength: noteContent.length });
+            
+            // Set save flag to prevent Calendar component from refreshing during save
+            sessionStorage.setItem('calendar_is_saving', 'true');
+            
+            const res = await fetch('/api/calendar-notes', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`
+                },
+                credentials: 'include',
+                body: JSON.stringify({
+                    date: dateString,
+                    note: noteContent
+                })
+            });
+
+            if (res.ok) {
+                const response = await res.json();
+                console.log('✅ Note save response received:', response);
+                
+                // The API wraps response in {data: {saved: true, note: ..., ...}}
+                const data = response?.data || response;
+                console.log('📋 Parsed response data:', data);
+                
+                // Verify the save was successful
+                if (data?.saved === false || (data?.saved === undefined && !data?.note && !data?.id)) {
+                    console.error('❌ Server indicated save failed:', data);
+                    throw new Error(data?.message || 'Note save failed on server');
+                }
+                
+                console.log('✅ Note saved successfully to server:', { 
+                    dateString, 
+                    contentLength: noteContent.length,
+                    savedNoteId: data?.id,
+                    saved: data?.saved
+                });
+                
+                // Store last saved content to prevent duplicate saves
+                sessionStorage.setItem(`last_saved_note_${dateString}`, noteContent);
+                
+                // Update local notes state immediately - CRITICAL for persistence
+                setNotes(prev => {
+                    const updated = { ...prev, [dateString]: noteContent };
+                    console.log('📝 Updated notes state after save, date:', dateString, 'length:', noteContent.length);
+                    return updated;
+                });
+                
+                // Also save to localStorage - CRITICAL for persistence
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                console.log('💾 Saved to localStorage after server save, date:', dateString, 'length:', noteContent.length);
+                
+                // Verify the save by checking localStorage
+                const verify = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                if (verify[dateString] === noteContent) {
+                    console.log('✅ Verified: Note persisted to localStorage correctly');
+                } else {
+                    console.error('❌ Verification failed: localStorage content mismatch');
+                }
+                
+                // Helper function to normalize HTML content for comparison
+                // This handles HTML entity differences (like &nbsp; vs space) and whitespace
+                const normalizeHtmlForComparison = (html) => {
+                    if (!html) return '';
+                    // Normalize HTML entities first
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+                    // Get innerHTML which will have normalized entities
+                    let normalized = tempDiv.innerHTML;
+                    // Replace common HTML entities with their text equivalents
+                    normalized = normalized.replace(/&nbsp;/g, ' ');
+                    normalized = normalized.replace(/&amp;/g, '&');
+                    normalized = normalized.replace(/&lt;/g, '<');
+                    normalized = normalized.replace(/&gt;/g, '>');
+                    normalized = normalized.replace(/&quot;/g, '"');
+                    normalized = normalized.replace(/&#39;/g, "'");
+                    // Normalize whitespace (multiple spaces/tabs/newlines to single space)
+                    normalized = normalized.replace(/\s+/g, ' ');
+                    // Trim leading/trailing whitespace
+                    return normalized.trim();
+                };
+
+                // Verify the save by fetching from server after a short delay
+                setTimeout(async () => {
+                    try {
+                        // Track retry attempts to prevent infinite loops
+                        const retryKey = `note_verify_retry_${dateString}`;
+                        const retryCount = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
+                        
+                        if (retryCount >= 3) {
+                            console.warn('⚠️ Max retry attempts reached for verification, accepting save as successful');
+                            sessionStorage.removeItem(retryKey);
+                            setIsSaving(false);
+                            sessionStorage.removeItem('calendar_is_saving');
+                            return;
+                        }
+
+                        const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                            headers: { 
+                                Authorization: `Bearer ${token}`,
+                                'Cache-Control': 'no-cache, no-store, must-revalidate'
+                            },
+                            credentials: 'include',
+                            cache: 'no-store'
+                        });
+                        if (verifyRes.ok) {
+                            const verifyData = await verifyRes.json();
+                            const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
+                            const serverNote = serverNotes[dateString] || '';
+                            
+                            // Normalize both contents for comparison
+                            const normalizedLocal = normalizeHtmlForComparison(noteContent);
+                            const normalizedServer = normalizeHtmlForComparison(serverNote);
+                            
+                            // Also do a direct comparison for exact matches
+                            const exactMatch = serverNote === noteContent;
+                            // And a normalized comparison for HTML entity differences
+                            const normalizedMatch = normalizedLocal === normalizedServer;
+                            
+                            if (exactMatch || normalizedMatch) {
+                                console.log('✅ Server verification: Note found on server with matching content');
+                                sessionStorage.removeItem(retryKey);
+                                // Update notes state with server data to ensure sync
+                                setNotes(prev => ({ ...prev, [dateString]: serverNote || noteContent }));
+                                setIsSaving(false);
+                                sessionStorage.removeItem('calendar_is_saving');
+                            } else if (serverNote) {
+                                console.warn('⚠️ Server verification: Note found but content differs');
+                                console.warn('   Expected (normalized):', normalizedLocal.substring(0, 50));
+                                console.warn('   Got (normalized):', normalizedServer.substring(0, 50));
+                                
+                                // Only retry if content is significantly different (more than just whitespace/entities)
+                                const significantDiff = Math.abs(normalizedLocal.length - normalizedServer.length) > 5 ||
+                                                       normalizedLocal.substring(0, 20) !== normalizedServer.substring(0, 20);
+                                
+                                if (significantDiff && retryCount < 2) {
+                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
+                                    console.log(`🔄 Retrying save due to content mismatch (attempt ${retryCount + 1}/3)...`);
+                                    setTimeout(() => {
+                                        saveNote().catch(err => console.error('Retry save error:', err));
+                                    }, 500);
+                                } else {
+                                    // Accept the server version if differences are minor
+                                    console.log('✅ Accepting server version (differences are minor)');
+                                    setNotes(prev => ({ ...prev, [dateString]: serverNote }));
+                                    sessionStorage.removeItem(retryKey);
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
+                                }
+                            } else {
+                                console.error('❌ Server verification: Note not found on server!');
+                                console.error('   Date:', dateString);
+                                console.error('   Server notes keys:', Object.keys(serverNotes));
+                                
+                                // Only retry if we haven't exceeded retry limit
+                                if (retryCount < 2) {
+                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
+                                    console.log(`🔄 Retrying save - note not found on server (attempt ${retryCount + 1}/3)...`);
+                                    setTimeout(() => {
+                                        saveNote().catch(err => console.error('Retry save error:', err));
+                                    }, 1000);
+                                } else {
+                                    console.warn('⚠️ Max retries reached, accepting save as successful');
+                                    sessionStorage.removeItem(retryKey);
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
+                                }
+                            }
+                        } else {
+                            console.error('❌ Verification request failed:', verifyRes.status);
+                            setIsSaving(false);
+                            sessionStorage.removeItem('calendar_is_saving');
+                        }
+                    } catch (verifyError) {
+                        console.error('Error verifying save on server:', verifyError);
+                        setIsSaving(false);
+                        sessionStorage.removeItem('calendar_is_saving');
+                    }
+                }, 2000); // Increased delay to 2 seconds to ensure database write completes
+                
+                // Clear handwriting canvas after saving
+                if (showHandwriting && canvasRef.current) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                }
+                
+                // Clear save flag after a delay to allow server to process
+                setTimeout(() => {
+                    sessionStorage.removeItem('calendar_is_saving');
+                    console.log('✅ Save flag cleared - Calendar refresh can resume');
+                }, 3000); // Wait 3 seconds before allowing refresh
+            } else {
+                const errorText = await res.text();
+                console.error('❌ Failed to save note:', res.status, errorText);
+                sessionStorage.removeItem('calendar_is_saving');
+                throw new Error(`Failed to save note: ${res.status}`);
+            }
+        } catch (error) {
+            console.error('Error saving note:', error);
+            sessionStorage.removeItem('calendar_is_saving');
+            // Try to save to localStorage as fallback
+            try {
+                const dateString = formatDateString(currentDate);
+                const noteContent = currentNoteHtml || currentNote;
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                savedNotes[dateString] = noteContent;
+                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                console.log('💾 Saved to localStorage as fallback');
+            } catch (localError) {
+                console.error('Failed to save to localStorage:', localError);
+            }
+        } finally {
+            setIsSaving(false);
+        }
+    }, [currentDate, currentNoteHtml, currentNote, showHandwriting, isDark]);
+
     // Set editing date flag when editing starts
     useEffect(() => {
         if (!showListView && currentDate) {
@@ -795,352 +1141,6 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             }
         }
     }, [currentNoteHtml, showListView]);
-
-    // Save note (including handwriting as image) - MUST be defined before useEffects that use it
-    const saveNote = useCallback(async () => {
-        setIsSaving(true);
-        try {
-            const dateString = formatDateString(currentDate);
-            
-            // Get content from editor first (most up-to-date)
-            let noteContent = '';
-            if (editorRef.current) {
-                noteContent = editorRef.current.innerHTML || '';
-                console.log('📝 Reading from editor for save, length:', noteContent.length);
-            } else {
-                noteContent = currentNoteHtml || currentNote || '';
-                console.log('📝 Reading from state for save (editor not available), length:', noteContent.length);
-            }
-            
-            // If editor is empty but state has content, use state (editor might not be synced yet)
-            if (!noteContent || noteContent.trim().length === 0) {
-                if (currentNoteHtml && currentNoteHtml.trim().length > 0) {
-                    console.log('⚠️ Editor empty but state has content, using state for save, length:', currentNoteHtml.length);
-                    noteContent = currentNoteHtml;
-                } else if (currentNote && currentNote.trim().length > 0) {
-                    console.log('⚠️ Editor empty but currentNote has content, using currentNote for save, length:', currentNote.length);
-                    noteContent = currentNote;
-                }
-            }
-            
-            // Always save content, even if empty (user might have cleared it)
-            // Only skip if we're in the very first 500ms of initialization to prevent saving initial empty state
-            const initTime = window._dailyNotesInitTime || 0;
-            if ((!noteContent || noteContent.trim().length === 0) && (Date.now() - initTime < 500)) {
-                console.log('⚠️ Skipping save during first 500ms - content is empty (initialization)');
-                setIsSaving(false);
-                return;
-            }
-            
-            // If content is empty, that means user cleared it - save it
-            if (!noteContent) {
-                noteContent = '';
-            }
-            
-            // ALWAYS check for handwriting canvas content and save it
-            // Check both when handwriting is enabled AND when disabled (to catch all drawings)
-            const canvas = canvasRef.current;
-            if (canvas) {
-                const ctx = canvas.getContext('2d');
-                // Check if canvas has any drawing (more thorough check)
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const hasDrawing = imageData.data.some((channel, index) => {
-                    return index % 4 !== 3 && channel !== 0; // Check non-alpha channels for non-zero values
-                });
-                
-                if (hasDrawing) {
-                    console.log('🎨 Found handwriting/drawing content, saving to note...');
-                    // Convert canvas to data URL
-                    const canvasDataUrl = canvas.toDataURL('image/png');
-                    // Create image tag
-                    const imgTag = `<img src="${canvasDataUrl}" alt="Handwriting" style="max-width: 100%; height: auto; margin: 10px 0;" />`;
-                    
-                    // Check if image already exists in note content (to avoid duplicates)
-                    const existingImgPattern = /<img[^>]*alt="Handwriting"[^>]*>/gi;
-                    if (existingImgPattern.test(noteContent)) {
-                        // Replace existing handwriting image
-                        noteContent = noteContent.replace(existingImgPattern, imgTag);
-                        console.log('🔄 Replaced existing handwriting image');
-                    } else {
-                        // Append handwriting image to content
-                        noteContent = noteContent + (noteContent ? '<br/>' : '') + imgTag;
-                        console.log('➕ Added handwriting image to note');
-                    }
-                    
-                    // Update editor content with image
-                    if (editorRef.current) {
-                        // Check if editor already has the image
-                        const editorHasImage = editorRef.current.innerHTML.includes(canvasDataUrl.substring(0, 50));
-                        if (!editorHasImage) {
-                            // Insert image at cursor position or append
-                            const selection = window.getSelection();
-                            if (selection.rangeCount > 0) {
-                                const range = selection.getRangeAt(0);
-                                const img = document.createElement('img');
-                                img.src = canvasDataUrl;
-                                img.alt = 'Handwriting';
-                                img.style.maxWidth = '100%';
-                                img.style.height = 'auto';
-                                img.style.margin = '10px 0';
-                                range.insertNode(img);
-                                range.setStartAfter(img);
-                                selection.removeAllRanges();
-                                selection.addRange(range);
-                            } else {
-                                // Append to end
-                                const img = document.createElement('img');
-                                img.src = canvasDataUrl;
-                                img.alt = 'Handwriting';
-                                img.style.maxWidth = '100%';
-                                img.style.height = 'auto';
-                                img.style.margin = '10px 0';
-                                editorRef.current.appendChild(img);
-                            }
-                            // Update content after inserting image
-                            noteContent = editorRef.current.innerHTML;
-                        }
-                    }
-                }
-            }
-            
-            const token = window.storage?.getToken?.();
-            if (!token) {
-                console.warn('Not authenticated - saving locally only');
-                // Save to localStorage as fallback
-                const user = window.storage?.getUser?.();
-                const userId = user?.id || user?.email || 'default';
-                const notesKey = `user_notes_${userId}`;
-                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                savedNotes[dateString] = noteContent;
-                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
-                setIsSaving(false);
-                return;
-            }
-
-            console.log('💾 Saving note:', { dateString, contentLength: noteContent.length });
-            
-            // Set save flag to prevent Calendar component from refreshing during save
-            sessionStorage.setItem('calendar_is_saving', 'true');
-            
-            const res = await fetch('/api/calendar-notes', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    date: dateString,
-                    note: noteContent
-                })
-            });
-
-            if (res.ok) {
-                const response = await res.json();
-                console.log('✅ Note save response received:', response);
-                
-                // The API wraps response in {data: {saved: true, note: ..., ...}}
-                const data = response?.data || response;
-                console.log('📋 Parsed response data:', data);
-                
-                // Verify the save was successful
-                if (data?.saved === false || (data?.saved === undefined && !data?.note && !data?.id)) {
-                    console.error('❌ Server indicated save failed:', data);
-                    throw new Error(data?.message || 'Note save failed on server');
-                }
-                
-                console.log('✅ Note saved successfully to server:', { 
-                    dateString, 
-                    contentLength: noteContent.length,
-                    savedNoteId: data?.id,
-                    saved: data?.saved
-                });
-                
-                // Store last saved content to prevent duplicate saves
-                sessionStorage.setItem(`last_saved_note_${dateString}`, noteContent);
-                
-                // Update local notes state immediately - CRITICAL for persistence
-                setNotes(prev => {
-                    const updated = { ...prev, [dateString]: noteContent };
-                    console.log('📝 Updated notes state after save, date:', dateString, 'length:', noteContent.length);
-                    return updated;
-                });
-                
-                // Also save to localStorage - CRITICAL for persistence
-                const user = window.storage?.getUser?.();
-                const userId = user?.id || user?.email || 'default';
-                const notesKey = `user_notes_${userId}`;
-                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                savedNotes[dateString] = noteContent;
-                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
-                console.log('💾 Saved to localStorage after server save, date:', dateString, 'length:', noteContent.length);
-                
-                // Verify the save by checking localStorage
-                const verify = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                if (verify[dateString] === noteContent) {
-                    console.log('✅ Verified: Note persisted to localStorage correctly');
-                } else {
-                    console.error('❌ Verification failed: localStorage content mismatch');
-                }
-                
-                // Helper function to normalize HTML content for comparison
-                // This handles HTML entity differences (like &nbsp; vs space) and whitespace
-                const normalizeHtmlForComparison = (html) => {
-                    if (!html) return '';
-                    // Normalize HTML entities first
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = html;
-                    // Get innerHTML which will have normalized entities
-                    let normalized = tempDiv.innerHTML;
-                    // Replace common HTML entities with their text equivalents
-                    normalized = normalized.replace(/&nbsp;/g, ' ');
-                    normalized = normalized.replace(/&amp;/g, '&');
-                    normalized = normalized.replace(/&lt;/g, '<');
-                    normalized = normalized.replace(/&gt;/g, '>');
-                    normalized = normalized.replace(/&quot;/g, '"');
-                    normalized = normalized.replace(/&#39;/g, "'");
-                    // Normalize whitespace (multiple spaces/tabs/newlines to single space)
-                    normalized = normalized.replace(/\s+/g, ' ');
-                    // Trim leading/trailing whitespace
-                    return normalized.trim();
-                };
-
-                // Verify the save by fetching from server after a short delay
-                setTimeout(async () => {
-                    try {
-                        // Track retry attempts to prevent infinite loops
-                        const retryKey = `note_verify_retry_${dateString}`;
-                        const retryCount = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
-                        
-                        if (retryCount >= 3) {
-                            console.warn('⚠️ Max retry attempts reached for verification, accepting save as successful');
-                            sessionStorage.removeItem(retryKey);
-                            setIsSaving(false);
-                            sessionStorage.removeItem('calendar_is_saving');
-                            return;
-                        }
-
-                        const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
-                            headers: { 
-                                Authorization: `Bearer ${token}`,
-                                'Cache-Control': 'no-cache, no-store, must-revalidate'
-                            },
-                            credentials: 'include',
-                            cache: 'no-store'
-                        });
-                        if (verifyRes.ok) {
-                            const verifyData = await verifyRes.json();
-                            const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
-                            const serverNote = serverNotes[dateString] || '';
-                            
-                            // Normalize both contents for comparison
-                            const normalizedLocal = normalizeHtmlForComparison(noteContent);
-                            const normalizedServer = normalizeHtmlForComparison(serverNote);
-                            
-                            // Also do a direct comparison for exact matches
-                            const exactMatch = serverNote === noteContent;
-                            // And a normalized comparison for HTML entity differences
-                            const normalizedMatch = normalizedLocal === normalizedServer;
-                            
-                            if (exactMatch || normalizedMatch) {
-                                console.log('✅ Server verification: Note found on server with matching content');
-                                sessionStorage.removeItem(retryKey);
-                                // Update notes state with server data to ensure sync
-                                setNotes(prev => ({ ...prev, [dateString]: serverNote || noteContent }));
-                                setIsSaving(false);
-                                sessionStorage.removeItem('calendar_is_saving');
-                            } else if (serverNote) {
-                                console.warn('⚠️ Server verification: Note found but content differs');
-                                console.warn('   Expected (normalized):', normalizedLocal.substring(0, 50));
-                                console.warn('   Got (normalized):', normalizedServer.substring(0, 50));
-                                
-                                // Only retry if content is significantly different (more than just whitespace/entities)
-                                const significantDiff = Math.abs(normalizedLocal.length - normalizedServer.length) > 5 ||
-                                                       normalizedLocal.substring(0, 20) !== normalizedServer.substring(0, 20);
-                                
-                                if (significantDiff && retryCount < 2) {
-                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
-                                    console.log(`🔄 Retrying save due to content mismatch (attempt ${retryCount + 1}/3)...`);
-                                    setTimeout(() => {
-                                        saveNote().catch(err => console.error('Retry save error:', err));
-                                    }, 500);
-                                } else {
-                                    // Accept the server version if differences are minor
-                                    console.log('✅ Accepting server version (differences are minor)');
-                                    setNotes(prev => ({ ...prev, [dateString]: serverNote }));
-                                    sessionStorage.removeItem(retryKey);
-                                    setIsSaving(false);
-                                    sessionStorage.removeItem('calendar_is_saving');
-                                }
-                            } else {
-                                console.error('❌ Server verification: Note not found on server!');
-                                console.error('   Date:', dateString);
-                                console.error('   Server notes keys:', Object.keys(serverNotes));
-                                
-                                // Only retry if we haven't exceeded retry limit
-                                if (retryCount < 2) {
-                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
-                                    console.log(`🔄 Retrying save - note not found on server (attempt ${retryCount + 1}/3)...`);
-                                    setTimeout(() => {
-                                        saveNote().catch(err => console.error('Retry save error:', err));
-                                    }, 1000);
-                                } else {
-                                    console.warn('⚠️ Max retries reached, accepting save as successful');
-                                    sessionStorage.removeItem(retryKey);
-                                    setIsSaving(false);
-                                    sessionStorage.removeItem('calendar_is_saving');
-                                }
-                            }
-                        } else {
-                            console.error('❌ Verification request failed:', verifyRes.status);
-                            setIsSaving(false);
-                            sessionStorage.removeItem('calendar_is_saving');
-                        }
-                    } catch (verifyError) {
-                        console.error('Error verifying save on server:', verifyError);
-                        setIsSaving(false);
-                        sessionStorage.removeItem('calendar_is_saving');
-                    }
-                }, 2000); // Increased delay to 2 seconds to ensure database write completes
-                
-                // Clear handwriting canvas after saving
-                if (showHandwriting && canvasRef.current) {
-                    const ctx = canvasRef.current.getContext('2d');
-                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                }
-                
-                // Clear save flag after a delay to allow server to process
-                setTimeout(() => {
-                    sessionStorage.removeItem('calendar_is_saving');
-                    console.log('✅ Save flag cleared - Calendar refresh can resume');
-                }, 3000); // Wait 3 seconds before allowing refresh
-            } else {
-                const errorText = await res.text();
-                console.error('❌ Failed to save note:', res.status, errorText);
-                sessionStorage.removeItem('calendar_is_saving');
-                throw new Error(`Failed to save note: ${res.status}`);
-            }
-        } catch (error) {
-            console.error('Error saving note:', error);
-            sessionStorage.removeItem('calendar_is_saving');
-            // Try to save to localStorage as fallback
-            try {
-                const dateString = formatDateString(currentDate);
-                const noteContent = currentNoteHtml || currentNote;
-                const user = window.storage?.getUser?.();
-                const userId = user?.id || user?.email || 'default';
-                const notesKey = `user_notes_${userId}`;
-                const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
-                savedNotes[dateString] = noteContent;
-                localStorage.setItem(notesKey, JSON.stringify(savedNotes));
-                console.log('💾 Saved to localStorage as fallback');
-            } catch (localError) {
-                console.error('Failed to save to localStorage:', localError);
-            }
-        } finally {
-            setIsSaving(false);
-        }
-    }, [currentDate, currentNoteHtml, currentNote, showHandwriting, isDark]);
     
     // Auto-save on content change (debounced)
     const saveTimeoutRef = useRef(null);
