@@ -1310,6 +1310,39 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         };
     }, [currentNoteHtml, currentDate, showListView, saveNote]);
     
+    // Handle checkbox clicks in checkbox lists
+    useEffect(() => {
+        if (!editorRef.current || showListView) return;
+        
+        const handleCheckboxClick = (e) => {
+            if (e.target.type === 'checkbox' && e.target.classList.contains('list-checkbox')) {
+                // Update state and trigger auto-save
+                setTimeout(() => {
+                    if (editorRef.current) {
+                        const newHtml = editorRef.current.innerHTML;
+                        const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                        setCurrentNoteHtml(newHtml);
+                        setCurrentNote(newText);
+                        const dateString = formatDateString(currentDate);
+                        setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                        
+                        // Trigger input event for auto-save
+                        const inputEvent = new Event('input', { bubbles: true });
+                        editorRef.current.dispatchEvent(inputEvent);
+                    }
+                }, 10);
+            }
+        };
+        
+        editorRef.current.addEventListener('click', handleCheckboxClick);
+        
+        return () => {
+            if (editorRef.current) {
+                editorRef.current.removeEventListener('click', handleCheckboxClick);
+            }
+        };
+    }, [currentDate, showListView]);
+    
     // Save drawing when handwriting is disabled or when drawing stops
     useEffect(() => {
         // Allow auto-save immediately - user actions should always save
@@ -1648,8 +1681,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         let range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
         
         // For list commands, use a more reliable approach
-        if (command === 'insertUnorderedList' || command === 'insertOrderedList') {
-            const listType = command === 'insertUnorderedList' ? 'ul' : 'ol';
+        if (command === 'insertUnorderedList' || command === 'insertOrderedList' || command === 'insertCheckboxList') {
+            const isCheckboxList = command === 'insertCheckboxList';
+            const listType = command === 'insertOrderedList' ? 'ol' : 'ul';
             const selectedText = selection.toString();
             
             // If there's selected text, convert it to a list
@@ -1660,10 +1694,35 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 if (lines.length > 0) {
                     // Create list element
                     const list = document.createElement(listType);
+                    if (isCheckboxList) {
+                        list.className = 'checkbox-list';
+                    }
                     
                     lines.forEach(line => {
                         const li = document.createElement('li');
-                        li.textContent = line.trim();
+                        if (isCheckboxList) {
+                            // Create checkbox list item - make entire li editable
+                            li.style.display = 'flex';
+                            li.style.alignItems = 'flex-start';
+                            li.contentEditable = 'true';
+                            
+                            const checkbox = document.createElement('input');
+                            checkbox.type = 'checkbox';
+                            checkbox.className = 'list-checkbox';
+                            checkbox.style.marginRight = '8px';
+                            checkbox.style.cursor = 'pointer';
+                            checkbox.style.marginTop = '2px';
+                            checkbox.style.flexShrink = '0';
+                            // Prevent checkbox from being editable
+                            checkbox.contentEditable = 'false';
+                            li.appendChild(checkbox);
+                            
+                            // Add text node directly to li
+                            const textNode = document.createTextNode(line.trim());
+                            li.appendChild(textNode);
+                        } else {
+                            li.textContent = line.trim();
+                        }
                         list.appendChild(li);
                     });
                     
@@ -1701,8 +1760,34 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             } else {
                 // No selection - create empty list item at cursor
                 const list = document.createElement(listType);
+                if (isCheckboxList) {
+                    list.className = 'checkbox-list';
+                }
+                
                 const li = document.createElement('li');
-                li.innerHTML = '<br>'; // Use <br> to ensure list item is visible
+                if (isCheckboxList) {
+                    // Create checkbox list item - make entire li editable
+                    li.style.display = 'flex';
+                    li.style.alignItems = 'flex-start';
+                    li.contentEditable = 'true';
+                    
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'list-checkbox';
+                    checkbox.style.marginRight = '8px';
+                    checkbox.style.cursor = 'pointer';
+                    checkbox.style.marginTop = '2px';
+                    checkbox.style.flexShrink = '0';
+                    // Prevent checkbox from being editable
+                    checkbox.contentEditable = 'false';
+                    li.appendChild(checkbox);
+                    
+                    // Add br for empty item
+                    const br = document.createElement('br');
+                    li.appendChild(br);
+                } else {
+                    li.innerHTML = '<br>'; // Use <br> to ensure list item is visible
+                }
                 list.appendChild(li);
                 
                 // Insert at cursor position
@@ -1726,8 +1811,20 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 const newRange = document.createRange();
                 const newLi = list.querySelector('li');
                 if (newLi) {
-                    newRange.setStart(newLi, 0);
-                    newRange.setEnd(newLi, 0);
+                    if (isCheckboxList) {
+                        // For checkbox lists, place cursor after checkbox
+                        const textNodes = Array.from(newLi.childNodes).filter(n => n.nodeType === Node.TEXT_NODE || n.nodeName === 'BR');
+                        if (textNodes.length > 0) {
+                            newRange.setStartBefore(textNodes[0]);
+                            newRange.setEndBefore(textNodes[0]);
+                        } else {
+                            newRange.setStart(newLi, newLi.childNodes.length);
+                            newRange.setEnd(newLi, newLi.childNodes.length);
+                        }
+                    } else {
+                        newRange.setStart(newLi, 0);
+                        newRange.setEnd(newLi, 0);
+                    }
                     selection.removeAllRanges();
                     selection.addRange(newRange);
                 }
@@ -2251,6 +2348,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 >
                     <i className="fas fa-list-ol"></i>
                 </button>
+                <button
+                    onClick={() => execCommand('insertCheckboxList')}
+                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
+                    title="Checkbox List"
+                >
+                    <i className="fas fa-check-square"></i>
+                </button>
                 <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
                 <button
                     onClick={() => {
@@ -2317,6 +2421,29 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         margin-top: 0.25rem;
                         margin-bottom: 0.25rem;
                     }
+                    /* Checkbox list styling */
+                    .daily-notes-editor ul.checkbox-list {
+                        list-style-type: none;
+                        padding-left: 0;
+                        margin: 0.5rem 0;
+                    }
+                    .daily-notes-editor ul.checkbox-list li {
+                        display: flex;
+                        align-items: flex-start;
+                        margin: 0.5rem 0;
+                        padding-left: 0;
+                    }
+                    .daily-notes-editor ul.checkbox-list li .list-checkbox {
+                        margin-right: 8px;
+                        margin-top: 2px;
+                        cursor: pointer;
+                        flex-shrink: 0;
+                    }
+                    /* Ensure checkbox lists work properly with Enter key */
+                    .daily-notes-editor ul.checkbox-list li:empty::before {
+                        content: '';
+                        display: inline-block;
+                    }
                 `}</style>
                 {/* Rich Text Editor with handwriting overlay */}
                 <div className="flex-1 p-4 overflow-y-auto relative">
@@ -2330,28 +2457,287 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                            // Handle Enter key to ensure it creates a new line
+                            // Handle Enter key to ensure it creates a new line or list item
                             if (e.key === 'Enter' || e.keyCode === 13) {
-                                // Prevent default to handle Enter ourselves
-                                e.preventDefault();
-                                
-                                // CRITICAL: Set typing flags BEFORE any operations to prevent sync interference
-                                isUserTypingRef.current = true;
-                                lastUserInputTimeRef.current = Date.now();
-                                isUpdatingFromUserInputRef.current = true;
-                                
-                                // CRITICAL: Set flag to prevent cursor restoration in input handler
-                                justPressedEnterRef.current = true;
-                                
-                                // Save cursor position before Enter key
-                                saveCursorPosition();
-                                
-                                // Insert a line break
                                 const selection = window.getSelection();
                                 if (selection.rangeCount > 0) {
                                     const range = selection.getRangeAt(0);
+                                    let node = range.startContainer;
                                     
-                                    // Try execCommand first (most compatible)
+                                    // Check if we're inside a list item or span within checkbox list
+                                    while (node && node !== editorRef.current) {
+                                        // Check if we're in a checkbox list item (which is contentEditable)
+                                        if (node.nodeName === 'LI' && node.contentEditable === 'true') {
+                                            const listItem = node;
+                                            const parentList = listItem.parentNode;
+                                            const isCheckboxList = parentList && parentList.classList && parentList.classList.contains('checkbox-list');
+                                            
+                                            if (isCheckboxList) {
+                                                // Handle Enter in checkbox list item
+                                                e.preventDefault();
+                                                
+                                                // Create new checkbox list item
+                                                const newLi = document.createElement('li');
+                                                newLi.style.display = 'flex';
+                                                newLi.style.alignItems = 'flex-start';
+                                                newLi.contentEditable = 'true';
+                                                
+                                                const checkbox = document.createElement('input');
+                                                checkbox.type = 'checkbox';
+                                                checkbox.className = 'list-checkbox';
+                                                checkbox.style.marginRight = '8px';
+                                                checkbox.style.cursor = 'pointer';
+                                                checkbox.style.marginTop = '2px';
+                                                checkbox.style.flexShrink = '0';
+                                                checkbox.contentEditable = 'false';
+                                                newLi.appendChild(checkbox);
+                                                
+                                                const br = document.createElement('br');
+                                                newLi.appendChild(br);
+                                                
+                                                // Insert after current list item
+                                                if (listItem.nextSibling) {
+                                                    parentList.insertBefore(newLi, listItem.nextSibling);
+                                                } else {
+                                                    parentList.appendChild(newLi);
+                                                }
+                                                
+                                                // Move cursor to new item (after checkbox)
+                                                const newRange = document.createRange();
+                                                const textNodes = Array.from(newLi.childNodes).filter(n => n.nodeType === Node.TEXT_NODE || n.nodeName === 'BR');
+                                                if (textNodes.length > 0) {
+                                                    newRange.setStartBefore(textNodes[0]);
+                                                    newRange.setEndBefore(textNodes[0]);
+                                                } else {
+                                                    newRange.setStart(newLi, newLi.childNodes.length);
+                                                    newRange.setEnd(newLi, newLi.childNodes.length);
+                                                }
+                                                selection.removeAllRanges();
+                                                selection.addRange(newRange);
+                                                
+                                                // Update state
+                                                setTimeout(() => {
+                                                    if (editorRef.current) {
+                                                        const newHtml = editorRef.current.innerHTML;
+                                                        const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                                                        setCurrentNoteHtml(newHtml);
+                                                        setCurrentNote(newText);
+                                                        const dateString = formatDateString(currentDate);
+                                                        setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                                        
+                                                        const inputEvent = new Event('input', { bubbles: true });
+                                                        editorRef.current.dispatchEvent(inputEvent);
+                                                    }
+                                                    
+                                                    setTimeout(() => {
+                                                        isUserTypingRef.current = false;
+                                                        isUpdatingFromUserInputRef.current = false;
+                                                        justPressedEnterRef.current = false;
+                                                    }, 100);
+                                                }, 10);
+                                                
+                                                return;
+                                            }
+                                        }
+                                        
+                                        // Check if we're in a span that's part of a checkbox list (legacy support)
+                                        if (node.nodeName === 'SPAN' && node.parentNode && node.parentNode.nodeName === 'LI') {
+                                            const listItem = node.parentNode;
+                                            const parentList = listItem.parentNode;
+                                            const isCheckboxList = parentList && parentList.classList && parentList.classList.contains('checkbox-list');
+                                            
+                                            if (isCheckboxList) {
+                                                // Handle Enter in checkbox list span
+                                                e.preventDefault();
+                                                
+                                                // Create new checkbox list item
+                                                const newLi = document.createElement('li');
+                                                newLi.style.display = 'flex';
+                                                newLi.style.alignItems = 'flex-start';
+                                                newLi.contentEditable = 'true';
+                                                
+                                                const checkbox = document.createElement('input');
+                                                checkbox.type = 'checkbox';
+                                                checkbox.className = 'list-checkbox';
+                                                checkbox.style.marginRight = '8px';
+                                                checkbox.style.cursor = 'pointer';
+                                                checkbox.style.marginTop = '2px';
+                                                checkbox.style.flexShrink = '0';
+                                                checkbox.contentEditable = 'false';
+                                                newLi.appendChild(checkbox);
+                                                
+                                                const br = document.createElement('br');
+                                                newLi.appendChild(br);
+                                                
+                                                // Insert after current list item
+                                                if (listItem.nextSibling) {
+                                                    parentList.insertBefore(newLi, listItem.nextSibling);
+                                                } else {
+                                                    parentList.appendChild(newLi);
+                                                }
+                                                
+                                                // Move cursor to new item
+                                                const newRange = document.createRange();
+                                                const textNodes = Array.from(newLi.childNodes).filter(n => n.nodeType === Node.TEXT_NODE || n.nodeName === 'BR');
+                                                if (textNodes.length > 0) {
+                                                    newRange.setStartBefore(textNodes[0]);
+                                                    newRange.setEndBefore(textNodes[0]);
+                                                } else {
+                                                    newRange.setStart(newLi, newLi.childNodes.length);
+                                                    newRange.setEnd(newLi, newLi.childNodes.length);
+                                                }
+                                                selection.removeAllRanges();
+                                                selection.addRange(newRange);
+                                                
+                                                // Update state
+                                                setTimeout(() => {
+                                                    if (editorRef.current) {
+                                                        const newHtml = editorRef.current.innerHTML;
+                                                        const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                                                        setCurrentNoteHtml(newHtml);
+                                                        setCurrentNote(newText);
+                                                        const dateString = formatDateString(currentDate);
+                                                        setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                                        
+                                                        const inputEvent = new Event('input', { bubbles: true });
+                                                        editorRef.current.dispatchEvent(inputEvent);
+                                                    }
+                                                    
+                                                    setTimeout(() => {
+                                                        isUserTypingRef.current = false;
+                                                        isUpdatingFromUserInputRef.current = false;
+                                                        justPressedEnterRef.current = false;
+                                                    }, 100);
+                                                }, 10);
+                                                
+                                                return;
+                                            }
+                                        }
+                                        
+                                        if (node.nodeName === 'LI') {
+                                            // We're in a regular list item - check if it's a checkbox list
+                                            const listItem = node;
+                                            const parentList = listItem.parentNode;
+                                            const isCheckboxList = parentList && parentList.classList && parentList.classList.contains('checkbox-list');
+                                            
+                                            // We're in a list item - let browser handle it naturally for proper list behavior
+                                            // Don't prevent default - browser will create new list item
+                                            // Just update flags and return
+                                            isUserTypingRef.current = true;
+                                            lastUserInputTimeRef.current = Date.now();
+                                            isUpdatingFromUserInputRef.current = true;
+                                            justPressedEnterRef.current = true;
+                                            
+                                            // If it's a checkbox list, we need to handle it specially
+                                            if (isCheckboxList) {
+                                                e.preventDefault();
+                                                
+                                                // Create new checkbox list item
+                                                const newLi = document.createElement('li');
+                                                newLi.style.display = 'flex';
+                                                newLi.style.alignItems = 'flex-start';
+                                                newLi.contentEditable = 'true';
+                                                
+                                                const checkbox = document.createElement('input');
+                                                checkbox.type = 'checkbox';
+                                                checkbox.className = 'list-checkbox';
+                                                checkbox.style.marginRight = '8px';
+                                                checkbox.style.cursor = 'pointer';
+                                                checkbox.style.marginTop = '2px';
+                                                checkbox.style.flexShrink = '0';
+                                                checkbox.contentEditable = 'false';
+                                                newLi.appendChild(checkbox);
+                                                
+                                                const br = document.createElement('br');
+                                                newLi.appendChild(br);
+                                                
+                                                // Insert after current list item
+                                                if (listItem.nextSibling) {
+                                                    parentList.insertBefore(newLi, listItem.nextSibling);
+                                                } else {
+                                                    parentList.appendChild(newLi);
+                                                }
+                                                
+                                                // Move cursor to new item
+                                                const newRange = document.createRange();
+                                                const textNodes = Array.from(newLi.childNodes).filter(n => n.nodeType === Node.TEXT_NODE || n.nodeName === 'BR');
+                                                if (textNodes.length > 0) {
+                                                    newRange.setStartBefore(textNodes[0]);
+                                                    newRange.setEndBefore(textNodes[0]);
+                                                } else {
+                                                    newRange.setStart(newLi, newLi.childNodes.length);
+                                                    newRange.setEnd(newLi, newLi.childNodes.length);
+                                                }
+                                                selection.removeAllRanges();
+                                                selection.addRange(newRange);
+                                                
+                                                // Update state
+                                                setTimeout(() => {
+                                                    if (editorRef.current) {
+                                                        const newHtml = editorRef.current.innerHTML;
+                                                        const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                                                        setCurrentNoteHtml(newHtml);
+                                                        setCurrentNote(newText);
+                                                        const dateString = formatDateString(currentDate);
+                                                        setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                                        
+                                                        const inputEvent = new Event('input', { bubbles: true });
+                                                        editorRef.current.dispatchEvent(inputEvent);
+                                                    }
+                                                    
+                                                    setTimeout(() => {
+                                                        isUserTypingRef.current = false;
+                                                        isUpdatingFromUserInputRef.current = false;
+                                                        justPressedEnterRef.current = false;
+                                                    }, 100);
+                                                }, 10);
+                                                
+                                                return;
+                                            }
+                                            
+                                            // Regular list - let browser handle it naturally
+                                            // Update state after a short delay to let browser create the list item
+                                            setTimeout(() => {
+                                                if (editorRef.current) {
+                                                    const newHtml = editorRef.current.innerHTML;
+                                                    const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                                                    setCurrentNoteHtml(newHtml);
+                                                    setCurrentNote(newText);
+                                                    const dateString = formatDateString(currentDate);
+                                                    setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                                    
+                                                    const inputEvent = new Event('input', { bubbles: true });
+                                                    editorRef.current.dispatchEvent(inputEvent);
+                                                }
+                                                
+                                                setTimeout(() => {
+                                                    isUserTypingRef.current = false;
+                                                    isUpdatingFromUserInputRef.current = false;
+                                                    justPressedEnterRef.current = false;
+                                                }, 100);
+                                            }, 10);
+                                            
+                                            return; // Let browser handle list item creation
+                                        }
+                                        node = node.parentNode;
+                                    }
+                                    
+                                    // Not in a list - handle Enter normally
+                                    // Prevent default to handle Enter ourselves
+                                    e.preventDefault();
+                                    
+                                    // CRITICAL: Set typing flags BEFORE any operations to prevent sync interference
+                                    isUserTypingRef.current = true;
+                                    lastUserInputTimeRef.current = Date.now();
+                                    isUpdatingFromUserInputRef.current = true;
+                                    
+                                    // CRITICAL: Set flag to prevent cursor restoration in input handler
+                                    justPressedEnterRef.current = true;
+                                    
+                                    // Save cursor position before Enter key
+                                    saveCursorPosition();
+                                    
+                                    // Insert a line break
                                     try {
                                         const success = document.execCommand('insertLineBreak', false, null);
                                         if (!success) {
@@ -2403,15 +2789,15 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                     // Trigger input event for auto-save (this will also call updateNoteContent)
                                     const inputEvent = new Event('input', { bubbles: true });
                                     editorRef.current.dispatchEvent(inputEvent);
+                                    
+                                    // Clear flags after longer delay to ensure sync doesn't interfere
+                                    setTimeout(() => {
+                                        isUserTypingRef.current = false;
+                                        isUpdatingFromUserInputRef.current = false;
+                                        // Clear Enter flag after all operations complete
+                                        justPressedEnterRef.current = false;
+                                    }, 3000); // Increased to 3 seconds to prevent sync interference
                                 }
-                                
-                                // Clear flags after longer delay to ensure sync doesn't interfere
-                                setTimeout(() => {
-                                    isUserTypingRef.current = false;
-                                    isUpdatingFromUserInputRef.current = false;
-                                    // Clear Enter flag after all operations complete
-                                    justPressedEnterRef.current = false;
-                                }, 3000); // Increased to 3 seconds to prevent sync interference
                                 
                                 return;
                             }
