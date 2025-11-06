@@ -609,6 +609,17 @@ app.use('/api', async (req, res) => {
     const handlerPath = toHandlerPath(req.url)
     console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
     
+    // Extract ID from URL for dynamic routes (e.g., /api/leads/[id] or /api/clients/[id])
+    // This ensures req.params.id is available for handlers that expect it
+    if (handlerPath.includes('[id].js')) {
+      const urlPath = req.url.split('?')[0].split('#')[0]
+      const pathSegments = urlPath.replace(/^\/api\/?/, '').split('/').filter(Boolean)
+      if (pathSegments.length >= 2) {
+        req.params = req.params || {}
+        req.params.id = pathSegments[pathSegments.length - 1]
+      }
+    }
+    
     const handler = await loadHandler(handlerPath)
     
     if (req.method === 'OPTIONS') {
