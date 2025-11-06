@@ -131,7 +131,9 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
     }, []);
     
-    // Completely stop LiveDataSync when modal is open (whether new or existing client), restart when closed
+    // CRITICAL: Completely stop LiveDataSync when modal is open (whether new or existing client)
+    // LiveDataSync will ONLY resume when user explicitly saves/closes the form
+    // VERSION: v2 - NO RESTART IN CLEANUP (2025-01-06)
     useEffect(() => {
         // Stop LiveDataSync directly if available, regardless of onPauseSync prop
         // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
@@ -141,24 +143,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
         
         // Also use onPauseSync callback if provided (for parent component coordination)
+        // This sets isFormOpenRef to true, providing additional blocking
         if (onPauseSync && typeof onPauseSync === 'function') {
             onPauseSync(true);
             console.log('🛑 ClientDetailModal opened - calling onPauseSync(true)');
         }
         
-        // Restart LiveDataSync when modal closes
+        // CRITICAL: LiveDataSync will ONLY restart when modal explicitly closes
+        // This happens in onClose callback, NOT in cleanup to prevent premature restarts
+        // VERSION v2: Removed all LiveDataSync.start() calls from cleanup
         return () => {
-            // Restart LiveDataSync directly if available
-            if (window.LiveDataSync && window.LiveDataSync.start) {
-                window.LiveDataSync.start();
-                console.log('▶️ ClientDetailModal closed - restarting LiveDataSync directly');
-            }
-            
-            // Also call onPauseSync callback if provided
-            if (onPauseSync && typeof onPauseSync === 'function') {
-                onPauseSync(false);
-                console.log('▶️ ClientDetailModal closed - calling onPauseSync(false)');
-            }
+            // Don't restart here - only restart when user explicitly closes/saves
+            console.log('🔄 ClientDetailModal unmounting - LiveDataSync will restart only on explicit close/save');
+            // NO LiveDataSync.start() here - only in onClose callback
         };
     }, []); // Run on mount/unmount only - stop/start based on modal visibility
     
@@ -171,6 +168,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
     // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
     useEffect(() => {
+        // CRITICAL: If client is null (new client), NEVER sync formData from prop
+        // User is creating a new client - formData should be completely user-controlled
+        if (!client) {
+            console.log('🚫 useEffect BLOCKED: client is null (new client) - formData is user-controlled');
+            return;
+        }
+        
         const currentClientId = client?.id || null;
         const previousClientId = lastProcessedClientRef.current?.id || null;
         

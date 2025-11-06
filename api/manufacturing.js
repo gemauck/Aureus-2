@@ -2383,10 +2383,21 @@ async function handler(req, res) {
     if (req.method === 'GET' && !id) {
       try {
         const owner = req.user?.sub
+        // Fetch ALL movements - no filtering by type
         const movements = await prisma.stockMovement.findMany({
           orderBy: { date: 'desc' }
         })
-        console.log('🧪 Manufacturing List movements', { owner, count: movements.length })
+        
+        // Log movement type breakdown for debugging
+        const typeBreakdown = movements.reduce((acc, m) => {
+          acc[m.type] = (acc[m.type] || 0) + 1;
+          return acc;
+        }, {});
+        console.log('🧪 Manufacturing List movements', { 
+          owner, 
+          totalCount: movements.length,
+          typeBreakdown 
+        })
         
         const formatted = movements.map(movement => ({
           ...movement,
@@ -2432,8 +2443,20 @@ async function handler(req, res) {
     if (req.method === 'POST' && !id) {
       const body = req.body || {}
       
+      // Robust validation
       if (!body.type || !body.itemName || !body.sku) {
-        return badRequest(res, 'type, itemName, and sku required')
+        return badRequest(res, 'type, itemName, and sku are required')
+      }
+      
+      // Validate movement type
+      const validTypes = ['receipt', 'consumption', 'production', 'transfer', 'adjustment', 'sale']
+      if (!validTypes.includes(body.type)) {
+        return badRequest(res, `Invalid movement type. Must be one of: ${validTypes.join(', ')}`)
+      }
+      
+      // Validate SKU and itemName
+      if (!body.sku.trim() || !body.itemName.trim()) {
+        return badRequest(res, 'SKU and Item Name cannot be empty')
       }
 
       try {
@@ -2457,6 +2480,11 @@ async function handler(req, res) {
           return badRequest(res, 'quantity is required and must be a valid number')
         }
         
+        // Check for extreme values
+        if (!isFinite(quantity) || Math.abs(quantity) > 1000000) {
+          return badRequest(res, 'quantity must be a reasonable number')
+        }
+        
         // For adjustments, allow any value (positive, negative, or zero)
         // For other types, allow negative values (for corrections) but not zero
         if (!isAdjustment && quantity === 0) {
@@ -2471,14 +2499,14 @@ async function handler(req, res) {
               movementId,
               date: body.date ? new Date(body.date) : new Date(),
               type: body.type, // expected: receipt | consumption | production | transfer | adjustment
-              itemName: body.itemName,
-              sku: body.sku,
+              itemName: body.itemName.trim(),
+              sku: body.sku.trim(),
               quantity,
-              fromLocation: body.fromLocation || '',
-              toLocation: body.toLocation || '',
-              reference: body.reference || '',
-              performedBy: body.performedBy || req.user?.name || 'System',
-              notes: body.notes || '',
+              fromLocation: (body.fromLocation || '').trim(),
+              toLocation: (body.toLocation || '').trim(),
+              reference: (body.reference || '').trim(),
+              performedBy: (body.performedBy || req.user?.name || 'System').trim(),
+              notes: (body.notes || '').trim(),
               ownerId: null
             }
           })
@@ -2656,6 +2684,21 @@ async function handler(req, res) {
         })
       } catch (error) {
         console.error('❌ Failed to create stock movement:', error)
+        
+        // Handle specific error types
+        if (error.code === 'P2002') {
+          return badRequest(res, 'A movement with this ID already exists')
+        }
+        if (error.code === 'P2003') {
+          return badRequest(res, 'Invalid reference to related record')
+        }
+        if (error.message?.includes('timeout') || error.code === 'P1008') {
+          return serverError(res, 'Transaction timed out. Please try again.')
+        }
+        if (error.code === 'P2034') {
+          return serverError(res, 'Transaction conflict. Please try again.')
+        }
+        
         const message = error?.message || 'Failed to create stock movement'
         return serverError(res, message, message)
       }

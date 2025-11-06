@@ -130,7 +130,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         };
     }, []);
     
-    // Completely stop LiveDataSync when modal is open (whether new or existing lead), restart when closed
+    // CRITICAL: Completely stop LiveDataSync when modal is open (whether new or existing lead)
+    // LiveDataSync will ONLY resume when user explicitly saves/closes the form
+    // VERSION: v2 - NO RESTART IN CLEANUP (2025-01-06)
     useEffect(() => {
         // Stop LiveDataSync directly if available, regardless of onPauseSync prop
         // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
@@ -140,24 +142,19 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
         
         // Also use onPauseSync callback if provided (for parent component coordination)
+        // This sets isFormOpenRef to true, providing additional blocking
         if (onPauseSync && typeof onPauseSync === 'function') {
             onPauseSync(true);
             console.log('🛑 LeadDetailModal opened - calling onPauseSync(true)');
         }
         
-        // Restart LiveDataSync when modal closes
+        // CRITICAL: LiveDataSync will ONLY restart when modal explicitly closes
+        // This happens in onClose callback, NOT in cleanup to prevent premature restarts
+        // VERSION v2: Removed all LiveDataSync.start() calls from cleanup
         return () => {
-            // Restart LiveDataSync directly if available
-            if (window.LiveDataSync && window.LiveDataSync.start) {
-                window.LiveDataSync.start();
-                console.log('▶️ LeadDetailModal closed - restarting LiveDataSync directly');
-            }
-            
-            // Also call onPauseSync callback if provided
-            if (onPauseSync && typeof onPauseSync === 'function') {
-                onPauseSync(false);
-                console.log('▶️ LeadDetailModal closed - calling onPauseSync(false)');
-            }
+            // Don't restart here - only restart when user explicitly closes/saves
+            console.log('🔄 LeadDetailModal unmounting - LiveDataSync will restart only on explicit close/save');
+            // NO LiveDataSync.start() here - only in onClose callback
         };
     }, []); // Run on mount/unmount only - stop/start based on modal visibility
     
@@ -173,6 +170,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Once modal is open, formData is completely user-controlled - no automatic syncing from props
     // This matches Manufacturing.jsx which has NO useEffect watching selectedItem prop
     useEffect(() => {
+        // CRITICAL: If lead is null (new lead), NEVER sync formData from prop
+        // User is creating a new lead - formData should be completely user-controlled
+        if (!lead) {
+            console.log('🚫 useEffect BLOCKED: lead is null (new lead) - formData is user-controlled');
+            return;
+        }
+        
         const currentLeadId = lead?.id || null;
         const previousLeadId = lastProcessedLeadRef.current?.id || null;
         

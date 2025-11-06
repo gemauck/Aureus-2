@@ -290,17 +290,22 @@ const Clients = React.memo(() => {
     const isAutoSavingRef = useRef(false); // Track auto-save state to prevent overwrites
     const editingTimeoutRef = useRef(null);
     
+    // CRITICAL: Track if ANY form modal is open - this completely blocks LiveDataSync
+    const isFormOpenRef = useRef(false);
+    
     // Stop/start LiveDataSync completely for modals (especially Add Client/Lead forms)
     const handlePauseSync = useCallback((shouldStop) => {
         if (window.LiveDataSync) {
             if (shouldStop) {
                 // Completely stop LiveDataSync when forms are open
+                isFormOpenRef.current = true; // Mark form as open
                 if (window.LiveDataSync.isRunning) {
                     window.LiveDataSync.stop();
                     console.log('🛑 LiveDataSync completely stopped for form');
                 }
             } else {
-                // Restart LiveDataSync when forms close
+                // Only restart if form is actually closing (not just a re-render)
+                isFormOpenRef.current = false; // Mark form as closed
                 // Only restart if not already running (prevents duplicate starts)
                 if (!window.LiveDataSync.isRunning) {
                     window.LiveDataSync.start();
@@ -893,7 +898,13 @@ const Clients = React.memo(() => {
     // IMPORTANT: We check selectedClient for user content, but the modal's formData might have more recent content
     // So we ALWAYS preserve selectedClient's content if it exists, even if LiveDataSync tries to overwrite with blank
     useEffect(() => {
-        if (!selectedClient || !selectedClient.id) return;
+        // CRITICAL: If selectedClient is null (new client), NEVER update it
+        // This prevents overwriting form data when user is creating a new client
+        if (!selectedClient) {
+            return;
+        }
+        
+        if (!selectedClient.id) return;
         
         // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
@@ -988,7 +999,13 @@ const Clients = React.memo(() => {
     
     // CRITICAL: Same protection for selectedLead
     useEffect(() => {
-        if (!selectedLead || !selectedLead.id) return;
+        // CRITICAL: If selectedLead is null (new lead), NEVER update it
+        // This prevents overwriting form data when user is creating a new lead
+        if (!selectedLead) {
+            return;
+        }
+        
+        if (!selectedLead.id) return;
         
         // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
@@ -1120,6 +1137,12 @@ const Clients = React.memo(() => {
 
         const subscriberId = 'clients-screen-live-sync';
         const handler = async (message) => {
+            // CRITICAL: FIRST CHECK - If ANY form is open, completely ignore ALL messages
+            if (isFormOpenRef.current) {
+                console.log('🚫 LiveDataSync: BLOCKED - form is open (isFormOpenRef check)');
+                return;
+            }
+            
             // CRITICAL: Ignore all messages if LiveDataSync is not running (stopped)
             if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
                 console.log('🚫 LiveDataSync: Ignoring message - LiveDataSync is stopped');
@@ -1134,17 +1157,22 @@ const Clients = React.memo(() => {
             }
             if (message?.type === 'data' && Array.isArray(message.data)) {
                 // CRITICAL: Ignore LiveDataSync updates when Add Client/Lead forms are open
+                // Check this FIRST before any data processing to prevent any possibility of overwrites
                 const currentViewMode = viewModeRef.current;
                 const isAddClientForm = currentViewMode === 'client-detail' && selectedClientRef.current === null;
                 const isAddLeadForm = currentViewMode === 'lead-detail' && selectedLeadRef.current === null;
                 const isDetailView = currentViewMode === 'client-detail' || currentViewMode === 'lead-detail';
                 
+                // CRITICAL: Block ALL data updates when ANY detail modal is open (new or existing)
+                // This is the PRIMARY guard to prevent overwrites
                 if (isAddClientForm || isAddLeadForm || isDetailView) {
-                    console.log('🚫 LiveDataSync: Ignoring update - form is open', {
+                    console.log('🚫 LiveDataSync: BLOCKED - form is open (PRIMARY GUARD)', {
                         viewMode: currentViewMode,
                         isAddClientForm,
                         isAddLeadForm,
-                        isDetailView
+                        isDetailView,
+                        selectedClient: selectedClientRef.current,
+                        selectedLead: selectedLeadRef.current
                     });
                     return; // Ignore all updates when forms are open
                 }
@@ -1236,6 +1264,22 @@ const Clients = React.memo(() => {
                     lastLiveDataSyncTime = now;
                 }
                 if (message.dataType === 'leads') {
+                    // CRITICAL: Double-check that we're not in a form before updating leads
+                    const currentViewMode = viewModeRef.current;
+                    const isAddLeadForm = currentViewMode === 'lead-detail' && selectedLeadRef.current === null;
+                    const isDetailView = currentViewMode === 'lead-detail';
+                    
+                    // CRITICAL: Never update leads when modal is open (prevents overwriting form data)
+                    if (isAddLeadForm || isDetailView) {
+                        console.log('🚫 LiveDataSync: BLOCKED leads update - lead modal is open', {
+                            viewMode: currentViewMode,
+                            isAddLeadForm,
+                            isDetailView,
+                            selectedLead: selectedLeadRef.current
+                        });
+                        return; // Don't update leads when modal is open
+                    }
+                    
                     const processedLeads = message.data.map(mapDbClient).filter(c => (c.type || 'lead') === 'lead');
                     console.log(`📥 LiveDataSync: Received ${processedLeads.length} leads update`);
                     setLeads(processedLeads);
@@ -1600,6 +1644,12 @@ const Clients = React.memo(() => {
             setViewMode('clients');
             setSelectedClient(null);
             setCurrentTab('overview');
+            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after update
+            handlePauseSync(false);
+            if (window.LiveDataSync && window.LiveDataSync.start) {
+                window.LiveDataSync.start();
+                console.log('▶️ ClientDetailModal updated - restarting LiveDataSync');
+            }
         }
     };
 
@@ -1615,6 +1665,12 @@ const Clients = React.memo(() => {
             setViewMode('leads');
             setSelectedLead(null);
             setCurrentLeadTab('overview');
+            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after update
+            handlePauseSync(false);
+            if (window.LiveDataSync && window.LiveDataSync.start) {
+                window.LiveDataSync.start();
+                console.log('▶️ LeadDetailModal updated - restarting LiveDataSync');
+            }
         }
     };
     
@@ -1934,6 +1990,12 @@ const Clients = React.memo(() => {
         
         if (!stayInEditMode) {
             setRefreshKey(k => k + 1);
+            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
+            handlePauseSync(false);
+            if (window.LiveDataSync && window.LiveDataSync.start) {
+                window.LiveDataSync.start();
+                console.log('▶️ ClientDetailModal saved - restarting LiveDataSync');
+            }
         }
     };
     
@@ -2398,6 +2460,12 @@ const Clients = React.memo(() => {
                     setViewMode('leads');
                     setSelectedLead(null);
                     setCurrentLeadTab('overview');
+                    // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
+                    handlePauseSync(false);
+                    if (window.LiveDataSync && window.LiveDataSync.start) {
+                        window.LiveDataSync.start();
+                        console.log('▶️ LeadDetailModal saved - restarting LiveDataSync');
+                    }
                     
                     // Force a refresh to ensure API data is loaded (if authenticated)
                     if (token) {
@@ -3513,10 +3581,19 @@ const Clients = React.memo(() => {
 
             {/* Full-page client detail content */}
             <div className="p-6">
-                {(() => {
+                {useMemo(() => {
                     const Modal = window.ClientDetailModal;
-                    return Modal ? (
+                    if (!Modal) {
+                        return (
+                            <div className="text-center py-8 text-gray-500">
+                                <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                                <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
+                            </div>
+                        );
+                    }
+                    return (
                         <Modal
+                        key={selectedClient?.id || 'new-client'}
                         client={selectedClient}
                         onSave={handleSaveClient}
                         onUpdate={handleUpdateClient}
@@ -3525,6 +3602,12 @@ const Clients = React.memo(() => {
                             setViewMode('clients');
                             setSelectedClient(null);
                             setCurrentTab('overview');
+                            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes
+                            handlePauseSync(false);
+                            if (window.LiveDataSync && window.LiveDataSync.start) {
+                                window.LiveDataSync.start();
+                                console.log('▶️ ClientDetailModal closed - restarting LiveDataSync on explicit close');
+                            }
                         }}
                         onDelete={handleDeleteClient}
                         allProjects={projects}
@@ -3541,37 +3624,35 @@ const Clients = React.memo(() => {
                             isAutoSavingRef.current = autoSaving || false; // Track auto-save state
                             setIsUserEditing(editing);
                             if (editing) {
-                                console.log('✏️ User started editing - blocking LiveDataSync updates');
+                                // CRITICAL: STOP LiveDataSync completely when user starts editing
+                                console.log('🛑 User started editing - STOPPING LiveDataSync completely');
+                                if (window.LiveDataSync && window.LiveDataSync.stop) {
+                                    window.LiveDataSync.stop();
+                                    console.log('🛑 LiveDataSync STOPPED due to editing');
+                                }
+                                // Also mark form as open for additional blocking
+                                isFormOpenRef.current = true;
+                                handlePauseSync(true);
                                 // Clear any existing timeout
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
-                                // Set timeout to mark editing as done after 5 seconds of no changes
-                                editingTimeoutRef.current = setTimeout(() => {
-                                    console.log('⏸️ User stopped editing - allowing LiveDataSync updates');
-                                    isUserEditingRef.current = false;
-                                    setIsUserEditing(false);
-                                }, 5000);
                             } else if (!autoSaving) {
-                                console.log('✅ User finished editing and save complete - allowing LiveDataSync updates');
+                                console.log('✅ User finished editing and save complete - LiveDataSync remains stopped until form closes');
                                 // Clear timeout if user explicitly stopped editing
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
                                 isUserEditingRef.current = false;
                                 setIsUserEditing(false);
+                                // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
                             } else {
-                                console.log('💾 Auto-save in progress - keeping LiveDataSync blocked');
+                                console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
                             }
                         }}
                     />
-                    ) : (
-                        <div className="text-center py-8 text-gray-500">
-                            <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                            <p>ClientDetailModal component is not loaded yet. Please refresh the page.</p>
-                        </div>
                     );
-                })()}
+                }, [selectedClient?.id, currentTab, handlePauseSync, handleSaveClient, handleUpdateClient, handleDeleteClient, handleNavigateToProject, projects])}
             </div>
         </div>
     );
@@ -3609,9 +3690,17 @@ const Clients = React.memo(() => {
 
             {/* Full-page lead detail content */}
             <div className="p-6">
-                {(() => {
+                {useMemo(() => {
                     const Modal = window.LeadDetailModal;
-                    return Modal ? (
+                    if (!Modal) {
+                        return (
+                            <div className="text-center py-8 text-gray-500">
+                                <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                                <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
+                            </div>
+                        );
+                    }
+                    return (
                         <Modal
                         key={selectedLead?.id || 'new-lead'}
                         lead={selectedLead}
@@ -3625,6 +3714,12 @@ const Clients = React.memo(() => {
                             setViewMode('leads');
                             setSelectedLead(null);
                             setCurrentLeadTab('overview');
+                            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes
+                            handlePauseSync(false);
+                            if (window.LiveDataSync && window.LiveDataSync.start) {
+                                window.LiveDataSync.start();
+                                console.log('▶️ LeadDetailModal closed - restarting LiveDataSync on explicit close');
+                            }
                         }}
                         onDelete={handleDeleteLead}
                         onConvertToClient={convertLeadToClient}
@@ -3642,37 +3737,35 @@ const Clients = React.memo(() => {
                             // Only update state if it actually changed to prevent unnecessary re-renders
                             setIsUserEditing(prev => prev !== editing ? editing : prev);
                             if (editing) {
-                                console.log('✏️ User started editing lead - blocking LiveDataSync updates');
+                                // CRITICAL: STOP LiveDataSync completely when user starts editing
+                                console.log('🛑 User started editing lead - STOPPING LiveDataSync completely');
+                                if (window.LiveDataSync && window.LiveDataSync.stop) {
+                                    window.LiveDataSync.stop();
+                                    console.log('🛑 LiveDataSync STOPPED due to lead editing');
+                                }
+                                // Also mark form as open for additional blocking
+                                isFormOpenRef.current = true;
+                                handlePauseSync(true);
                                 // Clear any existing timeout
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
-                                // Set timeout to mark editing as done after 5 seconds of no changes
-                                editingTimeoutRef.current = setTimeout(() => {
-                                    console.log('⏸️ User stopped editing lead - allowing LiveDataSync updates');
-                                    isUserEditingRef.current = false;
-                                    setIsUserEditing(false);
-                                }, 5000);
                             } else if (!autoSaving) {
-                                console.log('✅ User finished editing lead and save complete - allowing LiveDataSync updates');
+                                console.log('✅ User finished editing lead and save complete - LiveDataSync remains stopped until form closes');
                                 // Clear timeout if user explicitly stopped editing
                                 if (editingTimeoutRef.current) {
                                     clearTimeout(editingTimeoutRef.current);
                                 }
                                 isUserEditingRef.current = false;
                                 setIsUserEditing(false);
+                                // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
                             } else {
-                                console.log('💾 Auto-save in progress - keeping LiveDataSync blocked');
+                                console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
                             }
                         }}
                     />
-                    ) : (
-                        <div className="text-center py-8 text-gray-500">
-                            <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
-                            <p>LeadDetailModal component is not loaded yet. Please refresh the page.</p>
-                        </div>
                     );
-                })()}
+                }, [selectedLead?.id, currentLeadTab, handlePauseSync, handleSaveLead, handleUpdateLead, handleDeleteLead, convertLeadToClient, projects, loadLeads])}
             </div>
         </div>
     );
@@ -3761,6 +3854,7 @@ const Clients = React.memo(() => {
                             // Keep sync paused when Add Lead is clicked - modal will handle pause
                             setSelectedLead(null);
                             setSelectedClient(null);
+                            setCurrentLeadTab('overview');
                             setViewMode('lead-detail');
                         }}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
