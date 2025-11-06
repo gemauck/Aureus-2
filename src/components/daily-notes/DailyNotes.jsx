@@ -541,6 +541,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     
     // CRITICAL: Set editor content when editor ref becomes available or content changes
     useEffect(() => {
+        // NEVER run this if user is typing - it will reset cursor
+        const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
+        if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 2000) {
+            return;
+        }
+        
         if (!showListView && currentNoteHtml && currentNoteHtml.trim().length > 0) {
             // Use requestAnimationFrame to ensure DOM is ready
             requestAnimationFrame(() => {
@@ -568,7 +574,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             
             // CRITICAL: Don't sync if user is currently typing or just typed - preserve their input
             const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
-            if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 1500) {
+            if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 3000) {
                 console.log('⚠️ Skipping editor sync - user is actively typing or just typed', {
                     isTyping: isUserTypingRef.current,
                     isFromInput: isUpdatingFromUserInputRef.current,
@@ -1543,7 +1549,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         setTimeout(() => {
             isUserTypingRef.current = false;
             isUpdatingFromUserInputRef.current = false;
-        }, 1000);
+        }, 3000);
         
         // Force update immediately - user typing should always work
         if (editorRef.current) {
@@ -1936,12 +1942,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         ref={(el) => {
                             editorRef.current = el;
                             // When editor ref is set, immediately set content if we have it
+                            // BUT NEVER if user is typing - it will reset cursor
+                            const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
                             if (el && currentNoteHtml && currentNoteHtml.trim().length > 0) {
-                                const currentContent = el.innerHTML || '';
-                                if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
-                                    console.log('🔧 Setting editor content via ref callback - editor:', currentContent.length, 'state:', currentNoteHtml.length);
-                                    el.innerHTML = currentNoteHtml;
-                                    console.log('✅ Editor content set via ref callback, length:', currentNoteHtml.length);
+                                // Only set if user is NOT typing
+                                if (!isUserTypingRef.current && !isUpdatingFromUserInputRef.current && timeSinceLastInput > 2000) {
+                                    const currentContent = el.innerHTML || '';
+                                    if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
+                                        console.log('🔧 Setting editor content via ref callback - editor:', currentContent.length, 'state:', currentNoteHtml.length);
+                                        setEditorContentSafely(currentNoteHtml);
+                                        console.log('✅ Editor content set via ref callback, length:', currentNoteHtml.length);
+                                    }
                                 }
                             }
                         }}
@@ -1986,11 +1997,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                     editorRef.current.dispatchEvent(inputEvent);
                                 }
                                 
-                                // Clear flags after longer delay
+                                // Clear flags after longer delay - give plenty of time for React to finish
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
                                     isUpdatingFromUserInputRef.current = false;
-                                }, 1500);
+                                }, 3000);
                             }
                         }}
                         onBlur={() => {
