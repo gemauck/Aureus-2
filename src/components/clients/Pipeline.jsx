@@ -431,15 +431,38 @@ const Pipeline = () => {
 
     // Get all pipeline items (leads + client opportunities)
     const getPipelineItems = () => {
-        const leadItems = leads.map(lead => ({
-            ...lead,
-            type: 'lead',
-            itemType: 'New Lead',
-            stage: lead.stage || 'Awareness',
-            value: lead.value || 0,
-            createdDate: lead.createdDate || new Date().toISOString(),
-            expectedCloseDate: lead.expectedCloseDate || null
-        }));
+        const leadItems = leads.map(lead => {
+            // Map lead stages to AIDA pipeline stages (same normalization as opportunities)
+            let mappedStage = lead.stage || 'Awareness';
+            const originalStage = mappedStage;
+            
+            // Normalize stage value - trim whitespace and handle variations
+            if (mappedStage) {
+                mappedStage = mappedStage.trim();
+            }
+            
+            // Convert common stage values to AIDA stages
+            if (mappedStage === 'prospect' || mappedStage === 'new') {
+                mappedStage = 'Awareness';
+            } else if (!['Awareness', 'Interest', 'Desire', 'Action'].includes(mappedStage)) {
+                // If stage doesn't match AIDA stages, default to Awareness
+                mappedStage = 'Awareness';
+            }
+            
+            if (originalStage !== mappedStage) {
+                console.log(`🔄 Pipeline: Mapped lead stage "${originalStage}" → "${mappedStage}" for ${lead.name || lead.id}`);
+            }
+            
+            return {
+                ...lead,
+                type: 'lead',
+                itemType: 'New Lead',
+                stage: mappedStage,
+                value: lead.value || 0,
+                createdDate: lead.createdDate || new Date().toISOString(),
+                expectedCloseDate: lead.expectedCloseDate || null
+            };
+        });
 
         const opportunityItems = [];
         clients.forEach(client => {
