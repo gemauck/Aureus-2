@@ -179,12 +179,25 @@ body {
     }
 }
 
-/* Force Abcotronics logo to be blue in light mode */
-:not(.dark) .abcotronics-logo,
-:not(.dark) .abcotronics-logo-text,
+/* Force Abcotronics logo colors - CRITICAL: Override all other styles */
+/* Light mode: Always blue */
 html:not(.dark) .abcotronics-logo,
-html:not(.dark) .abcotronics-logo-text {
+html:not(.dark) h1.abcotronics-logo,
+:not(.dark) .abcotronics-logo,
+:not(.dark) h1.abcotronics-logo,
+body:not(.dark) .abcotronics-logo,
+body:not(.dark) h1.abcotronics-logo {
     color: #0369a1 !important;
+}
+
+/* Dark mode: Always white */
+html.dark .abcotronics-logo,
+html.dark h1.abcotronics-logo,
+.dark .abcotronics-logo,
+.dark h1.abcotronics-logo,
+body.dark .abcotronics-logo,
+body.dark h1.abcotronics-logo {
+    color: #ffffff !important;
 }
 
 /* Ensure text-primary-600 works */

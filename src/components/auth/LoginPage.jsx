@@ -570,7 +570,7 @@ const LoginPage = () => {
                 <div className="login-card login-modal">
                     {/* Header */}
                     <div className="login-header">
-                        <h1 className="login-brand">Abcotronics</h1>
+                        <h1 className="login-brand abcotronics-logo">Abcotronics</h1>
                     </div>
                     
                     {/* Form */}
