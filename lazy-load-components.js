@@ -1,16 +1,19 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 1017-clients-blocked - Removed Clients.jsx to prevent race condition with LeadDetailModal
-console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
+// VERSION: 1018-projectdetail-blocked - Removed ProjectDetail to prevent race conditions (now has robust loader)
+console.log('🚀 lazy-load-components.js v1018-projectdetail-blocked loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
     
-    // CRITICAL: Filter out LeadDetailModal and ClientDetailModal BEFORE creating componentFiles array
+    // CRITICAL: Filter out LeadDetailModal, ClientDetailModal, and ProjectDetail BEFORE creating componentFiles array
     // This prevents them from being loaded even if they somehow get into the array
+    // ProjectDetail is now loaded with robust dependency checking and should not be loaded via lazy-loader
     const shouldBlockComponent = (path) => {
         if (typeof path !== 'string') return false;
         const lowerPath = path.toLowerCase();
-        return lowerPath.includes('leaddetailmodal') || lowerPath.includes('clientdetailmodal');
+        return lowerPath.includes('leaddetailmodal') || 
+               lowerPath.includes('clientdetailmodal') ||
+               lowerPath.includes('projectdetail');
     };
     
     const componentFiles = [
@@ -44,7 +47,7 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
         }
         return true;
     }).concat([
-        // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail, then Projects
+        // Projects - Load ProjectDetail dependencies FIRST, then ProjectDetail (with robust loader), then Projects
         './src/components/projects/CustomFieldModal.jsx',
         './src/components/projects/TaskDetailModal.jsx',
         './src/components/projects/StatusManagementModal.jsx',
@@ -55,7 +58,7 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
-        './src/components/projects/ProjectDetail.jsx',
+        // ProjectDetail will be loaded AFTER dependencies via special handler (see loadBatch function)
         './src/components/projects/Projects.jsx',
         './src/components/projects/ProjectsDatabaseFirst.jsx',
         './src/components/projects/ProjectsSimple.jsx',
@@ -159,12 +162,16 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
         return new Promise((resolve, reject) => {
             // CRITICAL: NEVER load LeadDetailModal or ClientDetailModal from lazy-loader
             // They are loaded early in index.html and must NOT be overwritten
-            // This prevents the formData initialization error
-            // Use case-insensitive check to catch all variations
+            // ProjectDetail can be loaded via lazy-loader (handled in loadBatch after dependencies)
             if (shouldBlockComponent(src)) {
                 console.log(`⏭️ BLOCKED: ${src} must be loaded from index.html only - skipping lazy-loader`);
                 resolve();
                 return;
+            }
+            
+            // Special handling for ProjectDetail - log when loading
+            if (src.includes('ProjectDetail')) {
+                console.log(`🔵 Lazy loader: Loading ProjectDetail (robust loader will check dependencies)...`);
             }
             
             // Convert src/ paths to dist/src/ paths if needed
@@ -176,18 +183,61 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                 console.log(`🔵 Lazy loader: Attempting to load ProjectDetail from ${src} → ${scriptSrc}`);
             }
             
-            // Add cache-busting for DailyNotes to ensure fresh version loads
+            // CRITICAL: For ProjectDetail, ensure React is available before loading
+            // ProjectDetail.jsx now waits for React internally, but this provides an extra safeguard
+            const ensureReactForProjectDetail = () => {
+                if (!src.includes('ProjectDetail')) {
+                    return Promise.resolve(); // Not ProjectDetail, proceed immediately
+                }
+                
+                if (window.React && window.React.useState && window.React.useEffect && window.React.useRef) {
+                    return Promise.resolve(); // React already available
+                }
+                
+                console.warn('⚠️ Lazy loader: React not available yet for ProjectDetail, waiting...');
+                let reactAttempts = 0;
+                const maxReactAttempts = 50; // 5 seconds max wait
+                
+                return new Promise((reactResolve) => {
+                    const checkReact = setInterval(() => {
+                        reactAttempts++;
+                        if (window.React && window.React.useState && window.React.useEffect && window.React.useRef) {
+                            console.log(`✅ Lazy loader: React available after ${reactAttempts * 100}ms, proceeding with ProjectDetail load`);
+                            clearInterval(checkReact);
+                            reactResolve();
+                        } else if (reactAttempts >= maxReactAttempts) {
+                            console.warn('⚠️ Lazy loader: React still not available after 5s, proceeding anyway (ProjectDetail will wait internally)');
+                            clearInterval(checkReact);
+                            reactResolve(); // Still proceed - ProjectDetail.jsx will wait internally
+                        }
+                    }, 100);
+                    
+                    // Also listen for React ready event
+                    const handleReactReady = () => {
+                        if (window.React && window.React.useState && window.React.useEffect && window.React.useRef) {
+                            clearInterval(checkReact);
+                            window.removeEventListener('babelready', handleReactReady);
+                            reactResolve();
+                        }
+                    };
+                    window.addEventListener('babelready', handleReactReady);
+                });
+            };
+            
+            // Add cache-busting for DailyNotes and Manufacturing to ensure fresh version loads
             // Use timestamp-based version for critical components that change frequently
-            if (scriptSrc.includes('DailyNotes') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
                 scriptSrc = scriptSrc + separator + 'v=' + Date.now();
             }
             
-            // First, fetch the file to validate it's JavaScript before loading as script
-            // This prevents HTML (404 pages) from being executed as JavaScript
-            // Use no-cache for DailyNotes to ensure fresh version, default for others
-            const cachePolicy = scriptSrc.includes('DailyNotes') ? 'no-cache' : 'default';
-            fetch(scriptSrc, { cache: cachePolicy })
+            // Wait for React if needed (for ProjectDetail), then proceed with loading
+            ensureReactForProjectDetail().then(() => {
+                // First, fetch the file to validate it's JavaScript before loading as script
+                // This prevents HTML (404 pages) from being executed as JavaScript
+                // Use no-cache for DailyNotes and Manufacturing to ensure fresh version, default for others
+                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') ? 'no-cache' : 'default';
+                return fetch(scriptSrc, { cache: cachePolicy })
                 .then(response => {
                     if (!response.ok) {
                         // File doesn't exist - skip silently
@@ -235,21 +285,64 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                         script.src = blobUrl;
                         
                         script.onload = () => {
-                            URL.revokeObjectURL(blobUrl); // Clean up blob URL
-                            loadedComponents++;
-                            // Check if ProjectDetail was just loaded
+                            // For ProjectDetail, wait for component to actually register
                             if (scriptSrc.includes('ProjectDetail')) {
-                                console.log('🔵 Lazy loader: ProjectDetail script.onload fired');
-                                setTimeout(() => {
-                                    if (window.ProjectDetail) {
-                                        console.log('✅ ProjectDetail loaded and registered via lazy loader');
-                                    } else {
-                                        console.warn('⚠️ ProjectDetail script loaded but component not registered after 100ms');
-                                        console.warn('⚠️ Checking if script executed - window keys:', Object.keys(window).filter(k => k.includes('Project')));
+                                console.log('🔵 Lazy loader: ProjectDetail script.onload fired, waiting for registration...');
+                                
+                                // Wait for component to actually register before resolving
+                                let resolved = false;
+                                const doResolve = () => {
+                                    if (resolved) return; // Prevent double resolution
+                                    resolved = true;
+                                    window.removeEventListener('componentLoaded', eventHandler);
+                                    clearTimeout(timeoutId);
+                                    URL.revokeObjectURL(blobUrl);
+                                    loadedComponents++;
+                                    resolve();
+                                };
+                                
+                                // First, try listening for the componentLoaded event
+                                const eventHandler = (event) => {
+                                    if (event.detail && event.detail.component === 'ProjectDetail' && window.ProjectDetail) {
+                                        console.log('✅ ProjectDetail registered via componentLoaded event');
+                                        doResolve();
                                     }
-                                }, 500); // Increased timeout to 500ms to catch delayed registration
+                                };
+                                window.addEventListener('componentLoaded', eventHandler);
+                                
+                                // Also poll as fallback (in case event doesn't fire or fires too early)
+                                let attempts = 0;
+                                const maxAttempts = 20; // 2 seconds total
+                                const checkRegistration = () => {
+                                    attempts++;
+                                    if (window.ProjectDetail) {
+                                        console.log('✅ ProjectDetail loaded and registered via lazy loader (after', attempts * 100, 'ms)');
+                                        doResolve();
+                                    } else if (attempts < maxAttempts) {
+                                        setTimeout(checkRegistration, 100);
+                                    } else {
+                                        console.warn('⚠️ ProjectDetail script loaded but component not registered after 2s');
+                                        console.warn('⚠️ Checking if script executed - window keys:', Object.keys(window).filter(k => k.includes('Project')));
+                                        // Still resolve to prevent blocking other components
+                                        doResolve();
+                                    }
+                                };
+                                
+                                // Set timeout to prevent infinite waiting
+                                const timeoutId = setTimeout(() => {
+                                    if (!resolved) {
+                                        console.warn('⚠️ ProjectDetail registration timeout after 2.5s');
+                                        doResolve();
+                                    }
+                                }, 2500);
+                                
+                                // Start polling immediately
+                                checkRegistration();
+                            } else {
+                                URL.revokeObjectURL(blobUrl); // Clean up blob URL
+                                loadedComponents++;
+                                resolve();
                             }
-                            resolve();
                         };
                         
                         script.onerror = (error) => {
@@ -340,6 +433,11 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                         document.body.appendChild(script);
                     });
                 });
+            }).catch(error => {
+                // If ensureReactForProjectDetail fails or fetch fails, resolve anyway to prevent blocking
+                console.warn(`⚠️ Failed to load component ${src}:`, error);
+                resolve();
+            });
         });
     }
     
@@ -374,25 +472,71 @@ console.log('🚀 lazy-load-components.js v1017-clients-blocked loaded');
                         const batch = componentFiles.slice(index, index + batchSize);
                         if (batch.length === 0) {
                             console.log(`✅ Lazy loading complete: ${loadedComponents} components loaded`);
-                            // Final check for ProjectDetail
+                            // Final check for ProjectDetail - try loading if dependencies are ready
                             if (!window.ProjectDetail) {
-                                console.warn('⚠️ Lazy loading complete but ProjectDetail not loaded!');
-                                console.warn('⚠️ Checking if ProjectDetail was in the list...');
-                                const projectDetailInList = componentFiles.find(f => f.includes('ProjectDetail'));
-                                console.warn('⚠️ ProjectDetail in componentFiles:', projectDetailInList || 'NOT FOUND');
+                                const projectDependenciesLoaded = 
+                                    window.CustomFieldModal && 
+                                    window.TaskDetailModal && 
+                                    window.ListModal && 
+                                    window.ProjectModal &&
+                                    window.KanbanView &&
+                                    window.CommentsPopup &&
+                                    window.DocumentCollectionModal;
+                                
+                                if (projectDependenciesLoaded && !window._projectDetailLoadAttempted) {
+                                    console.log('🔵 Lazy loader: Final attempt - loading ProjectDetail...');
+                                    window._projectDetailLoadAttempted = true;
+                                    loadComponent('./src/components/projects/ProjectDetail.jsx').then(() => {
+                                        setTimeout(() => {
+                                            if (window.ProjectDetail) {
+                                                console.log('✅ Lazy loader: ProjectDetail loaded on final attempt');
+                                            } else {
+                                                console.warn('⚠️ Lazy loader: ProjectDetail still not available after all attempts');
+                                            }
+                                        }, 1000);
+                                    });
+                                } else {
+                                    console.warn('⚠️ Lazy loading complete but ProjectDetail not loaded');
+                                    if (!projectDependenciesLoaded) {
+                                        console.warn('⚠️ ProjectDetail dependencies not all loaded yet');
+                                    }
+                                }
                             } else {
-                                console.log('✅ ProjectDetail successfully loaded via lazy loader');
+                                console.log('✅ ProjectDetail successfully loaded');
                             }
                             return;
                         }
                         
-                        // Log if ProjectDetail is in this batch
-                        const hasProjectDetail = batch.some(f => f.includes('ProjectDetail'));
-                        if (hasProjectDetail) {
-                            console.log(`🔵 Lazy loader: ProjectDetail is in batch ${Math.floor(index / batchSize) + 1}, loading now...`);
-                        }
-                        
                         Promise.all(batch.map(loadComponent)).then(() => {
+                            // Special handling: Load ProjectDetail AFTER its dependencies are loaded
+                            // Check if we've loaded ProjectDetail dependencies but ProjectDetail itself isn't loaded yet
+                            const projectDependenciesLoaded = 
+                                window.CustomFieldModal && 
+                                window.TaskDetailModal && 
+                                window.ListModal && 
+                                window.ProjectModal &&
+                                window.KanbanView &&
+                                window.CommentsPopup &&
+                                window.DocumentCollectionModal;
+                            
+                            if (projectDependenciesLoaded && !window.ProjectDetail && !window._projectDetailLoadAttempted) {
+                                console.log('🔵 Lazy loader: ProjectDetail dependencies loaded, loading ProjectDetail now...');
+                                window._projectDetailLoadAttempted = true;
+                                
+                                // Load ProjectDetail with its robust dependency checker
+                                loadComponent('./src/components/projects/ProjectDetail.jsx').then(() => {
+                                    setTimeout(() => {
+                                        if (window.ProjectDetail) {
+                                            console.log('✅ Lazy loader: ProjectDetail loaded and registered successfully');
+                                        } else {
+                                            console.warn('⚠️ Lazy loader: ProjectDetail script loaded but component not registered');
+                                        }
+                                    }, 500);
+                                }).catch(err => {
+                                    console.warn('⚠️ Lazy loader: Failed to load ProjectDetail:', err);
+                                });
+                            }
+                            
                             index += batchSize;
                             // Reduced delay between batches from 100ms to 50ms for faster loading
                             const nextBatchDelay = index < componentFiles.length ? 50 : 0;
