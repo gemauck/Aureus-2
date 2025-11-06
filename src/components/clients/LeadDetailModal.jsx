@@ -74,7 +74,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
-    const isHandlingSpacebarRef = useRef(false); // Track if we're currently handling spacebar to prevent React from resetting value
     
     // Track when user has started typing - once they start, NEVER update inputs from prop
     const userHasStartedTypingRef = useRef(false);
@@ -1887,7 +1886,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         <select 
                                             value={formData.stage}
                                             onChange={async (e) => {
-                                            const newStage = e.target.value;
+                                                const newStage = e.target.value;
                                             
                                             // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
                                             // This prevents LiveDataSync from overwriting during the delay
@@ -1895,48 +1894,48 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             if (onEditingChange) onEditingChange(false, true);
                                             
                                             console.log('🔒 Stage change: auto-save guards set immediately', newStage);
-                                            
-                                            // Update state and get the updated formData
-                                            setFormData(prev => {
-                                            const updated = {...prev, stage: newStage};
-                                            
-                                            // Auto-save immediately with the updated data
-                                            if (lead && onSave) {
-                                            // Use setTimeout to ensure state is updated
-                                            setTimeout(async () => {
-                                            try {
-                                            // Get the latest formData from ref (updated by useEffect)
-                                            const latest = {...formDataRef.current, stage: newStage};
-                                            
-                                            // Explicitly ensure stage is included
-                                            latest.stage = newStage;
-                                            
-                                            // Save this as the last saved state
-                                            lastSavedDataRef.current = latest;
-                                            
-                                            // Save to API - ensure it's awaited
-                                            await onSave(latest, true);
-                                            
-                                            console.log('✅ Stage saved successfully:', newStage);
-                                            
+                                                
+                                                // Update state and get the updated formData
+                                                setFormData(prev => {
+                                                    const updated = {...prev, stage: newStage};
+                                                    
+                                                    // Auto-save immediately with the updated data
+                                                    if (lead && onSave) {
+                                                        // Use setTimeout to ensure state is updated
+                                                        setTimeout(async () => {
+                                                            try {
+                                                                // Get the latest formData from ref (updated by useEffect)
+                                                        const latest = {...formDataRef.current, stage: newStage};
+                                                                
+                                                                // Explicitly ensure stage is included
+                                                                latest.stage = newStage;
+                                                        
+                                                        // Save this as the last saved state
+                                                        lastSavedDataRef.current = latest;
+                                                        
+                                                                // Save to API - ensure it's awaited
+                                                                await onSave(latest, true);
+                                                                
+                                                                console.log('✅ Stage saved successfully:', newStage);
+                                                        
                                             // Clear the flag and notify parent after save completes
-                                                setTimeout(() => {
-                                                isAutoSavingRef.current = false;
+                                                        setTimeout(() => {
+                                                            isAutoSavingRef.current = false;
                                                 if (onEditingChange) onEditingChange(false, false);
                                                 console.log('🔓 Stage change: auto-save guards released');
-                                            }, 3000);
-                                            } catch (error) {
-                                                    console.error('❌ Error saving stage:', error);
-                                                        isAutoSavingRef.current = false;
+                                                        }, 3000);
+                                                            } catch (error) {
+                                                                console.error('❌ Error saving stage:', error);
+                                                                isAutoSavingRef.current = false;
                                                         if (onEditingChange) onEditingChange(false, false);
-                                                        alert('Failed to save stage change. Please try again.');
-                                                        }
-                                                        }, 100); // Small delay to ensure state update is processed
+                                                                alert('Failed to save stage change. Please try again.');
                                                 }
-                                                
-                                                return updated;
-                                            });
-                                        }}
+                                                        }, 100); // Small delay to ensure state update is processed
+                                                    }
+                                                    
+                                                    return updated;
+                                                });
+                                            }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                                         >
                                             <option value="Awareness">Awareness - Lead knows about us</option>
@@ -1955,7 +1954,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Notes</label>
                                     <textarea 
                                         ref={notesTextareaRef}
-                                        value={isHandlingSpacebarRef.current ? (notesTextareaRef.current?.value || formData.notes) : formData.notes}
+                                        value={formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
@@ -1963,26 +1962,21 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
-                                            // Skip cursor position update if spacebar was just pressed (handled in onKeyDown)
-                                            const skipCursorUpdate = isSpacebarPressedRef.current;
-                                            if (skipCursorUpdate) {
+                                            // Skip if spacebar was just pressed (handled in onKeyDown)
+                                            if (isSpacebarPressedRef.current) {
                                                 isSpacebarPressedRef.current = false;
+                                                return; // Skip - onKeyDown already updated formData
                                             }
                                             
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
-                                            userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
+                                            userEditedFieldsRef.current.add('notes');
                                             if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
                                                 if (onEditingChange) onEditingChange(false);
-                                            }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                            
-                                            // Only update formData if spacebar wasn't pressed (onKeyDown already updated it)
-                                            if (skipCursorUpdate) {
-                                                return; // Skip - onKeyDown already updated formData
-                                            }
+                                            }, 5000);
                                             
                                             // Preserve cursor position
                                             const textarea = e.target;
@@ -1994,7 +1988,6 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             
                                             setFormData(prev => {
                                                 const updated = {...prev, notes: newValue};
-                                                // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
                                             });
@@ -2004,72 +1997,57 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             if (e.key === ' ' || e.keyCode === 32) {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                e.stopImmediatePropagation();
                                                 
                                                 const textarea = e.target;
                                                 const start = textarea.selectionStart;
                                                 const end = textarea.selectionEnd;
-                                                const currentValue = textarea.value || formData.notes || '';
+                                                const currentValue = formData.notes || '';
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
                                                 const newCursorPos = start + 1;
                                                 
-                                                // Mark that we're handling spacebar - prevent React from updating value prop
-                                                isHandlingSpacebarRef.current = true;
+                                                // Mark that spacebar was pressed
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
                                                 notesCursorPositionRef.current = newCursorPos;
                                                 
-                                                // Update React state
+                                                // Update React state - let React handle the value update normally
                                                 setFormData(prev => {
                                                     const updated = {...prev, notes: newValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                                 
-                                                // Use multiple strategies to ensure cursor is restored:
-                                                // 1. Immediate DOM update
-                                                textarea.value = newValue;
-                                                textarea.setSelectionRange(newCursorPos, newCursorPos);
-                                                
-                                                // 2. After React render (useLayoutEffect will also handle this)
-                                                // 3. Double RAF to catch any late renders, then clear handling flag
-                                                requestAnimationFrame(() => {
-                                                    requestAnimationFrame(() => {
-                                                        if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
-                                                            notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-                                                            notesTextareaRef.current.focus();
-                                                        }
-                                                        // Clear handling flag after React has finished rendering
-                                                        setTimeout(() => {
-                                                            isHandlingSpacebarRef.current = false;
-                                                        }, 0);
-                                                    });
-                                                });
-                                                
-                                                return false;
+                                                // Restore cursor position after React re-renders
+                                                // Use setTimeout to ensure it's after React's render cycle
+                                                setTimeout(() => {
+                                                    if (notesTextareaRef.current) {
+                                                        notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                        notesTextareaRef.current.focus();
+                                                    }
+                                                }, 0);
                                             }
                                         }}
                                         onBlur={(e) => {
                                         // Clear cursor position tracking when user leaves field
                                         notesCursorPositionRef.current = null;
                                         
-                                        isEditingRef.current = false; // Clear editing flag when user leaves field
-                                        // Auto-save notes when user leaves the field
-                                        // Use the current textarea value to ensure we have the latest data
-                                        if (lead) {
+                                            isEditingRef.current = false; // Clear editing flag when user leaves field
+                                            // Auto-save notes when user leaves the field
+                                            // Use the current textarea value to ensure we have the latest data
+                                            if (lead) {
                                         // Mark as auto-saving to prevent useEffect from resetting
                                         isAutoSavingRef.current = true;
                                         if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
                                         
-                                        // Get latest formData including the notes value from the textarea
+                                                // Get latest formData including the notes value from the textarea
                                         const latestNotes = e.target.value;
-                                        setFormData(prev => {
+                                                setFormData(prev => {
                                         const latest = {...prev, notes: latestNotes};
-                                        // Update ref immediately
-                                        formDataRef.current = latest;
-                                            return latest;
-                                        });
+                                                    // Update ref immediately
+                                                    formDataRef.current = latest;
+                                                    return latest;
+                                                });
                                         
                                         // Update ref immediately with notes
                                         const currentFormData = formDataRef.current || {};
@@ -4283,10 +4261,10 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 
                                                                 // Clear the flag after a longer delay to allow API response to propagate
                                                                 setTimeout(() => {
-                                                                isAutoSavingRef.current = false;
+                                                                    isAutoSavingRef.current = false;
                                                                     if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
                                                                     console.log('🔓 Stage change: auto-save guards released');
-                                                        }, 3000);
+                                                                }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
                                                                 isAutoSavingRef.current = false;

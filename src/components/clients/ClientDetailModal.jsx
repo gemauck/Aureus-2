@@ -103,7 +103,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const notesTextareaRef = useRef(null);
     const notesCursorPositionRef = useRef(null); // Track cursor position to restore after renders
     const isSpacebarPressedRef = useRef(false); // Track if spacebar was just pressed
-    const isHandlingSpacebarRef = useRef(false); // Track if we're currently handling spacebar to prevent React from resetting value
     
     // Restore cursor position after formData.notes changes - use useLayoutEffect for synchronous restoration
     React.useLayoutEffect(() => {
@@ -2083,30 +2082,25 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <label className="block text-sm font-medium text-gray-700 mb-1.5">General Notes</label>
                                     <textarea 
                                         ref={notesTextareaRef}
-                                        value={isHandlingSpacebarRef.current ? (notesTextareaRef.current?.value || formData.notes) : formData.notes}
+                                        value={formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
-                                            // Skip cursor position update if spacebar was just pressed (handled in onKeyDown)
-                                            const skipCursorUpdate = isSpacebarPressedRef.current;
-                                            if (skipCursorUpdate) {
+                                            // Skip if spacebar was just pressed (handled in onKeyDown)
+                                            if (isSpacebarPressedRef.current) {
                                                 isSpacebarPressedRef.current = false;
+                                                return; // Skip - onKeyDown already updated formData
                                             }
                                             
                                             isEditingRef.current = true;
-                                            hasUserEditedForm.current = true; // Mark that user has edited
-                                            userEditedFieldsRef.current.add('notes'); // Track that user has edited this field
+                                            hasUserEditedForm.current = true;
+                                            userEditedFieldsRef.current.add('notes');
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
-                                            }, 5000); // Clear editing flag 5 seconds after user stops typing
-                                            
-                                            // Only update formData if spacebar wasn't pressed (onKeyDown already updated it)
-                                            if (skipCursorUpdate) {
-                                                return; // Skip - onKeyDown already updated formData
-                                            }
+                                            }, 5000);
                                             
                                             // Preserve cursor position
                                             const textarea = e.target;
@@ -2118,7 +2112,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             
                                             setFormData(prev => {
                                                 const updated = {...prev, notes: newValue};
-                                                // Update ref immediately with latest value
                                                 formDataRef.current = updated;
                                                 return updated;
                                             });
@@ -2128,50 +2121,35 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             if (e.key === ' ' || e.keyCode === 32) {
                                                 e.preventDefault();
                                                 e.stopPropagation();
-                                                e.stopImmediatePropagation();
                                                 
                                                 const textarea = e.target;
                                                 const start = textarea.selectionStart;
                                                 const end = textarea.selectionEnd;
-                                                const currentValue = textarea.value || formData.notes || '';
+                                                const currentValue = formData.notes || '';
                                                 const newValue = currentValue.substring(0, start) + ' ' + currentValue.substring(end);
                                                 const newCursorPos = start + 1;
                                                 
-                                                // Mark that we're handling spacebar - prevent React from updating value prop
-                                                isHandlingSpacebarRef.current = true;
+                                                // Mark that spacebar was pressed
                                                 isSpacebarPressedRef.current = true;
                                                 
                                                 // Store cursor position for restoration
                                                 notesCursorPositionRef.current = newCursorPos;
                                                 
-                                                // Update React state
+                                                // Update React state - let React handle the value update normally
                                                 setFormData(prev => {
                                                     const updated = {...prev, notes: newValue};
                                                     formDataRef.current = updated;
                                                     return updated;
                                                 });
                                                 
-                                                // Use multiple strategies to ensure cursor is restored:
-                                                // 1. Immediate DOM update
-                                                textarea.value = newValue;
-                                                textarea.setSelectionRange(newCursorPos, newCursorPos);
-                                                
-                                                // 2. After React render (useLayoutEffect will also handle this)
-                                                // 3. Double RAF to catch any late renders, then clear handling flag
-                                                requestAnimationFrame(() => {
-                                                    requestAnimationFrame(() => {
-                                                        if (notesTextareaRef.current && notesTextareaRef.current === textarea) {
-                                                            notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-                                                            notesTextareaRef.current.focus();
-                                                        }
-                                                        // Clear handling flag after React has finished rendering
-                                                        setTimeout(() => {
-                                                            isHandlingSpacebarRef.current = false;
-                                                        }, 0);
-                                                    });
-                                                });
-                                                
-                                                return false;
+                                                // Restore cursor position after React re-renders
+                                                // Use setTimeout to ensure it's after React's render cycle
+                                                setTimeout(() => {
+                                                    if (notesTextareaRef.current) {
+                                                        notesTextareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+                                                        notesTextareaRef.current.focus();
+                                                    }
+                                                }, 0);
                                             }
                                         }}
                                         onBlur={(e) => {
