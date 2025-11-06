@@ -53,6 +53,9 @@ const Manufacturing = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [clients, setClients] = useState([]);
   const [users, setUsers] = useState([]);
+  const [duplicateWarnings, setDuplicateWarnings] = useState([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [pendingCreateData, setPendingCreateData] = useState(null);
 
 
   // Load data from API - OPTIMIZED: Parallel loading + localStorage cache
@@ -2095,6 +2098,134 @@ const Manufacturing = () => {
     setShowModal(true);
   };
 
+  // Fuzzy matching utility functions
+  const levenshteinDistance = (str1, str2) => {
+    const s1 = (str1 || '').toLowerCase().trim();
+    const s2 = (str2 || '').toLowerCase().trim();
+    
+    if (s1 === s2) return 0;
+    if (s1.length === 0) return s2.length;
+    if (s2.length === 0) return s1.length;
+
+    const matrix = [];
+    for (let i = 0; i <= s2.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= s1.length; j++) {
+      matrix[0][j] = j;
+    }
+
+    for (let i = 1; i <= s2.length; i++) {
+      for (let j = 1; j <= s1.length; j++) {
+        if (s2.charAt(i - 1) === s1.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[s2.length][s1.length];
+  };
+
+  const calculateSimilarity = (str1, str2) => {
+    if (!str1 || !str2) return 0;
+    const maxLength = Math.max(str1.length, str2.length);
+    if (maxLength === 0) return 100;
+    const distance = levenshteinDistance(str1, str2);
+    return ((maxLength - distance) / maxLength) * 100;
+  };
+
+  const checkForDuplicateParts = (newItemData, existingInventory) => {
+    const warnings = [];
+    const newName = (newItemData.name || '').trim();
+    const newManufacturingPart = (newItemData.manufacturingPartNumber || '').trim();
+    const newLegacyPart = (newItemData.legacyPartNumber || '').trim();
+    const newSKU = (newItemData.sku || '').trim();
+
+    // Thresholds for similarity (percentage)
+    const nameThreshold = 85; // 85% similarity for names
+    const partNumberThreshold = 90; // 90% similarity for part numbers
+    const skuThreshold = 95; // 95% similarity for SKUs
+
+    existingInventory.forEach(item => {
+      const existingName = (item.name || '').trim();
+      const existingManufacturingPart = (item.manufacturingPartNumber || '').trim();
+      const existingLegacyPart = (item.legacyPartNumber || '').trim();
+      const existingSKU = (item.sku || '').trim();
+
+      let matchScore = 0;
+      let matchReasons = [];
+
+      // Check name similarity
+      if (newName && existingName) {
+        const nameSimilarity = calculateSimilarity(newName, existingName);
+        if (nameSimilarity >= nameThreshold) {
+          matchScore = Math.max(matchScore, nameSimilarity);
+          matchReasons.push(`Name: ${nameSimilarity.toFixed(1)}% similar`);
+        }
+      }
+
+      // Check manufacturing part number (exact match or high similarity)
+      if (newManufacturingPart && existingManufacturingPart) {
+        if (newManufacturingPart.toLowerCase() === existingManufacturingPart.toLowerCase()) {
+          matchScore = 100;
+          matchReasons.push('Manufacturing Part Number: Exact match');
+        } else {
+          const partSimilarity = calculateSimilarity(newManufacturingPart, existingManufacturingPart);
+          if (partSimilarity >= partNumberThreshold) {
+            matchScore = Math.max(matchScore, partSimilarity);
+            matchReasons.push(`Manufacturing Part: ${partSimilarity.toFixed(1)}% similar`);
+          }
+        }
+      }
+
+      // Check legacy part number (exact match or high similarity)
+      if (newLegacyPart && existingLegacyPart) {
+        if (newLegacyPart.toLowerCase() === existingLegacyPart.toLowerCase()) {
+          matchScore = 100;
+          matchReasons.push('Legacy Part Number: Exact match');
+        } else {
+          const partSimilarity = calculateSimilarity(newLegacyPart, existingLegacyPart);
+          if (partSimilarity >= partNumberThreshold) {
+            matchScore = Math.max(matchScore, partSimilarity);
+            matchReasons.push(`Legacy Part: ${partSimilarity.toFixed(1)}% similar`);
+          }
+        }
+      }
+
+      // Check SKU similarity (only if both exist)
+      if (newSKU && existingSKU) {
+        if (newSKU.toLowerCase() === existingSKU.toLowerCase()) {
+          matchScore = 100;
+          matchReasons.push('SKU: Exact match');
+        } else {
+          const skuSimilarity = calculateSimilarity(newSKU, existingSKU);
+          if (skuSimilarity >= skuThreshold) {
+            matchScore = Math.max(matchScore, skuSimilarity);
+            matchReasons.push(`SKU: ${skuSimilarity.toFixed(1)}% similar`);
+          }
+        }
+      }
+
+      // If we found a match, add to warnings
+      if (matchScore >= nameThreshold) {
+        warnings.push({
+          existingItem: item,
+          matchScore: matchScore,
+          reasons: matchReasons,
+          severity: matchScore >= 95 ? 'high' : matchScore >= 85 ? 'medium' : 'low'
+        });
+      }
+    });
+
+    // Sort by match score (highest first)
+    return warnings.sort((a, b) => b.matchScore - a.matchScore).slice(0, 5); // Return top 5 matches
+  };
+
   const handleSaveItem = async () => {
     try {
       // Don't include quantity in update (it's read-only)
@@ -2154,6 +2285,18 @@ const Manufacturing = () => {
           lastRestocked: new Date().toISOString().split('T')[0],
           locationId: locationId // Include locationId
         };
+
+        // Check for duplicate parts using fuzzy matching
+        const duplicateWarningsFound = checkForDuplicateParts(createData, inventory);
+        if (duplicateWarningsFound.length > 0) {
+          // Store the create data and show warning modal
+          setPendingCreateData(createData);
+          setDuplicateWarnings(duplicateWarningsFound);
+          setShowDuplicateWarning(true);
+          return; // Don't create yet, wait for user confirmation
+        }
+
+        // No duplicates found, proceed with creation
         const response = await safeCallAPI('createInventoryItem', createData);
         if (response?.data?.item) {
           console.log('✅ Created inventory item (debug):', {
@@ -2175,6 +2318,45 @@ const Manufacturing = () => {
       console.error('Error saving inventory item:', error);
       alert('Failed to save inventory item. Please try again.');
     }
+  };
+
+  // Handle duplicate warning - proceed with creation anyway
+  const handleProceedWithDuplicate = async () => {
+    if (!pendingCreateData) return;
+    
+    try {
+      const response = await safeCallAPI('createInventoryItem', pendingCreateData);
+      if (response?.data?.item) {
+        console.log('✅ Created inventory item (debug):', {
+          id: response.data.item.id,
+          sku: response.data.item.sku,
+          hasThumbnail: !!response.data.item.thumbnail,
+          thumbnailPreview: (response.data.item.thumbnail || '').slice(0, 64)
+        });
+        const updatedInventory = [...inventory, { ...response.data.item, id: response.data.item.id }];
+        setInventory(updatedInventory);
+        localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+      }
+      
+      // Close both modals
+      setShowDuplicateWarning(false);
+      setShowModal(false);
+      setSelectedItem(null);
+      setFormData({});
+      setPendingCreateData(null);
+      setDuplicateWarnings([]);
+    } catch (error) {
+      console.error('Error saving inventory item:', error);
+      alert('Failed to save inventory item. Please try again.');
+    }
+  };
+
+  // Handle duplicate warning - cancel creation
+  const handleCancelDuplicate = () => {
+    setShowDuplicateWarning(false);
+    setPendingCreateData(null);
+    setDuplicateWarnings([]);
+    // Keep the add item modal open so user can edit
   };
 
   const handleAddCategory = () => {
@@ -6943,6 +7125,140 @@ const Manufacturing = () => {
 
       {/* Modals */}
       {showModal && renderModal()}
+      
+      {/* Duplicate Warning Modal */}
+      {showDuplicateWarning && duplicateWarnings.length > 0 && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white">
+              <div className="flex items-center gap-3">
+                <i className="fas fa-exclamation-triangle text-yellow-600 text-xl"></i>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Potential Duplicate Parts Detected
+                </h2>
+              </div>
+              <button
+                onClick={handleCancelDuplicate}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <i className="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <div className="p-4 space-y-4">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm text-yellow-900 mb-2">
+                  <i className="fas fa-info-circle mr-2"></i>
+                  <strong>Warning:</strong> The following existing parts may be similar to the part you're trying to create.
+                  Please review them carefully before proceeding.
+                </p>
+                <p className="text-xs text-yellow-700">
+                  You can still create the part if you're sure it's different, or cancel to edit your entry.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {duplicateWarnings.map((warning, index) => (
+                  <div
+                    key={index}
+                    className={`border rounded-lg p-4 ${
+                      warning.severity === 'high'
+                        ? 'border-red-300 bg-red-50'
+                        : warning.severity === 'medium'
+                        ? 'border-orange-300 bg-orange-50'
+                        : 'border-yellow-300 bg-yellow-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900 mb-1">
+                          {warning.existingItem.name || 'Unnamed Item'}
+                        </h3>
+                        <div className="text-xs text-gray-600 space-y-1">
+                          {warning.existingItem.sku && (
+                            <div><strong>SKU:</strong> {warning.existingItem.sku}</div>
+                          )}
+                          {warning.existingItem.manufacturingPartNumber && (
+                            <div><strong>Manufacturing Part:</strong> {warning.existingItem.manufacturingPartNumber}</div>
+                          )}
+                          {warning.existingItem.legacyPartNumber && (
+                            <div><strong>Legacy Part:</strong> {warning.existingItem.legacyPartNumber}</div>
+                          )}
+                          {warning.existingItem.category && (
+                            <div><strong>Category:</strong> {warning.existingItem.category.replace('_', ' ')}</div>
+                          )}
+                          {warning.existingItem.type && (
+                            <div><strong>Type:</strong> {warning.existingItem.type}</div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-4 text-right">
+                        <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold ${
+                          warning.severity === 'high'
+                            ? 'bg-red-200 text-red-800'
+                            : warning.severity === 'medium'
+                            ? 'bg-orange-200 text-orange-800'
+                            : 'bg-yellow-200 text-yellow-800'
+                        }`}>
+                          {warning.matchScore.toFixed(1)}% Match
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-gray-300">
+                      <div className="text-xs text-gray-700">
+                        <strong>Match Reasons:</strong>
+                        <ul className="list-disc list-inside mt-1 space-y-0.5">
+                          {warning.reasons.map((reason, reasonIndex) => (
+                            <li key={reasonIndex}>{reason}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-900">
+                  <strong>New Part Details:</strong>
+                </p>
+                <div className="text-xs text-blue-700 mt-1 space-y-1">
+                  <div><strong>Name:</strong> {pendingCreateData?.name || 'N/A'}</div>
+                  {pendingCreateData?.manufacturingPartNumber && (
+                    <div><strong>Manufacturing Part:</strong> {pendingCreateData.manufacturingPartNumber}</div>
+                  )}
+                  {pendingCreateData?.legacyPartNumber && (
+                    <div><strong>Legacy Part:</strong> {pendingCreateData.legacyPartNumber}</div>
+                  )}
+                  {pendingCreateData?.category && (
+                    <div><strong>Category:</strong> {pendingCreateData.category.replace('_', ' ')}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2 bg-gray-50">
+              <button
+                onClick={handleCancelDuplicate}
+                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel & Edit
+              </button>
+              <button
+                onClick={handleProceedWithDuplicate}
+                className={`px-4 py-2 text-sm rounded-lg text-white ${
+                  duplicateWarnings.some(w => w.severity === 'high')
+                    ? 'bg-red-600 hover:bg-red-700'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
+              >
+                <i className="fas fa-exclamation-triangle mr-2"></i>
+                Create Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
