@@ -27,6 +27,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const isUserTypingRef = useRef(false); // Track if user is actively typing to prevent sync interference
     const lastUserInputTimeRef = useRef(0); // Track when user last typed to prevent sync
     const isUpdatingFromUserInputRef = useRef(false); // Track if currentNoteHtml update is from user input
+    const justPressedEnterRef = useRef(false); // Track if Enter was just pressed to prevent cursor restoration
     
     // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
@@ -1692,19 +1693,27 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const setEditorContentSafely = (html) => {
         if (!editorRef.current) return;
         
-        // Always save cursor position before any innerHTML update
-        saveCursorPosition();
+        // Skip cursor save/restore if Enter was just pressed (cursor is already in correct position)
+        const skipCursorRestore = justPressedEnterRef.current;
+        
+        if (!skipCursorRestore) {
+            // Always save cursor position before any innerHTML update
+            saveCursorPosition();
+        }
         
         // Set the content
         editorRef.current.innerHTML = html;
         
-        // Always restore cursor position after innerHTML update
-        // Use double RAF to ensure DOM is fully updated
-        requestAnimationFrame(() => {
+        // Only restore cursor if Enter was NOT just pressed
+        if (!skipCursorRestore) {
+            // Always restore cursor position after innerHTML update
+            // Use double RAF to ensure DOM is fully updated
             requestAnimationFrame(() => {
-                restoreCursorPosition();
+                requestAnimationFrame(() => {
+                    restoreCursorPosition();
+                });
             });
-        });
+        }
     };
     
     // Handle editor input - always update content and trigger auto-save immediately
@@ -1722,8 +1731,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Force update immediately - user typing should always work
         if (editorRef.current) {
-            // Save cursor position BEFORE reading innerHTML (which might trigger re-render)
-            saveCursorPosition();
+            // Skip cursor save/restore if Enter was just pressed (cursor is already in correct position)
+            const skipCursorRestore = justPressedEnterRef.current;
+            if (skipCursorRestore) {
+                // Clear the flag after a short delay
+                setTimeout(() => {
+                    justPressedEnterRef.current = false;
+                }, 100);
+            } else {
+                // Save cursor position BEFORE reading innerHTML (which might trigger re-render)
+                saveCursorPosition();
+            }
             
             let html = editorRef.current.innerHTML;
             // Clean &nbsp; entities from editor content
@@ -1735,16 +1753,19 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             
-            // Restore cursor position after state update - use multiple attempts
-            requestAnimationFrame(() => {
+            // Only restore cursor if Enter was NOT just pressed
+            if (!skipCursorRestore) {
+                // Restore cursor position after state update - use multiple attempts
                 requestAnimationFrame(() => {
-                    restoreCursorPosition();
-                    // Try again after a short delay to ensure it sticks
-                    setTimeout(() => {
+                    requestAnimationFrame(() => {
                         restoreCursorPosition();
-                    }, 10);
+                        // Try again after a short delay to ensure it sticks
+                        setTimeout(() => {
+                            restoreCursorPosition();
+                        }, 10);
+                    });
                 });
-            });
+            }
             
             // Trigger auto-save ultra instantly (100ms debounce for nearly real-time saves)
             if (saveTimeoutRef.current) {
@@ -2127,6 +2148,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 lastUserInputTimeRef.current = Date.now();
                                 isUpdatingFromUserInputRef.current = true;
                                 
+                                // CRITICAL: Set flag to prevent cursor restoration in input handler
+                                justPressedEnterRef.current = true;
+                                
                                 // Save cursor position before Enter key
                                 saveCursorPosition();
                                 
@@ -2178,6 +2202,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                         // Also update notes state immediately
                                         const dateString = formatDateString(currentDate);
                                         setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                        
+                                        // CRITICAL: Clear saved cursor position so restoreCursorPosition doesn't interfere
+                                        // The cursor is already in the correct position after inserting the line break
+                                        editorCursorPositionRef.current = null;
                                     }
                                     
                                     // Trigger input event for auto-save (this will also call updateNoteContent)
