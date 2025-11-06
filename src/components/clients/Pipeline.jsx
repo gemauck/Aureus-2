@@ -39,6 +39,7 @@ const Pipeline = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
     const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
+    const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -78,35 +79,28 @@ const Pipeline = () => {
 
     // Load data from API and localStorage
     useEffect(() => {
+        setDataLoaded(false); // Reset data loaded flag when refreshing
         loadData();
     }, [refreshKey]);
 
-    // Preload cached data immediately on mount - CRITICAL for instant display
+    // Preload cached data immediately on mount - but DON'T show cached opportunities (they may have stale stages)
     useEffect(() => {
-        // Show cached data immediately while API loads (same as leads do)
+        // Show cached clients and leads immediately while API loads
+        // BUT: Don't show cached opportunities - they may have stale stage data
+        // We'll wait for API to load opportunities with correct stages
         const savedClients = storage.getClients() || [];
         const savedLeads = storage.getLeads() || [];
         
         if (savedClients.length > 0) {
-            // Extract and preserve ALL opportunities from cached clients
-            const clientsWithOpportunities = savedClients.map(client => ({
+            // Load clients but WITHOUT opportunities - opportunities will come from API with correct stages
+            const clientsWithoutOpportunities = savedClients.map(client => ({
                 ...client,
-                // Ensure opportunities array exists and is properly formatted
-                opportunities: Array.isArray(client.opportunities) ? client.opportunities : []
+                // Clear opportunities - they'll be loaded from API with correct stages
+                opportunities: []
             }));
             
-            const totalCachedOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-            setClients(clientsWithOpportunities);
-            console.log(`⚡ Pipeline: Loaded cached data IMMEDIATELY: ${clientsWithOpportunities.length} clients, ${totalCachedOpps} opportunities`);
-            
-            // Log opportunity details for debugging
-            if (totalCachedOpps > 0) {
-                clientsWithOpportunities.forEach(client => {
-                    if (client.opportunities?.length > 0) {
-                        console.log(`   ⚡ ${client.name}: ${client.opportunities.length} opportunities visible immediately`);
-                    }
-                });
-            }
+            setClients(clientsWithoutOpportunities);
+            console.log(`⚡ Pipeline: Loaded cached clients IMMEDIATELY: ${clientsWithoutOpportunities.length} clients (opportunities will load from API with correct stages)`);
         }
         
         if (savedLeads.length > 0) {
@@ -119,43 +113,76 @@ const Pipeline = () => {
     useEffect(() => {
         // Wait for DOM to be fully ready and styles applied
         // This ensures tiles are positioned correctly on first load
-        if (viewMode === 'kanban' && (clients.length > 0 || leads.length > 0) && !isLoading) {
-            // Use a combination of requestAnimationFrame and a small delay to ensure:
-            // 1. Stylesheets are loaded
-            // 2. DOM is fully rendered
-            // 3. Layout calculations are complete
+        // Only run when data is loaded and we're in kanban view
+        if (viewMode === 'kanban' && (clients.length > 0 || leads.length > 0) && !isLoading && dataLoaded) {
+            let retryCount = 0;
+            const maxRetries = 5;
+            
             const fixLayout = () => {
                 const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
-                if (stageColumns.length > 0) {
+                const cards = document.querySelectorAll('[draggable="true"]');
+                
+                // Check if we have both columns and cards rendered
+                if (stageColumns.length > 0 && cards.length > 0) {
                     // Force browser to recalculate layout by accessing layout properties
                     // This triggers a reflow without causing visual flicker
                     stageColumns.forEach(column => {
                         void column.offsetHeight;
+                        void column.offsetWidth;
                     });
                     
                     // Also trigger layout on the kanban container
                     const kanbanContainer = stageColumns[0]?.closest('.flex.gap-3');
                     if (kanbanContainer) {
                         void kanbanContainer.offsetHeight;
+                        void kanbanContainer.offsetWidth;
                     }
                     
-                    console.log('✅ Pipeline: Layout recalculation triggered for tile positioning');
+                    // Force layout recalculation on cards themselves
+                    cards.forEach(card => {
+                        void card.offsetHeight;
+                    });
+                    
+                    console.log('✅ Pipeline: Layout recalculation triggered for tile positioning', {
+                        columns: stageColumns.length,
+                        cards: cards.length,
+                        retry: retryCount
+                    });
+                    return true; // Success
+                } else {
+                    console.log('⚠️ Pipeline: Layout fix waiting for DOM elements', {
+                        columns: stageColumns.length,
+                        cards: cards.length,
+                        retry: retryCount
+                    });
+                    return false; // Not ready yet
                 }
             };
 
-            // Double requestAnimationFrame ensures we're after the browser's layout pass
-            requestAnimationFrame(() => {
+            const attemptFix = () => {
+                // Double requestAnimationFrame ensures we're after the browser's layout pass
                 requestAnimationFrame(() => {
-                    // Add a small delay to ensure stylesheets are fully loaded
-                    setTimeout(() => {
-                        fixLayout();
-                    }, 50);
+                    requestAnimationFrame(() => {
+                        // Add a delay to ensure stylesheets are fully loaded and DOM is updated
+                        setTimeout(() => {
+                            const success = fixLayout();
+                            
+                            // If not successful and we haven't exceeded retries, try again
+                            if (!success && retryCount < maxRetries) {
+                                retryCount++;
+                                setTimeout(attemptFix, 100 * retryCount); // Exponential backoff
+                            }
+                        }, 100);
+                    });
                 });
-            });
-        }
-    }, [clients, leads, isLoading, viewMode]);
+            };
 
-    // Add resize observer to fix layout when viewport changes or component becomes visible
+            // Start the fix attempt
+            attemptFix();
+        }
+    }, [clients, leads, isLoading, viewMode, dataLoaded]);
+
+    // Add resize observer and mutation observer to fix layout when viewport changes or cards are added
     useEffect(() => {
         if (viewMode === 'kanban') {
             const kanbanContainer = document.querySelector('[data-pipeline-stage]')?.closest('.flex.gap-3');
@@ -173,11 +200,57 @@ const Pipeline = () => {
 
             resizeObserver.observe(kanbanContainer);
 
+            // MutationObserver to detect when cards are added to the DOM
+            const mutationObserver = new MutationObserver((mutations) => {
+                let shouldFixLayout = false;
+                
+                mutations.forEach((mutation) => {
+                    // Check if cards were added
+                    if (mutation.addedNodes.length > 0) {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.nodeType === 1 && (node.hasAttribute('draggable') || node.querySelector('[draggable="true"]'))) {
+                                shouldFixLayout = true;
+                            }
+                        });
+                    }
+                });
+                
+                if (shouldFixLayout && dataLoaded) {
+                    // Wait a bit for the browser to finish rendering
+                    setTimeout(() => {
+                        requestAnimationFrame(() => {
+                            const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
+                            const cards = document.querySelectorAll('[draggable="true"]');
+                            
+                            if (stageColumns.length > 0 && cards.length > 0) {
+                                stageColumns.forEach(column => {
+                                    void column.offsetHeight;
+                                    void column.offsetWidth;
+                                });
+                                
+                                cards.forEach(card => {
+                                    void card.offsetHeight;
+                                });
+                                
+                                console.log('✅ Pipeline: Layout fixed after cards added to DOM');
+                            }
+                        });
+                    }, 50);
+                }
+            });
+
+            // Observe the kanban container for changes
+            mutationObserver.observe(kanbanContainer, {
+                childList: true,
+                subtree: true
+            });
+
             return () => {
                 resizeObserver.disconnect();
+                mutationObserver.disconnect();
             };
         }
-    }, [viewMode, clients, leads]);
+    }, [viewMode, clients, leads, dataLoaded]);
 
     const loadData = async () => {
         // Don't set loading state immediately - show cached data first
@@ -187,17 +260,15 @@ const Pipeline = () => {
             .flatMap(c => (c.opportunities || []).map(opp => ({ ...opp, clientId: c.id })))
             .filter(opp => opp.clientId); // Only keep opportunities with valid clientId
         
-        // Show cached data immediately if available (instant display like leads)
+        // Show cached clients immediately (but without opportunities - they may have stale stages)
+        // Opportunities will be loaded from API with correct stages
         if (cachedClients.length > 0) {
-            const clientsWithCachedOpps = cachedClients.map(client => ({
+            const clientsWithoutOpps = cachedClients.map(client => ({
                 ...client,
-                opportunities: Array.isArray(client.opportunities) ? client.opportunities : []
+                opportunities: [] // Don't show cached opportunities - wait for API with correct stages
             }));
-            setClients(clientsWithCachedOpps);
-            const totalCachedOpps = clientsWithCachedOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-            if (totalCachedOpps > 0) {
-                console.log(`⚡ Pipeline: Showing ${totalCachedOpps} cached opportunities immediately`);
-            }
+            setClients(clientsWithoutOpps);
+            console.log(`⚡ Pipeline: Showing ${clientsWithoutOpps.length} cached clients (opportunities loading from API with correct stages)`);
         }
         
         try {
@@ -259,23 +330,29 @@ const Pipeline = () => {
                 }
                 
                 // Attach opportunities to their respective clients
-                // PRESERVE cached opportunities for clients - only replace when API has newer data
+                // ALWAYS prioritize API opportunities - they have the latest stage data
                 const clientsWithOpportunities = apiClients.map(client => {
-                    // First, get API opportunities for this client
+                    // Get API opportunities for this client (these have the correct, up-to-date stages)
                     let clientOpportunities = allOpportunities.filter(opp => opp.clientId === client.id);
                     
-                    // If API has opportunities, use them (they're fresh)
                     if (clientOpportunities.length > 0) {
-                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities from API`);
+                        console.log(`   📊 ${client.name}: ${clientOpportunities.length} opportunities from API (using API stages)`);
                     } else {
-                        // If no API opportunities, preserve cached ones (keep them visible immediately)
-                        const cachedClient = cachedClients.find(c => c.id === client.id);
-                        if (cachedClient?.opportunities?.length > 0) {
-                            clientOpportunities = cachedClient.opportunities.map(opp => ({
-                                ...opp,
-                                clientId: client.id
-                            }));
-                            console.log(`   💾 ${client.name}: Preserving ${clientOpportunities.length} cached opportunities (API had none)`);
+                        // Only use cached opportunities if API explicitly returned empty (not if API call failed)
+                        // This ensures we don't show stale stage data
+                        if (opportunitiesResponse.status === 'fulfilled') {
+                            // API succeeded but returned no opportunities for this client - that's correct
+                            console.log(`   ✅ ${client.name}: No opportunities from API (client has none)`);
+                        } else {
+                            // API call failed - fallback to cached (but log warning)
+                            const cachedClient = cachedClients.find(c => c.id === client.id);
+                            if (cachedClient?.opportunities?.length > 0) {
+                                clientOpportunities = cachedClient.opportunities.map(opp => ({
+                                    ...opp,
+                                    clientId: client.id
+                                }));
+                                console.log(`   ⚠️ ${client.name}: Using ${clientOpportunities.length} cached opportunities (API failed - stages may be stale)`);
+                            }
                         }
                     }
                     
@@ -285,9 +362,10 @@ const Pipeline = () => {
                     };
                 });
                 
-                // If API opportunities call failed completely, ensure all cached opportunities are preserved
+                // Only preserve cached opportunities if API call completely failed
+                // This prevents stale stage data from being shown
                 if (opportunitiesResponse.status !== 'fulfilled' && cachedOpportunities.length > 0) {
-                    console.log(`💾 Pipeline: API opportunities failed, preserving all ${cachedOpportunities.length} cached opportunities`);
+                    console.log(`⚠️ Pipeline: API opportunities failed, using cached data (stages may be stale)`);
                     cachedOpportunities.forEach(cachedOpp => {
                         const client = clientsWithOpportunities.find(c => c.id === cachedOpp.clientId);
                         if (client) {
@@ -298,6 +376,9 @@ const Pipeline = () => {
                             }
                         }
                     });
+                } else if (opportunitiesResponse.status === 'fulfilled') {
+                    // API succeeded - clear any stale cached opportunities that aren't in API response
+                    console.log(`✅ Pipeline: API opportunities loaded successfully - using API stages only`);
                 }
                 
                 const totalOpportunities = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
@@ -316,6 +397,7 @@ const Pipeline = () => {
                 
                 console.log('✅ Pipeline: API data refreshed and cached with opportunities');
                 setIsLoading(false);
+                setDataLoaded(true); // Mark data as fully loaded
                 return;
             }
         } catch (error) {
@@ -344,6 +426,7 @@ const Pipeline = () => {
         }
         
         setIsLoading(false);
+        setDataLoaded(true); // Mark data as loaded even if from cache
     };
 
     // Get all pipeline items (leads + client opportunities)
