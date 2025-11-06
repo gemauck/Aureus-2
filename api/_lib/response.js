@@ -75,6 +75,21 @@ export function serverError(res, message = 'Server error', details) {
     errorDetails = 'The database server is unreachable. Please check your network connection and ensure the database server is running.'
   }
   
-  res.end(JSON.stringify({ error: { code: errorCode, message: errorMessage, details: errorDetails } }))
+  // In development, include more details
+  const isDevelopment = process.env.NODE_ENV === 'development'
+  const response = {
+    error: {
+      code: errorCode,
+      message: errorMessage,
+      details: errorDetails
+    }
+  }
+  
+  // Include full error details in development
+  if (isDevelopment && details) {
+    response.error.fullDetails = details
+  }
+  
+  res.end(JSON.stringify(response))
 }
 

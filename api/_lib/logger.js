@@ -9,10 +9,26 @@ export function withLogging(handler) {
     req.id = id
     res.setHeader('X-Request-Id', id)
     try {
-      await handler(req, res)
+      const result = handler(req, res)
+      // Await if it's a promise
+      if (result && typeof result.then === 'function') {
+        await result
+      }
       logger.info({ id, method: req.method, url: req.url, ms: Date.now() - start }, 'ok')
     } catch (e) {
-      logger.error({ id, method: req.method, url: req.url, ms: Date.now() - start, err: e }, 'error')
+      logger.error({ 
+        id, 
+        method: req.method, 
+        url: req.url, 
+        ms: Date.now() - start, 
+        err: {
+          message: e.message,
+          name: e.name,
+          code: e.code,
+          stack: e.stack
+        }
+      }, 'error')
+      // Re-throw to be caught by outer handlers
       throw e
     }
   }

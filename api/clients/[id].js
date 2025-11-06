@@ -39,13 +39,31 @@ async function handler(req, res) {
         })
         if (!client) return notFound(res)
         
-        // Parse tags from ClientTag relations
-        const parsedClient = {
-          ...client,
-          tags: client.tags ? client.tags.map(ct => ct.tag).filter(Boolean) : []
+        // Parse JSON fields (proposals, contacts, etc.) and extract tags
+        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const parsedClient = { ...client }
+        
+        // Parse JSON fields
+        for (const field of jsonFields) {
+          const value = parsedClient[field]
+          if (typeof value === 'string' && value) {
+            try {
+              parsedClient[field] = JSON.parse(value)
+            } catch (e) {
+              // Set safe defaults on parse error
+              parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            }
+          } else if (!value) {
+            // Set defaults for missing/null fields
+            parsedClient[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+          }
         }
         
+        // Parse tags from ClientTag relations
+        parsedClient.tags = client.tags ? client.tags.map(ct => ct.tag).filter(Boolean) : []
+        
         console.log('✅ Client retrieved successfully:', client.id)
+        console.log('✅ Parsed proposals count:', Array.isArray(parsedClient.proposals) ? parsedClient.proposals.length : 'not an array')
         return ok(res, { client: parsedClient })
       } catch (dbError) {
         console.error('❌ Database error getting client:', dbError)

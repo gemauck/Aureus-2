@@ -7498,8 +7498,25 @@ const Manufacturing = () => {
                           <div className="text-sm font-medium text-gray-900">{movement.itemName}</div>
                           <div className="text-xs text-gray-500">{movement.sku}</div>
                         </td>
-                        <td className="px-3 py-2 text-sm font-semibold text-right text-gray-900">
-                          {movement.quantity > 0 ? '+' : ''}{movement.quantity}
+                        <td className={`px-3 py-2 text-sm font-semibold text-right ${
+                          movement.type === 'receipt' || movement.type === 'production' 
+                            ? 'text-green-600' 
+                            : movement.type === 'consumption' || movement.type === 'sale'
+                            ? 'text-red-600'
+                            : 'text-gray-900'
+                        }`}>
+                          {(() => {
+                            // Normalize display: receipts should show positive, consumption should show negative
+                            const qty = parseFloat(movement.quantity) || 0;
+                            if (movement.type === 'receipt' || movement.type === 'production') {
+                              return `+${Math.abs(qty)}`;
+                            } else if (movement.type === 'consumption' || movement.type === 'sale') {
+                              return `${-Math.abs(qty)}`;
+                            } else {
+                              // Adjustment or other types - show as-is
+                              return qty > 0 ? `+${qty}` : `${qty}`;
+                            }
+                          })()}
                         </td>
                         <td className="px-3 py-2 text-sm text-gray-600">{movement.fromLocation}</td>
                         <td className="px-3 py-2 text-sm text-gray-600">{movement.toLocation || '-'}</td>
@@ -8235,7 +8252,17 @@ const Manufacturing = () => {
                       
                       {/* Transaction Rows */}
                       {itemMovements.map((movement, index) => {
-                        const qty = parseFloat(movement.quantity) || 0;
+                        let qty = parseFloat(movement.quantity) || 0;
+                        
+                        // Normalize quantity based on type for display
+                        // Receipts should always be positive, consumption should always be negative
+                        if (movement.type === 'receipt' || movement.type === 'production') {
+                          qty = Math.abs(qty); // Ensure positive
+                        } else if (movement.type === 'consumption' || movement.type === 'sale') {
+                          qty = -Math.abs(qty); // Ensure negative
+                        }
+                        // Adjustments keep their sign as-is
+                        
                         const isIncrease = qty > 0;
                         const isDecrease = qty < 0;
                         

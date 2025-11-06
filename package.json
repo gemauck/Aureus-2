@@ -19,8 +19,10 @@
     "deploy": "./deploy-production.sh",
     "test": "node tests/deployment-test.js",
     "test:deploy": "node tests/deployment-test.js",
+    "test:safety": "node tests/deployment-safety-test.js",
+    "test:all": "npm run test:safety && npm run test:deploy",
     "test:manufacturing": "node tests/manufacturing-browser-test.js",
-    "predeploy": "npm run test",
+    "predeploy": "npm run test:safety && npm run test",
     "validate:deps": "node scripts/validate-component-deps.js",
     "precommit": "npm run validate:deps"
   },

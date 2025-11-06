@@ -604,8 +604,11 @@ app.all('/api/users', async (req, res, next) => {
 
 // API routes - must come before catch-all route
 app.use('/api', async (req, res) => {
+  let timeout = null
   try {
     const handlerPath = toHandlerPath(req.url)
+    console.log(`🔍 Loading handler for ${req.method} ${req.url} -> ${handlerPath}`)
+    
     const handler = await loadHandler(handlerPath)
     
     if (req.method === 'OPTIONS') {
@@ -613,7 +616,7 @@ app.use('/api', async (req, res) => {
     }
     
     // Add timeout to prevent hanging requests
-    const timeout = setTimeout(() => {
+    timeout = setTimeout(() => {
       if (!res.headersSent) {
         console.error(`⏰ Request timeout for: ${req.method} ${req.url}`)
         res.status(504).json({ 
@@ -625,30 +628,80 @@ app.use('/api', async (req, res) => {
     }, 30000) // 30 second timeout
     
     try {
-      await handler(req, res)
+      // Wrap handler execution with better error handling
+      const handlerPromise = handler(req, res)
+      
+      // Ensure handler is a promise
+      if (handlerPromise && typeof handlerPromise.then === 'function') {
+        await handlerPromise
+      }
+      
       clearTimeout(timeout)
+      
+      // Check if response was sent
+      if (!res.headersSent && !res.writableEnded) {
+        console.warn(`⚠️ Handler for ${req.method} ${req.url} did not send a response`)
+        // Don't send another response if headers were already sent
+      }
     } catch (handlerError) {
       clearTimeout(timeout)
+      
+      // Log detailed error information
+      console.error('❌ Handler execution error:', {
+        method: req.method,
+        url: req.url,
+        handlerPath,
+        error: handlerError.message,
+        errorName: handlerError.name,
+        errorCode: handlerError.code,
+        stack: handlerError.stack,
+        headersSent: res.headersSent,
+        writableEnded: res.writableEnded
+      })
+      
+      // Only send error if response hasn't been sent
+      if (!res.headersSent && !res.writableEnded) {
+        const isDevelopment = process.env.NODE_ENV === 'development'
+        res.status(500).json({ 
+          error: 'Internal server error', 
+          details: isDevelopment ? handlerError.message : 'Contact support if this persists',
+          errorCode: handlerError.code,
+          timestamp: new Date().toISOString()
+        })
+      } else {
+        console.error('⚠️ Cannot send error response - headers already sent or response ended')
+      }
+      
+      // Re-throw to be caught by outer catch block
       throw handlerError
     }
     
   } catch (error) {
+    if (timeout) clearTimeout(timeout)
+    
     console.error('❌ Railway API Error:', {
       method: req.method,
       url: req.url,
       error: error.message,
+      errorName: error.name,
+      errorCode: error.code,
       stack: error.stack,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      headersSent: res.headersSent,
+      writableEnded: res.writableEnded
     })
     
     // Don't expose internal errors in production
     const isDevelopment = process.env.NODE_ENV === 'development'
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.writableEnded) {
       res.status(500).json({ 
         error: 'Internal server error', 
         details: isDevelopment ? error.message : 'Contact support if this persists',
+        errorCode: error.code,
         timestamp: new Date().toISOString()
       })
+    } else {
+      console.error('⚠️ Cannot send error response - headers already sent or response ended')
     }
   }
 })

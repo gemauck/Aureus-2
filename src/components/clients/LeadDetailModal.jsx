@@ -20,9 +20,11 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             
             setIsLoading(true);
             try {
-                const response = await window.api.getClient(leadId);
-                const fetchedLead = response?.data?.client;
+                // Use getLead for leads to ensure proper parsing of proposals and other lead-specific fields
+                const response = await window.api.getLead(leadId);
+                const fetchedLead = response?.data?.lead || response?.lead;
                 if (fetchedLead) {
+                    console.log('✅ Lead fetched with proposals:', Array.isArray(fetchedLead.proposals) ? fetchedLead.proposals.length : 'not an array');
                     setLead(fetchedLead);
                 }
             } catch (error) {

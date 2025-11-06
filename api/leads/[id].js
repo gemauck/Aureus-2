@@ -40,13 +40,31 @@ async function handler(req, res) {
         })
         if (!lead) return notFound(res)
         
-        // Parse tags from ClientTag relations
-        const parsedLead = {
-          ...lead,
-          tags: lead.tags ? lead.tags.map(ct => ct.tag).filter(Boolean) : []
+        // Parse JSON fields (proposals, contacts, etc.) and extract tags
+        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const parsedLead = { ...lead }
+        
+        // Parse JSON fields
+        for (const field of jsonFields) {
+          const value = parsedLead[field]
+          if (typeof value === 'string' && value) {
+            try {
+              parsedLead[field] = JSON.parse(value)
+            } catch (e) {
+              // Set safe defaults on parse error
+              parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            }
+          } else if (!value) {
+            // Set defaults for missing/null fields
+            parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+          }
         }
         
+        // Parse tags from ClientTag relations
+        parsedLead.tags = lead.tags ? lead.tags.map(ct => ct.tag).filter(Boolean) : []
+        
         console.log('✅ Lead retrieved successfully:', lead.id)
+        console.log('✅ Parsed proposals count:', Array.isArray(parsedLead.proposals) ? parsedLead.proposals.length : 'not an array')
         return ok(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error getting lead:', dbError)
@@ -79,7 +97,8 @@ async function handler(req, res) {
         sites: body.sites !== undefined ? (typeof body.sites === 'string' ? body.sites : JSON.stringify(Array.isArray(body.sites) ? body.sites : [])) : undefined,
         contracts: body.contracts !== undefined ? (typeof body.contracts === 'string' ? body.contracts : JSON.stringify(Array.isArray(body.contracts) ? body.contracts : [])) : undefined,
         activityLog: body.activityLog !== undefined ? (typeof body.activityLog === 'string' ? body.activityLog : JSON.stringify(Array.isArray(body.activityLog) ? body.activityLog : [])) : undefined,
-        billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined
+        billingTerms: body.billingTerms !== undefined ? (typeof body.billingTerms === 'string' ? body.billingTerms : JSON.stringify(body.billingTerms)) : undefined,
+        proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined
       }
 
       // Remove undefined values (but keep empty strings and empty arrays as JSON strings)
@@ -96,6 +115,7 @@ async function handler(req, res) {
       console.log('🔍 Update contains followUps:', updateData.followUps ? `${typeof updateData.followUps} (length: ${updateData.followUps.length})` : 'not included')
       console.log('🔍 Update contains notes:', updateData.notes !== undefined ? `string (length: ${updateData.notes.length})` : 'not included')
       console.log('🔍 Update contains comments:', updateData.comments ? `${typeof updateData.comments} (length: ${updateData.comments.length})` : 'not included')
+      console.log('🔍 Update contains proposals:', updateData.proposals ? (typeof updateData.proposals === 'string' ? `${updateData.proposals.length} chars (JSON string)` : `${updateData.proposals.length} proposals`) : 'NOT INCLUDED')
       console.log('🔍 Lead ID to update:', id)
       
       try {
@@ -123,6 +143,7 @@ async function handler(req, res) {
         console.log('✅ Lead updated successfully:', lead.id)
         console.log('✅ New status:', lead.status, '(was:', existing.status, ')')
         console.log('✅ New stage:', lead.stage, '(was:', existing.stage, ')')
+        console.log('✅ Updated proposals:', lead.proposals ? (typeof lead.proposals === 'string' ? JSON.parse(lead.proposals).length + ' proposals' : lead.proposals.length + ' proposals') : 'NO PROPOSALS')
         console.log('✅ Full updated lead:', JSON.stringify(lead, null, 2))
         
         // If name changed, trigger RSS feed update (async, don't wait)
@@ -134,7 +155,24 @@ async function handler(req, res) {
           })
         }
         
-        return ok(res, { lead })
+        // Parse JSON fields before returning
+        const jsonFields = ['contacts', 'followUps', 'projectIds', 'comments', 'sites', 'contracts', 'activityLog', 'billingTerms', 'proposals', 'services']
+        const parsedLead = { ...lead }
+        
+        for (const field of jsonFields) {
+          const value = parsedLead[field]
+          if (typeof value === 'string' && value) {
+            try {
+              parsedLead[field] = JSON.parse(value)
+            } catch (e) {
+              parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+            }
+          } else if (!value) {
+            parsedLead[field] = field === 'billingTerms' ? { paymentTerms: 'Net 30', billingFrequency: 'Monthly', currency: 'ZAR', retainerAmount: 0, taxExempt: false, notes: '' } : []
+          }
+        }
+        
+        return ok(res, { lead: parsedLead })
       } catch (dbError) {
         console.error('❌ Database error updating lead:', dbError)
         console.error('❌ Error code:', dbError.code, 'Meta:', dbError.meta)

@@ -1245,8 +1245,21 @@ const Clients = React.memo(() => {
                     id: l.id, 
                     name: l.name, 
                     ownerId: l.ownerId || 'null',
-                    type: l.type 
+                    type: l.type,
+                    stage: l.stage,
+                    hasStage: l.stage !== undefined && l.stage !== null
                 })));
+                
+                // Log ReitCoal specifically to verify stage field
+                const reitcoulLead = rawLeads.find(l => l.name && l.name.toLowerCase().includes('reit'));
+                if (reitcoulLead) {
+                    console.log(`🎯 ReitCoal in raw API response:`, { 
+                        name: reitcoulLead.name, 
+                        stage: reitcoulLead.stage, 
+                        stageType: typeof reitcoulLead.stage,
+                        allKeys: Object.keys(reitcoulLead).slice(0, 20)
+                    });
+                }
                 
                 // Log specific lead IDs to help debug missing leads
                 const leadIds = rawLeads.map(l => l.id).sort();

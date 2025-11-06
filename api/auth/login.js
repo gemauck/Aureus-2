@@ -90,6 +90,18 @@ async function handler(req, res) {
         }
       })
       logger.info({ email, userFound: !!user }, '🔍 User query completed')
+    
+    // DEBUG: Log the actual user object to see what Prisma returned
+    if (user) {
+      logger.info({ 
+        email, 
+        actualUserId: user.id, 
+        actualUserEmail: user.email,
+        actualUserName: user.name,
+        hashPrefix: user.passwordHash?.substring(0, 30) || 'N/A',
+        hashLength: user.passwordHash?.length || 0
+      }, '🔍 DEBUG: Actual user object from Prisma')
+    }
     } catch (queryError) {
       logger.error({ email, error: queryError.message, stack: queryError.stack }, '❌ Database query failed')
       return serverError(res, 'Database query failed', queryError.message)

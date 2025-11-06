@@ -2,28 +2,45 @@ import { PrismaClient } from '@prisma/client'
 
 let prismaGlobal
 
-if (!global.__prisma) {
+// Force recreate Prisma client to avoid stale connections
+if (global.__prisma) {
   try {
-    if (!process.env.DATABASE_URL) {
-      console.error('❌ DATABASE_URL is not set')
-      throw new Error('DATABASE_URL environment variable is required')
-    }
-    
-    global.__prisma = new PrismaClient({
-      log: ['error', 'warn'],
-      errorFormat: 'pretty',
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL
-        }
-      }
-    })
-    console.log('✅ Prisma client initialized')
-    console.log(`🔗 DATABASE_URL: ${process.env.DATABASE_URL.substring(0, 50)}${process.env.DATABASE_URL.length > 50 ? '...' : ''}`)
-  } catch (error) {
-    console.error('❌ Failed to create Prisma client:', error)
-    throw error
+    global.__prisma.$disconnect().catch(() => {})
+  } catch (e) {
+    // Ignore disconnect errors
   }
+  delete global.__prisma
+  console.log('🔄 Cleared cached Prisma client')
+}
+
+try {
+  if (!process.env.DATABASE_URL) {
+    console.error('❌ DATABASE_URL is not set')
+    throw new Error('DATABASE_URL environment variable is required')
+  }
+  
+  console.log('🔗 Creating new Prisma client with DATABASE_URL:', process.env.DATABASE_URL.substring(0, 80) + '...')
+  global.__prisma = new PrismaClient({
+    log: ['error', 'warn'],
+    errorFormat: 'pretty',
+    datasources: {
+      db: {
+        url: process.env.DATABASE_URL
+      }
+    },
+    // Reduce connection pool to prevent connection exhaustion
+    __internal: {
+      engine: {
+        connectTimeout: 10000,
+        poolTimeout: 10
+      }
+    }
+  })
+  console.log('✅ Prisma client initialized')
+  console.log(`🔗 DATABASE_URL: ${process.env.DATABASE_URL.substring(0, 80)}${process.env.DATABASE_URL.length > 80 ? '...' : ''}`)
+} catch (error) {
+  console.error('❌ Failed to create Prisma client:', error)
+  throw error
 }
 
 prismaGlobal = global.__prisma

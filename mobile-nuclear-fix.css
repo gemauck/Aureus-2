@@ -169,6 +169,11 @@
     display: revert !important;
   }
   
+  /* CRITICAL: Force main to display AFTER revert rule */
+  main {
+    display: block !important;
+  }
+  
   aside[style*="display: none"] {
     display: flex !important;
     left: -100% !important;
@@ -436,7 +441,9 @@
   }
 }
 
-/* CONSOLE LOG FOR DEBUGGING */
+/* DEBUG BANNER REMOVED FOR PRODUCTION */
+/* Uncomment below for debugging only */
+/*
 @media (max-width: 766px) {
   body::before {
     content: "NUCLEAR FIX ACTIVE - Width " attr(data-width) "px" !important;
@@ -453,3 +460,4 @@
     font-weight: bold !important;
   }
 }
+*/

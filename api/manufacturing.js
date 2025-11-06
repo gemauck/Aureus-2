@@ -1855,7 +1855,7 @@ async function handler(req, res) {
                   
                   console.log(`📉 Deducted ${requiredQty} of ${component.sku} for production order ${id}`)
                   
-                // Create stock movement record
+                // Create stock movement record (consumption should be negative)
                 await tx.stockMovement.create({
                   data: {
                     movementId: `MOV${String(seq++).padStart(4, '0')}`,
@@ -1863,7 +1863,7 @@ async function handler(req, res) {
                     type: 'consumption',
                     itemName: component.name || component.sku,
                     sku: component.sku,
-                    quantity: requiredQty,
+                    quantity: -Math.abs(requiredQty), // Consumption should always be negative
                     fromLocation: '',
                     toLocation: '',
                     reference: orderInTx.workOrderNumber || id,
@@ -2472,13 +2472,25 @@ async function handler(req, res) {
           movementId = `MOV${String(nextNumber).padStart(4, '0')}`
         }
 
-        const quantity = parseFloat(body.quantity)
+        let quantity = parseFloat(body.quantity)
         const isAdjustment = body.type === 'adjustment'
+        const type = String(body.type).toLowerCase()
         
         // Validate quantity
         if (quantity === undefined || quantity === null || isNaN(quantity)) {
           return badRequest(res, 'quantity is required and must be a valid number')
         }
+        
+        // Normalize quantity based on movement type
+        // Receipts should always be positive, consumption should always be negative
+        if (type === 'receipt' || type === 'production') {
+          // Ensure receipts are always positive
+          quantity = Math.abs(quantity)
+        } else if (type === 'consumption' || type === 'sale') {
+          // Ensure consumption is always negative
+          quantity = -Math.abs(quantity)
+        }
+        // Adjustments can be positive or negative (user corrections)
         
         // Check for extreme values
         if (!isFinite(quantity) || Math.abs(quantity) > 1000000) {
@@ -2514,10 +2526,9 @@ async function handler(req, res) {
           // Fetch existing inventory item by SKU
           let item = await tx.inventoryItem.findFirst({ where: { sku: body.sku } })
 
-          const type = String(body.type).toLowerCase()
           let newQuantity = item?.quantity || 0
 
-          if (type === 'receipt') {
+          if (type === 'receipt' || type === 'production') {
             // Create item on first receipt if it doesn't exist
             if (!item) {
               const unitCost = parseFloat(body.unitCost) || 0
@@ -2561,9 +2572,9 @@ async function handler(req, res) {
                 }
               }
             } else {
-              // Increment quantity and update value
+              // Increment quantity and update value (quantity is already positive for receipts)
               const unitCost = body.unitCost !== undefined ? parseFloat(body.unitCost) : item.unitCost
-              newQuantity = (item.quantity || 0) + quantity
+              newQuantity = (item.quantity || 0) + quantity // quantity is positive for receipts
               const totalValue = newQuantity * (unitCost || 0)
               const reorderPoint = item.reorderPoint || 0
               const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
@@ -2582,10 +2593,12 @@ async function handler(req, res) {
             if (!item) {
               throw new Error('Inventory item not found for consumption')
             }
-            if ((item.quantity || 0) < quantity) {
+            // quantity is already negative for consumption, so we add it (subtract absolute value)
+            const absQty = Math.abs(quantity)
+            if ((item.quantity || 0) < absQty) {
               throw new Error('Insufficient stock to consume the requested quantity')
             }
-            newQuantity = (item.quantity || 0) - quantity
+            newQuantity = (item.quantity || 0) + quantity // quantity is negative, so this subtracts
             const totalValue = newQuantity * (item.unitCost || 0)
             const reorderPoint = item.reorderPoint || 0
             const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
@@ -2804,7 +2817,7 @@ async function handler(req, res) {
             data: { quantity: newQty, totalValue, status }
           })
 
-          // Create movement per component
+          // Create movement per component (consumption should be negative)
           const movement = await tx.stockMovement.create({
             data: {
               movementId: `MOV${String(seq++).padStart(4, '0')}`,
@@ -2812,7 +2825,7 @@ async function handler(req, res) {
               type: 'consumption',
               itemName: reqComp.itemName || item.name,
               sku: reqComp.sku,
-              quantity: reqComp.quantity,
+              quantity: -Math.abs(reqComp.quantity), // Consumption should always be negative
               fromLocation: 'store',
               toLocation: 'production',
               reference: `production:${order.id}`,

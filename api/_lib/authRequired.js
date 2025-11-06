@@ -21,10 +21,22 @@ export function authRequired(handler) {
       
       console.log('✅ Token verified for user:', payload.sub)
       req.user = payload
-      return handler(req, res)
+      
+      // Await the handler to properly catch async errors
+      const result = handler(req, res)
+      if (result && typeof result.then === 'function') {
+        return await result
+      }
+      return result
     } catch (e) {
       console.error('❌ Token verification failed:', e.message)
-      return unauthorized(res)
+      console.error('❌ Auth middleware error stack:', e.stack)
+      // Only send unauthorized if response hasn't been sent
+      if (!res.headersSent && !res.writableEnded) {
+        return unauthorized(res)
+      }
+      // If response already sent, re-throw to be caught by outer handler
+      throw e
     }
   }
 }
