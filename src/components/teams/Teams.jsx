@@ -77,6 +77,22 @@ const TEAMS = [
 ];
 
 const Teams = () => {
+    // Get theme state - CRITICAL: Use React state, not document root class
+    let themeResult = { isDark: false };
+    try {
+        if (window.useTheme && typeof window.useTheme === 'function') {
+            themeResult = window.useTheme();
+        }
+    } catch (error) {
+        // Fallback: check localStorage only
+        try {
+            const storedTheme = localStorage.getItem('abcotronics_theme');
+            themeResult.isDark = storedTheme === 'dark';
+        } catch (e) {
+            themeResult.isDark = false;
+        }
+    }
+    const isDark = themeResult?.isDark || false;
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedTeam, setSelectedTeam] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -470,13 +486,13 @@ const Teams = () => {
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
-					<h1 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Teams & Knowledge Hub</h1>
-					<p className="text-xs text-gray-600 dark:text-slate-400">Centralized documentation, workflows, and team collaboration</p>
+					<h1 className={`text-lg font-semibold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Teams & Knowledge Hub</h1>
+					<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Centralized documentation, workflows, and team collaboration</p>
                 </div>
                 {selectedTeam && (
                     <button
                         onClick={() => setSelectedTeam(null)}
-						className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
+						className={`px-3 py-1.5 text-xs rounded-lg hover:bg-gray-200 transition ${isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
                     >
                         <i className="fas fa-arrow-left mr-1.5"></i>
                         Back to All Teams
@@ -486,7 +502,7 @@ const Teams = () => {
 
             {/* Search and Filter Bar */}
             {selectedTeam && (
-				<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+				<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                     <div className="flex items-center gap-3">
                         <div className="flex-1 relative">
                             <input
@@ -494,9 +510,9 @@ const Teams = () => {
                                 placeholder="Search documents, workflows, checklists..."
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
-								className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent dark:bg-slate-700 dark:border-slate-600 dark:text-slate-100 placeholder-gray-400 dark:placeholder-slate-400"
+								className={`w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent placeholder-gray-400 ${isDark ? 'bg-slate-700 border-slate-600 text-slate-100 placeholder-slate-400' : 'border-gray-300'}`}
                             />
-							<i className="fas fa-search absolute left-2.5 top-2 text-gray-400 text-xs dark:text-slate-400"></i>
+							<i className={`fas fa-search absolute left-2.5 top-2 text-xs ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
                         </div>
                         <div className="flex gap-2">
                             <button
@@ -504,7 +520,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'documents'
                                         ? 'bg-primary-600 text-white'
-										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-file-alt mr-1"></i>
@@ -515,7 +531,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'workflows'
                                         ? 'bg-primary-600 text-white'
-										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-project-diagram mr-1"></i>
@@ -526,7 +542,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'checklists'
                                         ? 'bg-primary-600 text-white'
-										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-tasks mr-1"></i>
@@ -537,7 +553,7 @@ const Teams = () => {
                                 className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                     activeTab === 'notices'
                                         ? 'bg-primary-600 text-white'
-										: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+										: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                 }`}
                             >
                                 <i className="fas fa-bullhorn mr-1"></i>
@@ -549,7 +565,7 @@ const Teams = () => {
                                     className={`px-3 py-1.5 text-xs rounded-lg transition ${
                                         activeTab === 'meeting-notes'
                                             ? 'bg-primary-600 text-white'
-											: 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600'
+											: isDark ? 'bg-slate-700 text-slate-200 hover:bg-slate-600' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                                     }`}
                                 >
                                     <i className="fas fa-clipboard-list mr-1"></i>
@@ -566,55 +582,55 @@ const Teams = () => {
                 <div className="space-y-3">
                     {/* Quick Stats */}
 						<div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Total Documents</p>
-									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{documents.length}</p>
+									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Total Documents</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{documents.length}</p>
                                 </div>
-								<div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900">
-									<i className="fas fa-file-alt text-blue-600 dark:text-blue-300"></i>
+								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
+									<i className={`fas fa-file-alt ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Active Workflows</p>
-									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{workflows.filter(w => w.status === 'Active').length}</p>
+									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Active Workflows</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflows.filter(w => w.status === 'Active').length}</p>
                                 </div>
-								<div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center dark:bg-purple-900">
-									<i className="fas fa-project-diagram text-purple-600 dark:text-purple-300"></i>
+								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
+									<i className={`fas fa-project-diagram ${isDark ? 'text-purple-300' : 'text-purple-600'}`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Checklists</p>
-									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{checklists.length}</p>
+									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Checklists</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{checklists.length}</p>
                                 </div>
-								<div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center dark:bg-green-900">
-									<i className="fas fa-tasks text-green-600 dark:text-green-300"></i>
+								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-900' : 'bg-green-100'}`}>
+									<i className={`fas fa-tasks ${isDark ? 'text-green-300' : 'text-green-600'}`}></i>
                                 </div>
                             </div>
                         </div>
-						<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+						<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                             <div className="flex items-center justify-between">
                                 <div>
-									<p className="text-xs text-gray-600 mb-0.5 dark:text-slate-400">Executions</p>
-									<p className="text-xl font-bold text-gray-900 dark:text-slate-100">{workflowExecutions.length}</p>
+									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Executions</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflowExecutions.length}</p>
                                 </div>
-								<div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center dark:bg-orange-900">
-									<i className="fas fa-play-circle text-orange-600 dark:text-orange-300"></i>
+								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-900' : 'bg-orange-100'}`}>
+									<i className={`fas fa-play-circle ${isDark ? 'text-orange-300' : 'text-orange-600'}`}></i>
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Teams Grid */}
-					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
-						<h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Department Teams</h2>
+					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
                             {TEAMS.map(team => {
                                 const counts = getTeamCounts(team.id);
@@ -622,17 +638,17 @@ const Teams = () => {
                                     <button
                                         key={team.id}
                                         onClick={() => setSelectedTeam(team)}
-										className="text-left border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group dark:border-slate-700"
+										className={`text-left border rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group ${isDark ? 'border-slate-700' : 'border-gray-200'}`}
                                     >
                                         <div className="flex items-center justify-between mb-2">
-											<div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition dark:bg-slate-700 dark:group-hover:bg-slate-600`}>
-												<i className={`fas ${team.icon} text-${team.color}-600 text-lg dark:text-white`}></i>
+											<div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition ${isDark ? 'bg-slate-700 group-hover:bg-slate-600' : ''}`}>
+												<i className={`fas ${team.icon} text-${team.color}-600 text-lg ${isDark ? 'text-white' : ''}`}></i>
                                             </div>
                                             <i className="fas fa-arrow-right text-gray-400 text-xs group-hover:text-primary-600 transition"></i>
                                         </div>
-										<h3 className="font-semibold text-gray-900 text-sm mb-1 dark:text-slate-100">{team.name}</h3>
-										<p className="text-xs text-gray-600 mb-2 line-clamp-2 dark:text-slate-400">{team.description}</p>
-										<div className="flex items-center gap-2 text-xs text-gray-500 dark:text-slate-400">
+										<h3 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{team.name}</h3>
+										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{team.description}</p>
+										<div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                             <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
                                             <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>
                                             <span><i className="fas fa-tasks mr-1"></i>{counts.checklists}</span>
@@ -644,24 +660,24 @@ const Teams = () => {
                     </div>
 
                     {/* Recent Activity */}
-					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
-						<h2 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Recent Activity</h2>
+					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Recent Activity</h2>
                         {recentActivity.length > 0 ? (
                             <div className="space-y-2">
                                 {recentActivity.map((item, idx) => {
                                     const team = TEAMS.find(t => t.id === item.team);
                                     return (
-										<div key={idx} className="flex items-center gap-3 py-2 border-b last:border-b-0 dark:border-slate-700">
-											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 dark:bg-slate-700`}>
-												<i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs dark:text-white`}></i>
+										<div key={idx} className={`flex items-center gap-3 py-2 border-b last:border-b-0 ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+											<div className={`w-8 h-8 bg-${team?.color || 'gray'}-100 rounded-lg flex items-center justify-center flex-shrink-0 ${isDark ? 'bg-slate-700' : ''}`}>
+												<i className={`fas fa-${item.icon} text-${team?.color || 'gray'}-600 text-xs ${isDark ? 'text-white' : ''}`}></i>
                                             </div>
                                             <div className="flex-1 min-w-0">
-												<p className="text-xs font-medium text-gray-900 truncate dark:text-slate-100">{item.title}</p>
-												<p className="text-xs text-gray-500 dark:text-slate-400">
+												<p className={`text-xs font-medium truncate ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{item.title}</p>
+												<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                                     {team?.name} • {item.type}
                                                 </p>
                                             </div>
-											<span className="text-xs text-gray-400 whitespace-nowrap dark:text-slate-400">
+											<span className={`text-xs whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-gray-400'}`}>
                                                 {new Date(item.createdAt || item.updatedAt || item.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}
                                             </span>
                                         </div>
@@ -670,8 +686,8 @@ const Teams = () => {
                             </div>
                         ) : (
                             <div className="text-center py-8">
-								<i className="fas fa-history text-3xl text-gray-300 mb-2 dark:text-slate-500"></i>
-								<p className="text-xs text-gray-500 dark:text-slate-400">No activity yet</p>
+								<i className={`fas fa-history text-3xl mb-2 ${isDark ? 'text-slate-500' : 'text-gray-300'}`}></i>
+								<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No activity yet</p>
                             </div>
                         )}
                     </div>
@@ -773,22 +789,22 @@ const Teams = () => {
                     </div>
 
                     {/* Content Display Based on Active Tab */}
-					<div className="bg-white rounded-lg border border-gray-200 p-3 dark:bg-slate-800 dark:border-slate-700">
+					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                         {activeTab === 'documents' && (
                             <div>
-									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Documents Library</h3>
+									<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Documents Library</h3>
                                 {displayDocuments.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                         {displayDocuments.map(doc => (
-                                            <div key={doc.id} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition dark:bg-slate-800 dark:border-slate-700">
+                                            <div key={doc.id} className={`border rounded-lg p-3 hover:shadow-md transition ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                                 <div className="flex items-start justify-between mb-2">
-										<div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900">
-											<i className="fas fa-file-alt text-blue-600 dark:text-blue-300"></i>
+										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
+											<i className={`fas fa-file-alt ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleViewDocument(doc)}
-                                                            className="p-1 text-gray-400 hover:text-blue-600 transition dark:text-slate-400 dark:hover:text-blue-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-blue-400' : 'text-gray-400 hover:text-blue-600'}`}
                                                             title="View"
                                                         >
                                                             <i className="fas fa-eye text-xs"></i>
@@ -798,26 +814,26 @@ const Teams = () => {
                                                                 setEditingDocument(doc);
                                                                 setShowDocumentModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteDocument(doc.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-										<span className="px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block dark:bg-slate-700 dark:text-slate-200">
+										<span className={`px-2 py-0.5 text-xs rounded mb-2 inline-block ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
                                                     {doc.category}
                                                 </span>
-										<h4 className="font-semibold text-gray-900 text-sm mb-1 dark:text-slate-100">{doc.title}</h4>
-										<p className="text-xs text-gray-600 mb-2 line-clamp-2 dark:text-slate-400">{doc.description}</p>
-										<div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
+										<h4 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{doc.title}</h4>
+										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{doc.description}</p>
+										<div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                                     <span>v{doc.version}</span>
                                                     <span>{new Date(doc.createdAt).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric' })}</span>
                                                 </div>
@@ -826,8 +842,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-file-alt text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                        <p className="text-sm text-gray-500 dark:text-slate-400">No documents yet</p>
+                                        <i className={`fas fa-file-alt text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No documents yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingDocument(null);
@@ -844,25 +860,25 @@ const Teams = () => {
 
                         {activeTab === 'workflows' && (
                             <div>
-                                <h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Workflows & Processes</h3>
+                                <h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Workflows & Processes</h3>
                                 {displayWorkflows.length > 0 ? (
 									<div className="space-y-3">
                                         {displayWorkflows.map(workflow => (
-                                            <div key={workflow.id} className="border border-gray-200 rounded-lg p-3 dark:bg-slate-800 dark:border-slate-700">
+                                            <div key={workflow.id} className={`border rounded-lg p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-										<div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center dark:bg-purple-900">
-											<i className="fas fa-project-diagram text-purple-600 dark:text-purple-300"></i>
+										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
+											<i className={`fas fa-project-diagram ${isDark ? 'text-purple-300' : 'text-purple-600'}`}></i>
                                                         </div>
                                                         <div className="flex-1">
-												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{workflow.title}</h4>
-												<p className="text-xs text-gray-600 dark:text-slate-400">{workflow.description}</p>
+												<h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflow.title}</h4>
+												<p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{workflow.description}</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1">
                                                         <button
                                                             onClick={() => handleExecuteWorkflow(workflow)}
-                                                            className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition font-medium dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800"
+                                                            className={`px-2 py-1 rounded text-xs transition font-medium ${isDark ? 'bg-green-900 text-green-300 hover:bg-green-800' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
                                                             title="Execute Workflow"
                                                         >
                                                             <i className="fas fa-play mr-1"></i>
@@ -873,14 +889,14 @@ const Teams = () => {
                                                                 setEditingWorkflow(workflow);
                                                                 setShowWorkflowModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteWorkflow(workflow.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
@@ -890,20 +906,20 @@ const Teams = () => {
                                                 
 										<div className="flex items-center gap-2 mb-2">
                                                     <span className={`px-2 py-1 text-xs rounded ${
-												workflow.status === 'Active' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-												workflow.status === 'Draft' ? 'bg-gray-100 text-gray-700 dark:bg-slate-700 dark:text-slate-200' :
-												'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+												workflow.status === 'Active' ? isDark ? 'bg-green-900 text-green-300' : 'bg-green-100 text-green-700' :
+												workflow.status === 'Draft' ? isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700' :
+												isDark ? 'bg-yellow-900 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
                                                     }`}>
                                                         {workflow.status}
                                                     </span>
 											{workflow.tags && workflow.tags.map(tag => (
-												<span key={tag} className="px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded dark:bg-purple-900/40 dark:text-purple-300">
+												<span key={tag} className={`px-2 py-1 text-xs rounded ${isDark ? 'bg-purple-900/40 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
                                                             {tag}
                                                         </span>
                                                     ))}
                                                 </div>
                                                 
-										<div className="flex items-center gap-4 text-xs text-gray-500 dark:text-slate-400">
+										<div className={`flex items-center gap-4 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                                     <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
                                                     <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
                                                     <span><i className="fas fa-play-circle mr-1"></i>
@@ -915,8 +931,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-project-diagram text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                        <p className="text-sm text-gray-500 dark:text-slate-400">No workflows yet</p>
+                                        <i className={`fas fa-project-diagram text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No workflows yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingWorkflow(null);
@@ -933,19 +949,19 @@ const Teams = () => {
 
                         {activeTab === 'checklists' && (
                             <div>
-									<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Checklists & Forms</h3>
+									<h3 className="text-sm font-semibold text-gray-900 mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Checklists & Forms</h3>
                                 {displayChecklists.length > 0 ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                         {displayChecklists.map(checklist => (
-                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3 dark:bg-slate-800 dark:border-slate-700">
+                                            <div key={checklist.id} className="border border-gray-200 rounded-lg p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}">
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-3 flex-1">
-										<div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center dark:bg-green-900">
-											<i className="fas fa-tasks text-green-600 dark:text-green-300"></i>
+										<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-900' : 'bg-green-100'}`}>
+											<i className={`fas fa-tasks ${isDark ? 'text-green-300' : 'text-green-600'}`}></i>
                                                         </div>
                                                         <div>
-												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{checklist.title}</h4>
-												<p className="text-xs text-gray-600 dark:text-slate-400">{checklist.items?.length || 0} items</p>
+												<h4 className="font-semibold text-gray-900 text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}">{checklist.title}</h4>
+												<p className="text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">{checklist.items?.length || 0} items</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-1">
@@ -954,27 +970,27 @@ const Teams = () => {
                                                                 setEditingChecklist(checklist);
                                                                 setShowChecklistModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteChecklist(checklist.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-										<span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded mb-2 inline-block dark:bg-slate-700 dark:text-slate-200">
+										<span className={`px-2 py-1 text-xs rounded mb-2 inline-block ${isDark ? 'bg-slate-700 text-slate-200' : 'bg-gray-100 text-gray-700'}`}>
                                                     {checklist.category}
                                                 </span>
-										<p className="text-xs text-gray-600 mb-2 dark:text-slate-400">{checklist.description}</p>
-										<div className="flex items-center justify-between text-xs text-gray-500 dark:text-slate-400">
+										<p className="text-xs text-gray-600 mb-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}">{checklist.description}</p>
+										<div className="flex items-center justify-between text-xs text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
                                                     <span><i className="fas fa-check-circle mr-1"></i>{checklist.frequency}</span>
-                                                    <button className="text-primary-600 hover:text-primary-700 font-medium dark:text-primary-400 dark:hover:text-primary-300">
+                                                    <button className={`font-medium ${isDark ? 'text-primary-400 hover:text-primary-300' : 'text-primary-600 hover:text-primary-700'}`}>
                                                         Use Template →
                                                     </button>
                                                 </div>
@@ -983,8 +999,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-tasks text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                        <p className="text-sm text-gray-500 dark:text-slate-400">No checklists yet</p>
+                                        <i className={`fas fa-tasks text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No checklists yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingChecklist(null);
@@ -1001,30 +1017,37 @@ const Teams = () => {
 
                         {activeTab === 'notices' && (
                             <div>
-								<h3 className="text-sm font-semibold text-gray-900 mb-3 dark:text-slate-100">Notice Board</h3>
+								<h3 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Notice Board</h3>
                                 {displayNotices.length > 0 ? (
                                     <div className="space-y-3">
-                                        {displayNotices.map(notice => (
-                                            <div key={notice.id} className={`border-l-4 rounded-lg p-3 ${
-                                                notice.priority === 'Critical' || notice.priority === 'High' ? 'border-red-500 bg-red-50 dark:bg-red-900/30 dark:border-red-400' :
-                                                notice.priority === 'Medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/30 dark:border-yellow-400' :
-                                                'border-blue-500 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-400'
-                                            }`}>
+                                        {displayNotices.map(notice => {
+                                            const priorityClasses = notice.priority === 'Critical' || notice.priority === 'High' 
+                                                ? isDark ? 'border-red-400 bg-red-900/30' : 'border-red-500 bg-red-50'
+                                                : notice.priority === 'Medium'
+                                                ? isDark ? 'border-yellow-400 bg-yellow-900/30' : 'border-yellow-500 bg-yellow-50'
+                                                : isDark ? 'border-blue-400 bg-blue-900/30' : 'border-blue-500 bg-blue-50';
+                                            
+                                            const iconClasses = notice.priority === 'Critical' || notice.priority === 'High'
+                                                ? isDark ? 'text-red-400' : 'text-red-600'
+                                                : notice.priority === 'Medium'
+                                                ? isDark ? 'text-yellow-400' : 'text-yellow-600'
+                                                : isDark ? 'text-blue-400' : 'text-blue-600';
+                                            
+                                            const badgeClasses = notice.priority === 'Critical' || notice.priority === 'High'
+                                                ? isDark ? 'bg-red-900/50 text-red-300' : 'bg-red-100 text-red-700'
+                                                : notice.priority === 'Medium'
+                                                ? isDark ? 'bg-yellow-900/50 text-yellow-300' : 'bg-yellow-100 text-yellow-700'
+                                                : isDark ? 'bg-blue-900/50 text-blue-300' : 'bg-blue-100 text-blue-700';
+                                            
+                                            return (
+                                            <div key={notice.id} className={`border-l-4 rounded-lg p-3 ${priorityClasses}`}>
                                                 <div className="flex items-start justify-between mb-2">
                                                     <div className="flex items-center gap-2 flex-1">
-                                                        <i className={`fas fa-bullhorn ${
-                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'text-red-600 dark:text-red-400' :
-                                                            notice.priority === 'Medium' ? 'text-yellow-600 dark:text-yellow-400' :
-                                                            'text-blue-600 dark:text-blue-400'
-                                                        }`}></i>
-												<h4 className="font-semibold text-gray-900 text-sm dark:text-slate-100">{notice.title}</h4>
+                                                        <i className={`fas fa-bullhorn ${iconClasses}`}></i>
+												<h4 className={`font-semibold text-sm ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{notice.title}</h4>
                                                     </div>
                                                     <div className="flex gap-1">
-                                                        <span className={`px-2 py-1 text-xs rounded font-medium ${
-                                                            notice.priority === 'Critical' || notice.priority === 'High' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
-                                                            notice.priority === 'Medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/50 dark:text-yellow-300' :
-                                                            'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
-                                                        }`}>
+                                                        <span className={`px-2 py-1 text-xs rounded font-medium ${badgeClasses}`}>
                                                             {notice.priority}
                                                         </span>
                                                         <button
@@ -1032,22 +1055,22 @@ const Teams = () => {
                                                                 setEditingNotice(notice);
                                                                 setShowNoticeModal(true);
                                                             }}
-                                                            className="p-1 text-gray-400 hover:text-primary-600 transition dark:text-slate-400 dark:hover:text-primary-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-primary-400' : 'text-gray-400 hover:text-primary-600'}`}
                                                             title="Edit"
                                                         >
                                                             <i className="fas fa-edit text-xs"></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteNotice(notice.id)}
-                                                            className="p-1 text-gray-400 hover:text-red-600 transition dark:text-slate-400 dark:hover:text-red-400"
+                                                            className={`p-1 transition ${isDark ? 'text-slate-400 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
                                                             title="Delete"
                                                         >
                                                             <i className="fas fa-trash text-xs"></i>
                                                         </button>
                                                     </div>
                                                 </div>
-												<p className="text-sm text-gray-700 mb-2 dark:text-slate-300">{notice.content}</p>
-												<div className="flex items-center justify-between text-xs text-gray-600 dark:text-slate-400">
+												<p className={`text-sm mb-2 ${isDark ? 'text-slate-300' : 'text-gray-700'}`}>{notice.content}</p>
+												<div className="flex items-center justify-between text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
                                                     <span><i className="fas fa-user mr-1"></i>{notice.author}</span>
                                                     <span>{new Date(notice.date).toLocaleDateString('en-ZA', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                                 </div>
@@ -1056,8 +1079,8 @@ const Teams = () => {
                                     </div>
                                 ) : (
                                     <div className="text-center py-12">
-                                        <i className="fas fa-bullhorn text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                        <p className="text-sm text-gray-500 dark:text-slate-400">No notices yet</p>
+                                        <i className={`fas fa-bullhorn text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                        <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>No notices yet</p>
                                         <button 
                                             onClick={() => {
                                                 setEditingNotice(null);
@@ -1090,11 +1113,11 @@ const Teams = () => {
                                     // Component was available but disappeared (shouldn't happen)
                                     return (
                                         <div className="text-center py-12">
-                                            <i className="fas fa-clipboard-list text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                            <p className="text-sm text-gray-500 dark:text-slate-400 mb-2">
+                                            <i className={`fas fa-clipboard-list text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                            <p className="text-sm text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2">
                                                 Meeting Notes component not available
                                             </p>
-                                            <p className="text-xs text-gray-400 dark:text-slate-500">
+                                            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
                                                 Please refresh the page to load the component.
                                             </p>
                                         </div>
@@ -1103,11 +1126,11 @@ const Teams = () => {
                                     // Still loading
                                     return (
                                         <div className="text-center py-12">
-                                            <i className="fas fa-spinner fa-spin text-4xl text-gray-300 mb-3 dark:text-slate-600"></i>
-                                            <p className="text-sm text-gray-500 dark:text-slate-400 mb-2">
+                                            <i className={`fas fa-spinner fa-spin text-4xl mb-3 ${isDark ? 'text-slate-600' : 'text-gray-300'}`}></i>
+                                            <p className="text-sm text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'} mb-2">
                                                 Loading Meeting Notes component...
                                             </p>
-                                            <p className="text-xs text-gray-400 dark:text-slate-500">
+                                            <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
                                                 Please wait while the component loads.
                                             </p>
                                         </div>
@@ -1194,11 +1217,11 @@ const Teams = () => {
             {/* Document View Modal */}
             {showDocumentViewModal && viewingDocument && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto dark:bg-slate-800">
-                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10 dark:bg-slate-800 dark:border-slate-700">
+                    <div className={`rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto ${isDark ? 'bg-slate-800' : 'bg-white'}`}>
+                        <div className="sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}">
                             <div>
-                                <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">{viewingDocument.title}</h3>
-                                <p className="text-xs text-gray-600 dark:text-slate-400">
+                                <h3 className="text-lg font-semibold text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">{viewingDocument.title}</h3>
+                                <p className="text-xs text-gray-600 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
                                     {viewingDocument.category} • Version {viewingDocument.version}
                                 </p>
                             </div>
@@ -1207,7 +1230,7 @@ const Teams = () => {
                                     setShowDocumentViewModal(false);
                                     setViewingDocument(null);
                                 }}
-                                className="text-gray-400 hover:text-gray-600 transition dark:text-slate-400 dark:hover:text-slate-200"
+                                className={`text-gray-400 transition ${isDark ? 'hover:text-slate-200 text-slate-400' : 'hover:text-gray-600'}`}
                             >
                                 <i className="fas fa-times text-lg"></i>
                             </button>
@@ -1215,28 +1238,28 @@ const Teams = () => {
 
                         <div className="p-4 space-y-4">
                             {viewingDocument.description && (
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 dark:bg-blue-900/30 dark:border-blue-700">
-                                    <p className="text-sm text-blue-900 dark:text-blue-200">{viewingDocument.description}</p>
+                                <div className={`border rounded-lg p-3 ${isDark ? 'bg-blue-900/30 border-blue-700' : 'bg-blue-50 border-blue-200'}`}>
+                                    <p className={`text-sm ${isDark ? 'text-blue-200' : 'text-blue-900'}`}>{viewingDocument.description}</p>
                                 </div>
                             )}
 
                             <div className="prose prose-sm max-w-none">
-                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900 dark:text-slate-100">
+                                <pre className="whitespace-pre-wrap font-sans text-sm text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">
                                     {viewingDocument.content}
                                 </pre>
                             </div>
 
                             {viewingDocument.attachments && viewingDocument.attachments.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 dark:text-slate-100">Attachments</h4>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Attachments</h4>
                                     <div className="space-y-2">
                                         {viewingDocument.attachments.map((att, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded border border-gray-200 dark:bg-slate-700 dark:border-slate-600">
+                                            <div key={idx} className={`flex items-center justify-between p-2 rounded border ${isDark ? 'bg-slate-700 border-slate-600' : 'bg-gray-50 border-gray-200'}`}>
                                                 <div className="flex items-center gap-2">
-                                                    <i className="fas fa-file text-gray-400 dark:text-slate-400"></i>
-                                                    <span className="text-sm text-gray-900 dark:text-slate-100">{att.name}</span>
+                                                    <i className="fas fa-file text-gray-400 ${isDark ? 'text-slate-400' : 'text-gray-600'}"></i>
+                                                    <span className="text-sm text-gray-900 ${isDark ? 'text-slate-100' : 'text-gray-900'}">{att.name}</span>
                                                 </div>
-                                                <span className="text-xs text-gray-500 dark:text-slate-400">
+                                                <span className="text-xs text-gray-500 ${isDark ? 'text-slate-400' : 'text-gray-600'}">
                                                     {(att.size / 1024).toFixed(2)} KB
                                                 </span>
                                             </div>
@@ -1247,10 +1270,10 @@ const Teams = () => {
 
                             {viewingDocument.tags && viewingDocument.tags.length > 0 && (
                                 <div>
-                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 dark:text-slate-100">Tags</h4>
+                                    <h4 className="text-sm font-semibold text-gray-900 mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}">Tags</h4>
                                     <div className="flex flex-wrap gap-2">
                                         {viewingDocument.tags.map(tag => (
-                                            <span key={tag} className="px-2 py-1 bg-primary-100 text-primary-700 rounded text-xs dark:bg-primary-900/50 dark:text-primary-300">
+                                            <span key={tag} className={`px-2 py-1 rounded text-xs ${isDark ? 'bg-primary-900/50 text-primary-300' : 'bg-primary-100 text-primary-700'}`}>
                                                 {tag}
                                             </span>
                                         ))}
@@ -1258,7 +1281,7 @@ const Teams = () => {
                                 </div>
                             )}
 
-                            <div className="pt-4 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500 dark:border-slate-700 dark:text-slate-400">
+                            <div className={`pt-4 border-t flex items-center justify-between text-xs ${isDark ? 'border-slate-700 text-slate-400' : 'border-gray-200 text-gray-500'}`}>
                                 <span>Created by {viewingDocument.createdBy}</span>
                                 <span>
                                     Last updated: {new Date(viewingDocument.updatedAt).toLocaleDateString('en-ZA', {
