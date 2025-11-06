@@ -1872,7 +1872,7 @@ const Manufacturing = () => {
         </div>
       </div>
     );
-  }, [inventory, stockLocations, filterCategory, sortConfig, selectedLocationId, isRefreshing, handleSort, handleColumnFilterChange, refreshAllManufacturingData, openAddItemModal]);
+  }, [inventory, stockLocations, filterCategory, sortConfig, selectedLocationId, isRefreshing, handleSort, handleColumnFilterChange]);
 
   const BOMView = () => {
     return (
