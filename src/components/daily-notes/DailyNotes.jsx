@@ -1966,60 +1966,25 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                            // Handle spacebar specially to prevent cursor jumping
-                            if (e.key === ' ' || e.keyCode === 32) {
-                                console.log('⌨️ SPACEBAR PRESSED - Starting spacebar handler');
-                                e.preventDefault();
-                                e.stopPropagation();
-                                
-                                // CRITICAL: Save cursor position BEFORE inserting space
+                            // Mark user as typing for ANY key press to prevent sync interference
+                            // This preserves cursor position during typing without interfering with normal behavior
+                            if (e.key === ' ' || e.key === 'Enter' || e.keyCode === 32 || e.keyCode === 13) {
+                                // Save cursor position before any key press
                                 saveCursorPosition();
                                 
                                 // Mark user as typing to prevent sync interference
                                 isUserTypingRef.current = true;
                                 lastUserInputTimeRef.current = Date.now();
                                 isUpdatingFromUserInputRef.current = true;
-                                console.log('✅ Flags set - typing blocked for 3 seconds');
                                 
-                                // Manually insert space at cursor position
-                                const selection = window.getSelection();
-                                if (selection.rangeCount > 0 && editorRef.current.contains(selection.anchorNode)) {
-                                    const range = selection.getRangeAt(0);
-                                    const beforeText = editorRef.current.innerText.substring(0, editorCursorPositionRef.current);
-                                    console.log('📍 Before insert - cursor at:', editorCursorPositionRef.current, 'text before:', beforeText);
-                                    
-                                    range.deleteContents();
-                                    const textNode = document.createTextNode(' ');
-                                    range.insertNode(textNode);
-                                    
-                                    // Move cursor after the inserted space
-                                    range.setStartAfter(textNode);
-                                    range.collapse(true);
-                                    selection.removeAllRanges();
-                                    selection.addRange(range);
-                                    
-                                    // Update cursor position ref to account for inserted space
-                                    if (editorCursorPositionRef.current !== null) {
-                                        editorCursorPositionRef.current += 1;
-                                    }
-                                    
-                                    const afterText = editorRef.current.innerText;
-                                    console.log('✅ Space inserted - cursor at:', editorCursorPositionRef.current, 'text after:', afterText);
-                                    
-                                    // Trigger input event to update state
-                                    const inputEvent = new Event('input', { bubbles: true });
-                                    editorRef.current.dispatchEvent(inputEvent);
-                                    console.log('📤 Input event dispatched');
-                                } else {
-                                    console.error('❌ Cannot insert space - no valid selection');
-                                }
-                                
-                                // Clear flags after longer delay - give plenty of time for React to finish
+                                // Clear flags after delay to allow sync after typing stops
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
                                     isUpdatingFromUserInputRef.current = false;
-                                    console.log('⏰ Typing flags cleared');
-                                }, 3000);
+                                }, 2000);
+                                
+                                // Let the default behavior happen (spacebar inserts space, enter creates new line)
+                                // We just prevent sync from interfering
                             }
                         }}
                         onBlur={() => {
