@@ -602,12 +602,26 @@
   }
   
   /* When sidebar is fixed (mobile), it shouldn't take up flex space */
-  #root > div.flex > div:first-child[style*="position: fixed"] {
+  /* Target sidebar div when it has fixed positioning (mobile) */
+  #root > div.flex > div:first-child[style*="fixed"],
+  #root > div.flex > div:first-child[style*="position: fixed"],
+  #root > div.flex > div:first-child[style*="position:fixed"] {
     flex: 0 0 0 !important;
     width: 0 !important;
     min-width: 0 !important;
+    max-width: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
+  }
+  
+  /* Also target when sidebar is off-screen (left: -280px) */
+  #root > div.flex > div:first-child[style*="-280px"],
+  #root > div.flex > div:first-child[style*="left: -280px"],
+  #root > div.flex > div:first-child[style*="left:-280px"] {
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
   }
   
   /* Main content container should always be full width */
