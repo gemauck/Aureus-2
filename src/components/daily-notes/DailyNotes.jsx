@@ -649,7 +649,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             
             // CRITICAL: Don't sync if user is currently typing or just typed - preserve their input
             const timeSinceLastInput = Date.now() - lastUserInputTimeRef.current;
-            if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 3000) {
+            // Increased threshold to 4000ms to prevent sync interference after Enter key
+            if (isUserTypingRef.current || isUpdatingFromUserInputRef.current || timeSinceLastInput < 4000) {
                 console.log('⚠️ Skipping editor sync - user is actively typing or just typed', {
                     isTyping: isUserTypingRef.current,
                     isFromInput: isUpdatingFromUserInputRef.current,
@@ -2118,16 +2119,16 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onKeyDown={(e) => {
                             // Handle Enter key to ensure it creates a new line
                             if (e.key === 'Enter' || e.keyCode === 13) {
-                                // Save cursor position before Enter key
-                                saveCursorPosition();
+                                // Prevent default to handle Enter ourselves
+                                e.preventDefault();
                                 
-                                // Mark user as typing to prevent sync interference
+                                // CRITICAL: Set typing flags BEFORE any operations to prevent sync interference
                                 isUserTypingRef.current = true;
                                 lastUserInputTimeRef.current = Date.now();
                                 isUpdatingFromUserInputRef.current = true;
                                 
-                                // Prevent default to handle Enter ourselves
-                                e.preventDefault();
+                                // Save cursor position before Enter key
+                                saveCursorPosition();
                                 
                                 // Insert a line break
                                 const selection = window.getSelection();
@@ -2164,19 +2165,31 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                         selection.addRange(range);
                                     }
                                     
-                                    // Update content after Enter
-                                    updateNoteContent();
+                                    // CRITICAL: Update state IMMEDIATELY after inserting line break
+                                    // This prevents the sync effect from overwriting with old content
+                                    if (editorRef.current) {
+                                        const newHtml = editorRef.current.innerHTML;
+                                        const newText = editorRef.current.innerText || editorRef.current.textContent || '';
+                                        
+                                        // Update state synchronously to prevent sync effect from interfering
+                                        setCurrentNoteHtml(newHtml);
+                                        setCurrentNote(newText);
+                                        
+                                        // Also update notes state immediately
+                                        const dateString = formatDateString(currentDate);
+                                        setNotes(prev => ({ ...prev, [dateString]: newHtml }));
+                                    }
                                     
-                                    // Trigger input event for auto-save
+                                    // Trigger input event for auto-save (this will also call updateNoteContent)
                                     const inputEvent = new Event('input', { bubbles: true });
                                     editorRef.current.dispatchEvent(inputEvent);
                                 }
                                 
-                                // Clear flags after delay to allow sync after typing stops
+                                // Clear flags after longer delay to ensure sync doesn't interfere
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
                                     isUpdatingFromUserInputRef.current = false;
-                                }, 2000);
+                                }, 3000); // Increased to 3 seconds to prevent sync interference
                                 
                                 return;
                             }
