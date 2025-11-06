@@ -24,6 +24,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const canvasRef = useRef(null);
     const toolbarRef = useRef(null);
     const editorCursorPositionRef = useRef(null); // Track cursor position to restore after updates
+    const isUserTypingRef = useRef(false); // Track if user is actively typing to prevent sync interference
     
     // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
@@ -63,13 +64,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 
                 // Force set editor content immediately
                 if (editorRef.current) {
-                    editorRef.current.innerHTML = note;
+                    setEditorContentSafely(note);
                     console.log('✅ Set initial editor content immediately, length:', note.length);
                 } else {
                     // If editor not ready, wait and set
                     setTimeout(() => {
                         if (editorRef.current) {
-                            editorRef.current.innerHTML = note;
+                            setEditorContentSafely(note);
                             console.log('✅ Set initial editor content (delayed), length:', note.length);
                         }
                     }, 100);
@@ -79,7 +80,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 setCurrentNote('');
                 setCurrentNoteHtml('');
                 if (editorRef.current) {
-                    editorRef.current.innerHTML = '';
+                    setEditorContentSafely('');
                 }
             }
             
@@ -174,7 +175,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             
                             // Force set editor content immediately
                             if (editorRef.current) {
-                                editorRef.current.innerHTML = note;
+                                setEditorContentSafely(note);
                                 console.log('✅ Set editor content from localStorage, length:', note.length);
                             }
                         } else if (note && currentEditorContent.trim() !== note.trim()) {
@@ -185,7 +186,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             
                             // Force set editor content
                             if (editorRef.current) {
-                                editorRef.current.innerHTML = note;
+                                setEditorContentSafely(note);
                                 console.log('✅ Updated editor content from localStorage, length:', note.length);
                             }
                         }
@@ -546,7 +547,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     // Only set if editor is empty or content is different
                     if (currentContent.trim().length === 0 || currentContent.trim() !== currentNoteHtml.trim()) {
                         console.log('🔧 Setting editor content on mount/update - editor:', currentContent.length, 'state:', currentNoteHtml.length);
-                        editorRef.current.innerHTML = currentNoteHtml;
+                        setEditorContentSafely(currentNoteHtml);
                         console.log('✅ Editor content set successfully, length:', currentNoteHtml.length);
                     }
                 }
@@ -564,9 +565,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                  (currentEditorContent.trim().length === 0 && currentNoteHtml.trim().length > 0));
             
             // CRITICAL: Don't sync if user is currently typing - preserve their input
-            // If we have a saved cursor position, user is typing and we shouldn't overwrite
-            if (editorCursorPositionRef.current) {
-                console.log('⚠️ Skipping editor sync - user is typing (cursor position saved)');
+            if (isUserTypingRef.current) {
+                console.log('⚠️ Skipping editor sync - user is actively typing');
                 return;
             }
             
@@ -574,29 +574,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             // After initialization, only sync if not initializing to avoid overwriting user input
             if (shouldUpdate) {
                 console.log('🔄 Syncing editor - state has content, editor:', currentEditorContent.length, 'state:', currentNoteHtml.length, 'initializing:', isInitializingRef.current);
-                // Save cursor position before updating
-                saveCursorPosition();
                 
-                // Use requestAnimationFrame to ensure DOM is ready
-                requestAnimationFrame(() => {
-                    if (editorRef.current && editorRef.current.innerHTML.trim() !== currentNoteHtml.trim()) {
-                        // Temporarily disable updateNoteContent to prevent feedback loop
-                        const wasInitializing = isInitializingRef.current;
-                        isInitializingRef.current = true;
-                        editorRef.current.innerHTML = currentNoteHtml;
-                        console.log('✅ Editor synced with state, length:', currentNoteHtml.length);
-                        
-                        // Restore cursor position after innerHTML update
-                        requestAnimationFrame(() => {
-                            restoreCursorPosition();
-                        });
-                        
-                        // Re-enable after editor has time to update
-                        setTimeout(() => {
-                            isInitializingRef.current = wasInitializing;
-                        }, 300);
-                    }
-                });
+                // Use safe wrapper that preserves cursor position
+                const wasInitializing = isInitializingRef.current;
+                isInitializingRef.current = true;
+                setEditorContentSafely(currentNoteHtml);
+                console.log('✅ Editor synced with state, length:', currentNoteHtml.length);
+                
+                // Re-enable after editor has time to update
+                setTimeout(() => {
+                    isInitializingRef.current = wasInitializing;
+                }, 300);
             }
         }
     }, [currentNoteHtml, showListView]);
@@ -1194,7 +1182,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     setCurrentNote('');
                     setCurrentNoteHtml('');
                     if (editorRef.current) {
-                        editorRef.current.innerHTML = '';
+                        setEditorContentSafely('');
                     }
                 }
                 
@@ -1255,13 +1243,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         // Set editor content immediately if available
         if (note && editorRef.current) {
             // Force set editor content immediately
-            editorRef.current.innerHTML = note;
+            setEditorContentSafely(note);
             console.log('✅ Set editor content immediately on open, length:', note.length);
         } else if (note) {
             // If editor not ready yet, wait a bit and try again
             setTimeout(() => {
                 if (editorRef.current) {
-                    editorRef.current.innerHTML = note;
+                    setEditorContentSafely(note);
                     console.log('✅ Set editor content on open (delayed), length:', note.length);
                 }
             }, 100);
@@ -1299,13 +1287,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         
                         // Update editor with server content immediately
                         if (editorRef.current) {
-                            editorRef.current.innerHTML = note;
+                            setEditorContentSafely(note);
                             console.log('✅ Updated editor with server note immediately, length:', note.length);
                         } else {
                             // If editor not ready, wait and try again
                             setTimeout(() => {
                                 if (editorRef.current) {
-                                    editorRef.current.innerHTML = note;
+                                    setEditorContentSafely(note);
                                     console.log('✅ Updated editor with server note (delayed), length:', note.length);
                                 }
                             }, 200);
@@ -1517,9 +1505,36 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             }
         }
     };
-
+    
+    // Safe wrapper to set innerHTML while preserving cursor position
+    const setEditorContentSafely = (html) => {
+        if (!editorRef.current) return;
+        
+        // Always save cursor position before any innerHTML update
+        saveCursorPosition();
+        
+        // Set the content
+        editorRef.current.innerHTML = html;
+        
+        // Always restore cursor position after innerHTML update
+        // Use double RAF to ensure DOM is fully updated
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                restoreCursorPosition();
+            });
+        });
+    };
+    
     // Handle editor input - always update content and trigger auto-save immediately
     const handleEditorInput = () => {
+        // Mark that user is actively typing - this prevents sync useEffect from interfering
+        isUserTypingRef.current = true;
+        
+        // Clear typing flag after a short delay
+        setTimeout(() => {
+            isUserTypingRef.current = false;
+        }, 500);
+        
         // Force update immediately - user typing should always work
         if (editorRef.current) {
             // Save cursor position before updating
@@ -1615,7 +1630,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             setCurrentNote('');
                             setCurrentNoteHtml('');
                             if (editorRef.current) {
-                                editorRef.current.innerHTML = '';
+                                setEditorContentSafely('');
                             }
                         }}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
@@ -1916,16 +1931,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                            // Handle spacebar specially to prevent cursor jumping
+                            // Save cursor position on spacebar to prevent cursor jumping
                             if (e.key === ' ' || e.keyCode === 32) {
-                                // Save cursor position before spacebar
                                 saveCursorPosition();
-                                
-                                // Don't prevent default - let the space insert normally
-                                // But we'll restore cursor position after React updates
+                                // Mark user as typing to prevent sync interference
+                                isUserTypingRef.current = true;
                                 setTimeout(() => {
-                                    restoreCursorPosition();
-                                }, 0);
+                                    isUserTypingRef.current = false;
+                                }, 500);
                             }
                         }}
                         onBlur={() => {
