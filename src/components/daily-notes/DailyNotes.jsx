@@ -28,6 +28,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const lastUserInputTimeRef = useRef(0); // Track when user last typed to prevent sync
     const isUpdatingFromUserInputRef = useRef(false); // Track if currentNoteHtml update is from user input
     const justPressedEnterRef = useRef(false); // Track if Enter was just pressed to prevent cursor restoration
+    const justUsedFormattingRef = useRef(false); // Track if formatting button was just clicked to prevent cursor restoration
     
     // Format date string helper - MUST be defined before useEffects
     const formatDateString = (date) => {
@@ -137,10 +138,35 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         }
         
         return () => {
+            // CRITICAL: Save note before unmounting or navigating away
+            if (!showListView && currentDate && editorRef.current) {
+                const dateString = formatDateString(currentDate);
+                const editorContent = editorRef.current.innerHTML || '';
+                const currentNoteContent = currentNoteHtml || currentNote || '';
+                
+                // Only save if there's content and it's different from last saved
+                if (editorContent && editorContent.trim().length > 0) {
+                    const lastSaved = sessionStorage.getItem(`last_saved_note_${dateString}`) || '';
+                    if (editorContent !== lastSaved) {
+                        console.log('💾 Saving note before unmount/navigation, length:', editorContent.length);
+                        // Save synchronously if possible, or use a quick save
+                        saveNote().catch(err => {
+                            console.error('Error saving note before unmount:', err);
+                            // Fallback: save to localStorage
+                            const user = window.storage?.getUser?.();
+                            const userId = user?.id || user?.email || 'default';
+                            const notesKey = `user_notes_${userId}`;
+                            const savedNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                            savedNotes[dateString] = editorContent;
+                            localStorage.setItem(notesKey, JSON.stringify(savedNotes));
+                        });
+                    }
+                }
+            }
             // Clear on unmount
             sessionStorage.removeItem('calendar_editing_date');
         };
-    }, [currentDate, showListView]);
+    }, [currentDate, showListView, currentNoteHtml, currentNote, saveNote]);
     
     // Load note when currentDate changes (when navigating back to a date)
     useEffect(() => {
@@ -162,24 +188,53 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 setCurrentNoteHtml(note);
                 console.log('📝 Set note state for currentDate, length:', note.length);
                 
-                // Set editor content if available
-                if (editorRef.current) {
-                    setEditorContentSafely(note);
-                    console.log('✅ Set editor content for currentDate, length:', note.length);
-                } else {
+                // CRITICAL: Always set editor content when loading note
+                // Use multiple attempts to ensure it's set
+                const setEditorContent = () => {
+                    if (editorRef.current) {
+                        setEditorContentSafely(note);
+                        console.log('✅ Set editor content for currentDate, length:', note.length);
+                        return true;
+                    }
+                    return false;
+                };
+                
+                // Try immediately
+                if (!setEditorContent()) {
+                    // Try after short delay
                     setTimeout(() => {
-                        if (editorRef.current) {
-                            setEditorContentSafely(note);
-                            console.log('✅ Set editor content for currentDate (delayed), length:', note.length);
+                        if (!setEditorContent()) {
+                            // Try again after longer delay
+                            setTimeout(() => {
+                                setEditorContent();
+                            }, 200);
                         }
                     }, 100);
                 }
             } else {
-                // Clear if no note found
-                setCurrentNote('');
-                setCurrentNoteHtml('');
-                if (editorRef.current) {
-                    setEditorContentSafely('');
+                // Only clear if we're sure there's no note
+                // Check localStorage one more time before clearing
+                const user = window.storage?.getUser?.();
+                const userId = user?.id || user?.email || 'default';
+                const notesKey = `user_notes_${userId}`;
+                const localNotes = JSON.parse(localStorage.getItem(notesKey) || '{}');
+                const localNote = localNotes[dateString] || '';
+                
+                if (!localNote || localNote.trim().length === 0) {
+                    // Clear if no note found
+                    setCurrentNote('');
+                    setCurrentNoteHtml('');
+                    if (editorRef.current) {
+                        setEditorContentSafely('');
+                    }
+                } else {
+                    // Found note in localStorage, load it
+                    const cleanedNote = cleanHtmlContent(localNote);
+                    setCurrentNote(cleanedNote);
+                    setCurrentNoteHtml(cleanedNote);
+                    if (editorRef.current) {
+                        setEditorContentSafely(cleanedNote);
+                    }
                 }
             }
             
@@ -245,27 +300,38 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         const note = cleanedLocalNotes[dateString] || '';
                         const currentEditorContent = editorRef.current?.innerHTML || '';
                         
-                        // Load note if editor is empty or content is different
-                        if (note && (!currentEditorContent || currentEditorContent.trim().length === 0)) {
-                            setCurrentNote(note);
-                            setCurrentNoteHtml(note);
-                            console.log('📝 Loading note for date from localStorage:', dateString, 'length:', note.length);
-                            
-                            // Force set editor content immediately
-                            if (editorRef.current) {
-                                setEditorContentSafely(note);
-                                console.log('✅ Set editor content from localStorage, length:', note.length);
+                        // CRITICAL: Always load note from localStorage if editor is empty
+                        // This ensures notes persist when navigating back
+                        if (note && note.length > 0) {
+                            // Always update state and editor if we have a note
+                            if (!currentEditorContent || currentEditorContent.trim().length === 0 || currentEditorContent.trim() !== note.trim()) {
+                                setCurrentNote(note);
+                                setCurrentNoteHtml(note);
+                                console.log('📝 Loading note for date from localStorage:', dateString, 'length:', note.length);
+                                
+                                // Force set editor content immediately
+                                if (editorRef.current) {
+                                    setEditorContentSafely(note);
+                                    console.log('✅ Set editor content from localStorage, length:', note.length);
+                                } else {
+                                    // Wait for editor to be ready
+                                    setTimeout(() => {
+                                        if (editorRef.current) {
+                                            setEditorContentSafely(note);
+                                            console.log('✅ Set editor content from localStorage (delayed), length:', note.length);
+                                        }
+                                    }, 100);
+                                }
                             }
-                        } else if (note && currentEditorContent.trim() !== note.trim()) {
-                            // Update if different
-                            setCurrentNote(note);
-                            setCurrentNoteHtml(note);
-                            console.log('📝 Updating note from localStorage:', dateString, 'length:', note.length);
-                            
-                            // Force set editor content
-                            if (editorRef.current) {
-                                setEditorContentSafely(note);
-                                console.log('✅ Updated editor content from localStorage, length:', note.length);
+                        } else if (!note || note.length === 0) {
+                            // Only clear if we're sure there's no note
+                            // Don't clear if editor has content (might be unsaved)
+                            if (!currentEditorContent || currentEditorContent.trim().length === 0) {
+                                setCurrentNote('');
+                                setCurrentNoteHtml('');
+                                if (editorRef.current) {
+                                    setEditorContentSafely('');
+                                }
                             }
                         }
                     }
@@ -329,6 +395,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         if (!showListView && currentDate) {
                             let serverNote = serverNotes[dateString] || '';
                             const currentNoteContent = currentNoteHtml || currentNote;
+                            const editorContent = editorRef.current?.innerHTML || '';
                             
                             console.log('📝 Comparing notes for date:', dateString, {
                                 serverLength: serverNote.length,
@@ -337,17 +404,47 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 areEqual: serverNote === currentNoteContent
                             });
                             
-                            // Only update if server note exists and is different from current, or if current is empty
-                            const shouldUpdate = serverNote && serverNote.length > 0 && 
-                                (serverNote !== currentNoteContent || !currentNoteContent || currentNoteContent.length === 0) &&
-                                (serverNote !== editorContent || !editorContent || editorContent.trim().length === 0);
+                            // CRITICAL: Always load note if editor is empty or if server has a note
+                            // This ensures notes persist when navigating back
+                            const shouldUpdate = 
+                                // If server has a note and editor is empty, load it
+                                (serverNote && serverNote.length > 0 && (!editorContent || editorContent.trim().length === 0)) ||
+                                // If server has a note and current state is empty, load it
+                                (serverNote && serverNote.length > 0 && (!currentNoteContent || currentNoteContent.length === 0)) ||
+                                // If server note is different and longer than current, use server version
+                                (serverNote && serverNote.length > 0 && serverNote !== currentNoteContent && serverNote.length >= currentNoteContent.length);
                             
                             if (shouldUpdate) {
                                 console.log('📝 Updating note from server, server length:', serverNote.length);
                                 setCurrentNote(serverNote);
                                 setCurrentNoteHtml(serverNote);
+                                
+                                // CRITICAL: Always set editor content when loading from server
+                                if (editorRef.current) {
+                                    setEditorContentSafely(serverNote);
+                                    console.log('✅ Set editor content from server, length:', serverNote.length);
+                                } else {
+                                    // Wait for editor to be ready
+                                    setTimeout(() => {
+                                        if (editorRef.current) {
+                                            setEditorContentSafely(serverNote);
+                                            console.log('✅ Set editor content from server (delayed), length:', serverNote.length);
+                                        }
+                                    }, 100);
+                                }
                             } else if (!serverNote || serverNote.length === 0) {
-                                console.log('⚠️ Server note is empty for date:', dateString);
+                                // If server is empty but localStorage has content, use localStorage
+                                const localNote = cleanedLocalNotes[dateString] || '';
+                                if (localNote && localNote.length > 0 && (!editorContent || editorContent.trim().length === 0)) {
+                                    console.log('📝 Loading note from localStorage (server empty), length:', localNote.length);
+                                    setCurrentNote(localNote);
+                                    setCurrentNoteHtml(localNote);
+                                    if (editorRef.current) {
+                                        setEditorContentSafely(localNote);
+                                    }
+                                } else {
+                                    console.log('⚠️ Server note is empty for date:', dateString);
+                                }
                             } else {
                                 console.log('📝 Skipping update - current note is already set or editor has content');
                             }
@@ -412,12 +509,14 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 const width = editorRect.width;
                 const height = editorRect.height;
                 
+                // Setting width/height resets the context, so we need to re-apply styles
                 canvas.width = width * dpr;
                 canvas.height = height * dpr;
                 canvas.style.width = width + 'px';
                 canvas.style.height = height + 'px';
                 
-                // Scale context for high DPI displays
+                // Reset transform and scale context for high DPI displays
+                ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
                 ctx.scale(dpr, dpr);
                 
                 // Set drawing styles
@@ -463,7 +562,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         const ctx = canvas.getContext('2d');
         const rect = canvas.getBoundingClientRect();
         
-        // Get coordinates relative to canvas
+        // Get coordinates relative to canvas (in CSS pixels)
+        // The context is already scaled by DPR, so we use CSS pixel coordinates directly
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         
@@ -472,7 +572,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Restore drawing styles (in case they were reset)
         ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
-        ctx.lineWidth = 3;
+        ctx.lineWidth = 3; // Context is already scaled, so use CSS pixel size
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         
@@ -493,7 +593,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         const ctx = canvas.getContext('2d');
         const rect = canvas.getBoundingClientRect();
         
-        // Get coordinates relative to canvas
+        // Get coordinates relative to canvas (in CSS pixels)
+        // The context is already scaled by DPR, so we use CSS pixel coordinates directly
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
         const clientY = e.touches ? e.touches[0].clientY : e.clientY;
         
@@ -507,6 +608,22 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const stopDrawing = (e) => {
         if (isDrawing) {
             setIsDrawing(false);
+            // CRITICAL: Auto-save drawing when drawing stops
+            // Small delay to ensure canvas is fully updated
+            setTimeout(() => {
+                if (canvasRef.current && showHandwriting) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+                    const hasDrawing = imageData.data.some((channel, index) => {
+                        return index % 4 !== 3 && channel !== 0;
+                    });
+                    
+                    if (hasDrawing) {
+                        console.log('💾 Auto-saving drawing after stopDrawing...');
+                        saveNote().catch(err => console.error('Error auto-saving drawing:', err));
+                    }
+                }
+            }, 100);
         }
         if (e) {
             e.preventDefault();
@@ -1368,22 +1485,60 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     
     // Navigate to previous day
     const goToPreviousDay = () => {
+        // CRITICAL: Save current note before navigating
+        if (editorRef.current && currentDate) {
+            const dateString = formatDateString(currentDate);
+            const editorContent = editorRef.current.innerHTML || '';
+            if (editorContent && editorContent.trim().length > 0) {
+                console.log('💾 Saving note before navigating to previous day, length:', editorContent.length);
+                saveNote().catch(err => console.error('Error saving before navigation:', err));
+            }
+        }
+        
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() - 1);
         const dateString = formatDateString(newDate);
-        openNote(dateString);
+        // Small delay to ensure save completes
+        setTimeout(() => {
+            openNote(dateString);
+        }, 100);
     };
     
     // Navigate to next day
     const goToNextDay = () => {
+        // CRITICAL: Save current note before navigating
+        if (editorRef.current && currentDate) {
+            const dateString = formatDateString(currentDate);
+            const editorContent = editorRef.current.innerHTML || '';
+            if (editorContent && editorContent.trim().length > 0) {
+                console.log('💾 Saving note before navigating to next day, length:', editorContent.length);
+                saveNote().catch(err => console.error('Error saving before navigation:', err));
+            }
+        }
+        
         const newDate = new Date(currentDate);
         newDate.setDate(newDate.getDate() + 1);
         const dateString = formatDateString(newDate);
-        openNote(dateString);
+        // Small delay to ensure save completes
+        setTimeout(() => {
+            openNote(dateString);
+        }, 100);
     };
     
     // Open note for editing
     const openNote = async (dateString) => {
+        // CRITICAL: Save current note before opening a different note
+        if (editorRef.current && currentDate) {
+            const currentDateString = formatDateString(currentDate);
+            if (currentDateString !== dateString) {
+                const editorContent = editorRef.current.innerHTML || '';
+                if (editorContent && editorContent.trim().length > 0) {
+                    console.log('💾 Saving note before opening different note, length:', editorContent.length);
+                    await saveNote().catch(err => console.error('Error saving before opening note:', err));
+                }
+            }
+        }
+        
         const date = new Date(dateString + 'T00:00:00Z');
         setCurrentDate(date);
         setShowListView(false);
@@ -1478,6 +1633,12 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     // Rich text formatting commands
     const execCommand = (command, value = null) => {
         if (!editorRef.current) return;
+        
+        // CRITICAL: Save cursor position BEFORE formatting command
+        saveCursorPosition();
+        
+        // CRITICAL: Set flag to prevent cursor restoration in input handler
+        justUsedFormattingRef.current = true;
         
         // Ensure editor is focused
         editorRef.current.focus();
@@ -1596,6 +1757,18 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         editorRef.current.focus();
         updateNoteContent();
         
+        // CRITICAL: Restore cursor position after formatting command
+        // Use double RAF to ensure DOM is updated
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                restoreCursorPosition();
+                // Clear flag after restoration
+                setTimeout(() => {
+                    justUsedFormattingRef.current = false;
+                }, 100);
+            });
+        });
+        
         // Trigger input event to ensure auto-save
         const inputEvent = new Event('input', { bubbles: true });
         editorRef.current.dispatchEvent(inputEvent);
@@ -1693,8 +1866,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const setEditorContentSafely = (html) => {
         if (!editorRef.current) return;
         
-        // Skip cursor save/restore if Enter was just pressed (cursor is already in correct position)
-        const skipCursorRestore = justPressedEnterRef.current;
+        // Skip cursor save/restore if Enter was just pressed or formatting was just used
+        const skipCursorRestore = justPressedEnterRef.current || justUsedFormattingRef.current;
         
         if (!skipCursorRestore) {
             // Always save cursor position before any innerHTML update
@@ -1704,7 +1877,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         // Set the content
         editorRef.current.innerHTML = html;
         
-        // Only restore cursor if Enter was NOT just pressed
+        // Only restore cursor if Enter was NOT just pressed and formatting was NOT just used
         if (!skipCursorRestore) {
             // Always restore cursor position after innerHTML update
             // Use double RAF to ensure DOM is fully updated
@@ -1731,12 +1904,17 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         
         // Force update immediately - user typing should always work
         if (editorRef.current) {
-            // Skip cursor save/restore if Enter was just pressed (cursor is already in correct position)
-            const skipCursorRestore = justPressedEnterRef.current;
+            // Skip cursor save/restore if Enter was just pressed or formatting button was just clicked
+            const skipCursorRestore = justPressedEnterRef.current || justUsedFormattingRef.current;
             if (skipCursorRestore) {
-                // Clear the flag after a short delay (but longer than input handler's delay)
+                // Clear the flags after a short delay (but longer than input handler's delay)
                 setTimeout(() => {
-                    justPressedEnterRef.current = false;
+                    if (justPressedEnterRef.current) {
+                        justPressedEnterRef.current = false;
+                    }
+                    if (justUsedFormattingRef.current) {
+                        justUsedFormattingRef.current = false;
+                    }
                 }, 200);
             } else {
                 // Save cursor position BEFORE reading innerHTML (which might trigger re-render)
@@ -1753,7 +1931,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const text = editorRef.current.innerText || editorRef.current.textContent || '';
             setCurrentNote(text);
             
-            // Only restore cursor if Enter was NOT just pressed
+            // Only restore cursor if Enter was NOT just pressed and formatting was NOT just used
             if (!skipCursorRestore) {
                 // Restore cursor position after state update - use multiple attempts
                 requestAnimationFrame(() => {
@@ -1827,7 +2005,21 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     <div className="flex items-center space-x-4">
                         {onClose && (
                             <button
-                                onClick={onClose}
+                                onClick={() => {
+                                    // CRITICAL: Save note before closing
+                                    if (editorRef.current && currentDate) {
+                                        const dateString = formatDateString(currentDate);
+                                        const editorContent = editorRef.current.innerHTML || '';
+                                        if (editorContent && editorContent.trim().length > 0) {
+                                            console.log('💾 Saving note before close, length:', editorContent.length);
+                                            saveNote().catch(err => console.error('Error saving before close:', err));
+                                        }
+                                    }
+                                    // Small delay to ensure save completes
+                                    setTimeout(() => {
+                                        if (onClose) onClose();
+                                    }, 100);
+                                }}
                                 className={`${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
                             >
                                 <i className="fas fa-arrow-left"></i>

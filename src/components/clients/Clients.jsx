@@ -1442,22 +1442,38 @@ const Clients = React.memo(() => {
         startSync();
     };
     
+    const handlePauseSync = (pause) => {
+        isFormOpenRef.current = pause;
+        console.log(`⏸️ handlePauseSync: ${pause ? 'pausing' : 'resuming'} LiveDataSync`);
+    };
+    
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
         console.log('=== SAVE CLIENT DEBUG ===');
         console.log('Received form data:', clientFormData);
         console.log('All fields:', Object.keys(clientFormData));
         console.log('Contacts in form data:', clientFormData.contacts);
         console.log('Sites in form data:', clientFormData.sites);
+        
+        // Validate required fields
+        if (!clientFormData || !clientFormData.name || clientFormData.name.trim() === '') {
+            console.error('❌ Client name is required but empty');
+            alert('Please enter a Client Name to save the client.');
+            return;
+        }
+        
         // Get selectedClient from editingClientId
         const selectedClient = editingClientId ? clients.find(c => c.id === editingClientId) : null;
         console.log('Selected client:', selectedClient);
+        
+        // Declare comprehensiveClient outside try block so it's available in catch
+        let comprehensiveClient = null;
         
         try {
             // Check if user is logged in
             const token = window.storage?.getToken?.() || null;
             
             // Create comprehensive client object with ALL fields
-            const comprehensiveClient = {
+            comprehensiveClient = {
                 id: selectedClient ? selectedClient.id : Date.now().toString(),
                 name: clientFormData.name || '',
                 status: clientFormData.status || 'Active',
@@ -1714,13 +1730,32 @@ const Clients = React.memo(() => {
                     
                 } catch (apiError) {
                     console.error('API error saving client:', apiError);
-                    if (apiError.message.includes('Unauthorized') || apiError.message.includes('401')) {
+                    const errorMessage = apiError.message || 'Unknown error';
+                    
+                    // Check for specific error messages and show user-friendly alerts
+                    if (errorMessage.includes('name required') || errorMessage.includes('name is required')) {
+                        alert('Error: Client name is required. Please make sure the Client Name field is filled in.');
+                        return; // Don't fall back to localStorage if validation fails
+                    }
+                    
+                    // Check for duplicate client errors
+                    if (errorMessage.toLowerCase().includes('duplicate') || errorMessage.toLowerCase().includes('already exists')) {
+                        alert(`Error: ${errorMessage}\n\nPlease check if a client with this name already exists.`);
+                        return; // Don't fall back to localStorage for duplicates
+                    }
+                    
+                    if (errorMessage.includes('Unauthorized') || errorMessage.includes('401')) {
                         console.log('Token expired, falling back to localStorage only');
                         window.storage?.removeToken?.();
                         window.storage?.removeUser?.();
                     }
                     
-                    // Always fall back to localStorage on any API error
+                    // For other errors, show the error message but still allow fallback
+                    if (!errorMessage.includes('name required') && !errorMessage.includes('duplicate')) {
+                        alert(`Error saving client: ${errorMessage}\n\nAttempting to save locally...`);
+                    }
+                    
+                    // Always fall back to localStorage on any API error (except validation errors)
                     console.log('Falling back to localStorage for client save');
                     console.log('Current clients before fallback:', clients.length);
                     console.log('Comprehensive client to save:', comprehensiveClient);
@@ -1753,8 +1788,29 @@ const Clients = React.memo(() => {
             
         } catch (error) {
             console.error('Failed to save client:', error);
-            alert('Failed to save client: ' + error.message);
+            const errorMessage = error.message || 'Unknown error';
+            
+            // Show user-friendly error messages
+            if (errorMessage.includes('name required') || errorMessage.includes('name is required')) {
+                alert('Error: Client name is required. Please make sure the Client Name field is filled in.');
+            } else if (errorMessage.toLowerCase().includes('duplicate') || errorMessage.toLowerCase().includes('already exists')) {
+                alert(`Error: ${errorMessage}\n\nPlease check if a client with this name already exists.`);
+            } else {
+                alert('Failed to save client: ' + errorMessage);
+            }
+            
             // Return comprehensiveClient even on error so modal can preserve local state
+            // If comprehensiveClient wasn't created, create a minimal one from formData
+            if (!comprehensiveClient) {
+                comprehensiveClient = {
+                    id: Date.now().toString(),
+                    name: clientFormData.name || '',
+                    status: clientFormData.status || 'Active',
+                    industry: clientFormData.industry || 'Other',
+                    type: 'client',
+                    ...clientFormData
+                };
+            }
             return comprehensiveClient;
         }
         
@@ -1781,6 +1837,10 @@ const Clients = React.memo(() => {
             alert('Please enter an Entity Name to save the lead.');
             return;
         }
+        
+        // Get selectedLead from editingLeadId
+        const selectedLead = editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null;
+        console.log('Selected lead:', selectedLead);
         
         try {
             const token = window.storage?.getToken?.();
@@ -1903,7 +1963,7 @@ const Clients = React.memo(() => {
                         // This ensures we're synced with the database
                         const savedLeads = leads.map(l => l.id === savedLead.id ? savedLead : l);
                         setLeads(savedLeads);
-                        setSelectedLead(savedLead); // Update selected lead with persisted data
+                        selectedLeadRef.current = savedLead; // Update selected lead ref with persisted data
                         
                         // Also update localStorage to keep cache in sync
                         if (window.storage?.setLeads) {
@@ -1928,7 +1988,7 @@ const Clients = React.memo(() => {
                         // If API fails, still update local state but show warning
                         const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                         setLeads(updatedLeads);
-                        setSelectedLead(updatedLead);
+                        selectedLeadRef.current = updatedLead; // Update ref with updated lead
                         
                         // Save to localStorage even when API fails
                         if (window.storage?.setLeads) {
@@ -1946,7 +2006,7 @@ const Clients = React.memo(() => {
                     // No authentication - just update local state
                     const updatedLeads = leads.map(l => l.id === selectedLead.id ? updatedLead : l);
                     setLeads(updatedLeads);
-                    setSelectedLead(updatedLead);
+                    selectedLeadRef.current = updatedLead; // Update ref with updated lead
                     
                     // Save to localStorage even without authentication
                     if (window.storage?.setLeads) {
@@ -2138,7 +2198,7 @@ const Clients = React.memo(() => {
                                     name: parsedSavedLead.name,
                                     notes: parsedSavedLead.notes?.substring(0, 20)
                                 });
-                                setSelectedLead(parsedSavedLead);
+                                selectedLeadRef.current = parsedSavedLead; // Update ref with parsed saved lead
                             }
                             
                             // CRITICAL: Save to localStorage immediately to ensure persistence
@@ -2228,7 +2288,7 @@ const Clients = React.memo(() => {
                 // Only if not staying in edit mode
                 if (!stayInEditMode) {
                     setViewMode('leads');
-                    setSelectedLead(null);
+                    selectedLeadRef.current = null; // Clear selected lead ref
                     setCurrentLeadTab('overview');
                     // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after save
                     handlePauseSync(false);
@@ -2625,7 +2685,7 @@ const Clients = React.memo(() => {
         setClients([...clients, newClient]);
         setLeads(leads.filter(l => l.id !== lead.id));
         setViewMode('clients');
-        setSelectedLead(null);
+        selectedLeadRef.current = null; // Clear selected lead ref
         alert('Lead converted to client!');
     };
 
@@ -3391,7 +3451,8 @@ const Clients = React.memo(() => {
     // Full-page Lead Detail View
     const LeadDetailView = () => {
         // Get the lead from editingLeadId
-        const selectedLead = editingLeadId ? leads.find(l => l.id === editingLeadId) : null;
+        // Ensure leads array exists before trying to find
+        const selectedLead = editingLeadId && Array.isArray(leads) ? leads.find(l => l.id === editingLeadId) : null;
         
         return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
@@ -3439,6 +3500,7 @@ const Clients = React.memo(() => {
                         <Modal
                         key={editingLeadId || 'new-lead'}
                         leadId={editingLeadId}
+                        onSave={handleSaveLead}
                         onClose={handleLeadModalClose}
                         onDelete={handleDeleteLead}
                         onConvertToClient={convertLeadToClient}
@@ -3446,6 +3508,7 @@ const Clients = React.memo(() => {
                         isFullPage={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
+                        onPauseSync={handlePauseSync}
                     />
                     );
                 })()}

@@ -2,7 +2,7 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange }) => {
+const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange, onSave, onPauseSync = null }) => {
     // Modal owns its state - fetch data when leadId changes
     const [lead, setLead] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -1559,13 +1559,18 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                 lastContact: new Date().toISOString().split('T')[0]
             };
             
-            if (leadId) {
-                await window.api.updateClient(leadId, leadData);
+            // Use onSave prop if provided, otherwise fall back to direct API calls
+            if (onSave && typeof onSave === 'function') {
+                await onSave(leadData, false); // false = don't stay in edit mode after save
             } else {
-                await window.api.createClient(leadData);
+                // Fallback to direct API calls if onSave is not provided
+                if (leadId) {
+                    await window.api.updateLead(leadId, leadData);
+                } else {
+                    await window.api.createLead(leadData);
+                }
+                onClose();
             }
-            
-            onClose();
         } catch (error) {
             console.error('Error saving lead:', error);
             alert('Error saving lead: ' + error.message);
