@@ -222,6 +222,8 @@ const Clients = React.memo(() => {
     const [clients, setClients] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
+    const isUserEditingRef = useRef(false); // Ref to track if user is editing
+    const isAutoSavingRef = useRef(false); // Ref to track if auto-saving is in progress
     
     // Keep refs in sync with state
     useEffect(() => {
@@ -771,7 +773,7 @@ const Clients = React.memo(() => {
     // Force refresh leads when switching to leads view to ensure fresh data across users
     // CRITICAL: Skip if user is editing
     useEffect(() => {
-        if (viewMode === 'leads' && !isUserEditing) {
+        if (viewMode === 'leads' && !isUserEditingRef.current) {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
             console.log(`🔄 Switching to leads view (${userEmail}) - clearing caches and refreshing...`);
@@ -804,7 +806,7 @@ const Clients = React.memo(() => {
     // Force refresh clients when switching to clients view to ensure fresh data across users
     // CRITICAL: Skip if user is editing
     useEffect(() => {
-        if (viewMode === 'clients' && !isUserEditing) {
+        if (viewMode === 'clients' && !isUserEditingRef.current) {
             const currentUser = window.storage?.getUser?.();
             const userEmail = currentUser?.email || 'unknown';
             console.log(`🔄 Switching to clients view (${userEmail}) - clearing caches and refreshing...`);
@@ -931,7 +933,7 @@ const Clients = React.memo(() => {
             
             // CRITICAL: Skip LiveDataSync updates if user is editing OR auto-saving
             // Use REF for synchronous check (state might lag)
-            if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
+            if (isUserEditingRef.current || isAutoSavingRef.current) {
                 console.log('⏸️ LiveDataSync: Skipping update - user is editing or auto-saving (editing:', isUserEditingRef.current, 'autoSaving:', isAutoSavingRef.current, ')');
                 return;
             }
