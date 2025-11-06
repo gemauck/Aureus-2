@@ -1867,7 +1867,8 @@ const Clients = React.memo(() => {
                     contactsCount: Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 0,
                     followUpsCount: Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 0,
                     hasNotes: !!updatedLead.notes,
-                    commentsCount: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 0
+                    commentsCount: Array.isArray(updatedLead.comments) ? updatedLead.comments.length : 0,
+                    proposalsCount: Array.isArray(updatedLead.proposals) ? updatedLead.proposals.length : 0
                 });
                 
                 if (token && window.api?.updateLead) {
@@ -1876,7 +1877,9 @@ const Clients = React.memo(() => {
                         console.log('🌐 Payload includes - stage:', updatedLead.stage, '(type:', typeof updatedLead.stage, ')',
                                    'contacts:', Array.isArray(updatedLead.contacts) ? updatedLead.contacts.length : 'not array', 
                                    'followUps:', Array.isArray(updatedLead.followUps) ? updatedLead.followUps.length : 'not array',
+                                   'proposals:', Array.isArray(updatedLead.proposals) ? updatedLead.proposals.length : 'not array',
                                    'notes length:', updatedLead.notes ? updatedLead.notes.length : 0);
+                        console.log('🌐 Proposals being sent:', updatedLead.proposals ? JSON.stringify(updatedLead.proposals, null, 2) : 'NO PROPOSALS');
                         
                         const apiResponse = await window.api.updateLead(updatedLead.id, updatedLead);
                         console.log('✅ Lead updated in database');
