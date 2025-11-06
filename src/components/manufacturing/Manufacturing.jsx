@@ -1226,7 +1226,7 @@ const Manufacturing = () => {
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Part No.</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Manufacturing Part Number</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Legacy Part Number</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Abcotronics Part Number (Legacy)</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
                     <button 
                       type="button"
@@ -2187,12 +2187,12 @@ const Manufacturing = () => {
       if (newLegacyPart && existingLegacyPart) {
         if (newLegacyPart.toLowerCase() === existingLegacyPart.toLowerCase()) {
           matchScore = 100;
-          matchReasons.push('Legacy Part Number: Exact match');
+          matchReasons.push('Abcotronics Part Number (Legacy): Exact match');
         } else {
           const partSimilarity = calculateSimilarity(newLegacyPart, existingLegacyPart);
           if (partSimilarity >= partNumberThreshold) {
             matchScore = Math.max(matchScore, partSimilarity);
-            matchReasons.push(`Legacy Part: ${partSimilarity.toFixed(1)}% similar`);
+            matchReasons.push(`Abcotronics Part (Legacy): ${partSimilarity.toFixed(1)}% similar`);
           }
         }
       }
@@ -3549,9 +3549,9 @@ const Manufacturing = () => {
                   />
                 </div>
 
-                {/* Legacy Part Number */}
+                {/* Abcotronics Part Number (Legacy) */}
                 <div className="col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Legacy Part Number</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Abcotronics Part Number (Legacy)</label>
                   <input
                     type="text"
                     value={formData.legacyPartNumber || ''}
@@ -7202,7 +7202,7 @@ const Manufacturing = () => {
                             <div><strong>Manufacturing Part:</strong> {warning.existingItem.manufacturingPartNumber}</div>
                           )}
                           {warning.existingItem.legacyPartNumber && (
-                            <div><strong>Legacy Part:</strong> {warning.existingItem.legacyPartNumber}</div>
+                            <div><strong>Abcotronics Part (Legacy):</strong> {warning.existingItem.legacyPartNumber}</div>
                           )}
                           {warning.existingItem.category && (
                             <div><strong>Category:</strong> {warning.existingItem.category.replace('_', ' ')}</div>
@@ -7248,7 +7248,7 @@ const Manufacturing = () => {
                     <div><strong>Manufacturing Part:</strong> {pendingCreateData.manufacturingPartNumber}</div>
                   )}
                   {pendingCreateData?.legacyPartNumber && (
-                    <div><strong>Legacy Part:</strong> {pendingCreateData.legacyPartNumber}</div>
+                    <div><strong>Abcotronics Part (Legacy):</strong> {pendingCreateData.legacyPartNumber}</div>
                   )}
                   {pendingCreateData?.category && (
                     <div><strong>Category:</strong> {pendingCreateData.category.replace('_', ' ')}</div>
