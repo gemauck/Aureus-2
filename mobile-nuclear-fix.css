@@ -169,9 +169,18 @@
     display: revert !important;
   }
   
-  /* CRITICAL: Force main to display AFTER revert rule */
-  main {
+  /* CRITICAL: Force main to display AFTER revert rule - Multiple selectors for maximum specificity */
+  main,
+  main[class],
+  main[style],
+  body main,
+  #root main,
+  #root > div > main,
+  div.flex-1 main,
+  [class*="flex-1"] main {
     display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
   }
   
   aside[style*="display: none"] {
