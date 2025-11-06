@@ -791,13 +791,14 @@ const Manufacturing = () => {
         }
       })();
       const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
+      const matchesManufacturingPart = !columnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(columnFilters.manufacturingPart.toLowerCase()));
       const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
       const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
       const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
       const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
-             matchesLegacyPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
+             matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
     });
 
     // Sorting logic
@@ -1151,6 +1152,16 @@ const Manufacturing = () => {
                         </div>
                       )}
                       
+                      {/* Manufacturing Part Number */}
+                      {item.manufacturingPartNumber && (
+                        <div className="mt-2 pt-2 border-t border-gray-200">
+                          <div className="text-xs">
+                            <span className="text-gray-500">Manufacturing Part Number:</span>
+                            <span className="ml-1 text-gray-900 font-medium">{item.manufacturingPartNumber}</span>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* Actions */}
                       <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
                         <button
@@ -1211,6 +1222,7 @@ const Manufacturing = () => {
                     </button>
                   </th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Supplier Part No.</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Manufacturing Part Number</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Legacy Part Number</th>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
                     <button 
@@ -1346,6 +1358,15 @@ const Manufacturing = () => {
                   <th className="px-3 py-2">
                     <input
                       type="text"
+                      placeholder="Filter Mfg Part..."
+                      value={columnFilters.manufacturingPart || ''}
+                      onChange={(e) => handleColumnFilterChange('manufacturingPart', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </th>
+                  <th className="px-3 py-2">
+                    <input
+                      type="text"
                       placeholder="Filter Legacy..."
                       value={columnFilters.legacyPart || ''}
                       onChange={(e) => handleColumnFilterChange('legacyPart', e.target.value)}
@@ -1467,6 +1488,11 @@ const Manufacturing = () => {
                           return <span className="text-gray-400">-</span>;
                         }
                       })()}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-600">
+                      {(item.manufacturingPartNumber !== undefined && item.manufacturingPartNumber) 
+                        ? item.manufacturingPartNumber 
+                        : <span className="text-gray-400">-</span>}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-600">
                       {(item.legacyPartNumber !== undefined && item.legacyPartNumber) 
@@ -2090,6 +2116,9 @@ const Manufacturing = () => {
       // Only include new fields if they exist (backwards compatibility)
       if (formData.supplierPartNumbers !== undefined) {
         itemData.supplierPartNumbers = formData.supplierPartNumbers || '[]';
+      }
+      if (formData.manufacturingPartNumber !== undefined) {
+        itemData.manufacturingPartNumber = formData.manufacturingPartNumber || '';
       }
       if (formData.legacyPartNumber !== undefined) {
         itemData.legacyPartNumber = formData.legacyPartNumber || '';
@@ -3315,6 +3344,18 @@ const Manufacturing = () => {
                   </div>
                 </div>
 
+                {/* Manufacturing Part Number */}
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturing Part Number</label>
+                  <input
+                    type="text"
+                    value={formData.manufacturingPartNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, manufacturingPartNumber: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., MFG-PART-123"
+                  />
+                </div>
+
                 {/* Legacy Part Number */}
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Legacy Part Number</label>
@@ -4208,6 +4249,10 @@ const Manufacturing = () => {
                     <div>
                       <p className="text-xs text-gray-500">Supplier</p>
                       <p className="text-sm text-gray-900">{selectedItem.supplier}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Manufacturing Part Number</p>
+                      <p className="text-sm text-gray-900">{selectedItem.manufacturingPartNumber || '-'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Last Restocked</p>

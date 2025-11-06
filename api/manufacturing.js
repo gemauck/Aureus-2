@@ -258,12 +258,13 @@ async function handler(req, res) {
                 data: {
                   ...createData,
                   supplierPartNumbers: body.supplierPartNumbers || '[]',
+                  manufacturingPartNumber: body.manufacturingPartNumber || '',
                   legacyPartNumber: body.legacyPartNumber || ''
                 }
               })
             } catch (createError) {
               // If columns don't exist yet, create without them
-              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
                 console.warn('⚠️ Creating inventory item without new fields (columns may not exist yet)');
                 master = await tx.inventoryItem.create({ data: createData })
               } else {
@@ -651,11 +652,12 @@ async function handler(req, res) {
                 data: {
                   ...createData,
                   supplierPartNumbers: itemData.supplierPartNumbers || '[]',
+                  manufacturingPartNumber: itemData.manufacturingPartNumber || '',
                   legacyPartNumber: itemData.legacyPartNumber || ''
                 }
               })
             } catch (createError) {
-              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+              if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
                 console.warn('⚠️ Bulk import: Creating items without new fields (run migration)');
                 inventoryItem = await prisma.inventoryItem.create({ data: createData })
               } else {
@@ -767,10 +769,11 @@ async function handler(req, res) {
         })
         
         // Try to update new fields if provided (safe - won't crash if columns don't exist yet)
-        if ((body.supplierPartNumbers !== undefined || body.legacyPartNumber !== undefined)) {
+        if ((body.supplierPartNumbers !== undefined || body.manufacturingPartNumber !== undefined || body.legacyPartNumber !== undefined)) {
           try {
             const updateFields = {};
             if (body.supplierPartNumbers !== undefined) updateFields.supplierPartNumbers = body.supplierPartNumbers || '[]';
+            if (body.manufacturingPartNumber !== undefined) updateFields.manufacturingPartNumber = body.manufacturingPartNumber || '';
             if (body.legacyPartNumber !== undefined) updateFields.legacyPartNumber = body.legacyPartNumber || '';
             
             if (Object.keys(updateFields).length > 0) {
@@ -840,6 +843,14 @@ async function handler(req, res) {
             console.warn('⚠️ supplierPartNumbers field not available:', e.message)
           }
         }
+        if (body.manufacturingPartNumber !== undefined) {
+          try {
+            updateData.manufacturingPartNumber = body.manufacturingPartNumber
+          } catch (e) {
+            // Column may not exist yet - safe to ignore
+            console.warn('⚠️ manufacturingPartNumber field not available:', e.message)
+          }
+        }
         if (body.legacyPartNumber !== undefined) {
           try {
             updateData.legacyPartNumber = body.legacyPartNumber
@@ -880,10 +891,11 @@ async function handler(req, res) {
           })
         } catch (updateError) {
           // If error is about missing columns, retry without new fields
-          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('legacyPartNumber'))) {
+          if (updateError.message && (updateError.message.includes('supplierPartNumbers') || updateError.message.includes('manufacturingPartNumber') || updateError.message.includes('legacyPartNumber'))) {
             console.warn('⚠️ New inventory columns not available yet, updating without them');
             const safeUpdateData = { ...updateData };
             delete safeUpdateData.supplierPartNumbers;
+            delete safeUpdateData.manufacturingPartNumber;
             delete safeUpdateData.legacyPartNumber;
             item = await prisma.inventoryItem.update({
               where: { id },
@@ -2499,11 +2511,12 @@ async function handler(req, res) {
                   data: {
                     ...createData,
                     supplierPartNumbers: body.supplierPartNumbers || '[]',
+                    manufacturingPartNumber: body.manufacturingPartNumber || '',
                     legacyPartNumber: body.legacyPartNumber || ''
                   }
                 })
               } catch (createError) {
-                if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('legacyPartNumber'))) {
+                if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
                   console.warn('⚠️ Stock receipt: Creating item without new fields');
                   item = await tx.inventoryItem.create({ data: createData })
                 } else {
