@@ -914,11 +914,7 @@ const Manufacturing = () => {
     }, 300);
   }, []);
 
-  const InventoryView = useMemo(() => {
-    // Use ref values while typing to prevent re-renders, otherwise use state
-    const currentSearchTerm = isUserTypingRef.current ? searchTermRef.current : searchTerm;
-    const currentColumnFilters = isUserTypingRef.current ? columnFiltersRef.current : columnFilters;
-    
+  const InventoryView = () => {
     // Get unique categories from inventory items
     const uniqueCategories = [...new Set(inventory.map(item => item.category).filter(Boolean))].sort();
     
@@ -930,31 +926,31 @@ const Manufacturing = () => {
       const name = (item.name || '').toString().toLowerCase();
       const sku = (item.sku || '').toString().toLowerCase();
       const category = (item.category || '').toString();
-      const matchesSearch = name.includes(currentSearchTerm.toLowerCase()) || sku.includes(currentSearchTerm.toLowerCase());
+      const matchesSearch = name.includes(searchTerm.toLowerCase()) || sku.includes(searchTerm.toLowerCase());
       const matchesCategory = filterCategory === 'all' || category === filterCategory;
       
       // Column-specific filters
-      const matchesSKU = !currentColumnFilters.sku || (item.sku || '').toString().toLowerCase().includes(currentColumnFilters.sku.toLowerCase());
-      const matchesName = !currentColumnFilters.name || name.includes(currentColumnFilters.name.toLowerCase());
-      const matchesSupplierPart = !currentColumnFilters.supplierPart || (() => {
+      const matchesSKU = !columnFilters.sku || (item.sku || '').toString().toLowerCase().includes(columnFilters.sku.toLowerCase());
+      const matchesName = !columnFilters.name || name.includes(columnFilters.name.toLowerCase());
+      const matchesSupplierPart = !columnFilters.supplierPart || (() => {
         try {
           const supplierParts = typeof item.supplierPartNumbers === 'string' 
             ? JSON.parse(item.supplierPartNumbers || '[]') 
             : (item.supplierPartNumbers || []);
           return supplierParts.some(sp => 
-            (sp.supplier || '').toLowerCase().includes(currentColumnFilters.supplierPart.toLowerCase()) ||
-            (sp.partNumber || '').toLowerCase().includes(currentColumnFilters.supplierPart.toLowerCase())
+            (sp.supplier || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase()) ||
+            (sp.partNumber || '').toLowerCase().includes(columnFilters.supplierPart.toLowerCase())
           );
         } catch {
           return false;
         }
       })();
-      const matchesLegacyPart = !currentColumnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(currentColumnFilters.legacyPart.toLowerCase()));
-      const matchesManufacturingPart = !currentColumnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(currentColumnFilters.manufacturingPart.toLowerCase()));
-      const matchesCategoryFilter = !currentColumnFilters.category || category.toLowerCase().includes(currentColumnFilters.category.toLowerCase());
-      const matchesType = !currentColumnFilters.type || (item.type || '').toString().toLowerCase().includes(currentColumnFilters.type.toLowerCase());
-      const matchesStatus = !currentColumnFilters.status || (item.status || '').toString().toLowerCase().includes(currentColumnFilters.status.toLowerCase());
-      const matchesLocation = !currentColumnFilters.location || ((item.location || '').toString().toLowerCase().includes(currentColumnFilters.location.toLowerCase()));
+      const matchesLegacyPart = !columnFilters.legacyPart || ((item.legacyPartNumber || '').toString().toLowerCase().includes(columnFilters.legacyPart.toLowerCase()));
+      const matchesManufacturingPart = !columnFilters.manufacturingPart || ((item.manufacturingPartNumber || '').toString().toLowerCase().includes(columnFilters.manufacturingPart.toLowerCase()));
+      const matchesCategoryFilter = !columnFilters.category || category.toLowerCase().includes(columnFilters.category.toLowerCase());
+      const matchesType = !columnFilters.type || (item.type || '').toString().toLowerCase().includes(columnFilters.type.toLowerCase());
+      const matchesStatus = !columnFilters.status || (item.status || '').toString().toLowerCase().includes(columnFilters.status.toLowerCase());
+      const matchesLocation = !columnFilters.location || ((item.location || '').toString().toLowerCase().includes(columnFilters.location.toLowerCase()));
       
       return matchesSearch && matchesCategory && matchesSKU && matchesName && matchesSupplierPart && 
              matchesLegacyPart && matchesManufacturingPart && matchesCategoryFilter && matchesType && matchesStatus && matchesLocation;
@@ -1505,7 +1501,11 @@ const Manufacturing = () => {
                           }
                         }, 100);
                       }}
-                      onChange={(e) => handleColumnFilterChange('sku', e.target.value, e)}
+                      onChange={(e) => {
+                        // Mark that user is typing - don't update state yet
+                        isUserTypingRef.current = true;
+                        activeInputRef.current = e.target;
+                      }}
                       className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </th>
@@ -1872,7 +1872,7 @@ const Manufacturing = () => {
         </div>
       </div>
     );
-  }, [inventory, stockLocations, filterCategory, sortConfig, selectedLocationId, isRefreshing, handleSort, handleColumnFilterChange]);
+  };
 
   const BOMView = () => {
     return (
@@ -7572,7 +7572,7 @@ const Manufacturing = () => {
       {/* Content Area */}
       <div>
         {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'inventory' && InventoryView}
+        {activeTab === 'inventory' && <InventoryView />}
         {activeTab === 'bom' && <BOMView />}
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'sales' && <SalesOrdersView />}
