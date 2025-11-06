@@ -295,12 +295,19 @@ const Clients = React.memo(() => {
         if (window.LiveDataSync) {
             if (shouldStop) {
                 // Completely stop LiveDataSync when forms are open
-                window.LiveDataSync.stop();
-                console.log('🛑 LiveDataSync completely stopped for form');
+                if (window.LiveDataSync.isRunning) {
+                    window.LiveDataSync.stop();
+                    console.log('🛑 LiveDataSync completely stopped for form');
+                }
             } else {
                 // Restart LiveDataSync when forms close
-                window.LiveDataSync.start();
-                console.log('▶️ LiveDataSync restarted after form closed');
+                // Only restart if not already running (prevents duplicate starts)
+                if (!window.LiveDataSync.isRunning) {
+                    window.LiveDataSync.start();
+                    console.log('▶️ LiveDataSync restarted after form closed');
+                } else {
+                    console.log('⏸️ LiveDataSync already running, skipping start');
+                }
             }
         }
     }, []);
@@ -2179,15 +2186,24 @@ const Clients = React.memo(() => {
                             throw new Error('API response missing lead data');
                         }
                         
-                        // Ensure savedLead has all required fields including type
+                        // CRITICAL: Ensure savedLead has all required fields including type
+                        // ALWAYS preserve user input from newLead (which contains leadFormData)
+                        // This prevents blank values from API from overwriting user's typed input
                         if (savedLead && savedLead.id) {
                             savedLead = {
                                 ...savedLead,
                                 type: savedLead.type || 'lead', // Ensure type is set
-                                name: savedLead.name || newLead.name || '',
-                                industry: savedLead.industry || newLead.industry || 'Other',
+                                // CRITICAL: ALWAYS preserve user input - use savedLead only if it has content, otherwise use newLead
+                                name: (savedLead.name && savedLead.name.trim()) ? savedLead.name : (newLead.name || ''),
+                                industry: (savedLead.industry && savedLead.industry.trim()) ? savedLead.industry : (newLead.industry || 'Other'),
                                 status: savedLead.status || newLead.status || 'Potential',
                                 stage: savedLead.stage || newLead.stage || 'Awareness',
+                                // CRITICAL: Preserve notes, source, and all other user-entered fields
+                                notes: (savedLead.notes && savedLead.notes.trim()) ? savedLead.notes : (newLead.notes || ''),
+                                source: (savedLead.source && savedLead.source.trim()) ? savedLead.source : (newLead.source || 'Website'),
+                                address: (savedLead.address && savedLead.address.trim()) ? savedLead.address : (newLead.address || ''),
+                                website: (savedLead.website && savedLead.website.trim()) ? savedLead.website : (newLead.website || ''),
+                                value: savedLead.value !== undefined && savedLead.value !== null ? savedLead.value : (newLead.value || 0),
                                 contacts: savedLead.contacts || newLead.contacts || [],
                                 firstContactDate: savedLead.firstContactDate || savedLead.createdAt ? new Date(savedLead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                                 lastContact: savedLead.lastContact || savedLead.updatedAt ? new Date(savedLead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
@@ -2254,8 +2270,9 @@ const Clients = React.memo(() => {
                             };
                             
                             // Ensure all JSON fields are properly parsed
+                            // CRITICAL: Use savedLead which already has preserved user input from merge above
                             const parsedSavedLead = {
-                                ...savedLead,
+                                ...savedLead, // This already has preserved user input from lines 2185-2203
                                 contacts: safeParseJSON(savedLead.contacts, []),
                                 followUps: safeParseJSON(savedLead.followUps, []),
                                 projectIds: safeParseJSON(savedLead.projectIds, []),
@@ -2277,6 +2294,20 @@ const Clients = React.memo(() => {
                             const updatedLeads = [...leads, parsedSavedLead];
                             setLeads(updatedLeads);
                             setLeadsCount(updatedLeads.length); // Update count immediately
+                            
+                            // CRITICAL: If modal is still open (stayInEditMode), update selectedLead with preserved data
+                            // This ensures the modal receives the lead with user input preserved, not blank values
+                            // For new leads, selectedLead is null initially, but after save we need to update it
+                            // if we're staying in edit mode OR if the modal is still open
+                            if (viewMode === 'lead-detail') {
+                                // Update selectedLead with preserved data so modal can continue showing user's input
+                                console.log('🔄 Updating selectedLead with preserved user input for new lead', {
+                                    leadId: parsedSavedLead.id,
+                                    name: parsedSavedLead.name,
+                                    notes: parsedSavedLead.notes?.substring(0, 20)
+                                });
+                                setSelectedLead(parsedSavedLead);
+                            }
                             
                             // CRITICAL: Save to localStorage immediately to ensure persistence
                             if (window.storage?.setLeads) {
@@ -3689,6 +3720,13 @@ const Clients = React.memo(() => {
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={() => {
+                            // Stop LiveDataSync immediately when opening add client form
+                            if (window.LiveDataSync && window.LiveDataSync.stop) {
+                                window.LiveDataSync.stop();
+                                console.log('🛑 Add Client clicked - stopping LiveDataSync immediately');
+                            }
+                            // Also call handlePauseSync if available
+                            handlePauseSync(true);
                             // Keep sync paused when Add Client is clicked - modal will handle pause
                             setSelectedClient(null);
                             setSelectedLead(null);
@@ -3712,6 +3750,13 @@ const Clients = React.memo(() => {
                     </button>
                     <button 
                         onClick={() => {
+                            // Stop LiveDataSync immediately when opening add lead form
+                            if (window.LiveDataSync && window.LiveDataSync.stop) {
+                                window.LiveDataSync.stop();
+                                console.log('🛑 Add Lead clicked - stopping LiveDataSync immediately');
+                            }
+                            // Also call handlePauseSync if available
+                            handlePauseSync(true);
                             // Keep sync paused when Add Lead is clicked - modal will handle pause
                             setSelectedLead(null);
                             setSelectedClient(null);

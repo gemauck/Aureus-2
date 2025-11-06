@@ -1,14 +1,194 @@
 // Get dependencies from window
 console.log('🔵 ProjectDetail.jsx: Script is executing...');
-const { useState, useEffect, useRef } = React;
-const storage = window.storage;
-const ListModal = window.ListModal;
-const ProjectModal = window.ProjectModal;
-const CustomFieldModal = window.CustomFieldModal;
-const TaskDetailModal = window.TaskDetailModal;
-const KanbanView = window.KanbanView;
-const CommentsPopup = window.CommentsPopup;
-const DocumentCollectionModal = window.DocumentCollectionModal;
+
+// ROBUST ProjectDetail Loader - Multiple layers of protection
+(function waitForDependenciesAndLoad() {
+    // Prevent duplicate initialization
+    if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+        console.log('✅ ProjectDetail: Already loaded, skipping initialization');
+        return;
+    }
+    
+    // Check if we're already initializing
+    if (window._projectDetailInitializing) {
+        console.log('⏳ ProjectDetail: Already initializing, waiting...');
+        return;
+    }
+    
+    // Track initialization state
+    window._projectDetailInitializing = true;
+    
+    // Define required dependencies with their validation functions
+    const requiredDependencies = {
+        React: () => window.React && window.React.useState && window.React.useEffect && window.React.useRef,
+        // Optional dependencies (will check but not fail if missing)
+        storage: () => window.storage,
+        ListModal: () => window.ListModal,
+        ProjectModal: () => window.ProjectModal,
+        CustomFieldModal: () => window.CustomFieldModal,
+        TaskDetailModal: () => window.TaskDetailModal,
+        KanbanView: () => window.KanbanView,
+        CommentsPopup: () => window.CommentsPopup,
+        DocumentCollectionModal: () => window.DocumentCollectionModal
+    };
+    
+    const criticalDependencies = ['React'];
+    
+    // Check dependencies
+    const checkDependencies = () => {
+        const missing = [];
+        const optional = [];
+        
+        for (const [name, checkFn] of Object.entries(requiredDependencies)) {
+            if (!checkFn()) {
+                if (criticalDependencies.includes(name)) {
+                    missing.push(name);
+                } else {
+                    optional.push(name);
+                }
+            }
+        }
+        
+        return { missing, optional };
+    };
+    
+    // Wait for dependencies with exponential backoff
+    let attempt = 0;
+    const maxAttempts = 150; // 15 seconds max (with exponential backoff)
+    let baseDelay = 50; // Start with 50ms
+    
+    const waitForDependencies = () => {
+        const { missing, optional } = checkDependencies();
+        
+        if (missing.length === 0) {
+            // All critical dependencies available
+            if (optional.length > 0) {
+                console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
+                console.warn('⚠️ ProjectDetail will continue but may have limited functionality');
+            }
+            console.log(`✅ ProjectDetail: All critical dependencies available after ${attempt * baseDelay}ms`);
+            initializeProjectDetail();
+            return;
+        }
+        
+        attempt++;
+        if (attempt >= maxAttempts) {
+            console.error(`❌ ProjectDetail: Critical dependencies still missing after ${attempt * baseDelay}ms:`, missing);
+            console.error('❌ Missing dependencies:', missing);
+            console.error('❌ Attempting to initialize anyway - may fail');
+            window._projectDetailInitializing = false;
+            initializeProjectDetail(); // Try anyway
+            return;
+        }
+        
+        // Exponential backoff: 50ms, 75ms, 112ms, 168ms, etc. (max 500ms)
+        const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 500);
+        setTimeout(waitForDependencies, delay);
+    };
+    
+    // Start waiting
+    const { missing, optional } = checkDependencies();
+    if (missing.length === 0) {
+        console.log('✅ ProjectDetail: All critical dependencies available immediately');
+        if (optional.length > 0) {
+            console.warn(`⚠️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
+        }
+        initializeProjectDetail();
+    } else {
+        console.log(`⏳ ProjectDetail: Waiting for dependencies: ${missing.join(', ')}`);
+        if (optional.length > 0) {
+            console.log(`ℹ️ ProjectDetail: Optional dependencies missing: ${optional.join(', ')}`);
+        }
+        waitForDependencies();
+    }
+    
+    // Also listen for React load event
+    const handleReactReady = () => {
+        const { missing } = checkDependencies();
+        if (missing.length === 0 && window._projectDetailInitializing) {
+            console.log('✅ ProjectDetail: Dependencies ready via event');
+            window.removeEventListener('babelready', handleReactReady);
+            window.removeEventListener('componentLoaded', handleComponentLoaded);
+            if (!window.ProjectDetail) {
+                initializeProjectDetail();
+            }
+        }
+    };
+    
+    // Listen for when dependencies become available
+    const handleComponentLoaded = (event) => {
+        if (event.detail && event.detail.component) {
+            const compName = event.detail.component;
+            if (requiredDependencies[compName] && requiredDependencies[compName]()) {
+                const { missing } = checkDependencies();
+                if (missing.length === 0 && window._projectDetailInitializing && !window.ProjectDetail) {
+                    console.log(`✅ ProjectDetail: Dependency ${compName} loaded, initializing now`);
+                    window.removeEventListener('componentLoaded', handleComponentLoaded);
+                    window.removeEventListener('babelready', handleReactReady);
+                    initializeProjectDetail();
+                }
+            }
+        }
+    };
+    
+    window.addEventListener('babelready', handleReactReady);
+    window.addEventListener('componentLoaded', handleComponentLoaded);
+})();
+
+function initializeProjectDetail() {
+    // Prevent duplicate initialization
+    if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+        console.log('✅ ProjectDetail: Already initialized, skipping');
+        window._projectDetailInitializing = false;
+        return;
+    }
+    
+    // Final check: Ensure React is available
+    if (!window.React || !window.React.useState || !window.React.useEffect || !window.React.useRef) {
+        console.error('❌ ProjectDetail: React still not available in initializeProjectDetail!');
+        console.error('❌ Available React:', typeof window.React, window.React);
+        console.error('❌ Will retry initialization after React loads...');
+        window._projectDetailInitializing = false;
+        
+        // Set up retry mechanism
+        const retryInitialization = () => {
+            if (!window.ProjectDetail && window.React && window.React.useState) {
+                console.log('🔄 ProjectDetail: React now available, retrying initialization...');
+                window._projectDetailInitializing = true;
+                initializeProjectDetail();
+            }
+        };
+        
+        // Retry on React ready event
+        const handleRetry = () => {
+            if (window.React && window.React.useState) {
+                window.removeEventListener('babelready', handleRetry);
+                retryInitialization();
+            }
+        };
+        window.addEventListener('babelready', handleRetry);
+        
+        // Also poll as fallback
+        setTimeout(() => {
+            if (!window.ProjectDetail && window.React && window.React.useState) {
+                retryInitialization();
+            }
+        }, 1000);
+        
+        return;
+    }
+    
+    console.log('✅ ProjectDetail: Starting component initialization...');
+    
+    const { useState, useEffect, useRef } = window.React;
+    const storage = window.storage;
+    const ListModal = window.ListModal;
+    const ProjectModal = window.ProjectModal;
+    const CustomFieldModal = window.CustomFieldModal;
+    const TaskDetailModal = window.TaskDetailModal;
+    const KanbanView = window.KanbanView;
+    const CommentsPopup = window.CommentsPopup;
+    const DocumentCollectionModal = window.DocumentCollectionModal;
 
 const ProjectDetail = ({ project, onBack, onDelete }) => {
     console.log('ProjectDetail rendering with project:', project);
@@ -1836,17 +2016,102 @@ const ProjectDetail = ({ project, onBack, onDelete }) => {
     );
 };
 
-// Make available globally
-console.log('🔵 ProjectDetail.jsx: About to register on window.ProjectDetail...');
-window.ProjectDetail = ProjectDetail;
-console.log('✅ ProjectDetail component registered on window.ProjectDetail');
-
-// Dispatch event to notify that ProjectDetail is loaded
-try {
-    window.dispatchEvent(new CustomEvent('componentLoaded', { 
-        detail: { component: 'ProjectDetail' } 
-    }));
-    console.log('✅ ProjectDetail component registered and event dispatched');
-} catch (error) {
-    console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
+    // Make available globally - INSIDE initializeProjectDetail function
+    console.log('🔵 ProjectDetail.jsx: About to register on window.ProjectDetail...');
+    
+    // Validate component before registering
+    const validateComponent = () => {
+        if (!ProjectDetail) {
+            throw new Error('ProjectDetail component is undefined');
+        }
+        
+        if (typeof ProjectDetail !== 'function') {
+            throw new Error(`ProjectDetail is not a function, got: ${typeof ProjectDetail}`);
+        }
+        
+        // Check if it's a valid React component (could be function, memo, forwardRef, etc.)
+        const isValidReactComponent = 
+            typeof ProjectDetail === 'function' ||
+            (typeof ProjectDetail === 'object' && (ProjectDetail.$$typeof || ProjectDetail.type));
+        
+        if (!isValidReactComponent) {
+            console.warn('⚠️ ProjectDetail may not be a valid React component');
+        }
+        
+        return true;
+    };
+    
+    try {
+        // Validate first
+        validateComponent();
+        
+        // Register component
+        window.ProjectDetail = ProjectDetail;
+        console.log('✅ ProjectDetail component registered on window.ProjectDetail');
+        console.log('✅ ProjectDetail type:', typeof ProjectDetail);
+        
+        // Health check: Verify it's actually registered and callable
+        if (!window.ProjectDetail) {
+            throw new Error('Registration failed: window.ProjectDetail is still undefined');
+        }
+        
+        if (typeof window.ProjectDetail !== 'function') {
+            throw new Error(`Registration failed: window.ProjectDetail is not a function, got: ${typeof window.ProjectDetail}`);
+        }
+        
+        console.log('✅ ProjectDetail health check passed: Component is registered and callable');
+        
+        // Clear initialization flag
+        window._projectDetailInitializing = false;
+        
+        // Dispatch event to notify that ProjectDetail is loaded
+        try {
+            window.dispatchEvent(new CustomEvent('componentLoaded', { 
+                detail: { component: 'ProjectDetail' } 
+            }));
+            console.log('✅ ProjectDetail component registered and event dispatched');
+        } catch (error) {
+            console.warn('⚠️ Failed to dispatch componentLoaded event:', error);
+        }
+        
+        // Set up periodic health check (every 5 seconds for first 30 seconds)
+        let healthCheckCount = 0;
+        const maxHealthChecks = 6; // 6 checks * 5 seconds = 30 seconds
+        const healthCheckInterval = setInterval(() => {
+            healthCheckCount++;
+            if (!window.ProjectDetail) {
+                console.error(`❌ ProjectDetail health check ${healthCheckCount}: Component disappeared!`);
+                console.error('❌ Attempting to re-register...');
+                window.ProjectDetail = ProjectDetail;
+            } else if (typeof window.ProjectDetail !== 'function') {
+                console.error(`❌ ProjectDetail health check ${healthCheckCount}: Component corrupted!`);
+                console.error('❌ Attempting to re-register...');
+                window.ProjectDetail = ProjectDetail;
+            } else {
+                console.log(`✅ ProjectDetail health check ${healthCheckCount}/${maxHealthChecks}: Component healthy`);
+            }
+            
+            if (healthCheckCount >= maxHealthChecks) {
+                clearInterval(healthCheckInterval);
+                console.log('✅ ProjectDetail health monitoring complete');
+            }
+        }, 5000);
+        
+    } catch (error) {
+        console.error('❌ CRITICAL: Failed to register ProjectDetail on window:', error);
+        console.error('❌ Error details:', error.message, error.stack);
+        window._projectDetailInitializing = false;
+        
+        // Try to register anyway if possible
+        try {
+            if (typeof ProjectDetail !== 'undefined') {
+                window.ProjectDetail = ProjectDetail;
+                console.log('✅ ProjectDetail registered after error recovery');
+                window._projectDetailInitializing = false;
+            }
+        } catch (recoveryError) {
+            console.error('❌ Failed to recover ProjectDetail registration:', recoveryError);
+            window._projectDetailInitializing = false;
+        }
+    }
 }

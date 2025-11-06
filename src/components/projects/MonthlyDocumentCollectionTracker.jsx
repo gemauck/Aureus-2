@@ -100,6 +100,12 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
     
     // Ref to track if this is the initial mount (prevent save on initial load)
     const isInitialMount = useRef(true);
+    
+    // Ref to track when we last updated sections locally (to prevent sync from overwriting)
+    const lastLocalUpdateRef = useRef(Date.now());
+    
+    // Ref to track if we're currently saving to prevent sync during save
+    const isSavingRef = useRef(false);
 
     // Generate year options (current year ± 5 years)
     const yearOptions = [];
@@ -148,8 +154,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
 
     // Sync sections from project prop when it changes (e.g., after refresh or reload)
     // This ensures that when the project data is reloaded from the database, the sections state is updated
+    // BUT: Only sync if we haven't made recent local changes (to prevent overwriting user edits)
     useEffect(() => {
         if (project && project.documentSections !== undefined) {
+            // Don't sync if we're currently saving or just made a local update (within last 3 seconds)
+            const timeSinceLastUpdate = Date.now() - lastLocalUpdateRef.current;
+            if (isSavingRef.current || timeSinceLastUpdate < 3000) {
+                console.log('⏭️ Skipping sync - recent local changes or save in progress');
+                return;
+            }
+            
             const parsed = parseSections(project.documentSections);
             
             // Use functional update to access current sections state and avoid stale closures
@@ -160,10 +174,16 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 const parsedSectionsStr = JSON.stringify(parsed);
                 
                 if (currentSectionsStr !== parsedSectionsStr) {
-                    console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
-                    console.log('  - Previous sections:', currentSections.length);
-                    console.log('  - New sections:', parsed.length);
-                    return parsed;
+                    // Only sync if the prop data has more sections OR if local state is empty
+                    // This prevents stale prop data from overwriting newer local changes
+                    if (parsed.length > currentSections.length || currentSections.length === 0) {
+                        console.log('🔄 Syncing sections from project prop:', parsed.length, 'sections');
+                        console.log('  - Previous sections:', currentSections.length);
+                        console.log('  - New sections:', parsed.length);
+                        return parsed;
+                    } else {
+                        console.log('⏭️ Skipping sync - local state has more sections than prop');
+                    }
                 }
                 
                 // Return current state if no change (prevents unnecessary re-renders)
@@ -183,6 +203,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         // Save sections to project whenever they change
         const saveProjectData = async () => {
             try {
+                isSavingRef.current = true;
                 console.log('💾 MonthlyDocumentCollectionTracker: Saving sections...');
                 console.log('  - Project ID:', project.id);
                 console.log('  - Sections count:', sections.length);
@@ -197,6 +218,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 // Save to database first (server-first approach)
                 const apiResponse = await window.DatabaseAPI.updateProject(project.id, updatePayload);
                 console.log('✅ Database save successful for document sections:', apiResponse);
+                
+                // Update the timestamp to prevent sync from overwriting
+                lastLocalUpdateRef.current = Date.now();
                 
                 // Then update localStorage for consistency
                 if (window.dataService && typeof window.dataService.getProjects === 'function') {
@@ -222,6 +246,11 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             } catch (error) {
                 console.error('❌ Error saving document sections:', error);
                 alert('Failed to save document collection changes: ' + error.message);
+            } finally {
+                // Reset saving flag after a short delay to allow sync to see the update
+                setTimeout(() => {
+                    isSavingRef.current = false;
+                }, 1000);
             }
         };
         
@@ -384,6 +413,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 s.id === editingSection.id ? { ...s, ...sectionData } : s
             ));
             
+            // Update timestamp to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
+            
             // Log to audit trail
             if (window.AuditLogger) {
                 window.AuditLogger.log(
@@ -406,6 +438,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 documents: []
             };
             setSections([...sections, newSection]);
+            
+            // Update timestamp to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
             
             // Log to audit trail
             if (window.AuditLogger) {
@@ -433,6 +468,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         const section = sections.find(s => s.id === sectionId);
         if (confirm(`Delete section "${section.name}" and all its documents?`)) {
             setSections(sections.filter(s => s.id !== sectionId));
+            
+            // Update timestamp to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
             
             // Log to audit trail
             if (window.AuditLogger) {
@@ -481,6 +519,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         )
                     };
                     
+                    // Update timestamp to prevent sync from overwriting
+                    lastLocalUpdateRef.current = Date.now();
+                    
                     // Log to audit trail
                     if (window.AuditLogger) {
                         window.AuditLogger.log(
@@ -511,6 +552,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                         ...s,
                         documents: [...s.documents, newDocument]
                     };
+                    
+                    // Update timestamp to prevent sync from overwriting
+                    lastLocalUpdateRef.current = Date.now();
                     
                     // Log to audit trail
                     if (window.AuditLogger) {
@@ -555,6 +599,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 }
                 return s;
             }));
+            
+            // Update timestamp to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
             
             // Log to audit trail
             if (window.AuditLogger) {
@@ -604,6 +651,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             }
             return s;
         }));
+        
+        // Update timestamp to prevent sync from overwriting
+        lastLocalUpdateRef.current = Date.now();
 
         // Log to audit trail
         if (window.AuditLogger) {
@@ -742,6 +792,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
 
         setSections(updatedSections);
+        
+        // Update timestamp to prevent sync from overwriting
+        lastLocalUpdateRef.current = Date.now();
 
         // Save to database
         try {
@@ -823,6 +876,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
 
         setSections(updatedSections);
+        
+        // Update timestamp to prevent sync from overwriting
+        lastLocalUpdateRef.current = Date.now();
 
         // Save to database
         try {
@@ -1130,6 +1186,9 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             const [movedSection] = newSections.splice(draggedSection.index, 1);
             newSections.splice(dropIndex, 0, movedSection);
             setSections(newSections);
+            
+            // Update timestamp to prevent sync from overwriting
+            lastLocalUpdateRef.current = Date.now();
         }
         setDragOverIndex(null);
     };

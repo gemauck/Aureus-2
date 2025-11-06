@@ -78,6 +78,22 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Track when user has started typing - once they start, NEVER update inputs from prop
     const userHasStartedTypingRef = useRef(false);
     
+    // CRITICAL: Track if this is a new lead that hasn't been explicitly saved yet
+    // This prevents auto-saves from overriding new lead data until user clicks "Create Lead"
+    const isNewLeadNotSavedRef = useRef(!lead); // true if lead is null/undefined (new lead)
+    
+    // Update the flag when lead changes from null to having an ID (after first save)
+    useEffect(() => {
+        if (lead && lead.id && isNewLeadNotSavedRef.current) {
+            // Lead was just created and got an ID - clear the flag to allow auto-saves
+            console.log('✅ New lead created with ID, enabling auto-saves');
+            isNewLeadNotSavedRef.current = false;
+        } else if (!lead) {
+            // Lead is null - reset flag for next new lead
+            isNewLeadNotSavedRef.current = true;
+        }
+    }, [lead?.id]);
+    
     // Refs for auto-scrolling comments
     const commentsContainerRef = useRef(null);
     const contentScrollableRef = useRef(null);
@@ -115,19 +131,34 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     
     // Completely stop LiveDataSync when modal is open (whether new or existing lead), restart when closed
     useEffect(() => {
-        if (!onPauseSync) return;
+        // Stop LiveDataSync directly if available, regardless of onPauseSync prop
+        // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
+        if (window.LiveDataSync && window.LiveDataSync.stop) {
+            window.LiveDataSync.stop();
+            console.log('🛑 LeadDetailModal opened - stopping LiveDataSync directly', lead ? '(existing lead)' : '(new lead)');
+        }
         
-        // Completely stop LiveDataSync whenever modal is open (both new lead form and existing lead)
-        // This prevents LiveDataSync from making ANY API calls while form is open
-        onPauseSync(true);
-        console.log('🛑 LeadDetailModal opened - stopping LiveDataSync completely', lead ? '(existing lead)' : '(new lead)');
+        // Also use onPauseSync callback if provided (for parent component coordination)
+        if (onPauseSync && typeof onPauseSync === 'function') {
+            onPauseSync(true);
+            console.log('🛑 LeadDetailModal opened - calling onPauseSync(true)');
+        }
         
         // Restart LiveDataSync when modal closes
         return () => {
-            onPauseSync(false);
-            console.log('▶️ LeadDetailModal closed - restarting LiveDataSync');
+            // Restart LiveDataSync directly if available
+            if (window.LiveDataSync && window.LiveDataSync.start) {
+                window.LiveDataSync.start();
+                console.log('▶️ LeadDetailModal closed - restarting LiveDataSync directly');
+            }
+            
+            // Also call onPauseSync callback if provided
+            if (onPauseSync && typeof onPauseSync === 'function') {
+                onPauseSync(false);
+                console.log('▶️ LeadDetailModal closed - calling onPauseSync(false)');
+            }
         };
-    }, [onPauseSync]); // Removed lead from dependencies - stop/start based on modal mount/unmount only
+    }, []); // Run on mount/unmount only - stop/start based on modal visibility
     
     // NOTE: No useEffect to watch ref values - refs don't trigger effects!
     // onEditingChange is called directly in onChange/onFocus/onBlur handlers instead
@@ -1508,6 +1539,9 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             if (onUpdate && lead) {
                 await onUpdate(leadData);
             } else {
+                // CRITICAL: This is the explicit "Create Lead" action - clear the new lead flag
+                // This allows auto-saves to work after the lead is created
+                isNewLeadNotSavedRef.current = false;
                 await onSave(leadData);
             }
         } catch (error) {
@@ -1900,7 +1934,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                     const updated = {...prev, stage: newStage};
                                                     
                                                     // Auto-save immediately with the updated data
-                                                    if (lead && onSave) {
+                                                    // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
+                                                    if (lead && !isNewLeadNotSavedRef.current && onSave) {
                                                         // Use setTimeout to ensure state is updated
                                                         setTimeout(async () => {
                                                             try {
@@ -2035,7 +2070,8 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             isEditingRef.current = false; // Clear editing flag when user leaves field
                                             // Auto-save notes when user leaves the field
                                             // Use the current textarea value to ensure we have the latest data
-                                            if (lead) {
+                                            // CRITICAL: Only auto-save for existing leads, NOT for new leads that haven't been saved yet
+                                            if (lead && !isNewLeadNotSavedRef.current) {
                                         // Mark as auto-saving to prevent useEffect from resetting
                                         isAutoSavingRef.current = true;
                                         if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
@@ -4177,7 +4213,31 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         React.createElement('input', {
                                             type: 'text',
                                             value: formData.name,
-                                            onChange: (e) => setFormData({...formData, name: e.target.value}),
+                                            onChange: (e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('name');
+                                                isEditingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
+                                                }, 5000);
+                                                
+                                                // Use functional update to avoid closure issues
+                                                setFormData(prev => {
+                                                    const updated = {...prev, name: e.target.value};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            },
+                                            onFocus: () => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                            },
+                                            ref: nameInputRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
                                             placeholder: 'Enter lead name'
                                         })
@@ -4186,7 +4246,31 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'Industry'),
                                         React.createElement('select', {
                                             value: formData.industry,
-                                            onChange: (e) => setFormData({...formData, industry: e.target.value}),
+                                            onChange: (e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('industry');
+                                                isEditingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
+                                                }, 5000);
+                                                
+                                                // Use functional update to avoid closure issues
+                                                setFormData(prev => {
+                                                    const updated = {...prev, industry: e.target.value};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            },
+                                            onFocus: () => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                            },
+                                            ref: industrySelectRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         },
                                             React.createElement('option', { value: 'Technology' }, 'Technology'),
@@ -4204,7 +4288,30 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         React.createElement('input', {
                                             type: 'date',
                                             value: formData.firstContactDate,
-                                            onChange: (e) => setFormData({...formData, firstContactDate: e.target.value}),
+                                            onChange: (e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('firstContactDate');
+                                                isEditingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
+                                                }, 5000);
+                                                
+                                                // Use functional update to avoid closure issues
+                                                setFormData(prev => {
+                                                    const updated = {...prev, firstContactDate: e.target.value};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            },
+                                            onFocus: () => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                            },
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         })
                                     ),
@@ -4217,7 +4324,31 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         React.createElement('input', {
                                             type: 'text',
                                             value: formData.source,
-                                            onChange: (e) => setFormData({...formData, source: e.target.value}),
+                                            onChange: (e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('source');
+                                                isEditingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                                if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                                                editingTimeoutRef.current = setTimeout(() => {
+                                                    isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
+                                                }, 5000);
+                                                
+                                                // Use functional update to avoid closure issues
+                                                setFormData(prev => {
+                                                    const updated = {...prev, source: e.target.value};
+                                                    formDataRef.current = updated;
+                                                    return updated;
+                                                });
+                                            },
+                                            onFocus: () => {
+                                                isEditingRef.current = true;
+                                                userHasStartedTypingRef.current = true;
+                                                if (onEditingChange) onEditingChange(true);
+                                            },
+                                            ref: sourceSelectRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
                                             placeholder: 'e.g., Website, Referral, Cold Call'
                                         })
@@ -4228,6 +4359,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             value: formData.stage,
                                             onChange: async (e) => {
                                                 const newStage = e.target.value;
+                                                
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                userEditedFieldsRef.current.add('stage');
+                                                isEditingRef.current = true;
                                                 
                                                 // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
                                                 // This prevents LiveDataSync from overwriting during the delay

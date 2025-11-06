@@ -6,7 +6,7 @@
 const { useState, useEffect, useRef } = React;
 const GoogleCalendarSync = window.GoogleCalendarSync;
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const [formData, setFormData] = useState(() => {
@@ -133,19 +133,34 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     
     // Completely stop LiveDataSync when modal is open (whether new or existing client), restart when closed
     useEffect(() => {
-        if (!onPauseSync) return;
+        // Stop LiveDataSync directly if available, regardless of onPauseSync prop
+        // This ensures LiveDataSync is stopped even if onPauseSync prop is not passed
+        if (window.LiveDataSync && window.LiveDataSync.stop) {
+            window.LiveDataSync.stop();
+            console.log('🛑 ClientDetailModal opened - stopping LiveDataSync directly', client ? '(existing client)' : '(new client)');
+        }
         
-        // Completely stop LiveDataSync whenever modal is open (both new client form and existing client)
-        // This prevents LiveDataSync from making ANY API calls while form is open
-        onPauseSync(true);
-        console.log('🛑 ClientDetailModal opened - stopping LiveDataSync completely', client ? '(existing client)' : '(new client)');
+        // Also use onPauseSync callback if provided (for parent component coordination)
+        if (onPauseSync && typeof onPauseSync === 'function') {
+            onPauseSync(true);
+            console.log('🛑 ClientDetailModal opened - calling onPauseSync(true)');
+        }
         
         // Restart LiveDataSync when modal closes
         return () => {
-            onPauseSync(false);
-            console.log('▶️ ClientDetailModal closed - restarting LiveDataSync');
+            // Restart LiveDataSync directly if available
+            if (window.LiveDataSync && window.LiveDataSync.start) {
+                window.LiveDataSync.start();
+                console.log('▶️ ClientDetailModal closed - restarting LiveDataSync directly');
+            }
+            
+            // Also call onPauseSync callback if provided
+            if (onPauseSync && typeof onPauseSync === 'function') {
+                onPauseSync(false);
+                console.log('▶️ ClientDetailModal closed - calling onPauseSync(false)');
+            }
         };
-    }, [onPauseSync]); // Removed client from dependencies - stop/start based on modal mount/unmount only
+    }, []); // Run on mount/unmount only - stop/start based on modal visibility
     
     // Update tab when initialTab prop changes
     useEffect(() => {
@@ -1913,12 +1928,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
                                                 isEditingRef.current = true;
                                                 hasUserEditedForm.current = true; // Mark that user has edited
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing (longer to prevent overwrites)
                                                 setFormData(prev => {
                                                     const updated = {...prev, name: e.target.value};
@@ -1946,12 +1965,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                         onChange={(e) => {
+                                            // CRITICAL: Mark that user has started typing and edited this field
+                                            userHasStartedTypingRef.current = true;
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
                                             userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
+                                            if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
+                                                if (onEditingChange) onEditingChange(false);
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
                                             setFormData(prev => {
                                                 const updated = {...prev, industry: e.target.value};
@@ -2019,12 +2042,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
+                                                // CRITICAL: Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
                                                 isEditingRef.current = true;
                                                 hasUserEditedForm.current = true; // Mark that user has edited
                                                 userEditedFieldsRef.current.add('website'); // Track that user has edited this field
+                                                if (onEditingChange) onEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
+                                                    if (onEditingChange) onEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, website: e.target.value};
@@ -2049,16 +2076,22 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     <textarea 
                                         value={formData.address}
                                         onFocus={() => {
+                                            userHasStartedTypingRef.current = true;
                                             isEditingRef.current = true;
+                                            if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
+                                            // CRITICAL: Mark that user has started typing and edited this field
+                                            userHasStartedTypingRef.current = true;
                                             isEditingRef.current = true;
                                             hasUserEditedForm.current = true; // Mark that user has edited
                                             userEditedFieldsRef.current.add('address'); // Track that user has edited this field
+                                            if (onEditingChange) onEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
+                                                if (onEditingChange) onEditingChange(false);
                                             }, 5000); // Clear editing flag 5 seconds after user stops typing
                                             setFormData(prev => {
                                                 const updated = {...prev, address: e.target.value};

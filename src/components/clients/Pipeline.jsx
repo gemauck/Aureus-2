@@ -115,6 +115,70 @@ const Pipeline = () => {
         }
     }, []);
 
+    // Fix tile positioning on initial load - ensure DOM is fully laid out before rendering
+    useEffect(() => {
+        // Wait for DOM to be fully ready and styles applied
+        // This ensures tiles are positioned correctly on first load
+        if (viewMode === 'kanban' && (clients.length > 0 || leads.length > 0) && !isLoading) {
+            // Use a combination of requestAnimationFrame and a small delay to ensure:
+            // 1. Stylesheets are loaded
+            // 2. DOM is fully rendered
+            // 3. Layout calculations are complete
+            const fixLayout = () => {
+                const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
+                if (stageColumns.length > 0) {
+                    // Force browser to recalculate layout by accessing layout properties
+                    // This triggers a reflow without causing visual flicker
+                    stageColumns.forEach(column => {
+                        void column.offsetHeight;
+                    });
+                    
+                    // Also trigger layout on the kanban container
+                    const kanbanContainer = stageColumns[0]?.closest('.flex.gap-3');
+                    if (kanbanContainer) {
+                        void kanbanContainer.offsetHeight;
+                    }
+                    
+                    console.log('✅ Pipeline: Layout recalculation triggered for tile positioning');
+                }
+            };
+
+            // Double requestAnimationFrame ensures we're after the browser's layout pass
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    // Add a small delay to ensure stylesheets are fully loaded
+                    setTimeout(() => {
+                        fixLayout();
+                    }, 50);
+                });
+            });
+        }
+    }, [clients, leads, isLoading, viewMode]);
+
+    // Add resize observer to fix layout when viewport changes or component becomes visible
+    useEffect(() => {
+        if (viewMode === 'kanban') {
+            const kanbanContainer = document.querySelector('[data-pipeline-stage]')?.closest('.flex.gap-3');
+            if (!kanbanContainer) return;
+
+            const resizeObserver = new ResizeObserver(() => {
+                // Force layout recalculation when container size changes
+                requestAnimationFrame(() => {
+                    const stageColumns = document.querySelectorAll('[data-pipeline-stage]');
+                    stageColumns.forEach(column => {
+                        void column.offsetHeight;
+                    });
+                });
+            });
+
+            resizeObserver.observe(kanbanContainer);
+
+            return () => {
+                resizeObserver.disconnect();
+            };
+        }
+    }, [viewMode, clients, leads]);
+
     const loadData = async () => {
         // Don't set loading state immediately - show cached data first
         // Keep cached opportunities visible while API loads

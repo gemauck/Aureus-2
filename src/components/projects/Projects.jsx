@@ -1441,7 +1441,7 @@ const Projects = () => {
             attemptLoad();
         }
         
-        // Continuous polling while viewing project - check every 300ms
+        // Continuous polling while viewing project - check every 200ms (more aggressive)
         const checkInterval = setInterval(() => {
             if (window.ProjectDetail) {
                 if (!projectDetailAvailable) {
@@ -1462,24 +1462,106 @@ const Projects = () => {
                     }
                 });
             }
-        }, 300); // Check every 300ms
+        }, 200); // Check every 200ms (more frequent)
         
         return () => clearInterval(checkInterval);
     }, [viewingProject, waitingForProjectDetail, projectDetailAvailable]);
+
+    // BULLETPROOF: Immediate check when viewingProject changes (runs synchronously before paint)
+    React.useLayoutEffect(() => {
+        if (!viewingProject || window.ProjectDetail) return;
+        
+        // Immediate aggressive check - try multiple times quickly
+        console.log('⚡ LayoutEffect: Immediate ProjectDetail check for viewingProject');
+        let attempts = 0;
+        let cancelled = false;
+        const quickCheck = () => {
+            if (cancelled) return;
+            attempts++;
+            if (window.ProjectDetail) {
+                console.log('✅ LayoutEffect: ProjectDetail found!', attempts);
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+                return;
+            }
+            if (attempts < 10) {
+                setTimeout(quickCheck, 50); // Check every 50ms for 500ms
+            } else {
+                // If still not found, trigger full load
+                setWaitingForProjectDetail(prev => {
+                    if (prev) return prev; // Already loading
+                    return true; // Set to true immediately
+                });
+                console.log('🚀 LayoutEffect: Triggering full ProjectDetail load...');
+                loadProjectDetail().then(loaded => {
+                    if (cancelled) return;
+                    if (loaded && window.ProjectDetail) {
+                        console.log('✅ LayoutEffect: ProjectDetail loaded successfully');
+                        setProjectDetailAvailable(true);
+                        setWaitingForProjectDetail(false);
+                        setViewingProject(prev => prev ? { ...prev } : null);
+                    } else {
+                        setWaitingForProjectDetail(false);
+                    }
+                }).catch(err => {
+                    if (cancelled) return;
+                    console.error('❌ LayoutEffect: Failed to load ProjectDetail:', err);
+                    setWaitingForProjectDetail(false);
+                });
+            }
+        };
+        quickCheck();
+        return () => { cancelled = true; }; // Cleanup
+    }, [viewingProject?.id]); // Only when project ID changes
 
     if (viewingProject) {
         try {
             // Check window.ProjectDetail directly (it may be loaded lazily)
             const ProjectDetailComponent = window.ProjectDetail;
-            if (!ProjectDetailComponent) {
+            
+            // Validate that ProjectDetailComponent is a valid React component
+            const isValidComponent = ProjectDetailComponent && (
+                typeof ProjectDetailComponent === 'function' || 
+                (typeof ProjectDetailComponent === 'object' && ProjectDetailComponent.$$typeof)
+            );
+            
+            if (!isValidComponent) {
                 // If we just set viewingProject, ProjectDetail should already be loaded
                 // But if it's not, show loading state and keep trying
                 console.warn('ProjectDetail component not found yet, waiting...', {
                     windowProjectDetail: typeof window.ProjectDetail,
                     projectDetailAvailable: projectDetailAvailable,
                     waitingForProjectDetail: waitingForProjectDetail,
+                    isValidComponent: isValidComponent,
                     availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
                 });
+                
+                // CRITICAL: Try immediate check first (in case it just registered)
+                // This handles the race condition where lazy loader resolves but component isn't registered yet
+                if (window.ProjectDetail && !waitingForProjectDetail) {
+                    // Component just became available - update state and re-render
+                    console.log('✅ Render: ProjectDetail just became available!');
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                    // Force re-render by updating viewingProject
+                    setViewingProject(prev => prev ? { ...prev } : null);
+                    // Return loading state - next render will show the component
+                    return (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                            <h2 className="text-lg font-semibold text-blue-800 mb-2">
+                                Loading Project Details...
+                            </h2>
+                        </div>
+                    );
+                }
+                
+                // Try to load ProjectDetail if not already loading
+                if (!waitingForProjectDetail) {
+                    loadProjectDetail().catch(err => {
+                        console.warn('Failed to load ProjectDetail:', err);
+                    });
+                }
                 
                 return (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
@@ -1503,6 +1585,39 @@ const Projects = () => {
                     </div>
                 );
             }
+            
+            // Double-check before rendering
+            if (!window.ProjectDetail) {
+                console.error('❌ ProjectDetail component not loaded');
+                return (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+                        <i className="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
+                        <h2 className="text-lg font-semibold text-red-800 mb-2">
+                            ProjectDetail Component Not Loaded
+                        </h2>
+                        <p className="text-sm text-red-600 mb-4">
+                            The ProjectDetail component is not available. Check the browser console for more details.
+                        </p>
+                        <div className="flex gap-2 justify-center">
+                            <button 
+                                onClick={() => window.location.reload()}
+                                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium"
+                            >
+                                <i className="fas fa-sync-alt mr-2"></i>
+                                Reload Page
+                            </button>
+                            <button 
+                                onClick={() => setViewingProject(null)}
+                                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
+                            >
+                                <i className="fas fa-arrow-left mr-2"></i>
+                                Back to Projects
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+            
             return <ProjectDetailComponent 
                 project={viewingProject} 
                 onBack={() => setViewingProject(null)}

@@ -3028,12 +3028,24 @@ const Manufacturing = () => {
         date: formData.date || new Date().toISOString()
       };
 
+      console.log('📤 Creating stock movement:', movementData);
       const response = await safeCallAPI('createStockMovement', movementData);
+      console.log('📥 Stock movement response:', response);
       
-      if (response?.data?.movement) {
-        // Refresh movements list
+      // Check if movement was created successfully (response structure may vary)
+      const createdMovement = response?.data?.movement || response?.movement || response?.data;
+      
+      if (createdMovement || response?.data) {
+        console.log('✅ Stock movement created successfully, refreshing movements list...');
+        
+        // Refresh movements list - wait a bit to ensure database commit
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
         const movementsResponse = await safeCallAPI('getStockMovements');
         const movementsData = movementsResponse?.data?.movements || [];
+        console.log('📋 Fetched movements:', movementsData.length, 'total movements');
+        console.log('📋 Movement types:', movementsData.map(m => ({ id: m.id, type: m.type, quantity: m.quantity })));
+        
         const processedMovements = movementsData.map(movement => ({
           ...movement,
           id: movement.id
@@ -3052,6 +3064,7 @@ const Manufacturing = () => {
         setFormData({});
         alert('Stock movement recorded successfully!');
       } else {
+        console.error('❌ Invalid response structure:', response);
         throw new Error('Invalid response from server');
       }
     } catch (error) {
@@ -6925,6 +6938,34 @@ const Manufacturing = () => {
   };
 
   const MovementsView = () => {
+    // Refresh movements when this view is mounted/opened
+    useEffect(() => {
+      const refreshMovements = async () => {
+        try {
+          console.log('🔄 Refreshing stock movements list...');
+          if (window.DatabaseAPI?.getStockMovements) {
+            const movementsResponse = await window.DatabaseAPI.getStockMovements();
+            const movementsData = movementsResponse?.data?.movements || [];
+            console.log('📋 Loaded movements:', movementsData.length, 'total');
+            console.log('📋 Movement types breakdown:', {
+              receipt: movementsData.filter(m => m.type === 'receipt').length,
+              consumption: movementsData.filter(m => m.type === 'consumption').length,
+              adjustment: movementsData.filter(m => m.type === 'adjustment').length,
+              transfer: movementsData.filter(m => m.type === 'transfer').length,
+              production: movementsData.filter(m => m.type === 'production').length,
+              other: movementsData.filter(m => !['receipt', 'consumption', 'adjustment', 'transfer', 'production'].includes(m.type)).length
+            });
+            const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+            setMovements(processed);
+            localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+          }
+        } catch (error) {
+          console.error('Error refreshing movements:', error);
+        }
+      };
+      refreshMovements();
+    }, []); // Run once when component mounts
+
     // Memoize the handler to prevent recreation on every render
     const handleRecordClick = useCallback((e) => {
       if (e) {
@@ -6955,6 +6996,24 @@ const Manufacturing = () => {
       }
     }, []); // Empty deps - React's useState setters are stable
 
+    const handleRefreshMovements = async () => {
+      try {
+        console.log('🔄 Manually refreshing stock movements...');
+        if (window.DatabaseAPI?.getStockMovements) {
+          const movementsResponse = await window.DatabaseAPI.getStockMovements();
+          const movementsData = movementsResponse?.data?.movements || [];
+          console.log('📋 Refreshed movements:', movementsData.length, 'total');
+          const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+          setMovements(processed);
+          localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+          alert(`✅ Refreshed! Found ${movementsData.length} stock movements.`);
+        }
+      } catch (error) {
+        console.error('Error refreshing movements:', error);
+        alert('Failed to refresh movements: ' + error.message);
+      }
+    };
+
     return (
       <div className="space-y-3">
         {/* Controls */}
@@ -6967,21 +7026,15 @@ const Manufacturing = () => {
               )}
             </h3>
             <div className="flex items-center gap-2">
-              {movements.length > 0 && (
-                <button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handlePurgeAllMovements();
-                  }}
-                  className="px-3 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
-                  title="Purge all stock movements (cannot be undone)"
-                  type="button"
-                >
-                  <i className="fas fa-trash-alt text-xs"></i>
-                  Purge All
-                </button>
-              )}
+              <button 
+                onClick={handleRefreshMovements}
+                className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2"
+                title="Refresh movements list"
+                type="button"
+              >
+                <i className="fas fa-sync-alt text-xs"></i>
+                Refresh
+              </button>
               <button className="px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-2">
                 <i className="fas fa-filter text-xs"></i>
                 Filter

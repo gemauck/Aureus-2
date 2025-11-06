@@ -29,7 +29,12 @@ class LiveDataSync {
 
     // Start the live sync service
     start() {
-        if (this.isRunning) return;
+        if (this.isRunning) {
+            const getLog = () => window.debug?.log || (() => {});
+            const log = getLog();
+            log('⚠️ LiveDataSync.start() called but already running - skipping');
+            return;
+        }
         
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
@@ -42,7 +47,10 @@ class LiveDataSync {
         
         // Set up interval
         this.intervalId = setInterval(() => {
-            this.sync();
+            // Double-check isRunning before each interval sync
+            if (this.isRunning && !this.isPaused) {
+                this.sync();
+            }
         }, this.refreshInterval);
         
         // Listen for visibility changes to sync when tab becomes active
@@ -70,7 +78,12 @@ class LiveDataSync {
 
     // Stop the live sync service
     stop() {
-        if (!this.isRunning) return;
+        if (!this.isRunning) {
+            const getLog = () => window.debug?.log || (() => {});
+            const log = getLog();
+            log('⏹️ LiveDataSync.stop() called but already stopped');
+            return;
+        }
         
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
@@ -78,12 +91,27 @@ class LiveDataSync {
         this.isRunning = false;
         this.connectionStatus = 'disconnected';
         
+        // Abort any sync in progress IMMEDIATELY
+        if (this.syncInProgress) {
+            log('⏹️ Aborting sync in progress immediately');
+            this.syncInProgress = false;
+            this._forceSyncInProgress = false;
+        }
+        
+        // Clear interval timer to prevent any scheduled syncs
         if (this.intervalId) {
             clearInterval(this.intervalId);
             this.intervalId = null;
+            log('⏹️ Cleared sync interval timer');
         }
         
+        // Clear data cache to prevent stale data from being served
+        this.dataCache.clear();
+        log('⏹️ Cleared data cache');
+        
+        // Notify subscribers that LiveDataSync is disconnected
         this.notifySubscribers({ type: 'connection', status: 'disconnected' });
+        log('⏹️ LiveDataSync stopped completely');
     }
 
     // Pause syncing (e.g., when modal is open)
@@ -149,6 +177,13 @@ class LiveDataSync {
         const getLog = () => window.debug?.log || (() => {});
         const log = getLog();
         
+        // CRITICAL: Check if LiveDataSync is running - abort if stopped
+        // This check happens FIRST before any async operations
+        if (!this.isRunning) {
+            log('⏹️ Sync aborted - LiveDataSync is stopped (checked at start of sync)');
+            return;
+        }
+        
         // Check if paused - skip sync if paused
         if (this.isPaused) {
             log('⏸️ Sync paused, skipping...');
@@ -202,7 +237,7 @@ class LiveDataSync {
                 throw new Error('Database API not available');
             }
 
-            log('🔄 Syncing live data...');
+            log('🔄 [LiveDataSync] Syncing live data...');
             
             // Sync core data types - stagger calls to prevent rate limiting
             // Check if this is a forced sync (bypassCache parameter)
@@ -225,7 +260,12 @@ class LiveDataSync {
                 const delay = i * 200; // 200ms delay between each call
                 const promise = new Promise(resolve => {
                     setTimeout(async () => {
-                        // Check if paused before making API call
+                        // Check if stopped or paused before making API call
+                        if (!this.isRunning) {
+                            log(`⏹️ Sync stopped, skipping ${call.type} API call`);
+                            resolve({ dataType: call.type, success: false, skipped: true });
+                            return;
+                        }
                         if (this.isPaused) {
                             log(`⏸️ Sync paused, skipping ${call.type} API call`);
                             resolve({ dataType: call.type, success: false, skipped: true });
@@ -250,7 +290,12 @@ class LiveDataSync {
                     const usersDelay = syncCalls.length * 200; // After all other calls
                     const usersPromise = new Promise(resolve => {
                         setTimeout(async () => {
-                            // Check if paused before making API call
+                            // Check if stopped or paused before making API call
+                            if (!this.isRunning) {
+                                log('⏹️ Sync stopped, skipping users API call');
+                                resolve({ dataType: 'users', success: false, skipped: true });
+                                return;
+                            }
                             if (this.isPaused) {
                                 log('⏸️ Sync paused, skipping users API call');
                                 resolve({ dataType: 'users', success: false, skipped: true });
@@ -272,7 +317,13 @@ class LiveDataSync {
 
             const results = await Promise.allSettled(syncPromises);
             
-            // Check if paused after async operations complete - abort if paused
+            // Check if stopped or paused after async operations complete - abort if stopped/paused
+            if (!this.isRunning) {
+                log('⏹️ Sync stopped during execution, aborting results processing');
+                this.syncInProgress = false;
+                this._forceSyncInProgress = false;
+                return;
+            }
             if (this.isPaused) {
                 log('⏸️ Sync paused during execution, aborting results processing');
                 this.syncInProgress = false;
@@ -382,7 +433,13 @@ class LiveDataSync {
     async syncData(dataType, fetchFunction, bypassCache = false) {
         // Wrap entire function to ensure it never throws
         try {
-            // Check if paused before making any API calls
+            // Check if stopped or paused before making any API calls
+            if (!this.isRunning) {
+                const getLog = () => window.debug?.log || (() => {});
+                const log = getLog();
+                log(`⏹️ Sync stopped, skipping ${dataType} sync`);
+                return { dataType, success: false, skipped: true };
+            }
             if (this.isPaused) {
                 const getLog = () => window.debug?.log || (() => {});
                 const log = getLog();
@@ -529,6 +586,21 @@ class LiveDataSync {
 
     // Notify all subscribers
     notifySubscribers(message) {
+        // Don't notify subscribers of data or sync updates if LiveDataSync is stopped
+        // Connection status changes (like 'disconnected', 'paused') should still be sent
+        // to inform subscribers that LiveDataSync was stopped
+        if (!this.isRunning) {
+            // Only allow connection status messages when stopped (to notify about the stop)
+            if (message?.type === 'connection' && message?.status === 'disconnected') {
+                // Allow disconnected status to notify subscribers
+            } else if (message?.type === 'data' || message?.type === 'sync') {
+                const getLog = () => window.debug?.log || (() => {});
+                const log = getLog();
+                log(`⏹️ Skipping ${message?.type} notification - LiveDataSync is stopped`);
+                return;
+            }
+        }
+        
         this.subscribers.forEach((callback, id) => {
             try {
                 callback(message);
