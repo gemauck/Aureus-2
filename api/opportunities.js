@@ -63,13 +63,15 @@ async function handler(req, res) {
     if (req.method === 'GET' && clientId) {
       try {
         console.log('🔍 Opportunities API: Fetching opportunities for clientId:', clientId)
+        console.log('🔍 Prisma client available:', !!prisma, 'opportunity model available:', !!prisma?.opportunity)
+        
         const opportunities = await prisma.opportunity.findMany({ 
           where: { clientId },
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Client opportunities retrieved successfully:', opportunities.length, 'for client:', clientId)
         if (opportunities.length > 0) {
-          console.log('📋 Opportunity details:', opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, clientId: o.clientId, status: o.status })))
+          console.log('📋 Opportunity details:', opportunities.map(o => ({ id: o.id, title: o.title, stage: o.stage, clientId: o.clientId, value: o.value })))
         } else {
           console.log('⚠️ No opportunities found for client:', clientId)
           // Check if ANY opportunities exist in database
@@ -84,7 +86,13 @@ async function handler(req, res) {
         }
         return ok(res, { opportunities })
       } catch (dbError) {
-        console.error('❌ Database error getting client opportunities:', dbError)
+        console.error('❌ Database error getting client opportunities:', {
+          error: dbError.message,
+          errorName: dbError.name,
+          errorCode: dbError.code,
+          stack: dbError.stack,
+          clientId: clientId
+        })
         return serverError(res, 'Failed to get client opportunities', dbError.message)
       }
     }
@@ -118,6 +126,7 @@ async function handler(req, res) {
       }
 
       console.log('🔍 Creating opportunity with data:', opportunityData)
+      console.log('🔍 Prisma client available:', !!prisma, 'opportunity model available:', !!prisma?.opportunity)
       try {
         const opportunity = await prisma.opportunity.create({
           data: opportunityData
@@ -126,7 +135,13 @@ async function handler(req, res) {
         console.log('✅ Opportunity created successfully:', opportunity.id)
         return created(res, { opportunity })
       } catch (dbError) {
-        console.error('❌ Database error creating opportunity:', dbError)
+        console.error('❌ Database error creating opportunity:', {
+          error: dbError.message,
+          errorName: dbError.name,
+          errorCode: dbError.code,
+          stack: dbError.stack,
+          opportunityData: opportunityData
+        })
         return serverError(res, 'Failed to create opportunity', dbError.message)
       }
     }

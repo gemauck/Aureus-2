@@ -1,45 +1,102 @@
 // Permission system for role-based access control
+// Main permission categories - all users have access to everything except Users and HR (admin-only)
 export const PERMISSIONS = {
-    // General permissions
+    // Main module permissions
+    ACCESS_CRM: 'access_crm',
+    ACCESS_PROJECTS: 'access_projects',
+    ACCESS_TEAM: 'access_team',
+    ACCESS_USERS: 'access_users', // Admin only
+    ACCESS_HR: 'access_hr', // Admin only
+    ACCESS_MANUFACTURING: 'access_manufacturing',
+    ACCESS_TOOL: 'access_tool',
+    ACCESS_REPORTS: 'access_reports',
+    
+    // Legacy permissions (kept for backward compatibility, mapped to new structure)
     VIEW_ALL: 'view_all',
     VIEW_ASSIGNED: 'view_assigned',
     EDIT_ASSIGNED: 'edit_assigned',
-    
-    // Administration permissions
     MANAGE_USERS: 'manage_users',
     MANAGE_ROLES: 'manage_roles',
     SYSTEM_SETTINGS: 'system_settings',
-    
-    // Project permissions
     EDIT_PROJECTS: 'edit_projects',
     VIEW_PROJECTS: 'view_projects',
     MANAGE_TASKS: 'manage_tasks',
     DELETE_PROJECTS: 'delete_projects',
-    
-    // CRM permissions
     EDIT_CLIENTS: 'edit_clients',
     VIEW_CLIENTS: 'view_clients',
     MANAGE_LEADS: 'manage_leads',
-    
-    // Finance permissions
     MANAGE_INVOICING: 'manage_invoicing',
     VIEW_INVOICES: 'view_invoices',
     MANAGE_EXPENSES: 'manage_expenses',
     APPROVE_EXPENSES: 'approve_expenses',
-    
-    // Operations permissions
     TIME_TRACKING: 'time_tracking',
     VIEW_TEAM: 'view_team',
     MANAGE_TEAM: 'manage_team',
-    
-    // Manufacturing permissions
     VIEW_MANUFACTURING: 'view_manufacturing',
     EDIT_MANUFACTURING: 'edit_manufacturing',
     MANAGE_MANUFACTURING: 'manage_manufacturing',
-    
-    // Reporting permissions
     VIEW_REPORTS: 'view_reports',
     EXPORT_DATA: 'export_data',
+};
+
+// Permission categories for UI organization
+export const PERMISSION_CATEGORIES = {
+    CRM: {
+        id: 'crm',
+        label: 'CRM',
+        permission: PERMISSIONS.ACCESS_CRM,
+        description: 'Customer Relationship Management',
+        adminOnly: false
+    },
+    PROJECTS: {
+        id: 'projects',
+        label: 'Projects',
+        permission: PERMISSIONS.ACCESS_PROJECTS,
+        description: 'Project Management',
+        adminOnly: false
+    },
+    TEAM: {
+        id: 'team',
+        label: 'Team',
+        permission: PERMISSIONS.ACCESS_TEAM,
+        description: 'Team Management',
+        adminOnly: false
+    },
+    USERS: {
+        id: 'users',
+        label: 'Users',
+        permission: PERMISSIONS.ACCESS_USERS,
+        description: 'User Management',
+        adminOnly: true
+    },
+    HR: {
+        id: 'hr',
+        label: 'HR',
+        permission: PERMISSIONS.ACCESS_HR,
+        description: 'Human Resources',
+        adminOnly: true
+    },
+    MANUFACTURING: {
+        id: 'manufacturing',
+        label: 'Manufacturing',
+        permission: PERMISSIONS.ACCESS_MANUFACTURING,
+        description: 'Manufacturing Operations',
+        adminOnly: false
+    },
+    TOOL: {
+        id: 'tool',
+        label: 'Tool',
+        permission: PERMISSIONS.ACCESS_TOOL,
+        description: 'Tool Management',
+        adminOnly: false
+    },
+    REPORTS: {
+        id: 'reports',
+        label: 'Reports',
+        permission: PERMISSIONS.ACCESS_REPORTS,
+        description: 'Reports and Analytics',
+        adminOnly: false
+    }
 };
 
 export const ROLE_PERMISSIONS = {
@@ -52,45 +109,19 @@ export const ROLE_PERMISSIONS = {
     manager: {
         name: 'Manager',
         description: 'Manage projects, teams, and assigned resources',
-        permissions: [
-            PERMISSIONS.VIEW_ALL,
-            PERMISSIONS.EDIT_PROJECTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.VIEW_REPORTS,
-            PERMISSIONS.MANAGE_TEAM,
-            PERMISSIONS.MANAGE_TASKS,
-            PERMISSIONS.TIME_TRACKING
-        ],
+        permissions: ['all'], // All non-admin users get access to everything except Users and HR
         color: 'blue'
     },
     user: {
         name: 'User',
-        description: 'Standard user with assigned task access',
-        permissions: [
-            PERMISSIONS.VIEW_ASSIGNED,
-            PERMISSIONS.EDIT_ASSIGNED,
-            PERMISSIONS.TIME_TRACKING,
-            // All users can access Clients and Leads
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS,
-            // All users can access Manufacturing (temporary for testing)
-            PERMISSIONS.VIEW_MANUFACTURING,
-            PERMISSIONS.EDIT_MANUFACTURING,
-            PERMISSIONS.MANAGE_MANUFACTURING
-        ],
+        description: 'Standard user with access to all modules except Users and HR',
+        permissions: ['all'], // All non-admin users get access to everything except Users and HR
         color: 'orange'
     },
     guest: {
         name: 'Guest',
-        description: 'Limited access - Can only view specified projects',
-        permissions: [
-            PERMISSIONS.VIEW_PROJECTS,
-            // All users (including guests) can access Clients and Leads
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
-        ],
+        description: 'Limited access - Can access all modules except Users and HR',
+        permissions: ['all'], // All non-admin users get access to everything except Users and HR
         color: 'gray'
     }
 };
@@ -120,28 +151,57 @@ export class PermissionChecker {
     }
 
     hasPermission(permission) {
-        // All users can access Clients and Leads - no restrictions
-        const clientLeadPermissions = [
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
+        const isAdmin = this.userRole?.toLowerCase() === 'admin';
+        
+        // Admin-only permissions: Users and HR
+        const adminOnlyPermissions = [
+            PERMISSIONS.ACCESS_USERS,
+            PERMISSIONS.ACCESS_HR,
+            PERMISSIONS.MANAGE_USERS,
+            PERMISSIONS.MANAGE_ROLES,
+            PERMISSIONS.SYSTEM_SETTINGS
         ];
-        if (clientLeadPermissions.includes(permission)) {
-            return true;
+        
+        // If permission is admin-only and user is not admin, deny access
+        if (adminOnlyPermissions.includes(permission) && !isAdmin) {
+            return false;
         }
         
-        // All users can access Manufacturing - no restrictions (temporary for testing)
-        const manufacturingPermissions = [
+        // All users (including non-admins) have access to these modules by default
+        const publicPermissions = [
+            PERMISSIONS.ACCESS_CRM,
+            PERMISSIONS.ACCESS_PROJECTS,
+            PERMISSIONS.ACCESS_TEAM,
+            PERMISSIONS.ACCESS_MANUFACTURING,
+            PERMISSIONS.ACCESS_TOOL,
+            PERMISSIONS.ACCESS_REPORTS,
+            // Legacy permissions for backward compatibility
+            PERMISSIONS.VIEW_CLIENTS,
+            PERMISSIONS.EDIT_CLIENTS,
+            PERMISSIONS.MANAGE_LEADS,
             PERMISSIONS.VIEW_MANUFACTURING,
             PERMISSIONS.EDIT_MANUFACTURING,
-            PERMISSIONS.MANAGE_MANUFACTURING
+            PERMISSIONS.MANAGE_MANUFACTURING,
+            PERMISSIONS.VIEW_PROJECTS,
+            PERMISSIONS.EDIT_PROJECTS,
+            PERMISSIONS.MANAGE_TASKS,
+            PERMISSIONS.VIEW_TEAM,
+            PERMISSIONS.MANAGE_TEAM,
+            PERMISSIONS.TIME_TRACKING,
+            PERMISSIONS.VIEW_REPORTS,
+            PERMISSIONS.EXPORT_DATA,
+            PERMISSIONS.VIEW_ALL,
+            PERMISSIONS.VIEW_ASSIGNED,
+            PERMISSIONS.EDIT_ASSIGNED
         ];
-        if (manufacturingPermissions.includes(permission)) {
+        
+        // If permission is public, grant access
+        if (publicPermissions.includes(permission)) {
             return true;
         }
         
         // Admin has all permissions (unless explicitly overridden)
-        if (this.userRole?.toLowerCase() === 'admin' && !this.customPermissions.length) {
+        if (isAdmin && !this.customPermissions.length) {
             return true;
         }
         
@@ -152,6 +212,10 @@ export class PermissionChecker {
         
         // Check role-based permissions
         if (this.rolePermissions.includes('all')) {
+            // For non-admin users with 'all', they still don't get admin-only permissions
+            if (!isAdmin && adminOnlyPermissions.includes(permission)) {
+                return false;
+            }
             return true;
         }
         
@@ -167,21 +231,49 @@ export class PermissionChecker {
     }
 
     canManageUsers() {
-        return this.hasPermission(PERMISSIONS.MANAGE_USERS);
+        return this.hasPermission(PERMISSIONS.ACCESS_USERS) || this.hasPermission(PERMISSIONS.MANAGE_USERS);
+    }
+
+    canAccessHR() {
+        return this.hasPermission(PERMISSIONS.ACCESS_HR);
+    }
+
+    canAccessCRM() {
+        return this.hasPermission(PERMISSIONS.ACCESS_CRM);
+    }
+
+    canAccessProjects() {
+        return this.hasPermission(PERMISSIONS.ACCESS_PROJECTS);
+    }
+
+    canAccessTeam() {
+        return this.hasPermission(PERMISSIONS.ACCESS_TEAM);
+    }
+
+    canAccessManufacturing() {
+        return this.hasPermission(PERMISSIONS.ACCESS_MANUFACTURING);
+    }
+
+    canAccessTool() {
+        return this.hasPermission(PERMISSIONS.ACCESS_TOOL);
+    }
+
+    canAccessReports() {
+        return this.hasPermission(PERMISSIONS.ACCESS_REPORTS);
     }
 
     canManageProjects() {
-        return this.hasPermission(PERMISSIONS.EDIT_PROJECTS);
+        return this.hasPermission(PERMISSIONS.EDIT_PROJECTS) || this.hasPermission(PERMISSIONS.ACCESS_PROJECTS);
     }
 
     canManageClients() {
         // All users can manage clients - always return true
-        return true;
+        return this.hasPermission(PERMISSIONS.ACCESS_CRM);
     }
 
     canManageManufacturing() {
-        // All users can manage manufacturing - always return true (temporary for testing)
-        return true;
+        // All users can manage manufacturing - always return true
+        return this.hasPermission(PERMISSIONS.ACCESS_MANUFACTURING);
     }
 
     canManageInvoicing() {
@@ -189,7 +281,7 @@ export class PermissionChecker {
     }
 
     canViewReports() {
-        return this.hasPermission(PERMISSIONS.VIEW_REPORTS);
+        return this.hasPermission(PERMISSIONS.VIEW_REPORTS) || this.hasPermission(PERMISSIONS.ACCESS_REPORTS);
     }
 
     canExportData() {
@@ -197,7 +289,7 @@ export class PermissionChecker {
     }
 
     canManageTeam() {
-        return this.hasPermission(PERMISSIONS.MANAGE_TEAM);
+        return this.hasPermission(PERMISSIONS.MANAGE_TEAM) || this.hasPermission(PERMISSIONS.ACCESS_TEAM);
     }
 
     canTimeTrack() {
@@ -221,26 +313,6 @@ export class PermissionChecker {
 // Middleware for API routes
 export function requirePermission(permission) {
     return (req, res, next) => {
-        // Always allow Clients and Leads permissions - no restrictions
-        const clientLeadPermissions = [
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
-        ];
-        if (clientLeadPermissions.includes(permission)) {
-            return next();
-        }
-        
-        // Always allow Manufacturing permissions - no restrictions (temporary for testing)
-        const manufacturingPermissions = [
-            PERMISSIONS.VIEW_MANUFACTURING,
-            PERMISSIONS.EDIT_MANUFACTURING,
-            PERMISSIONS.MANAGE_MANUFACTURING
-        ];
-        if (manufacturingPermissions.includes(permission)) {
-            return next();
-        }
-        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasPermission(permission)) {
@@ -258,26 +330,6 @@ export function requirePermission(permission) {
 // Middleware for multiple permissions (any)
 export function requireAnyPermission(permissions) {
     return (req, res, next) => {
-        // Always allow if any permission is a Clients/Leads permission
-        const clientLeadPermissions = [
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
-        ];
-        if (permissions.some(p => clientLeadPermissions.includes(p))) {
-            return next();
-        }
-        
-        // Always allow if any permission is a Manufacturing permission (temporary for testing)
-        const manufacturingPermissions = [
-            PERMISSIONS.VIEW_MANUFACTURING,
-            PERMISSIONS.EDIT_MANUFACTURING,
-            PERMISSIONS.MANAGE_MANUFACTURING
-        ];
-        if (permissions.some(p => manufacturingPermissions.includes(p))) {
-            return next();
-        }
-        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasAnyPermission(permissions)) {
@@ -295,26 +347,6 @@ export function requireAnyPermission(permissions) {
 // Middleware for multiple permissions (all)
 export function requireAllPermissions(permissions) {
     return (req, res, next) => {
-        // Always allow if all permissions are Clients/Leads permissions
-        const clientLeadPermissions = [
-            PERMISSIONS.VIEW_CLIENTS,
-            PERMISSIONS.EDIT_CLIENTS,
-            PERMISSIONS.MANAGE_LEADS
-        ];
-        if (permissions.every(p => clientLeadPermissions.includes(p))) {
-            return next();
-        }
-        
-        // Always allow if all permissions are Manufacturing permissions (temporary for testing)
-        const manufacturingPermissions = [
-            PERMISSIONS.VIEW_MANUFACTURING,
-            PERMISSIONS.EDIT_MANUFACTURING,
-            PERMISSIONS.MANAGE_MANUFACTURING
-        ];
-        if (permissions.every(p => manufacturingPermissions.includes(p))) {
-            return next();
-        }
-        
         const checker = new PermissionChecker(req.user);
         
         if (!checker.hasAllPermissions(permissions)) {
@@ -338,6 +370,13 @@ export function usePermissions(user) {
         hasAnyPermission: (permissions) => checker.hasAnyPermission(permissions),
         hasAllPermissions: (permissions) => checker.hasAllPermissions(permissions),
         canManageUsers: () => checker.canManageUsers(),
+        canAccessHR: () => checker.canAccessHR(),
+        canAccessCRM: () => checker.canAccessCRM(),
+        canAccessProjects: () => checker.canAccessProjects(),
+        canAccessTeam: () => checker.canAccessTeam(),
+        canAccessManufacturing: () => checker.canAccessManufacturing(),
+        canAccessTool: () => checker.canAccessTool(),
+        canAccessReports: () => checker.canAccessReports(),
         canManageProjects: () => checker.canManageProjects(),
         canManageClients: () => checker.canManageClients(),
         canManageManufacturing: () => checker.canManageManufacturing(),
@@ -354,44 +393,16 @@ export function usePermissions(user) {
 // Component wrapper for permission-based rendering
 export function PermissionGate({ permission, permissions, requireAll = false, children, fallback = null }) {
     const user = window.storage?.getUser?.();
-    
-    // Always allow Clients and Leads - no restrictions
-    const clientLeadPermissions = [
-        PERMISSIONS.VIEW_CLIENTS,
-        PERMISSIONS.EDIT_CLIENTS,
-        PERMISSIONS.MANAGE_LEADS
-    ];
-    
-    // Always allow Manufacturing - no restrictions (temporary for testing)
-    const manufacturingPermissions = [
-        PERMISSIONS.VIEW_MANUFACTURING,
-        PERMISSIONS.EDIT_MANUFACTURING,
-        PERMISSIONS.MANAGE_MANUFACTURING
-    ];
+    const checker = new PermissionChecker(user);
     
     let hasAccess = false;
     
     if (permission) {
-        // Always allow if it's a Clients/Leads or Manufacturing permission
-        if (clientLeadPermissions.includes(permission) || manufacturingPermissions.includes(permission)) {
-            hasAccess = true;
-        } else {
-            const checker = new PermissionChecker(user);
-            hasAccess = checker.hasPermission(permission);
-        }
+        hasAccess = checker.hasPermission(permission);
     } else if (permissions) {
-        // Always allow if all/any permissions are Clients/Leads or Manufacturing permissions
-        const allAllowedPermissions = [...clientLeadPermissions, ...manufacturingPermissions];
-        if (requireAll && permissions.every(p => allAllowedPermissions.includes(p))) {
-            hasAccess = true;
-        } else if (!requireAll && permissions.some(p => allAllowedPermissions.includes(p))) {
-            hasAccess = true;
-        } else {
-            const checker = new PermissionChecker(user);
-            hasAccess = requireAll 
-                ? checker.hasAllPermissions(permissions)
-                : checker.hasAnyPermission(permissions);
-        }
+        hasAccess = requireAll 
+            ? checker.hasAllPermissions(permissions)
+            : checker.hasAnyPermission(permissions);
     }
     
     return hasAccess ? children : fallback;
@@ -401,6 +412,7 @@ export function PermissionGate({ permission, permissions, requireAll = false, ch
 if (typeof window !== 'undefined') {
     window.PermissionChecker = PermissionChecker;
     window.PERMISSIONS = PERMISSIONS;
+    window.PERMISSION_CATEGORIES = PERMISSION_CATEGORIES;
     window.ROLE_PERMISSIONS = ROLE_PERMISSIONS;
     window.usePermissions = usePermissions;
     window.PermissionGate = PermissionGate;

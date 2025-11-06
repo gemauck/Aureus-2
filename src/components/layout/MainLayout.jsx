@@ -467,6 +467,8 @@ const MainLayout = () => {
                     ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} 
                     border-r transition-all duration-300 flex flex-col
                     ${isMobile ? 'fixed z-50' : 'relative z-10'}
+                    ${isMobile ? 'main-layout-sidebar' : ''}
+                    ${isMobile ? (sidebarOpen ? 'sidebar-open' : 'sidebar-closed') : ''}
                 `}
                 style={{
                     // Mobile: Fixed positioning, slide in from left
@@ -489,7 +491,7 @@ const MainLayout = () => {
                 {/* Logo */}
                 <div className={`h-14 flex items-center ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'} border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen && (
-                        <h1 className="abcotronics-logo font-bold text-lg" style={isDark ? { color: '#ffffff' } : { color: '#0369a1' }}>
+                        <h1 className="abcotronics-logo font-bold text-lg">
                             Abcotronics
                         </h1>
                     )}
@@ -579,7 +581,7 @@ const MainLayout = () => {
                         
                         {/* Logo - MOBILE ONLY */}
                         {isMobile && (
-                            <h1 className="abcotronics-logo font-bold text-base truncate" style={isDark ? { color: '#ffffff' } : { color: '#0369a1' }}>
+                            <h1 className="abcotronics-logo font-bold text-base truncate">
                                 Abcotronics
                             </h1>
                         )}

@@ -193,24 +193,29 @@ h1.abcotronics-logo:not(.dark) {
     color: #0369a1 !important;
 }
 
-/* Dark mode: Always white - Use maximum specificity */
+/* Override any Tailwind classes - but still respect dark mode */
+html:not(.dark) .abcotronics-logo.text-blue-600,
+html:not(.dark) .abcotronics-logo.text-primary-600 {
+    color: #0369a1 !important;
+}
+
+/* Dark mode: Always white - Use maximum specificity - MUST come after other rules */
 html.dark .abcotronics-logo,
 html.dark h1.abcotronics-logo,
 html.dark h1.abcotronics-logo.font-bold,
+html.dark .abcotronics-logo.font-bold,
+html.dark .abcotronics-logo.text-white,
+html.dark .abcotronics-logo.text-blue-600,
+html.dark .abcotronics-logo.text-primary-600,
 .dark .abcotronics-logo,
 .dark h1.abcotronics-logo,
+.dark h1.abcotronics-logo.font-bold,
 body.dark .abcotronics-logo,
 body.dark h1.abcotronics-logo,
+body.dark h1.abcotronics-logo.font-bold,
 .abcotronics-logo.dark,
 h1.abcotronics-logo.dark {
     color: #ffffff !important;
-}
-
-/* Override any Tailwind classes */
-.abcotronics-logo.text-white,
-.abcotronics-logo.text-blue-600,
-.abcotronics-logo.text-primary-600 {
-    color: inherit !important;
 }
 
 /* Login page logo - always white (on blue background) */

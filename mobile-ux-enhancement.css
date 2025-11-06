@@ -604,7 +604,8 @@
   /* When sidebar is fixed (mobile), it shouldn't take up flex space */
   /* Target sidebar div when it has fixed positioning (mobile) - use class-based selector */
   #root > div.flex > div:first-child.border-r[class*="fixed"],
-  #root > div.flex > div:first-child[style*="fixed"] {
+  #root > div.flex > div:first-child[style*="fixed"],
+  .main-layout-sidebar {
     flex: 0 0 0 !important;
     width: 0 !important;
     min-width: 0 !important;
@@ -613,8 +614,15 @@
     padding: 0 !important;
   }
   
+  /* When sidebar is open, restore its width for display */
+  .main-layout-sidebar.sidebar-open {
+    width: 280px !important;
+    flex: 0 0 280px !important;
+  }
+  
   /* Also target when sidebar is off-screen (left: -280px) */
-  #root > div.flex > div:first-child[style*="-280px"] {
+  #root > div.flex > div:first-child[style*="-280px"],
+  .main-layout-sidebar.sidebar-closed {
     flex: 0 0 0 !important;
     width: 0 !important;
     min-width: 0 !important;
@@ -669,10 +677,11 @@
   
   /* Ensure sidebar overlays instead of pushing */
   /* Target the sidebar div (not aside) - it's the div with border-r class */
-  #root > div > div:first-child,
-  #root > div.flex > div:first-child,
-  div[class*="border-r"][class*="bg-white"],
-  div[class*="border-r"][class*="bg-gray-800"] {
+  /* BUT: Respect sidebar state classes - don't override when sidebar is closed */
+  #root > div > div:first-child:not(.sidebar-closed),
+  #root > div.flex > div:first-child:not(.sidebar-closed),
+  div[class*="border-r"][class*="bg-white"]:not(.sidebar-closed),
+  div[class*="border-r"][class*="bg-gray-800"]:not(.sidebar-closed) {
     position: fixed !important;
     left: 0 !important;
     top: 0 !important;
@@ -680,6 +689,24 @@
     z-index: 50 !important;
     transform: translateX(-100%) !important;
     transition: transform 0.3s ease !important;
+  }
+  
+  /* When sidebar is closed, ensure it's off-screen - HIGH SPECIFICITY */
+  .main-layout-sidebar.sidebar-closed,
+  div.main-layout-sidebar.sidebar-closed,
+  #root > div > div.sidebar-closed,
+  #root > div.flex > div.sidebar-closed {
+    left: -280px !important;
+    transform: translateX(-100%) !important;
+  }
+  
+  /* When sidebar is open, ensure it's visible - HIGH SPECIFICITY */
+  .main-layout-sidebar.sidebar-open,
+  div.main-layout-sidebar.sidebar-open,
+  #root > div > div.sidebar-open,
+  #root > div.flex > div.sidebar-open {
+    left: 0 !important;
+    transform: translateX(0) !important;
   }
   
   /* When sidebar is visible (has left: 0 in inline style), slide it in */
@@ -690,11 +717,21 @@
   
   /* Ensure main content container doesn't overflow */
   #root > div.flex > div:last-child,
-  #root > div > div.flex-1 {
+  #root > div > div.flex-1,
+  div.flex.h-screen > div.flex-1,
+  div.flex.h-screen.overflow-hidden > div.flex-1 {
     max-width: 100vw !important;
     width: 100% !important;
     margin-left: 0 !important;
     overflow-x: hidden !important;
+  }
+  
+  /* When sidebar is closed, main content should take full width */
+  div.flex.h-screen:has(> div.main-layout-sidebar.sidebar-closed) > div.flex-1,
+  div.flex.h-screen.overflow-hidden:has(> div.main-layout-sidebar.sidebar-closed) > div.flex-1 {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    flex: 1 1 100% !important;
   }
   
   /* Ensure main content doesn't move when sidebar opens */
@@ -814,5 +851,53 @@
     padding: 10px !important;
   }
   
+}
+
+/* ============================================
+   CRITICAL OVERRIDE - Sidebar closed state
+   Must be at the end to override all other rules
+   ============================================ */
+
+@media (max-width: 766px) {
+  /* ULTRA-HIGH SPECIFICITY - Override everything for closed sidebar */
+  /* Match actual DOM structure: div.flex.h-screen > div.main-layout-sidebar.sidebar-closed */
+  div.flex.h-screen > div.main-layout-sidebar.sidebar-closed,
+  div.flex.h-screen.overflow-hidden > div.main-layout-sidebar.sidebar-closed,
+  #root > div > div.flex.h-screen > div.main-layout-sidebar.sidebar-closed,
+  .flex.h-screen > div.main-layout-sidebar.sidebar-closed {
+    left: -280px !important;
+    transform: translateX(-100%) !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    flex: 0 0 0 !important;
+    flex-basis: 0 !important;
+  }
+  
+  /* ULTRA-HIGH SPECIFICITY - Override everything for open sidebar */
+  div.flex.h-screen > div.main-layout-sidebar.sidebar-open,
+  div.flex.h-screen.overflow-hidden > div.main-layout-sidebar.sidebar-open,
+  #root > div > div.flex.h-screen > div.main-layout-sidebar.sidebar-open,
+  .flex.h-screen > div.main-layout-sidebar.sidebar-open {
+    left: 0 !important;
+    transform: translateX(0) !important;
+    width: 280px !important;
+    flex: 0 0 280px !important;
+  }
+  
+  /* Ensure main content takes full width when sidebar is closed */
+  div.flex.h-screen:has(> div.main-layout-sidebar.sidebar-closed) > div.flex-1,
+  div.flex.h-screen.overflow-hidden:has(> div.main-layout-sidebar.sidebar-closed) > div.flex-1,
+  /* Fallback for browsers that don't support :has() */
+  div.flex.h-screen > div.flex-1:not(:has(+ div.main-layout-sidebar.sidebar-open)),
+  div.flex.h-screen.overflow-hidden > div.flex-1:not(:has(+ div.main-layout-sidebar.sidebar-open)),
+  /* ALWAYS force full width on mobile - sidebar is fixed so doesn't affect layout */
+  div.flex.h-screen > div.flex-1,
+  div.flex.h-screen.overflow-hidden > div.flex-1 {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+  }
 }
 

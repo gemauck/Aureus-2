@@ -424,13 +424,103 @@ app.all('/api/users/invitation/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for opportunities list and create operations (GET, POST /api/opportunities)
+app.all('/api/opportunities', async (req, res, next) => {
+  try {
+    console.log('🔍 Opportunities route matched:', {
+      method: req.method,
+      url: req.url,
+      hasBody: !!req.body,
+      bodyKeys: req.body ? Object.keys(req.body) : []
+    })
+    
+    const handler = await loadHandler(path.join(apiDir, 'opportunities.js'))
+    if (!handler) {
+      console.error('❌ Opportunities handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    
+    // Ensure handler result is awaited
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
+  } catch (e) {
+    console.error('❌ Error in opportunities handler:', {
+      error: e.message,
+      errorName: e.name,
+      stack: e.stack,
+      url: req.url,
+      method: req.method
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
+        timestamp: new Date().toISOString()
+      })
+    }
+    return next(e)
+  }
+})
+
 // Explicit mapping for opportunities by client endpoint
 app.all('/api/opportunities/client/:clientId', async (req, res, next) => {
   try {
+    console.log('🔍 Opportunities by client route matched:', {
+      method: req.method,
+      url: req.url,
+      clientId: req.params.clientId,
+      params: req.params,
+      hasParams: !!req.params,
+      paramKeys: req.params ? Object.keys(req.params) : []
+    })
+    
+    // Ensure req.params is set and clientId is available
+    if (!req.params) {
+      req.params = {}
+    }
+    // Ensure clientId is set from route param (Express should set this automatically, but add fallback)
+    if (!req.params.clientId) {
+      // Extract from URL as fallback
+      const urlPath = req.url.split('?')[0].split('#')[0]
+      const pathSegments = urlPath.split('/').filter(Boolean)
+      const clientIdIndex = pathSegments.indexOf('client')
+      if (clientIdIndex >= 0 && pathSegments[clientIdIndex + 1]) {
+        req.params.clientId = pathSegments[clientIdIndex + 1]
+        console.log('🔧 Extracted clientId from URL:', req.params.clientId)
+      }
+    }
+    
     const handler = await loadHandler(path.join(apiDir, 'opportunities.js'))
-    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
-    return handler(req, res)
+    if (!handler) {
+      console.error('❌ Opportunities handler not found')
+      return res.status(404).json({ error: 'API endpoint not found' })
+    }
+    
+    // Ensure handler result is awaited
+    const result = handler(req, res)
+    if (result && typeof result.then === 'function') {
+      await result
+    }
+    return result
   } catch (e) {
+    console.error('❌ Error in opportunities by client handler:', {
+      error: e.message,
+      errorName: e.name,
+      stack: e.stack,
+      clientId: req.params?.clientId,
+      url: req.url,
+      method: req.method
+    })
+    if (!res.headersSent && !res.writableEnded) {
+      return res.status(500).json({ 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? e.message : 'Failed to process request',
+        timestamp: new Date().toISOString()
+      })
+    }
     return next(e)
   }
 })

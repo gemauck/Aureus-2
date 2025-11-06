@@ -77,6 +77,34 @@
     left: 0 !important;
   }
   
+  /* MainLayout sidebar - target the first div child with border-r that is fixed */
+  /* Only apply base styles, let inline styles control left position */
+  .flex.h-screen > div[class*="border-r"]:first-child,
+  .main-layout-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    /* DO NOT override left - let inline style control it */
+    width: 280px !important;
+    max-width: 85vw !important;
+    height: 100vh !important;
+    z-index: 50 !important;
+    transition: left 0.3s ease !important;
+    flex-shrink: 0 !important;
+    overflow-y: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* CRITICAL: Ensure sidebar respects inline left style when closed */
+  .main-layout-sidebar.sidebar-closed {
+    left: -280px !important;
+  }
+  
+  /* When sidebar is open */
+  .main-layout-sidebar.sidebar-open {
+    left: 0 !important;
+  }
+  
   /* FORCE MAIN CONTENT TO BE VISIBLE AND TAKE FULL WIDTH */
   main,
   .flex-1,

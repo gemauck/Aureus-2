@@ -950,13 +950,34 @@ const UserManagement = () => {
                                                                 } else if (Array.isArray(user.permissions)) {
                                                                     userPermissions = user.permissions;
                                                                 }
-                                                            } catch (e) {
-                                                                userPermissions = [];
-                                                            }
+                                                        } catch (e) {
+                                                            userPermissions = [];
                                                         }
-                                                        setEditingUserPermissions(user);
-                                                        setSelectedPermissions(userPermissions);
-                                                        setShowPermissionsModal(true);
+                                                    }
+                                                    
+                                                    // Initialize permissions based on new structure
+                                                    // All users get access to public modules by default
+                                                    const permissionCategories = window.PERMISSION_CATEGORIES || {};
+                                                    const isAdmin = user?.role?.toLowerCase() === 'admin';
+                                                    const defaultPermissions = [];
+                                                    
+                                                    Object.values(permissionCategories).forEach(category => {
+                                                        // Add public permissions (all users)
+                                                        if (!category.adminOnly) {
+                                                            defaultPermissions.push(category.permission);
+                                                        }
+                                                        // Add admin-only permissions if user is admin
+                                                        if (category.adminOnly && isAdmin) {
+                                                            defaultPermissions.push(category.permission);
+                                                        }
+                                                    });
+                                                    
+                                                    // Merge with existing custom permissions
+                                                    const finalPermissions = [...new Set([...defaultPermissions, ...userPermissions])];
+                                                    
+                                                    setEditingUserPermissions(user);
+                                                    setSelectedPermissions(finalPermissions);
+                                                    setShowPermissionsModal(true);
                                                     }}
                                                     className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
                                                     title="Manage Permissions"
@@ -1771,85 +1792,77 @@ const UserManagement = () => {
                         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
                             <p className="text-sm text-blue-800 dark:text-blue-200">
                                 <i className="fas fa-info-circle mr-2"></i>
-                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | Custom permissions override role-based permissions.
+                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | All users have access to CRM, Projects, Team, Manufacturing, Tool, and Reports. Only Admins can access Users and HR.
                             </p>
                         </div>
 
                         <div className="space-y-4">
-                            {/* All Available Permissions organized by category */}
-                            {Object.entries({
-                                'General': [
-                                    { id: 'view_all', label: 'View All Data', description: 'Can view all data in the system' },
-                                    { id: 'view_assigned', label: 'View Assigned', description: 'Can view only assigned items' },
-                                    { id: 'edit_assigned', label: 'Edit Assigned', description: 'Can edit assigned items' }
-                                ],
-                                'Administration': [
-                                    { id: 'manage_users', label: 'Manage Users', description: 'Can create, edit, and delete users' },
-                                    { id: 'manage_roles', label: 'Manage Roles', description: 'Can modify user roles' },
-                                    { id: 'system_settings', label: 'System Settings', description: 'Can access system settings' }
-                                ],
-                                'Projects': [
-                                    { id: 'view_projects', label: 'View Projects', description: 'Can view projects' },
-                                    { id: 'edit_projects', label: 'Edit Projects', description: 'Can create and edit projects' },
-                                    { id: 'manage_tasks', label: 'Manage Tasks', description: 'Can create and manage tasks' },
-                                    { id: 'delete_projects', label: 'Delete Projects', description: 'Can delete projects' }
-                                ],
-                                'CRM': [
-                                    { id: 'view_clients', label: 'View Clients', description: 'Can view clients' },
-                                    { id: 'edit_clients', label: 'Edit Clients', description: 'Can create and edit clients' },
-                                    { id: 'manage_leads', label: 'Manage Leads', description: 'Can manage leads and opportunities' }
-                                ],
-                                'Finance': [
-                                    { id: 'view_invoices', label: 'View Invoices', description: 'Can view invoices' },
-                                    { id: 'manage_invoicing', label: 'Manage Invoicing', description: 'Can create and manage invoices' },
-                                    { id: 'manage_expenses', label: 'Manage Expenses', description: 'Can manage expenses' },
-                                    { id: 'approve_expenses', label: 'Approve Expenses', description: 'Can approve expense reports' }
-                                ],
-                                'Operations': [
-                                    { id: 'time_tracking', label: 'Time Tracking', description: 'Can track time on projects' },
-                                    { id: 'view_team', label: 'View Team', description: 'Can view team information' },
-                                    { id: 'manage_team', label: 'Manage Team', description: 'Can manage team members' }
-                                ],
-                                'Reporting': [
-                                    { id: 'view_reports', label: 'View Reports', description: 'Can view system reports' },
-                                    { id: 'export_data', label: 'Export Data', description: 'Can export data from the system' }
-                                ]
-                            }).map(([category, permissions]) => (
-                                <div key={category} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                                    <h4 className="font-semibold text-gray-900 dark:text-white mb-3 text-sm">
-                                        {category}
-                                    </h4>
-                                    <div className="space-y-2">
-                                        {permissions.map((permission) => (
-                                            <label
-                                                key={permission.id}
-                                                className="flex items-start p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={selectedPermissions.includes(permission.id)}
-                                                    onChange={(e) => {
-                                                        if (e.target.checked) {
-                                                            setSelectedPermissions([...selectedPermissions, permission.id]);
-                                                        } else {
-                                                            setSelectedPermissions(selectedPermissions.filter(p => p !== permission.id));
-                                                        }
-                                                    }}
-                                                    className="mt-1 mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                                                />
-                                                <div className="flex-1">
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-white">
-                                                        {permission.label}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {permission.description}
-                                                    </div>
+                            {/* Permission Categories */}
+                            {(() => {
+                                const permissionCategories = window.PERMISSION_CATEGORIES || {};
+                                const isAdmin = editingUserPermissions?.role?.toLowerCase() === 'admin';
+                                
+                                return Object.values(permissionCategories).map((category) => {
+                                    const isAdminOnly = category.adminOnly;
+                                    const hasAccess = !isAdminOnly || isAdmin;
+                                    const isChecked = hasAccess || selectedPermissions.includes(category.permission);
+                                    
+                                    return (
+                                        <div 
+                                            key={category.id} 
+                                            className={`border rounded-lg p-4 ${
+                                                isAdminOnly && !isAdmin 
+                                                    ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 opacity-60' 
+                                                    : 'border-gray-200 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-semibold text-gray-900 dark:text-white text-sm">
+                                                        {category.label}
+                                                    </h4>
+                                                    {isAdminOnly && (
+                                                        <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded">
+                                                            Admin Only
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                                                <label className="flex items-center cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isChecked}
+                                                        disabled={isAdminOnly && !isAdmin}
+                                                        onChange={(e) => {
+                                                            if (isAdminOnly && !isAdmin) return;
+                                                            
+                                                            if (e.target.checked) {
+                                                                if (!selectedPermissions.includes(category.permission)) {
+                                                                    setSelectedPermissions([...selectedPermissions, category.permission]);
+                                                                }
+                                                            } else {
+                                                                setSelectedPermissions(selectedPermissions.filter(p => p !== category.permission));
+                                                            }
+                                                        }}
+                                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    />
+                                                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">
+                                                        {isChecked ? 'Enabled' : 'Disabled'}
+                                                    </span>
+                                                </label>
+                                            </div>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                {category.description}
+                                            </p>
+                                            {isAdminOnly && !isAdmin && (
+                                                <p className="text-xs text-red-600 dark:text-red-400 mt-2">
+                                                    <i className="fas fa-lock mr-1"></i>
+                                                    Only administrators can access this module
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                });
+                            })()}
                         </div>
 
                         <div className="mt-6 flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">

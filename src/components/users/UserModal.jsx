@@ -17,37 +17,8 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
     const [availableProjects, setAvailableProjects] = useState([]);
     const [loadingProjects, setLoadingProjects] = useState(false);
 
-    // All available permissions
-    const allPermissions = [
-        { id: 'view_all', label: 'View All Data', category: 'General' },
-        { id: 'view_assigned', label: 'View Assigned Items', category: 'General' },
-        { id: 'edit_assigned', label: 'Edit Assigned Items', category: 'General' },
-        
-        { id: 'manage_users', label: 'Manage Users', category: 'Administration' },
-        { id: 'manage_roles', label: 'Manage Roles', category: 'Administration' },
-        { id: 'system_settings', label: 'System Settings', category: 'Administration' },
-        
-        { id: 'edit_projects', label: 'Edit Projects', category: 'Projects' },
-        { id: 'view_projects', label: 'View Projects', category: 'Projects' },
-        { id: 'manage_tasks', label: 'Manage Tasks', category: 'Projects' },
-        { id: 'delete_projects', label: 'Delete Projects', category: 'Projects' },
-        
-        { id: 'edit_clients', label: 'Edit Clients', category: 'CRM' },
-        { id: 'view_clients', label: 'View Clients', category: 'CRM' },
-        { id: 'manage_leads', label: 'Manage Leads', category: 'CRM' },
-        
-        { id: 'manage_invoicing', label: 'Manage Invoicing', category: 'Finance' },
-        { id: 'view_invoices', label: 'View Invoices', category: 'Finance' },
-        { id: 'manage_expenses', label: 'Manage Expenses', category: 'Finance' },
-        { id: 'approve_expenses', label: 'Approve Expenses', category: 'Finance' },
-        
-        { id: 'time_tracking', label: 'Time Tracking', category: 'Operations' },
-        { id: 'view_team', label: 'View Team', category: 'Operations' },
-        { id: 'manage_team', label: 'Manage Team', category: 'Operations' },
-        
-        { id: 'view_reports', label: 'View Reports', category: 'Reporting' },
-        { id: 'export_data', label: 'Export Data', category: 'Reporting' },
-    ];
+    // Get permission categories from permissions.js
+    const permissionCategories = window.PERMISSION_CATEGORIES || {};
 
     useEffect(() => {
         if (user) {
@@ -146,21 +117,13 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
         return role.permissions;
     };
 
-    const hasPermission = (permissionId) => {
-        const role = roleDefinitions[formData.role];
-        if (role?.permissions.includes('all')) return true;
-        return formData.customPermissions.includes(permissionId) || 
-               role?.permissions.includes(permissionId);
+    const isAdmin = formData.role?.toLowerCase() === 'admin';
+    
+    // Check if user has access to a permission category
+    const hasCategoryAccess = (category) => {
+        if (!category.adminOnly) return true; // Public categories
+        return isAdmin; // Admin-only categories
     };
-
-    // Group permissions by category
-    const groupedPermissions = allPermissions.reduce((acc, perm) => {
-        if (!acc[perm.category]) {
-            acc[perm.category] = [];
-        }
-        acc[perm.category].push(perm);
-        return acc;
-    }, {});
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -363,54 +326,50 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
 
                         {showPermissions && (
                             <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
-                                {formData.role === 'admin' ? (
-                                    <div className="text-center py-4">
-                                        <i className="fas fa-shield-alt text-3xl text-red-600 mb-2"></i>
-                                        <p className="text-sm font-medium text-gray-900">Administrator</p>
-                                        <p className="text-xs text-gray-600 mt-1">This role has full system access</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        <p className="text-xs text-gray-600">
-                                            Select additional permissions beyond the default role permissions:
-                                        </p>
-                                        {Object.entries(groupedPermissions).map(([category, perms]) => (
-                                            <div key={category}>
-                                                <h4 className="text-xs font-semibold text-gray-700 mb-1.5">{category}</h4>
-                                                <div className="space-y-1">
-                                                    {perms.map(perm => {
-                                                        const isRoleDefault = roleDefinitions[formData.role]?.permissions.includes(perm.id);
-                                                        const isCustom = formData.customPermissions.includes(perm.id);
-                                                        const isChecked = isRoleDefault || isCustom;
-
-                                                        return (
-                                                            <label
-                                                                key={perm.id}
-                                                                className={`flex items-center gap-2 p-1.5 rounded cursor-pointer ${
-                                                                    isRoleDefault ? 'bg-blue-50' : 'hover:bg-gray-100'
-                                                                }`}
-                                                            >
-                                                                <input
-                                                                    type="checkbox"
-                                                                    checked={isChecked}
-                                                                    onChange={() => !isRoleDefault && handlePermissionToggle(perm.id)}
-                                                                    disabled={isRoleDefault}
-                                                                    className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                                                                />
-                                                                <span className="text-xs text-gray-700 flex-1">
-                                                                    {perm.label}
-                                                                    {isRoleDefault && (
-                                                                        <span className="ml-1.5 text-[10px] text-blue-600">(Role default)</span>
-                                                                    )}
-                                                                </span>
-                                                            </label>
-                                                        );
-                                                    })}
+                                <div className="space-y-3">
+                                    <p className="text-xs text-gray-600">
+                                        All users have access to CRM, Projects, Team, Manufacturing, Tool, and Reports. Only Admins can access Users and HR.
+                                    </p>
+                                    {Object.values(permissionCategories).map((category) => {
+                                        const hasAccess = hasCategoryAccess(category);
+                                        const isChecked = hasAccess;
+                                        
+                                        return (
+                                            <div 
+                                                key={category.id}
+                                                className={`p-2 rounded border ${
+                                                    category.adminOnly && !isAdmin 
+                                                        ? 'border-gray-300 bg-gray-100 opacity-60' 
+                                                        : 'border-gray-200 bg-white'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-semibold text-gray-700">
+                                                            {category.label}
+                                                        </span>
+                                                        {category.adminOnly && (
+                                                            <span className="text-[10px] px-1.5 py-0.5 bg-red-100 text-red-700 rounded">
+                                                                Admin Only
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className={`text-xs ${isChecked ? 'text-green-600' : 'text-gray-400'}`}>
+                                                            {isChecked ? 'Enabled' : 'Disabled'}
+                                                        </span>
+                                                        {category.adminOnly && !isAdmin && (
+                                                            <i className="fas fa-lock text-xs text-red-500"></i>
+                                                        )}
+                                                    </div>
                                                 </div>
+                                                <p className="text-[10px] text-gray-500 mt-1">
+                                                    {category.description}
+                                                </p>
                                             </div>
-                                        ))}
-                                    </div>
-                                )}
+                                        );
+                                    })}
+                                </div>
                             </div>
                         )}
                     </div>
