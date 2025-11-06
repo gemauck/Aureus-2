@@ -43,12 +43,16 @@
   }
   
   /* ============================================
-     2. ENHANCED HEADER
+     2. ENHANCED HEADER - ULTRA SPECIFIC
      ============================================ */
   
   header,
   header[class],
-  header.border-b {
+  header.border-b,
+  header.h-14,
+  #root header,
+  #root > div > header,
+  body header {
     height: 60px !important;
     min-height: 60px !important;
     max-height: 60px !important;
@@ -58,7 +62,13 @@
     background: rgba(255, 255, 255, 0.95) !important;
   }
   
-  .dark header {
+  .dark header,
+  .dark header[class],
+  .dark header.border-b,
+  .dark header.h-14,
+  .dark #root header,
+  .dark #root > div > header,
+  .dark body header {
     background: rgba(31, 41, 55, 0.95) !important;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
   }
@@ -89,12 +99,16 @@
   }
   
   /* ============================================
-     3. BEAUTIFUL MAIN CONTENT AREA
+     3. BEAUTIFUL MAIN CONTENT AREA - ULTRA SPECIFIC
      ============================================ */
   
   main,
   main[class],
-  main.flex-1 {
+  main.flex-1,
+  main.overflow-y-auto,
+  #root main,
+  #root > div > main,
+  body main {
     padding: 20px 16px !important;
     background: #f9fafb !important;
     min-height: calc(100vh - 60px) !important;
@@ -103,12 +117,16 @@
   
   .dark main,
   .dark main[class],
-  .dark main.flex-1 {
+  .dark main.flex-1,
+  .dark main.overflow-y-auto,
+  .dark #root main,
+  .dark #root > div > main,
+  .dark body main {
     background: #111827 !important;
   }
   
   /* ============================================
-     4. ENHANCED CARDS & CONTAINERS
+     4. ENHANCED CARDS & CONTAINERS - ULTRA SPECIFIC
      ============================================ */
   
   .card,
@@ -119,7 +137,13 @@
   .rounded-lg.border,
   main .rounded-lg,
   main .border,
-  main .rounded-lg.border {
+  main .rounded-lg.border,
+  main .bg-white,
+  main .bg-gray-50,
+  main .bg-gray-100,
+  main > div > .rounded-lg,
+  main > div > .border,
+  main > div > .rounded-lg.border {
     border-radius: 16px !important;
     padding: 20px !important;
     margin-bottom: 16px !important;
