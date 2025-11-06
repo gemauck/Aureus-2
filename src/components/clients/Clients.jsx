@@ -3372,6 +3372,7 @@ const Clients = React.memo(() => {
                         <Modal
                         key={editingClientId || 'new-client'}
                         clientId={editingClientId}
+                        onSave={handleSaveClient}
                         onClose={handleClientModalClose}
                         onDelete={handleDeleteClient}
                         allProjects={projects}
@@ -3388,7 +3389,11 @@ const Clients = React.memo(() => {
     };
 
     // Full-page Lead Detail View
-    const LeadDetailView = () => (
+    const LeadDetailView = () => {
+        // Get the lead from editingLeadId
+        const selectedLead = editingLeadId ? leads.find(l => l.id === editingLeadId) : null;
+        
+        return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
@@ -3400,7 +3405,7 @@ const Clients = React.memo(() => {
                                 console.log('🔄 Refreshing leads after closing lead detail...');
                                 await loadLeads(true); // Force refresh to get latest data
                                 setViewMode('leads');
-                                setSelectedLead(null);
+                                selectedLeadRef.current = null;
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
@@ -3446,7 +3451,8 @@ const Clients = React.memo(() => {
                 })()}
             </div>
         </div>
-    );
+        );
+    };
 
     console.log('🎨 Clients component rendering...', { clientsLength: clients.length, leadsLength: leads.length });
 
