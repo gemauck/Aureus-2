@@ -489,7 +489,7 @@ const MainLayout = () => {
                 {/* Logo */}
                 <div className={`h-14 flex items-center ${sidebarOpen ? 'justify-between px-4' : 'justify-center px-2'} border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
                     {sidebarOpen && (
-                        <h1 className={`abcotronics-logo font-bold text-lg ${isDark ? 'text-white' : 'text-blue-600'}`} style={isDark ? { color: '#ffffff !important' } : { color: '#0369a1 !important' }}>
+                        <h1 className="abcotronics-logo font-bold text-lg" style={isDark ? { color: '#ffffff' } : { color: '#0369a1' }}>
                             Abcotronics
                         </h1>
                     )}
@@ -579,7 +579,7 @@ const MainLayout = () => {
                         
                         {/* Logo - MOBILE ONLY */}
                         {isMobile && (
-                            <h1 className={`abcotronics-logo font-bold text-base truncate ${isDark ? 'text-white' : 'text-blue-600'}`} style={isDark ? { color: '#ffffff !important' } : { color: '#0369a1 !important' }}>
+                            <h1 className="abcotronics-logo font-bold text-base truncate" style={isDark ? { color: '#ffffff' } : { color: '#0369a1' }}>
                                 Abcotronics
                             </h1>
                         )}
