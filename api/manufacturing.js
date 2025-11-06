@@ -2449,9 +2449,18 @@ async function handler(req, res) {
           movementId = `MOV${String(nextNumber).padStart(4, '0')}`
         }
 
-        const quantity = parseFloat(body.quantity) || 0
-        if (quantity <= 0) {
-          return badRequest(res, 'quantity must be greater than 0')
+        const quantity = parseFloat(body.quantity)
+        const isAdjustment = body.type === 'adjustment'
+        
+        // Validate quantity
+        if (quantity === undefined || quantity === null || isNaN(quantity)) {
+          return badRequest(res, 'quantity is required and must be a valid number')
+        }
+        
+        // For adjustments, allow any value (positive, negative, or zero)
+        // For other types, allow negative values (for corrections) but not zero
+        if (!isAdjustment && quantity === 0) {
+          return badRequest(res, 'quantity cannot be zero for non-adjustment movements')
         }
 
         // Perform movement and inventory adjustment atomically (basic aggregate store)
@@ -2560,6 +2569,67 @@ async function handler(req, res) {
                 status
               }
             })
+          } else if (type === 'adjustment') {
+            // Adjustments can be positive (increase) or negative (decrease)
+            // Create item if it doesn't exist (for positive adjustments)
+            if (!item) {
+              if (quantity < 0) {
+                throw new Error('Cannot adjust inventory for non-existent item with negative quantity')
+              }
+              // Create item with adjustment quantity
+              const unitCost = parseFloat(body.unitCost) || 0
+              const reorderPoint = parseFloat(body.reorderPoint) || 0
+              const totalValue = quantity * unitCost
+              const createData = {
+                sku: body.sku,
+                name: body.itemName,
+                thumbnail: body.thumbnail || '',
+                category: body.category || 'components',
+                type: body.itemType || 'raw_material',
+                quantity: quantity,
+                unit: body.unit || 'pcs',
+                reorderPoint,
+                reorderQty: parseFloat(body.reorderQty) || 0,
+                unitCost,
+                totalValue,
+                supplier: body.supplier || '',
+                status: quantity > reorderPoint ? 'in_stock' : (quantity > 0 ? 'low_stock' : 'out_of_stock'),
+                lastRestocked: body.date ? new Date(body.date) : new Date(),
+                ownerId: null
+              }
+              try {
+                item = await tx.inventoryItem.create({
+                  data: {
+                    ...createData,
+                    supplierPartNumbers: body.supplierPartNumbers || '[]',
+                    manufacturingPartNumber: body.manufacturingPartNumber || '',
+                    legacyPartNumber: body.legacyPartNumber || ''
+                  }
+                })
+              } catch (createError) {
+                if (createError.message && (createError.message.includes('supplierPartNumbers') || createError.message.includes('manufacturingPartNumber') || createError.message.includes('legacyPartNumber'))) {
+                  console.warn('⚠️ Stock adjustment: Creating item without new fields')
+                  item = await tx.inventoryItem.create({ data: createData })
+                } else {
+                  throw createError
+                }
+              }
+            } else {
+              // Adjust existing item quantity (can be positive or negative)
+              newQuantity = (item.quantity || 0) + quantity
+              // Allow negative inventory for adjustments (user corrections)
+              const totalValue = newQuantity * (item.unitCost || 0)
+              const reorderPoint = item.reorderPoint || 0
+              const status = newQuantity > reorderPoint ? 'in_stock' : (newQuantity > 0 ? 'low_stock' : 'out_of_stock')
+              item = await tx.inventoryItem.update({
+                where: { id: item.id },
+                data: {
+                  quantity: newQuantity,
+                  totalValue,
+                  status
+                }
+              })
+            }
           }
 
           return { movement, item }

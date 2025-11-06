@@ -2999,8 +2999,19 @@ const Manufacturing = () => {
 
   const handleSaveMovement = async () => {
     try {
-      if (!formData.sku || !formData.itemName || !formData.quantity || parseFloat(formData.quantity) <= 0) {
-        alert('Please provide SKU, Item Name, and a positive Quantity');
+      // Allow negative quantities for adjustments, but still require quantity to be provided
+      const isValidQuantity = formData.quantity !== '' && formData.quantity !== null && formData.quantity !== undefined;
+      const isAdjustment = formData.type === 'adjustment';
+      
+      if (!formData.sku || !formData.itemName || !isValidQuantity) {
+        alert('Please provide SKU, Item Name, and Quantity');
+        return;
+      }
+      
+      // For non-adjustment types, allow negative values as well (for corrections)
+      // Only validate that quantity is not zero for non-adjustments
+      if (!isAdjustment && parseFloat(formData.quantity) === 0) {
+        alert('Quantity cannot be zero');
         return;
       }
 
@@ -5174,14 +5185,23 @@ const Manufacturing = () => {
 
                 {/* Quantity */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity *
+                    {formData.type === 'adjustment' && (
+                      <span className="text-xs font-normal text-gray-500 ml-2">(Negative values allowed)</span>
+                    )}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.quantity || ''}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Allow empty string, negative values, and positive values
+                      setFormData({ ...formData, quantity: value });
+                    }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="10"
+                    placeholder={formData.type === 'adjustment' ? "±10 (use negative for reductions)" : "10"}
                   />
                 </div>
 
