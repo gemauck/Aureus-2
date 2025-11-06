@@ -6947,78 +6947,47 @@ const Manufacturing = () => {
     );
   };
 
-  const MovementsView = () => {
-    // Refresh movements when this view is mounted/opened
+  const MovementsView = ({ onRecordMovement }) => {
+    // Don't block - movements are already loaded from parent's initial load
+    // Only refresh if we don't have any movements
     useEffect(() => {
-      const refreshMovements = async () => {
-        try {
-          console.log('🔄 Refreshing stock movements list...');
-          if (window.DatabaseAPI?.getStockMovements) {
-            const movementsResponse = await window.DatabaseAPI.getStockMovements();
-            const movementsData = movementsResponse?.data?.movements || [];
-            console.log('📋 Loaded movements:', movementsData.length, 'total');
-            console.log('📋 Movement types breakdown:', {
-              receipt: movementsData.filter(m => m.type === 'receipt').length,
-              consumption: movementsData.filter(m => m.type === 'consumption').length,
-              adjustment: movementsData.filter(m => m.type === 'adjustment').length,
-              transfer: movementsData.filter(m => m.type === 'transfer').length,
-              production: movementsData.filter(m => m.type === 'production').length,
-              other: movementsData.filter(m => !['receipt', 'consumption', 'adjustment', 'transfer', 'production'].includes(m.type)).length
-            });
-            console.log('📋 All movements:', movementsData);
-            const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
-            setMovements(processed);
-            localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
-          } else {
-            console.warn('⚠️ DatabaseAPI.getStockMovements not available');
-            // Fallback to localStorage
-            const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-            console.log('📋 Using cached movements:', cachedMovements.length);
-            setMovements(cachedMovements);
+      if (movements.length === 0) {
+        // Only fetch if we have no cached data
+        const refreshMovements = async () => {
+          try {
+            if (window.DatabaseAPI?.getStockMovements) {
+              const movementsResponse = await window.DatabaseAPI.getStockMovements();
+              const movementsData = movementsResponse?.data?.movements || [];
+              const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
+              setMovements(processed);
+              localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+            }
+          } catch (error) {
+            console.error('Error refreshing movements:', error);
           }
-        } catch (error) {
-          console.error('Error refreshing movements:', error);
-          // Fallback to localStorage on error
-          const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
-          console.log('📋 Using cached movements after error:', cachedMovements.length);
-          setMovements(cachedMovements);
-        }
-      };
-      refreshMovements();
+        };
+        refreshMovements();
+      }
     }, []); // Run once when component mounts
 
-    // Handler for opening the record movement modal - simplified for reliability
-    const handleRecordClick = useCallback((e) => {
-      console.log('🔵 Record Movement button clicked');
+    // Handler for opening the record movement modal
+    const handleRecordClick = (e) => {
       if (e) {
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation?.();
       }
       
-      // Prepare form data
-      const formDataInit = {
-        type: 'receipt',
-        sku: '',
-        itemName: '',
-        quantity: '',
-        unitCost: '',
-        fromLocation: '',
-        toLocation: '',
-        reference: '',
-        notes: '',
-        date: new Date().toISOString().split('T')[0]
-      };
+      console.log('🔵 Record Movement button clicked');
       
-      console.log('🔵 Setting modal state:', { modalType: 'add_movement', showModal: true });
-      
-      // Set all state synchronously - React will batch these
-      setFormData(formDataInit);
-      setModalType('add_movement');
-      setShowModal(true);
-      
-      console.log('✅ Record Movement modal should now be open');
-    }, []); // Empty deps - state setters are stable
+      // Use the prop function passed from parent
+      if (onRecordMovement && typeof onRecordMovement === 'function') {
+        onRecordMovement();
+      } else {
+        console.error('❌ onRecordMovement is not available!');
+        alert('Error: Unable to open movement modal. Please refresh the page.');
+      }
+    };
 
     const handleRefreshMovements = async () => {
       try {
@@ -7064,10 +7033,7 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={(e) => {
-                  console.log('🔵 Button onClick fired');
-                  handleRecordClick(e);
-                }}
+                onClick={handleRecordClick}
                 className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
                 type="button"
                 aria-label="Record Stock Movement"
@@ -7207,7 +7173,11 @@ const Manufacturing = () => {
         {activeTab === 'production' && <ProductionView />}
         {activeTab === 'sales' && <SalesOrdersView />}
         {activeTab === 'purchase' && <PurchaseOrdersView />}
-        {activeTab === 'movements' && <MovementsView />}
+        {activeTab === 'movements' && (
+          <MovementsView 
+            onRecordMovement={openAddMovementModal}
+          />
+        )}
         {activeTab === 'suppliers' && <SuppliersView />}
         {activeTab === 'jobcards' && window.JobCards && (
           <window.JobCards 
