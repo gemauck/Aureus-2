@@ -594,6 +594,33 @@
     overflow-x: hidden !important;
   }
   
+  /* Fix flex container - when sidebar is fixed, it shouldn't take up space */
+  #root > div.flex {
+    max-width: 100vw !important;
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+  
+  /* When sidebar is fixed (mobile), it shouldn't take up flex space */
+  #root > div.flex > div:first-child[style*="position: fixed"] {
+    flex: 0 0 0 !important;
+    width: 0 !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Main content container should always be full width */
+  #root > div.flex > div.flex-1,
+  #root > div.flex > div:last-child {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    overflow-x: hidden !important;
+  }
+  
   /* Ensure main content stays within viewport */
   main,
   main[class],
