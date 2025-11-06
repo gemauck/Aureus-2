@@ -44,6 +44,8 @@ const Manufacturing = () => {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [formData, setFormData] = useState({});
+  const [viewingInventoryItemDetail, setViewingInventoryItemDetail] = useState(null); // Full-page detail view
+  const [isEditingInventoryItem, setIsEditingInventoryItem] = useState(false); // Edit mode in detail view
   const [bomComponents, setBomComponents] = useState([]);
   const [salesOrderItems, setSalesOrderItems] = useState([]);
   const [newSalesOrderItem, setNewSalesOrderItem] = useState({ sku: '', name: '', quantity: 1, unitPrice: 0 });
@@ -1203,7 +1205,11 @@ const Manufacturing = () => {
               const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
               
               return (
-                <div key={item.id} className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
+                <div 
+                  key={item.id} 
+                  className="mobile-card bg-white rounded-lg border border-gray-200 p-4 shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setViewingInventoryItemDetail(item)}
+                >
                   <div className="flex items-start gap-3 mb-3">
                     {/* Thumbnail */}
                     <div className="flex-shrink-0">
@@ -1342,7 +1348,7 @@ const Manufacturing = () => {
                       )}
                       
                       {/* Actions */}
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => { setSelectedItem(item); setModalType('view_item'); setShowModal(true); }}
                           className="flex-1 px-3 py-2 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 font-medium"
@@ -1749,7 +1755,11 @@ const Manufacturing = () => {
                 {filteredInventory.map(item => {
                   const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50">
+                    <tr 
+                      key={item.id} 
+                      className="hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setViewingInventoryItemDetail(item)}
+                    >
                     <td className="px-3 py-2 text-sm font-medium text-gray-900">{item.sku}</td>
                     <td className="px-3 py-2">
                       {item.thumbnail ? (
@@ -1863,7 +1873,7 @@ const Manufacturing = () => {
                         {item.status.replace('_', ' ')}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setSelectedItem(item); setModalType('view_item'); setShowModal(true); }}
@@ -7526,76 +7536,677 @@ const Manufacturing = () => {
     );
   };
 
-  return (
-    <div className="space-y-3">
-      {/* Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Manufacturing & Inventory Management</h2>
-            <p className="text-sm text-gray-500 mt-1">Comprehensive stock control and production management system</p>
+  // Inventory Item Detail View Component
+  const InventoryItemDetailView = () => {
+    if (!viewingInventoryItemDetail) return null;
+
+    const item = viewingInventoryItemDetail;
+    const [editFormData, setEditFormData] = useState({ ...item });
+    const [localShowCategoryInput, setLocalShowCategoryInput] = useState(false);
+    const [localNewCategoryName, setLocalNewCategoryName] = useState('');
+
+    // Sync editFormData when item changes
+    useEffect(() => {
+      setEditFormData({ ...item });
+    }, [item]);
+
+    const supplierParts = (() => {
+      try {
+        return typeof item.supplierPartNumbers === 'string' 
+          ? JSON.parse(item.supplierPartNumbers || '[]') 
+          : (item.supplierPartNumbers || []);
+      } catch (e) {
+        return [];
+      }
+    })();
+
+    const availableQty = (item.quantity || 0) - (item.allocatedQuantity || 0);
+
+    const handleSaveEdit = async () => {
+      try {
+        const itemData = {
+          name: editFormData.name,
+          thumbnail: editFormData.thumbnail || '',
+          category: editFormData.category,
+          type: editFormData.type,
+          unit: editFormData.unit,
+          reorderPoint: editFormData.reorderPoint === undefined || editFormData.reorderPoint === null || editFormData.reorderPoint === '' ? undefined : parseFloat(editFormData.reorderPoint),
+          reorderQty: editFormData.reorderQty === undefined || editFormData.reorderQty === null || editFormData.reorderQty === '' ? undefined : parseFloat(editFormData.reorderQty),
+          unitCost: editFormData.unitCost === undefined || editFormData.unitCost === null || editFormData.unitCost === '' ? undefined : parseFloat(editFormData.unitCost),
+          supplier: editFormData.supplier || ''
+        };
+        
+        if (editFormData.supplierPartNumbers !== undefined) {
+          itemData.supplierPartNumbers = editFormData.supplierPartNumbers || '[]';
+        }
+        if (editFormData.manufacturingPartNumber !== undefined) {
+          itemData.manufacturingPartNumber = editFormData.manufacturingPartNumber || '';
+        }
+        if (editFormData.legacyPartNumber !== undefined) {
+          itemData.legacyPartNumber = editFormData.legacyPartNumber || '';
+        }
+
+        const response = await safeCallAPI('updateInventoryItem', item.id, itemData);
+        if (response?.data?.item) {
+          const updatedInventory = inventory.map(invItem => invItem.id === item.id ? response.data.item : invItem);
+          setInventory(updatedInventory);
+          localStorage.setItem('manufacturing_inventory', JSON.stringify(updatedInventory));
+          setViewingInventoryItemDetail(response.data.item);
+          setIsEditingInventoryItem(false);
+          alert('Item updated successfully!');
+        }
+      } catch (error) {
+        console.error('Error updating inventory item:', error);
+        alert('Failed to update inventory item. Please try again.');
+      }
+    };
+
+    const handleAddLocalCategory = () => {
+      const trimmedName = localNewCategoryName.trim().toLowerCase().replace(/\s+/g, '_');
+      if (trimmedName && !categories.includes(trimmedName)) {
+        const updatedCategories = [...categories, trimmedName];
+        setCategories(updatedCategories);
+        localStorage.setItem('inventory_categories', JSON.stringify(updatedCategories));
+        setEditFormData({ ...editFormData, category: trimmedName });
+        setLocalNewCategoryName('');
+        setLocalShowCategoryInput(false);
+      } else if (categories.includes(trimmedName)) {
+        alert('Category already exists!');
+      }
+    };
+
+    return (
+      <div className="space-y-4">
+        {/* Header with Back Button */}
+        <div className="bg-white rounded-lg border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={() => {
+                setViewingInventoryItemDetail(null);
+                setIsEditingInventoryItem(false);
+              }}
+              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
+            >
+              <i className="fas fa-arrow-left"></i>
+              <span>Back to Inventory</span>
+            </button>
+            <div className="flex items-center gap-2">
+              {!isEditingInventoryItem ? (
+                <>
+                  <button
+                    onClick={() => setIsEditingInventoryItem(true)}
+                    className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <i className="fas fa-edit"></i>
+                    Edit Item
+                  </button>
+                  <button
+                    onClick={() => handleDeleteItem(item.id)}
+                    className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2"
+                  >
+                    <i className="fas fa-trash"></i>
+                    Delete
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => {
+                      setIsEditingInventoryItem(false);
+                      setEditFormData({ ...item });
+                    }}
+                    className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                  >
+                    <i className="fas fa-save"></i>
+                    Save Changes
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Item Header Info */}
+          <div className="flex items-start gap-4 pb-4 border-b border-gray-200">
+            {item.thumbnail ? (
+              <img 
+                src={item.thumbnail} 
+                alt={item.name} 
+                className="w-24 h-24 object-cover rounded-lg border border-gray-200" 
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-24 h-24 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center text-gray-400">
+                <i className="fas fa-box text-3xl"></i>
+              </div>
+            )}
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">{item.name}</h1>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div>
+                  <span className="text-sm text-gray-500">SKU:</span>
+                  <span className="ml-2 text-sm font-mono font-semibold text-gray-900">{item.sku}</span>
+                </div>
+                <div>
+                  <span className={`inline-flex items-center px-3 py-1 rounded text-sm font-medium capitalize ${getStatusColor(item.status)}`}>
+                    {item.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-sm text-gray-500">Type:</span>
+                  <span className="ml-2 text-sm text-gray-900 capitalize">
+                    {item.type === 'final_product' ? 'Final Product' : item.type === 'component' ? 'Component' : item.type.replace('_', ' ')}
+                  </span>
+                </div>
+                {item.category && (
+                  <div>
+                    <span className="text-sm text-gray-500">Category:</span>
+                    <span className="ml-2 text-sm text-gray-900 capitalize">{item.category.replace('_', ' ')}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Left Column - Main Details */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Stock Information */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Stock Information</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Total Quantity</p>
+                  <p className={`text-xl font-bold ${item.quantity < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {item.quantity || 0} {item.unit}
+                  </p>
+                </div>
+                {item.type === 'final_product' ? (
+                  <>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">In Production</p>
+                      <p className="text-xl font-bold text-orange-600">{item.inProductionQuantity || 0} {item.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Completed</p>
+                      <p className="text-xl font-bold text-green-600">{item.completedQuantity || 0} {item.unit}</p>
+                    </div>
+                  </>
+                ) : null}
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Allocated</p>
+                  <p className="text-xl font-bold text-yellow-700">{item.allocatedQuantity || 0} {item.unit}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-1">Available</p>
+                  <p className={`text-xl font-bold ${availableQty < 0 ? 'text-red-600' : 'text-green-700'}`}>
+                    {availableQty} {item.unit}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Item Details */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Item Details</h2>
+              <div className="grid grid-cols-2 gap-4">
+                {isEditingInventoryItem ? (
+                  <>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Item Name *</label>
+                      <input
+                        type="text"
+                        value={editFormData.name || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                      <div className="flex gap-2">
+                        <select
+                          value={editFormData.category || ''}
+                          onChange={(e) => setEditFormData({ ...editFormData, category: e.target.value })}
+                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Select a category...</option>
+                          {categories.map(cat => (
+                            <option key={cat} value={cat}>
+                              {cat.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => setLocalShowCategoryInput(!localShowCategoryInput)}
+                          className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                        >
+                          <i className="fas fa-plus"></i>
+                        </button>
+                      </div>
+                      {localShowCategoryInput && (
+                        <div className="mt-2 flex gap-2">
+                          <input
+                            type="text"
+                            value={localNewCategoryName}
+                            onChange={(e) => setLocalNewCategoryName(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && handleAddLocalCategory()}
+                            className="flex-1 px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="New category name..."
+                          />
+                          <button
+                            type="button"
+                            onClick={handleAddLocalCategory}
+                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setLocalShowCategoryInput(false); setLocalNewCategoryName(''); }}
+                            className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
+                      <select
+                        value={editFormData.type || 'component'}
+                        onChange={(e) => setEditFormData({ ...editFormData, type: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="component">Component</option>
+                        <option value="final_product">Final Product</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit *</label>
+                      <select
+                        value={editFormData.unit || 'pcs'}
+                        onChange={(e) => setEditFormData({ ...editFormData, unit: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="pcs">Pieces (pcs)</option>
+                        <option value="units">Units</option>
+                        <option value="kg">Kilograms (kg)</option>
+                        <option value="m">Meters (m)</option>
+                        <option value="l">Liters (l)</option>
+                        <option value="box">Box</option>
+                        <option value="set">Set</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Point</label>
+                      <input
+                        type="number"
+                        value={editFormData.reorderPoint === undefined || editFormData.reorderPoint === null ? '' : editFormData.reorderPoint}
+                        onChange={(e) => setEditFormData({ ...editFormData, reorderPoint: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Quantity</label>
+                      <input
+                        type="number"
+                        value={editFormData.reorderQty === undefined || editFormData.reorderQty === null ? '' : editFormData.reorderQty}
+                        onChange={(e) => setEditFormData({ ...editFormData, reorderQty: e.target.value === '' ? undefined : parseInt(e.target.value, 10) })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost (R) *</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={editFormData.unitCost === undefined || editFormData.unitCost === null ? '' : editFormData.unitCost}
+                        onChange={(e) => setEditFormData({ ...editFormData, unitCost: e.target.value === '' ? undefined : parseFloat(e.target.value) })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Supplier</label>
+                      <select
+                        value={editFormData.supplier || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, supplier: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option value="">Select supplier...</option>
+                        {suppliers.filter(s => s.status === 'active').map(supplier => (
+                          <option key={supplier.id} value={supplier.name}>{supplier.name} {supplier.code ? `(${supplier.code})` : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Manufacturing Part Number</label>
+                      <input
+                        type="text"
+                        value={editFormData.manufacturingPartNumber || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, manufacturingPartNumber: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., MFG-PART-123"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Abcotronics Part Number (Legacy)</label>
+                      <input
+                        type="text"
+                        value={editFormData.legacyPartNumber || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, legacyPartNumber: e.target.value })}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="e.g., OLD-PART-123"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Image / Thumbnail</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files && e.target.files[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setEditFormData(prev => ({ ...prev, thumbnail: reader.result }));
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                        className="w-full text-sm mb-2"
+                      />
+                      <input
+                        type="url"
+                        placeholder="Or paste image URL (https://...)"
+                        value={editFormData.thumbnail || ''}
+                        onChange={(e) => setEditFormData(prev => ({ ...prev, thumbnail: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {editFormData.thumbnail && (
+                        <div className="mt-2">
+                          <img src={editFormData.thumbnail} alt="Preview" className="w-20 h-20 object-cover rounded border" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Part Numbers</label>
+                      <div className="space-y-2">
+                        {(() => {
+                          try {
+                            const parts = typeof editFormData.supplierPartNumbers === 'string' 
+                              ? JSON.parse(editFormData.supplierPartNumbers || '[]') 
+                              : (editFormData.supplierPartNumbers || []);
+                            return (
+                              <>
+                                {parts.map((sp, idx) => (
+                                  <div key={idx} className="flex gap-2">
+                                    <select
+                                      value={sp.supplier || ''}
+                                      onChange={(e) => {
+                                        const updated = [...parts];
+                                        updated[idx].supplier = e.target.value;
+                                        setEditFormData({ ...editFormData, supplierPartNumbers: JSON.stringify(updated) });
+                                      }}
+                                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                      <option value="">Select supplier...</option>
+                                      {suppliers.filter(s => s.status === 'active').map(supplier => (
+                                        <option key={supplier.id} value={supplier.name}>
+                                          {supplier.name} {supplier.code ? `(${supplier.code})` : ''}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="text"
+                                      value={sp.partNumber || ''}
+                                      onChange={(e) => {
+                                        const updated = [...parts];
+                                        updated[idx].partNumber = e.target.value;
+                                        setEditFormData({ ...editFormData, supplierPartNumbers: JSON.stringify(updated) });
+                                      }}
+                                      className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      placeholder="Part number"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = parts.filter((_, i) => i !== idx);
+                                        setEditFormData({ ...editFormData, supplierPartNumbers: JSON.stringify(updated) });
+                                      }}
+                                      className="px-3 py-2 text-sm text-red-600 hover:bg-red-50 border border-red-300 rounded-lg"
+                                    >
+                                      <i className="fas fa-times"></i>
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentParts = typeof editFormData.supplierPartNumbers === 'string' 
+                                      ? JSON.parse(editFormData.supplierPartNumbers || '[]') 
+                                      : (editFormData.supplierPartNumbers || []);
+                                    const updated = [...currentParts, { supplier: '', partNumber: '' }];
+                                    setEditFormData({ ...editFormData, supplierPartNumbers: JSON.stringify(updated) });
+                                  }}
+                                  className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                                >
+                                  <i className="fas fa-plus mr-1"></i>
+                                  Add Supplier Part Number
+                                </button>
+                              </>
+                            );
+                          } catch (e) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditFormData({ ...editFormData, supplierPartNumbers: JSON.stringify([{ supplier: '', partNumber: '' }]) });
+                                }}
+                                className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300"
+                              >
+                                <i className="fas fa-plus mr-1"></i>
+                                Add Supplier Part Number
+                              </button>
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Quantity</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.quantity || 0} {item.unit}</p>
+                      <p className="text-xs text-gray-400 mt-1">(Update via stock movements/purchase orders)</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Unit</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.unit || 'pcs'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Reorder Point</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.reorderPoint || '-'} {item.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Reorder Quantity</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.reorderQty || '-'} {item.unit}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Unit Cost</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.unitCost > 0 ? formatCurrency(item.unitCost) : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Total Value</p>
+                      <p className="text-sm font-semibold text-blue-600">{item.totalValue > 0 ? formatCurrency(item.totalValue) : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Supplier</p>
+                      <p className="text-sm font-semibold text-gray-900">{item.supplier || '-'}</p>
+                    </div>
+                    {item.location && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Location</p>
+                        <p className="text-sm font-semibold text-gray-900">{item.location}</p>
+                      </div>
+                    )}
+                    {item.manufacturingPartNumber && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Manufacturing Part Number</p>
+                        <p className="text-sm font-semibold text-gray-900">{item.manufacturingPartNumber}</p>
+                      </div>
+                    )}
+                    {item.legacyPartNumber && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Abcotronics Part Number (Legacy)</p>
+                        <p className="text-sm font-semibold text-gray-900">{item.legacyPartNumber}</p>
+                      </div>
+                    )}
+                    {item.lastRestocked && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Last Restocked</p>
+                        <p className="text-sm font-semibold text-gray-900">{item.lastRestocked}</p>
+                      </div>
+                    )}
+                    {supplierParts.length > 0 && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500 mb-2">Supplier Part Numbers</p>
+                        <div className="space-y-1">
+                          {supplierParts.map((sp, idx) => (
+                            <div key={idx} className="text-sm">
+                              <span className="font-medium text-gray-700">{sp.supplier}:</span>
+                              <span className="ml-2 text-gray-600">{sp.partNumber}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Summary */}
+          <div className="space-y-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-gray-500">Status</p>
+                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium capitalize mt-1 ${getStatusColor(item.status)}`}>
+                    {item.status.replace('_', ' ')}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Total Value</p>
+                  <p className="text-lg font-bold text-blue-600 mt-1">{formatCurrency(item.totalValue || 0)}</p>
+                </div>
+                {item.reorderPoint > 0 && (
+                  <div className={`p-3 rounded-lg ${availableQty <= item.reorderPoint ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                    <p className="text-xs font-medium text-gray-700">Stock Level</p>
+                    <p className={`text-sm font-bold mt-1 ${availableQty <= item.reorderPoint ? 'text-red-600' : 'text-green-600'}`}>
+                      {availableQty <= item.reorderPoint ? 'Low Stock' : 'In Stock'}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      Available: {availableQty} / Reorder Point: {item.reorderPoint}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>
+    );
+  };
 
-      {/* Navigation Tabs */}
-      <div className="bg-white rounded-lg border border-gray-200">
-        <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
-            { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
-            { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
-            { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
-            { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
-            { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
-            { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
-            { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
-            { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
-            { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-                activeTab === tab.id
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              <i className={`fas ${tab.icon} text-xs`}></i>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+  return (
+    <div className="space-y-3">
+      {/* Show detail view if viewing an item, otherwise show normal view */}
+      {viewingInventoryItemDetail ? (
+        <InventoryItemDetailView />
+      ) : (
+        <>
+          {/* Header */}
+          <div className="bg-white rounded-lg border border-gray-200 p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Manufacturing & Inventory Management</h2>
+                <p className="text-sm text-gray-500 mt-1">Comprehensive stock control and production management system</p>
+              </div>
+            </div>
+          </div>
 
-      {/* Content Area */}
-      <div>
-        {activeTab === 'dashboard' && <DashboardView />}
-        {activeTab === 'inventory' && <InventoryView />}
-        {activeTab === 'bom' && <BOMView />}
-        {activeTab === 'production' && <ProductionView />}
-        {activeTab === 'sales' && <SalesOrdersView />}
-        {activeTab === 'purchase' && <PurchaseOrdersView />}
-        {activeTab === 'movements' && (
-          <MovementsView 
-            onRecordMovement={openAddMovementModal}
-          />
-        )}
-        {activeTab === 'suppliers' && <SuppliersView />}
-        {activeTab === 'jobcards' && window.JobCards && (
-          <window.JobCards 
-            clients={clients}
-            users={users}
-          />
-        )}
-        {activeTab === 'locations' && window.StockLocations && (
-          <window.StockLocations 
-            inventory={inventory}
-            onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
-          />
-        )}
-      </div>
+          {/* Navigation Tabs */}
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="flex border-b border-gray-200 overflow-x-auto scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {[
+                { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-bar' },
+                { id: 'inventory', label: 'Inventory', icon: 'fa-boxes' },
+                { id: 'bom', label: 'Bill of Materials', icon: 'fa-clipboard-list' },
+                { id: 'production', label: 'Production Orders', icon: 'fa-industry' },
+                { id: 'sales', label: 'Sales Orders', icon: 'fa-shopping-cart' },
+                { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
+                { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
+                { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
+                { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
+                { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
+                    activeTab === tab.id
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  <i className={`fas ${tab.icon} text-xs`}></i>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Content Area */}
+          <div>
+            {activeTab === 'dashboard' && <DashboardView />}
+            {activeTab === 'inventory' && <InventoryView />}
+            {activeTab === 'bom' && <BOMView />}
+            {activeTab === 'production' && <ProductionView />}
+            {activeTab === 'sales' && <SalesOrdersView />}
+            {activeTab === 'purchase' && <PurchaseOrdersView />}
+            {activeTab === 'movements' && (
+              <MovementsView 
+                onRecordMovement={openAddMovementModal}
+              />
+            )}
+            {activeTab === 'suppliers' && <SuppliersView />}
+            {activeTab === 'jobcards' && window.JobCards && (
+              <window.JobCards 
+                clients={clients}
+                users={users}
+              />
+            )}
+            {activeTab === 'locations' && window.StockLocations && (
+              <window.StockLocations 
+                inventory={inventory}
+                onInventoryUpdate={(updatedInventory) => setInventory(updatedInventory)}
+              />
+            )}
+          </div>
+        </>
+      )}
 
       {/* Modals */}
       {showModal && renderModal()}
