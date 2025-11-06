@@ -889,10 +889,6 @@ const Manufacturing = () => {
       }
     });
     
-    // Force re-render of InventoryView to show filtered results
-    // But don't update state yet - that happens after debounce
-    setColumnFilters(prev => ({ ...prev })); // Trigger re-render
-    
     // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
