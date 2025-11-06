@@ -1376,28 +1376,21 @@ const Clients = React.memo(() => {
                     }
                 });
                 
-                // Attach opportunities to clients (merge with existing)
+                // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
+                // Don't merge with cached opportunities - they may have stale stage data
                 const clientsWithOpportunities = clients.map(client => {
-                    const existingOpps = client.opportunities || [];
-                    const newOpps = opportunitiesByClient[client.id] || [];
+                    const apiOpps = opportunitiesByClient[client.id] || [];
                     
-                    // Merge: combine existing and new opportunities, avoiding duplicates
-                    const oppsById = {};
-                    [...existingOpps, ...newOpps].forEach(opp => {
-                        if (opp.id) {
-                            oppsById[opp.id] = opp;
-                        }
-                    });
-                    const mergedOpps = Object.values(oppsById);
-                    
+                    // Use API opportunities only - they have the correct, up-to-date stages
+                    // This prevents stale cached stage data from showing wrong columns
                     return {
                         ...client,
-                        opportunities: mergedOpps
+                        opportunities: apiOpps
                     };
                 });
                 
                 const totalOpps = clientsWithOpportunities.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                console.log(`✅ Pipeline view: Attached ${totalOpps} opportunities from bulk load (merged with existing)`);
+                console.log(`✅ Pipeline view: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
                 setClients(clientsWithOpportunities);
                 safeStorage.setClients(clientsWithOpportunities);
                 // Update ref immediately so LiveDataSync can see the opportunities
@@ -3667,28 +3660,21 @@ const Clients = React.memo(() => {
                                 }
                             });
                             
-                            // Attach opportunities to clients (merge with existing, avoid duplicates)
+                            // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
+                            // Don't merge with cached opportunities - they may have stale stage data
                             const clientsWithOpps = clients.map(client => {
-                                const existingOpps = client.opportunities || [];
-                                const newOpps = opportunitiesByClient[client.id] || [];
+                                const apiOpps = opportunitiesByClient[client.id] || [];
                                 
-                                // Merge: combine existing and new opportunities, avoiding duplicates by ID
-                                const oppsById = {};
-                                [...existingOpps, ...newOpps].forEach(opp => {
-                                    if (opp.id) {
-                                        oppsById[opp.id] = opp;
-                                    }
-                                });
-                                const mergedOpps = Object.values(oppsById);
-                                
+                                // Use API opportunities only - they have the correct, up-to-date stages
+                                // This prevents stale cached stage data from showing wrong columns
                                 return {
                                     ...client,
-                                    opportunities: mergedOpps
+                                    opportunities: apiOpps
                                 };
                             });
                             
                             const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from bulk load (merged with existing)`);
+                            console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
                             setClients(clientsWithOpps);
                             safeStorage.setClients(clientsWithOpps);
                             // Update ref immediately so LiveDataSync can see the opportunities
