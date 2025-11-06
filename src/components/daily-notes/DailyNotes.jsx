@@ -864,9 +864,43 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     console.error('❌ Verification failed: localStorage content mismatch');
                 }
                 
+                // Helper function to normalize HTML content for comparison
+                // This handles HTML entity differences (like &nbsp; vs space) and whitespace
+                const normalizeHtmlForComparison = (html) => {
+                    if (!html) return '';
+                    // Normalize HTML entities first
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = html;
+                    // Get innerHTML which will have normalized entities
+                    let normalized = tempDiv.innerHTML;
+                    // Replace common HTML entities with their text equivalents
+                    normalized = normalized.replace(/&nbsp;/g, ' ');
+                    normalized = normalized.replace(/&amp;/g, '&');
+                    normalized = normalized.replace(/&lt;/g, '<');
+                    normalized = normalized.replace(/&gt;/g, '>');
+                    normalized = normalized.replace(/&quot;/g, '"');
+                    normalized = normalized.replace(/&#39;/g, "'");
+                    // Normalize whitespace (multiple spaces/tabs/newlines to single space)
+                    normalized = normalized.replace(/\s+/g, ' ');
+                    // Trim leading/trailing whitespace
+                    return normalized.trim();
+                };
+
                 // Verify the save by fetching from server after a short delay
                 setTimeout(async () => {
                     try {
+                        // Track retry attempts to prevent infinite loops
+                        const retryKey = `note_verify_retry_${dateString}`;
+                        const retryCount = parseInt(sessionStorage.getItem(retryKey) || '0', 10);
+                        
+                        if (retryCount >= 3) {
+                            console.warn('⚠️ Max retry attempts reached for verification, accepting save as successful');
+                            sessionStorage.removeItem(retryKey);
+                            setIsSaving(false);
+                            sessionStorage.removeItem('calendar_is_saving');
+                            return;
+                        }
+
                         const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
                             headers: { 
                                 Authorization: `Bearer ${token}`,
@@ -878,34 +912,75 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         if (verifyRes.ok) {
                             const verifyData = await verifyRes.json();
                             const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
-                            if (serverNotes[dateString] === noteContent) {
+                            const serverNote = serverNotes[dateString] || '';
+                            
+                            // Normalize both contents for comparison
+                            const normalizedLocal = normalizeHtmlForComparison(noteContent);
+                            const normalizedServer = normalizeHtmlForComparison(serverNote);
+                            
+                            // Also do a direct comparison for exact matches
+                            const exactMatch = serverNote === noteContent;
+                            // And a normalized comparison for HTML entity differences
+                            const normalizedMatch = normalizedLocal === normalizedServer;
+                            
+                            if (exactMatch || normalizedMatch) {
                                 console.log('✅ Server verification: Note found on server with matching content');
+                                sessionStorage.removeItem(retryKey);
                                 // Update notes state with server data to ensure sync
-                                setNotes(prev => ({ ...prev, [dateString]: noteContent }));
-                            } else if (serverNotes[dateString]) {
+                                setNotes(prev => ({ ...prev, [dateString]: serverNote || noteContent }));
+                                setIsSaving(false);
+                                sessionStorage.removeItem('calendar_is_saving');
+                            } else if (serverNote) {
                                 console.warn('⚠️ Server verification: Note found but content differs');
-                                console.warn('   Expected:', noteContent.substring(0, 50));
-                                console.warn('   Got:', serverNotes[dateString].substring(0, 50));
-                                // Retry save if content differs
-                                console.log('🔄 Retrying save due to content mismatch...');
-                                setTimeout(() => {
-                                    saveNote().catch(err => console.error('Retry save error:', err));
-                                }, 500);
+                                console.warn('   Expected (normalized):', normalizedLocal.substring(0, 50));
+                                console.warn('   Got (normalized):', normalizedServer.substring(0, 50));
+                                
+                                // Only retry if content is significantly different (more than just whitespace/entities)
+                                const significantDiff = Math.abs(normalizedLocal.length - normalizedServer.length) > 5 ||
+                                                       normalizedLocal.substring(0, 20) !== normalizedServer.substring(0, 20);
+                                
+                                if (significantDiff && retryCount < 2) {
+                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
+                                    console.log(`🔄 Retrying save due to content mismatch (attempt ${retryCount + 1}/3)...`);
+                                    setTimeout(() => {
+                                        saveNote().catch(err => console.error('Retry save error:', err));
+                                    }, 500);
+                                } else {
+                                    // Accept the server version if differences are minor
+                                    console.log('✅ Accepting server version (differences are minor)');
+                                    setNotes(prev => ({ ...prev, [dateString]: serverNote }));
+                                    sessionStorage.removeItem(retryKey);
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
+                                }
                             } else {
                                 console.error('❌ Server verification: Note not found on server!');
                                 console.error('   Date:', dateString);
                                 console.error('   Server notes keys:', Object.keys(serverNotes));
-                                // Retry save if note not found
-                                console.log('🔄 Retrying save - note not found on server...');
-                                setTimeout(() => {
-                                    saveNote().catch(err => console.error('Retry save error:', err));
-                                }, 1000);
+                                
+                                // Only retry if we haven't exceeded retry limit
+                                if (retryCount < 2) {
+                                    sessionStorage.setItem(retryKey, String(retryCount + 1));
+                                    console.log(`🔄 Retrying save - note not found on server (attempt ${retryCount + 1}/3)...`);
+                                    setTimeout(() => {
+                                        saveNote().catch(err => console.error('Retry save error:', err));
+                                    }, 1000);
+                                } else {
+                                    console.warn('⚠️ Max retries reached, accepting save as successful');
+                                    sessionStorage.removeItem(retryKey);
+                                    setIsSaving(false);
+                                    sessionStorage.removeItem('calendar_is_saving');
+                                }
                             }
                         } else {
                             console.error('❌ Verification request failed:', verifyRes.status);
+                            setIsSaving(false);
+                            sessionStorage.removeItem('calendar_is_saving');
                         }
                     } catch (verifyError) {
                         console.error('Error verifying save on server:', verifyError);
+                        setIsSaving(false);
+                        sessionStorage.removeItem('calendar_is_saving');
                     }
                 }, 2000); // Increased delay to 2 seconds to ensure database write completes
                 
@@ -2041,10 +2116,74 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
                         onKeyDown={(e) => {
-                            // Mark user as typing for ANY key press to prevent sync interference
-                            // This preserves cursor position during typing without interfering with normal behavior
-                            if (e.key === ' ' || e.key === 'Enter' || e.keyCode === 32 || e.keyCode === 13) {
-                                // Save cursor position before any key press
+                            // Handle Enter key to ensure it creates a new line
+                            if (e.key === 'Enter' || e.keyCode === 13) {
+                                // Save cursor position before Enter key
+                                saveCursorPosition();
+                                
+                                // Mark user as typing to prevent sync interference
+                                isUserTypingRef.current = true;
+                                lastUserInputTimeRef.current = Date.now();
+                                isUpdatingFromUserInputRef.current = true;
+                                
+                                // Prevent default to handle Enter ourselves
+                                e.preventDefault();
+                                
+                                // Insert a line break
+                                const selection = window.getSelection();
+                                if (selection.rangeCount > 0) {
+                                    const range = selection.getRangeAt(0);
+                                    
+                                    // Try execCommand first (most compatible)
+                                    try {
+                                        const success = document.execCommand('insertLineBreak', false, null);
+                                        if (!success) {
+                                            // Fallback: insert a <br> tag
+                                            const br = document.createElement('br');
+                                            if (!range.collapsed) {
+                                                range.deleteContents();
+                                            }
+                                            range.insertNode(br);
+                                            // Move cursor after the <br>
+                                            range.setStartAfter(br);
+                                            range.collapse(true);
+                                            selection.removeAllRanges();
+                                            selection.addRange(range);
+                                        }
+                                    } catch (err) {
+                                        // Fallback: insert a <br> tag
+                                        const br = document.createElement('br');
+                                        if (!range.collapsed) {
+                                            range.deleteContents();
+                                        }
+                                        range.insertNode(br);
+                                        // Move cursor after the <br>
+                                        range.setStartAfter(br);
+                                        range.collapse(true);
+                                        selection.removeAllRanges();
+                                        selection.addRange(range);
+                                    }
+                                    
+                                    // Update content after Enter
+                                    updateNoteContent();
+                                    
+                                    // Trigger input event for auto-save
+                                    const inputEvent = new Event('input', { bubbles: true });
+                                    editorRef.current.dispatchEvent(inputEvent);
+                                }
+                                
+                                // Clear flags after delay to allow sync after typing stops
+                                setTimeout(() => {
+                                    isUserTypingRef.current = false;
+                                    isUpdatingFromUserInputRef.current = false;
+                                }, 2000);
+                                
+                                return;
+                            }
+                            
+                            // Handle spacebar
+                            if (e.key === ' ' || e.keyCode === 32) {
+                                // Save cursor position before spacebar
                                 saveCursorPosition();
                                 
                                 // Mark user as typing to prevent sync interference
@@ -2058,8 +2197,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                     isUpdatingFromUserInputRef.current = false;
                                 }, 2000);
                                 
-                                // Let the default behavior happen (spacebar inserts space, enter creates new line)
-                                // We just prevent sync from interfering
+                                // Let the default behavior happen (spacebar inserts space)
                             }
                         }}
                         onBlur={() => {

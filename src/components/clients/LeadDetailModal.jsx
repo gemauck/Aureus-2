@@ -2,12 +2,40 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, isEditing = false, initialTab = 'overview', onTabChange, onEditingChange, onPauseSync }) => {
+const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange }) => {
+    // Modal owns its state - fetch data when leadId changes
+    const [lead, setLead] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState(initialTab);
     
-    // CRITICAL: Initialize formData FIRST with a safe default, before any other hooks or refs
-    // This prevents "Cannot access 'formData' before initialization" errors
-    // FIXED: formData now declared before all useEffect hooks that reference it
+    // Fetch lead data when leadId changes
+    useEffect(() => {
+        const fetchLead = async () => {
+            if (!leadId) {
+                setLead(null);
+                setIsLoading(false);
+                return;
+            }
+            
+            setIsLoading(true);
+            try {
+                const response = await window.api.getClient(leadId);
+                const fetchedLead = response?.data?.client;
+                if (fetchedLead) {
+                    setLead(fetchedLead);
+                }
+            } catch (error) {
+                console.error('Error fetching lead:', error);
+                alert('Error loading lead data');
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        
+        fetchLead();
+    }, [leadId]);
+    
     // Create default object first to ensure it's always defined
     const defaultFormData = {
         name: '',
@@ -1518,20 +1546,12 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // Validate required fields
         if (!formData.name || formData.name.trim() === '') {
             alert('Please enter an Entity Name');
             return;
         }
         
-        if (!onSave) {
-            console.error('❌ onSave callback is not defined');
-            alert('Error: Save function is not available. Please refresh the page.');
-            return;
-        }
-        
-        console.log('💾 Submitting lead form:', formData);
-        
+        setIsSaving(true);
         try {
             const leadData = {
                 ...formData,
@@ -1539,19 +1559,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                 lastContact: new Date().toISOString().split('T')[0]
             };
             
-            // Use onUpdate if provided (for updates that should close the modal)
-            // Otherwise use onSave (for auto-saves that stay in edit mode)
-            if (onUpdate && lead) {
-                await onUpdate(leadData);
+            if (leadId) {
+                await window.api.updateClient(leadId, leadData);
             } else {
-                // CRITICAL: This is the explicit "Create Lead" action - clear the new lead flag
-                // This allows auto-saves to work after the lead is created
-                isNewLeadNotSavedRef.current = false;
-                await onSave(leadData);
+                await window.api.createClient(leadData);
             }
+            
+            onClose();
         } catch (error) {
-            console.error('❌ Error in handleSubmit:', error);
-            alert('Error saving lead: ' + (error.message || 'Unknown error'));
+            console.error('Error saving lead:', error);
+            alert('Error saving lead: ' + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -1577,6 +1596,20 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
         }
     };
 
+    // Show loading state
+    if (isLoading) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-8">
+                    <div className="flex items-center gap-3">
+                        <i className="fas fa-spinner fa-spin text-2xl text-primary-600"></i>
+                        <span className="text-gray-800">Loading lead data...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
     // Thumbnail Preview Modal Component - defined before use
     const ThumbnailPreviewModal = () => (
         showThumbnailPreview && (thumbnailPreview || formData.thumbnail) && (
@@ -1601,6 +1634,20 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
             </div>
         )
     );
+
+    // Show loading state
+    if (isLoading) {
+        return (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white rounded-lg p-8">
+                    <div className="flex items-center gap-3">
+                        <i className="fas fa-spinner fa-spin text-2xl text-primary-600"></i>
+                        <span>Loading lead data...</span>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (isFullPage) {
         // Full-page view - no modal wrapper
@@ -4103,11 +4150,15 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                     Cancel
                                 </button>
                                 <button 
-                                    type="submit" 
-                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center"
+                                    type="submit"
+                                    disabled={isSaving}
+                                    className="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <i className="fas fa-save mr-2"></i>
-                                    {lead ? 'Update Lead' : 'Create Lead'}
+                                    {isSaving ? (
+                                        <><i className="fas fa-spinner fa-spin mr-2"></i>Saving...</>
+                                    ) : (
+                                        <><i className="fas fa-save mr-2"></i>{leadId ? 'Update Lead' : 'Create Lead'}</>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -4461,10 +4512,16 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                 }, 'Cancel'),
                                 React.createElement('button', {
                                     type: 'submit',
-                                    className: 'bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 transition-colors flex items-center'
+                                    disabled: isSaving,
+                                    className: 'bg-primary-600 text-white px-6 py-2 rounded-md hover:bg-primary-700 transition-colors flex items-center disabled:opacity-50 disabled:cursor-not-allowed'
                                 },
-                                    React.createElement('i', { className: 'fas fa-save mr-2' }),
-                                    lead ? 'Update Lead' : 'Create Lead'
+                                    isSaving ? React.createElement(React.Fragment, null,
+                                        React.createElement('i', { className: 'fas fa-spinner fa-spin mr-2' }),
+                                        'Saving...'
+                                    ) : React.createElement(React.Fragment, null,
+                                        React.createElement('i', { className: 'fas fa-save mr-2' }),
+                                        leadId ? 'Update Lead' : 'Create Lead'
+                                    )
                                 )
                             )
                         )

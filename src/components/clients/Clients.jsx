@@ -251,31 +251,18 @@ const Clients = React.memo(() => {
     const [leads, setLeads] = useState([]);
     const [leadsCount, setLeadsCount] = useState(0);
     const [projects, setProjects] = useState([]);
-    const [selectedClient, setSelectedClient] = useState(null);
-    const [selectedLead, setSelectedLead] = useState(null);
-    const selectedClientRef = useRef(null);
-    const selectedLeadRef = useRef(null);
-    
-    // Keep refs in sync with state for LiveDataSync handler
-    useEffect(() => {
-        selectedClientRef.current = selectedClient;
-    }, [selectedClient]);
-    
-    useEffect(() => {
-        selectedLeadRef.current = selectedLead;
-    }, [selectedLead]);
+    // Just store IDs - modals fetch their own data
+    const [editingClientId, setEditingClientId] = useState(null);
+    const [editingLeadId, setEditingLeadId] = useState(null);
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
-    // Removed isEditing state - always allow editing
     const [searchTerm, setSearchTerm] = useState('');
     const [filterIndustry, setFilterIndustry] = useState('All Industries');
     const [filterStatus, setFilterStatus] = useState('All Status');
-    const [filterServices, setFilterServices] = useState([]); // Array of selected services
-    const [showStarredOnly, setShowStarredOnly] = useState(false); // Filter to show only starred clients/leads
-    const [refreshKey, setRefreshKey] = useState(0);
+    const [filterServices, setFilterServices] = useState([]);
+    const [showStarredOnly, setShowStarredOnly] = useState(false);
     const [sortField, setSortField] = useState('name');
     const [sortDirection, setSortDirection] = useState('asc');
-    // Separate sort state for leads
     const [leadSortField, setLeadSortField] = useState('name');
     const [leadSortDirection, setLeadSortDirection] = useState('asc');
     const [clientsPage, setClientsPage] = useState(1);
@@ -283,109 +270,22 @@ const Clients = React.memo(() => {
     const ITEMS_PER_PAGE = 25;
     const { isDark } = window.useTheme();
     
-    // CRITICAL: Track if user is actively editing to prevent data overwrites
-    // Use BOTH state (for UI) and ref (for synchronous checks in useEffects)
-    const [isUserEditing, setIsUserEditing] = useState(false);
-    const isUserEditingRef = useRef(false); // Synchronous flag for immediate checks
-    const isAutoSavingRef = useRef(false); // Track auto-save state to prevent overwrites
-    const editingTimeoutRef = useRef(null);
+    // Simple sync control - just stop/start
+    const stopSync = () => {
+        if (window.LiveDataSync?.isRunning) {
+            window.LiveDataSync.stop();
+            console.log('⏸️ LiveDataSync paused for editing');
+        }
+    };
     
-    // CRITICAL: Track if ANY form modal is open - this completely blocks LiveDataSync
-    const isFormOpenRef = useRef(false);
-    
-    // Stop/start LiveDataSync completely for modals (especially Add Client/Lead forms)
-    const handlePauseSync = useCallback((shouldStop) => {
-        if (shouldStop) {
-            // CRITICAL: Set flags IMMEDIATELY, BEFORE any async operations
-            isFormOpenRef.current = true;
-            isUserEditingRef.current = true; // Also set editing flag immediately
-            
-            // Stop LiveDataSync
-            if (window.LiveDataSync && window.LiveDataSync.isRunning) {
-                window.LiveDataSync.stop();
-                console.log('🛑 LiveDataSync completely stopped for form');
-            }
-        } else {
-            // Only restart if form is actually closing
-            isFormOpenRef.current = false;
-            isUserEditingRef.current = false;
-            
-            // Restart LiveDataSync if not already running
-            if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
-                window.LiveDataSync.start();
-                console.log('▶️ LiveDataSync restarted after form closed');
-            }
+    const startSync = () => {
+        if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
+            window.LiveDataSync.start();
+            console.log('▶️ LiveDataSync resumed');
         }
-    }, []);
+    };
 
-    // Memoized callback for client editing changes - prevents modal remounting
-    const handleClientEditingChange = useCallback((editing, autoSaving) => {
-        console.log('📝 ClientDetailModal state changed:', { editing, autoSaving });
-        isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
-        isAutoSavingRef.current = autoSaving || false; // Track auto-save state
-        setIsUserEditing(editing);
-        if (editing) {
-            // CRITICAL: STOP LiveDataSync completely when user starts editing
-            console.log('🛑 User started editing - STOPPING LiveDataSync completely');
-            if (window.LiveDataSync && window.LiveDataSync.stop) {
-                window.LiveDataSync.stop();
-                console.log('🛑 LiveDataSync STOPPED due to editing');
-            }
-            // Also mark form as open for additional blocking
-            isFormOpenRef.current = true;
-            handlePauseSync(true);
-            // Clear any existing timeout
-            if (editingTimeoutRef.current) {
-                clearTimeout(editingTimeoutRef.current);
-            }
-        } else if (!autoSaving) {
-            console.log('✅ User finished editing and save complete - LiveDataSync remains stopped until form closes');
-            // Clear timeout if user explicitly stopped editing
-            if (editingTimeoutRef.current) {
-                clearTimeout(editingTimeoutRef.current);
-            }
-            isUserEditingRef.current = false;
-            setIsUserEditing(false);
-            // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
-        } else {
-            console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
-        }
-    }, [handlePauseSync]);
-
-    // Memoized callback for lead editing changes - prevents modal remounting
-    const handleLeadEditingChange = useCallback((editing, autoSaving) => {
-        console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
-        isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
-        isAutoSavingRef.current = autoSaving || false; // Track auto-save state
-        // Only update state if it actually changed to prevent unnecessary re-renders
-        setIsUserEditing(prev => prev !== editing ? editing : prev);
-        if (editing) {
-            // CRITICAL: STOP LiveDataSync completely when user starts editing
-            console.log('🛑 User started editing lead - STOPPING LiveDataSync completely');
-            if (window.LiveDataSync && window.LiveDataSync.stop) {
-                window.LiveDataSync.stop();
-                console.log('🛑 LiveDataSync STOPPED due to lead editing');
-            }
-            // Also mark form as open for additional blocking
-            isFormOpenRef.current = true;
-            handlePauseSync(true);
-            // Clear any existing timeout
-            if (editingTimeoutRef.current) {
-                clearTimeout(editingTimeoutRef.current);
-            }
-        } else if (!autoSaving) {
-            console.log('✅ User finished editing lead and save complete - LiveDataSync remains stopped until form closes');
-            // Clear timeout if user explicitly stopped editing
-            if (editingTimeoutRef.current) {
-                clearTimeout(editingTimeoutRef.current);
-            }
-            isUserEditingRef.current = false;
-            setIsUserEditing(false);
-            // NOTE: LiveDataSync will restart ONLY when form explicitly closes (onClose or onSave)
-        } else {
-            console.log('💾 Auto-save in progress - LiveDataSync remains stopped');
-        }
-    }, [handlePauseSync]);
+    // Modal callbacks no longer needed - modals own their state
     
     // Stop LiveDataSync when viewing client/lead list, restart when entering detail views
     // Note: Detail views (client-detail, lead-detail) will stop LiveDataSync completely via modals
@@ -963,211 +863,7 @@ const Clients = React.memo(() => {
         }
     }, [clients.length]);
 
-    // CRITICAL: Sync selectedClient with clients array when LiveDataSync updates it
-    // BUT preserve user-edited fields to prevent overwriting user input
-    // IMPORTANT: We check selectedClient for user content, but the modal's formData might have more recent content
-    // So we ALWAYS preserve selectedClient's content if it exists, even if LiveDataSync tries to overwrite with blank
-    useEffect(() => {
-        // CRITICAL: If selectedClient is null (new client), NEVER update it
-        // This prevents overwriting form data when user is creating a new client
-        if (!selectedClient) {
-            return;
-        }
-        
-        if (!selectedClient.id) return;
-        
-        // CRITICAL: ULTIMATE GUARD - Check form open flag FIRST
-        // This is checked before ANY other logic to absolutely prevent updates during form editing
-        if (isFormOpenRef.current) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - form is open (ULTIMATE GUARD)');
-            return;
-        }
-        
-        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
-        // This is the PRIMARY guard to prevent overwriting user input
-        // Use REF for synchronous check (state might not be updated yet)
-        if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - user is editing or auto-saving');
-            return;
-        }
-        
-        // CRITICAL: Don't update selectedClient if the modal is open (user might be typing)
-        // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
-        // from overwriting selectedClient while the user is editing
-        if (viewMode === 'client-detail') {
-            // Modal is open - don't update selectedClient from LiveDataSync
-            // This prevents overwriting user input while they're typing
-            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - modal is open');
-            return;
-        }
-        
-        // Find the updated client in the clients array
-        const updatedClient = clients.find(c => c.id === selectedClient.id);
-        if (!updatedClient) return;
-        
-        // Check if updatedClient is different from selectedClient (new reference)
-        // If they're the same object reference, no update needed
-        if (updatedClient === selectedClient) return;
-        
-        // CRITICAL: ALWAYS preserve fields from selectedClient that have content
-        // This prevents LiveDataSync from overwriting user input with blank values
-        // Even if formData in the modal has newer content, preserving selectedClient prevents
-        // the modal from receiving a blank client prop that would trigger its useEffect
-        const hasUserContent = Boolean(
-            (selectedClient.name && selectedClient.name.trim() && selectedClient.name.trim() !== '') ||
-            (selectedClient.notes && selectedClient.notes.trim() && selectedClient.notes.trim() !== '') ||
-            (selectedClient.industry && selectedClient.industry.trim() && selectedClient.industry.trim() !== '') ||
-            (selectedClient.address && selectedClient.address.trim() && selectedClient.address.trim() !== '') ||
-            (selectedClient.website && selectedClient.website.trim() && selectedClient.website.trim() !== '')
-        );
-        
-        // CRITICAL: Check if incoming client would overwrite user content with blank/empty values
-        const wouldOverwriteWithBlank = Boolean(
-            (selectedClient.name && selectedClient.name.trim() && (!updatedClient.name || !updatedClient.name.trim())) ||
-            (selectedClient.notes && selectedClient.notes.trim() && (!updatedClient.notes || !updatedClient.notes.trim())) ||
-            (selectedClient.industry && selectedClient.industry.trim() && (!updatedClient.industry || !updatedClient.industry.trim())) ||
-            (selectedClient.address && selectedClient.address.trim() && (!updatedClient.address || !updatedClient.address.trim())) ||
-            (selectedClient.website && selectedClient.website.trim() && (!updatedClient.website || !updatedClient.website.trim()))
-        );
-        
-        // CRITICAL: If user has content OR would overwrite with blank, NEVER update
-        if (hasUserContent || wouldOverwriteWithBlank) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - would overwrite user content', {
-                hasUserContent,
-                wouldOverwriteWithBlank,
-                selectedName: selectedClient.name,
-                updatedName: updatedClient.name
-            });
-            return;
-        }
-        
-        // CRITICAL: If user has content (regardless of whether LiveDataSync would overwrite), preserve it
-        // This ensures user input is NEVER overwritten by LiveDataSync updates
-        // The modal's useEffect will also block updates, but this provides an extra layer of protection
-        if (hasUserContent) {
-            // Merge: preserve user-edited fields, update other fields from LiveDataSync
-            const mergedClient = {
-                ...updatedClient,
-                // CRITICAL: ALWAYS preserve user-edited fields if they have content in selectedClient
-                // This prevents LiveDataSync from passing a blank client prop to the modal
-                name: selectedClient.name && selectedClient.name.trim() ? selectedClient.name : updatedClient.name,
-                notes: selectedClient.notes && selectedClient.notes.trim() ? selectedClient.notes : updatedClient.notes,
-                industry: selectedClient.industry && selectedClient.industry.trim() ? selectedClient.industry : updatedClient.industry,
-                address: selectedClient.address && selectedClient.address.trim() ? selectedClient.address : updatedClient.address,
-                website: selectedClient.website && selectedClient.website.trim() ? selectedClient.website : updatedClient.website
-            };
-            
-            // Only update if actually different to prevent unnecessary re-renders
-            const needsUpdate = JSON.stringify(mergedClient) !== JSON.stringify(selectedClient);
-            if (needsUpdate) {
-                console.log('🔄 Clients.jsx: Syncing selectedClient with LiveDataSync, preserving user content', {
-                    preservedName: selectedClient.name && selectedClient.name.trim() ? 'yes' : 'no',
-                    preservedNotes: selectedClient.notes && selectedClient.notes.trim() ? 'yes' : 'no',
-                    liveDataSyncName: updatedClient.name,
-                    liveDataSyncNotes: updatedClient.notes?.substring(0, 20)
-                });
-                setSelectedClient(mergedClient);
-            }
-        } else {
-            // No user content to preserve, safe to update
-            setSelectedClient(updatedClient);
-        }
-    }, [clients, selectedClient?.id, viewMode, isUserEditing]); // Include isUserEditing to block during typing
-    
-    // CRITICAL: Same protection for selectedLead
-    useEffect(() => {
-        // CRITICAL: If selectedLead is null (new lead), NEVER update it
-        // This prevents overwriting form data when user is creating a new lead
-        if (!selectedLead) {
-            return;
-        }
-        
-        if (!selectedLead.id) return;
-        
-        // CRITICAL: ULTIMATE GUARD - Check form open flag FIRST
-        // This is checked before ANY other logic to absolutely prevent updates during form editing
-        if (isFormOpenRef.current) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - form is open (ULTIMATE GUARD)');
-            return;
-        }
-        
-        // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
-        // This is the PRIMARY guard to prevent overwriting user input
-        // Use REF for synchronous check (state might not be updated yet)
-        if (isUserEditingRef.current || isUserEditing || isAutoSavingRef.current) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - user is editing or auto-saving');
-            return;
-        }
-        
-        // CRITICAL: Don't update selectedLead if the modal is open (user might be typing)
-        // The modal's useEffect will handle updates, but we need to prevent LiveDataSync
-        // from overwriting selectedLead while the user is editing
-        if (viewMode === 'lead-detail') {
-            // Modal is open - don't update selectedLead from LiveDataSync
-            // This prevents overwriting user input while they're typing
-            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - modal is open');
-            return;
-        }
-        
-        // Find the updated lead in the leads array
-        const updatedLead = leads.find(l => l.id === selectedLead.id);
-        if (!updatedLead) return;
-        
-        // Check if updatedLead is different from selectedLead (new reference)
-        if (updatedLead === selectedLead) return;
-        
-        // CRITICAL: ALWAYS preserve fields from selectedLead that have content
-        const hasUserContent = Boolean(
-            (selectedLead.name && selectedLead.name.trim() && selectedLead.name.trim() !== '') ||
-            (selectedLead.notes && selectedLead.notes.trim() && selectedLead.notes.trim() !== '') ||
-            (selectedLead.industry && selectedLead.industry.trim() && selectedLead.industry.trim() !== '') ||
-            (selectedLead.source && selectedLead.source.trim() && selectedLead.source.trim() !== '' && selectedLead.source !== 'Website')
-        );
-        
-        // CRITICAL: Check if incoming lead would overwrite user content with blank/empty values
-        const wouldOverwriteWithBlank = Boolean(
-            (selectedLead.name && selectedLead.name.trim() && (!updatedLead.name || !updatedLead.name.trim())) ||
-            (selectedLead.notes && selectedLead.notes.trim() && (!updatedLead.notes || !updatedLead.notes.trim())) ||
-            (selectedLead.industry && selectedLead.industry.trim() && (!updatedLead.industry || !updatedLead.industry.trim())) ||
-            (selectedLead.source && selectedLead.source.trim() && selectedLead.source !== 'Website' && (!updatedLead.source || updatedLead.source === 'Website'))
-        );
-        
-        // CRITICAL: If user has content OR would overwrite with blank, NEVER update
-        if (hasUserContent || wouldOverwriteWithBlank) {
-            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - would overwrite user content', {
-                hasUserContent,
-                wouldOverwriteWithBlank,
-                selectedName: selectedLead.name,
-                updatedName: updatedLead.name
-            });
-            return;
-        }
-        
-        // CRITICAL: If user has content, preserve it
-        if (hasUserContent) {
-            // Merge: preserve user-edited fields
-            const mergedLead = {
-                ...updatedLead,
-                name: selectedLead.name && selectedLead.name.trim() ? selectedLead.name : updatedLead.name,
-                notes: selectedLead.notes && selectedLead.notes.trim() ? selectedLead.notes : updatedLead.notes,
-                industry: selectedLead.industry && selectedLead.industry.trim() ? selectedLead.industry : updatedLead.industry,
-                source: selectedLead.source && selectedLead.source.trim() && selectedLead.source !== 'Website' ? selectedLead.source : updatedLead.source
-            };
-            
-            // Only update if actually different to prevent unnecessary re-renders
-            const needsUpdate = JSON.stringify(mergedLead) !== JSON.stringify(selectedLead);
-            if (needsUpdate) {
-                console.log('🔄 Clients.jsx: Syncing selectedLead with LiveDataSync, preserving user content', {
-                    preservedName: selectedLead.name && selectedLead.name.trim() ? 'yes' : 'no',
-                    preservedNotes: selectedLead.notes && selectedLead.notes.trim() ? 'yes' : 'no'
-                });
-                setSelectedLead(mergedLead);
-            }
-        } else {
-            // No user content to preserve, safe to update
-            setSelectedLead(updatedLead);
-        }
-    }, [leads, selectedLead?.id, viewMode, isUserEditing]); // Include isUserEditing to block during typing
+    // NO MORE SYNCING! Modals fetch their own fresh data
     
     // Live sync: subscribe to real-time updates so clients stay fresh without manual refresh
     // CRITICAL: Skip updates if user is actively editing to prevent overwriting input
@@ -1719,43 +1415,22 @@ const Clients = React.memo(() => {
     
     // Leads are now database-only, no localStorage sync needed
 
-    const handleUpdateClient = async (clientFormData, stayInEditMode = false) => {
-        console.log('🔄 handleUpdateClient called');
-        await handleSaveClient(clientFormData, stayInEditMode);
-        
-        // After saving, close the form and return to clients view
-        if (!stayInEditMode) {
-            setViewMode('clients');
-            setSelectedClient(null);
-            setCurrentTab('overview');
-            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after update
-            handlePauseSync(false);
-            if (window.LiveDataSync && window.LiveDataSync.start) {
-                window.LiveDataSync.start();
-                console.log('▶️ ClientDetailModal updated - restarting LiveDataSync');
-            }
-        }
+    const handleClientModalClose = async () => {
+        setViewMode('clients');
+        setEditingClientId(null);
+        setCurrentTab('overview');
+        // Refresh data from server
+        await loadClients(true);
+        startSync();
     };
 
-    const handleUpdateLead = async (leadFormData, stayInEditMode = false) => {
-        console.log('🔄 handleUpdateLead called');
-        await handleSaveLead(leadFormData, stayInEditMode);
-        
-        // After saving, close the form and return to leads view
-        if (!stayInEditMode) {
-            // Refresh leads from database to ensure we have latest persisted data
-            console.log('🔄 Refreshing leads after update...');
-            await loadLeads(true); // Force refresh to get latest data
-            setViewMode('leads');
-            setSelectedLead(null);
-            setCurrentLeadTab('overview');
-            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes after update
-            handlePauseSync(false);
-            if (window.LiveDataSync && window.LiveDataSync.start) {
-                window.LiveDataSync.start();
-                console.log('▶️ LeadDetailModal updated - restarting LiveDataSync');
-            }
-        }
+    const handleLeadModalClose = async () => {
+        setViewMode('leads');
+        setEditingLeadId(null);
+        setCurrentLeadTab('overview');
+        // Refresh data from server
+        await loadLeads(true);
+        startSync();
     };
     
     const handleSaveClient = async (clientFormData, stayInEditMode = false) => {
@@ -2835,40 +2510,16 @@ const Clients = React.memo(() => {
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
     const handleOpenClient = (client) => {
-        // CRITICAL: Set protection flags IMMEDIATELY before any state changes
-        isFormOpenRef.current = true;
-        isUserEditingRef.current = true;
-        setIsUserEditing(true);
-        
-        // Stop LiveDataSync
-        if (window.LiveDataSync && window.LiveDataSync.stop) {
-            window.LiveDataSync.stop();
-            console.log('🛑 Opening client detail - stopping LiveDataSync');
-        }
-        handlePauseSync(true);
-        
-        // Now safe to update state
-        setSelectedClient(client);
-        setSelectedLead(null);
+        stopSync();
+        setEditingClientId(client.id);
+        setEditingLeadId(null);
         setViewMode('client-detail');
     };
 
     const handleOpenLead = (lead) => {
-        // CRITICAL: Set protection flags IMMEDIATELY before any state changes
-        isFormOpenRef.current = true;
-        isUserEditingRef.current = true;
-        setIsUserEditing(true);
-        
-        // Stop LiveDataSync
-        if (window.LiveDataSync && window.LiveDataSync.stop) {
-            window.LiveDataSync.stop();
-            console.log('🛑 Opening lead detail - stopping LiveDataSync');
-        }
-        handlePauseSync(true);
-        
-        // Now safe to update state
-        setSelectedLead(lead);
-        setSelectedClient(null);
+        stopSync();
+        setEditingLeadId(lead.id);
+        setEditingClientId(null);
         setViewMode('lead-detail');
     };
 
@@ -3667,10 +3318,7 @@ const Clients = React.memo(() => {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
                         <button 
-                            onClick={() => {
-                                setViewMode('clients');
-                                setSelectedClient(null);
-                            }}
+                        onClick={handleClientModalClose}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
                             title="Go back"
                         >
@@ -3701,32 +3349,15 @@ const Clients = React.memo(() => {
                     }
                     return (
                         <Modal
-                        key={selectedClient?.id || 'new-client'}
-                        client={selectedClient}
-                        onSave={handleSaveClient}
-                        onUpdate={handleUpdateClient}
-                        onClose={() => {
-                            setIsUserEditing(false);
-                            setViewMode('clients');
-                            setSelectedClient(null);
-                            setCurrentTab('overview');
-                            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes
-                            handlePauseSync(false);
-                            if (window.LiveDataSync && window.LiveDataSync.start) {
-                                window.LiveDataSync.start();
-                                console.log('▶️ ClientDetailModal closed - restarting LiveDataSync on explicit close');
-                            }
-                        }}
+                        key={editingClientId || 'new-client'}
+                        clientId={editingClientId}
+                        onClose={handleClientModalClose}
                         onDelete={handleDeleteClient}
                         allProjects={projects}
                         onNavigateToProject={handleNavigateToProject}
                         isFullPage={true}
-                        isEditing={true}
-                        hideSearchFilters={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
-                        onPauseSync={handlePauseSync}
-                        onEditingChange={handleClientEditingChange}
                     />
                     );
                 })()}
@@ -3779,35 +3410,15 @@ const Clients = React.memo(() => {
                     }
                     return (
                         <Modal
-                        key={selectedLead?.id || 'new-lead'}
-                        lead={selectedLead}
-                        onSave={handleSaveLead}
-                        onUpdate={handleUpdateLead}
-                        onClose={async () => {
-                            setIsUserEditing(false);
-                            // Refresh leads from database to ensure we have latest persisted data
-                            console.log('🔄 Refreshing leads after closing modal...');
-                            await loadLeads(true); // Force refresh to get latest data
-                            setViewMode('leads');
-                            setSelectedLead(null);
-                            setCurrentLeadTab('overview');
-                            // CRITICAL: Restart LiveDataSync ONLY when form explicitly closes
-                            handlePauseSync(false);
-                            if (window.LiveDataSync && window.LiveDataSync.start) {
-                                window.LiveDataSync.start();
-                                console.log('▶️ LeadDetailModal closed - restarting LiveDataSync on explicit close');
-                            }
-                        }}
+                        key={editingLeadId || 'new-lead'}
+                        leadId={editingLeadId}
+                        onClose={handleLeadModalClose}
                         onDelete={handleDeleteLead}
                         onConvertToClient={convertLeadToClient}
                         allProjects={projects}
                         isFullPage={true}
-                        isEditing={true}
-                        hideSearchFilters={true}
                         initialTab={currentLeadTab}
                         onTabChange={setCurrentLeadTab}
-                        onPauseSync={handlePauseSync}
-                        onEditingChange={handleLeadEditingChange}
                     />
                     );
                 })()}
@@ -3859,21 +3470,9 @@ const Clients = React.memo(() => {
                 <div className="flex items-center gap-3">
                     <button 
                     onClick={() => {
-                    // CRITICAL: Set ALL protection flags IMMEDIATELY before any state changes
-                    isFormOpenRef.current = true;
-                    isUserEditingRef.current = true;
-                    setIsUserEditing(true);
-                    
-                    // Stop LiveDataSync
-                    if (window.LiveDataSync && window.LiveDataSync.stop) {
-                        window.LiveDataSync.stop();
-                        console.log('🛑 Add Client clicked - stopping LiveDataSync immediately');
-                    }
-                    handlePauseSync(true);
-                    
-                        // Now safe to update state
-                        setSelectedClient(null);
-                        setSelectedLead(null);
+                        stopSync();
+                        setEditingClientId(null); // null = new client
+                        setEditingLeadId(null);
                         setCurrentTab('overview');
                         setViewMode('client-detail');
                     }}
@@ -3894,21 +3493,9 @@ const Clients = React.memo(() => {
                     </button>
                     <button 
                     onClick={() => {
-                    // CRITICAL: Set ALL protection flags IMMEDIATELY before any state changes
-                    isFormOpenRef.current = true;
-                    isUserEditingRef.current = true;
-                    setIsUserEditing(true);
-                    
-                    // Stop LiveDataSync
-                    if (window.LiveDataSync && window.LiveDataSync.stop) {
-                        window.LiveDataSync.stop();
-                        console.log('🛑 Add Lead clicked - stopping LiveDataSync immediately');
-                    }
-                    handlePauseSync(true);
-                    
-                        // Now safe to update state
-                        setSelectedLead(null);
-                        setSelectedClient(null);
+                        stopSync();
+                        setEditingLeadId(null); // null = new lead
+                        setEditingClientId(null);
                         setCurrentLeadTab('overview');
                         setViewMode('lead-detail');
                     }}
