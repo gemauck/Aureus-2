@@ -224,6 +224,9 @@ const Clients = React.memo(() => {
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
     const isUserEditingRef = useRef(false); // Ref to track if user is editing
     const isAutoSavingRef = useRef(false); // Ref to track if auto-saving is in progress
+    const isFormOpenRef = useRef(false); // Ref to track if any form is open
+    const selectedClientRef = useRef(null); // Ref to track selected client
+    const selectedLeadRef = useRef(null); // Ref to track selected lead
     
     // Keep refs in sync with state
     useEffect(() => {
@@ -1420,6 +1423,8 @@ const Clients = React.memo(() => {
     const handleClientModalClose = async () => {
         setViewMode('clients');
         setEditingClientId(null);
+        selectedClientRef.current = null;
+        isFormOpenRef.current = false;
         setCurrentTab('overview');
         // Refresh data from server
         await loadClients(true);
@@ -1429,6 +1434,8 @@ const Clients = React.memo(() => {
     const handleLeadModalClose = async () => {
         setViewMode('leads');
         setEditingLeadId(null);
+        selectedLeadRef.current = null;
+        isFormOpenRef.current = false;
         setCurrentLeadTab('overview');
         // Refresh data from server
         await loadLeads(true);
@@ -1441,6 +1448,8 @@ const Clients = React.memo(() => {
         console.log('All fields:', Object.keys(clientFormData));
         console.log('Contacts in form data:', clientFormData.contacts);
         console.log('Sites in form data:', clientFormData.sites);
+        // Get selectedClient from editingClientId
+        const selectedClient = editingClientId ? clients.find(c => c.id === editingClientId) : null;
         console.log('Selected client:', selectedClient);
         
         try {
@@ -1498,14 +1507,14 @@ const Clients = React.memo(() => {
                         safeStorage.setClients(updated);
                         // CRITICAL: Always use comprehensiveClient (which has latest notes) instead of API response
                         // This ensures notes typed by user are never lost
-                        setSelectedClient(comprehensiveClient); // Update selectedClient with comprehensiveClient (has latest notes)
+                        selectedClientRef.current = comprehensiveClient; // Update ref with comprehensiveClient (has latest notes)
                         console.log('✅ Updated client in localStorage, new count:', updated.length);
                         console.log('📝 Notes in comprehensiveClient:', comprehensiveClient.notes?.substring(0, 50) || 'none');
                     } else {
                         const newClients = [...clients, comprehensiveClient];
                         setClients(newClients);
                         safeStorage.setClients(newClients);
-                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        selectedClientRef.current = comprehensiveClient; // Update ref to show new data
                         console.log('✅ Added new client to localStorage, new count:', newClients.length);
                     }
                     // Return comprehensiveClient (has latest notes) for localStorage-only saves
@@ -1678,11 +1687,11 @@ const Clients = React.memo(() => {
                                 notesPreview: comprehensiveClient.notes.substring(0, 50)
                             });
                         }
-                        // CRITICAL: Delay setSelectedClient to prevent useEffect from running before save completes
+                        // CRITICAL: Delay updating ref to prevent useEffect from running before save completes
                         // This ensures isAutoSavingRef is still set when useEffect runs
                         setTimeout(() => {
-                            setSelectedClient(savedClient); // Update selectedClient to show new data
-                            console.log('✅ Updated selectedClient after delay, notes:', savedClient.notes?.substring(0, 50) || 'none');
+                            selectedClientRef.current = savedClient; // Update ref to show new data
+                            console.log('✅ Updated selectedClientRef after delay, notes:', savedClient.notes?.substring(0, 50) || 'none');
                         }, 100); // Small delay to ensure save flags are still set
                         console.log('✅ Updated client in localStorage after API success, new count:', updated.length);
                         console.log('📝 Saved client notes:', savedClient.notes?.substring(0, 50) || 'none');
@@ -1698,7 +1707,7 @@ const Clients = React.memo(() => {
                         }
                         setClients(newClients);
                         safeStorage.setClients(newClients);
-                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        selectedClientRef.current = comprehensiveClient; // Update ref to show new data
                         console.log('✅ Added new client to localStorage after API success, new count:', newClients.length);
                     }
                     console.log('✅ Comprehensive client data saved to localStorage');
@@ -1720,13 +1729,13 @@ const Clients = React.memo(() => {
                         const updated = clients.map(c => c.id === selectedClient.id ? comprehensiveClient : c);
                         setClients(updated);
                         safeStorage.setClients(updated);
-                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        selectedClientRef.current = comprehensiveClient; // Update ref to show new data
                         console.log('✅ Updated client in localStorage, new count:', updated.length);
                     } else {
                         const newClients = [...clients, comprehensiveClient];
                         setClients(newClients);
                         safeStorage.setClients(newClients);
-                        setSelectedClient(comprehensiveClient); // Update selectedClient to show new data
+                        selectedClientRef.current = comprehensiveClient; // Update ref to show new data
                         console.log('✅ Added new client to localStorage, new count:', newClients.length);
                     }
                     console.log('✅ Fallback: Client saved to localStorage only');
@@ -2515,6 +2524,9 @@ const Clients = React.memo(() => {
         stopSync();
         setEditingClientId(client.id);
         setEditingLeadId(null);
+        selectedClientRef.current = client;
+        selectedLeadRef.current = null;
+        isFormOpenRef.current = true;
         setViewMode('client-detail');
     };
 
@@ -2522,6 +2534,9 @@ const Clients = React.memo(() => {
         stopSync();
         setEditingLeadId(lead.id);
         setEditingClientId(null);
+        selectedLeadRef.current = lead;
+        selectedClientRef.current = null;
+        isFormOpenRef.current = true;
         setViewMode('lead-detail');
     };
 
@@ -2564,7 +2579,7 @@ const Clients = React.memo(() => {
     const handleNavigateToProject = (projectId) => {
         sessionStorage.setItem('openProjectId', projectId);
         setViewMode('clients');
-        setSelectedClient(null);
+        selectedClientRef.current = null;
         window.dispatchEvent(new CustomEvent('navigateToPage', { 
             detail: { page: 'projects', projectId } 
         }));
@@ -3313,7 +3328,11 @@ const Clients = React.memo(() => {
     );
 
     // Full-page Client Detail View
-    const ClientDetailView = () => (
+    const ClientDetailView = () => {
+        // Get the client from editingClientId
+        const selectedClient = editingClientId ? clients.find(c => c.id === editingClientId) : null;
+        
+        return (
         <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
             {/* Header with breadcrumb */}
             <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
@@ -3365,7 +3384,8 @@ const Clients = React.memo(() => {
                 })()}
             </div>
         </div>
-    );
+        );
+    };
 
     // Full-page Lead Detail View
     const LeadDetailView = () => (
@@ -3475,6 +3495,9 @@ const Clients = React.memo(() => {
                         stopSync();
                         setEditingClientId(null); // null = new client
                         setEditingLeadId(null);
+                        selectedClientRef.current = null;
+                        selectedLeadRef.current = null;
+                        isFormOpenRef.current = true;
                         setCurrentTab('overview');
                         setViewMode('client-detail');
                     }}
@@ -3498,6 +3521,9 @@ const Clients = React.memo(() => {
                         stopSync();
                         setEditingLeadId(null); // null = new lead
                         setEditingClientId(null);
+                        selectedLeadRef.current = null;
+                        selectedClientRef.current = null;
+                        isFormOpenRef.current = true;
                         setCurrentLeadTab('overview');
                         setViewMode('lead-detail');
                     }}
