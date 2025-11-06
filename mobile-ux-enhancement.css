@@ -46,8 +46,12 @@
      2. ENHANCED HEADER
      ============================================ */
   
-  header {
+  header,
+  header[class],
+  header.border-b {
     height: 60px !important;
+    min-height: 60px !important;
+    max-height: 60px !important;
     padding: 0 16px !important;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08) !important;
     backdrop-filter: blur(10px) !important;
@@ -88,13 +92,18 @@
      3. BEAUTIFUL MAIN CONTENT AREA
      ============================================ */
   
-  main {
+  main,
+  main[class],
+  main.flex-1 {
     padding: 20px 16px !important;
     background: #f9fafb !important;
     min-height: calc(100vh - 60px) !important;
+    font-size: 16px !important;
   }
   
-  .dark main {
+  .dark main,
+  .dark main[class],
+  .dark main.flex-1 {
     background: #111827 !important;
   }
   
@@ -106,7 +115,11 @@
   [class*="card"],
   .bg-white,
   .bg-gray-50,
-  .bg-gray-100 {
+  .bg-gray-100,
+  .rounded-lg.border,
+  main .rounded-lg,
+  main .border,
+  main .rounded-lg.border {
     border-radius: 16px !important;
     padding: 20px !important;
     margin-bottom: 16px !important;
@@ -270,14 +283,21 @@
   
   aside button,
   [class*="sidebar"] button,
-  aside nav button {
+  aside nav button,
+  aside nav button[class],
+  nav button {
     min-height: 52px !important;
+    height: auto !important;
+    max-height: none !important;
     padding: 14px 16px !important;
     border-radius: 12px !important;
     margin-bottom: 4px !important;
     transition: all 0.2s ease !important;
     font-size: 0.9375rem !important;
     font-weight: 500 !important;
+    display: flex !important;
+    align-items: center !important;
+    flex-direction: row !important;
   }
   
   aside button:hover,
@@ -350,6 +370,25 @@
   
   main > div > div {
     margin-bottom: 20px !important;
+  }
+  
+  /* Ensure proper spacing between elements */
+  main .space-y-4 > * + * {
+    margin-top: 1rem !important;
+  }
+  
+  main .space-y-2 > * + * {
+    margin-top: 0.5rem !important;
+  }
+  
+  /* Better tab button styling */
+  main button[class*="tab"],
+  main [role="tab"] {
+    min-height: 48px !important;
+    padding: 12px 20px !important;
+    font-size: 0.9375rem !important;
+    font-weight: 500 !important;
+    border-radius: 12px !important;
   }
   
   /* ============================================
