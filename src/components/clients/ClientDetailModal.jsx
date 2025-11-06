@@ -2135,6 +2135,11 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 // Mark that spacebar was pressed
                                                 isSpacebarPressedRef.current = true;
                                                 
+                                                // Mark that user has started typing and edited this field
+                                                userHasStartedTypingRef.current = true;
+                                                hasUserEditedForm.current = true;
+                                                userEditedFieldsRef.current.add('notes');
+                                                
                                                 // Store cursor position for restoration
                                                 notesCursorPositionRef.current = newCursorPos;
                                                 
