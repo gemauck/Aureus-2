@@ -6948,44 +6948,43 @@ const Manufacturing = () => {
   };
 
   const MovementsView = ({ onRecordMovement }) => {
-    // Don't block - movements are already loaded from parent's initial load
-    // Only refresh if we don't have any movements
-    useEffect(() => {
-      if (movements.length === 0) {
-        // Only fetch if we have no cached data
-        const refreshMovements = async () => {
-          try {
-            if (window.DatabaseAPI?.getStockMovements) {
-              const movementsResponse = await window.DatabaseAPI.getStockMovements();
-              const movementsData = movementsResponse?.data?.movements || [];
-              const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
-              setMovements(processed);
-              localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
-            }
-          } catch (error) {
-            console.error('Error refreshing movements:', error);
-          }
-        };
-        refreshMovements();
-      }
-    }, []); // Run once when component mounts
-
-    // Handler for opening the record movement modal
+    // No blocking operations - movements are already loaded from parent
+    
+    // Handler for opening the record movement modal - direct call
     const handleRecordClick = (e) => {
-      if (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation?.();
-      }
+      e?.preventDefault();
+      e?.stopPropagation();
       
       console.log('🔵 Record Movement button clicked');
+      console.log('🔵 onRecordMovement type:', typeof onRecordMovement);
       
-      // Use the prop function passed from parent
+      // Call the parent function directly
       if (onRecordMovement && typeof onRecordMovement === 'function') {
+        console.log('✅ Calling onRecordMovement...');
         onRecordMovement();
       } else {
-        console.error('❌ onRecordMovement is not available!');
-        alert('Error: Unable to open movement modal. Please refresh the page.');
+        console.error('❌ onRecordMovement not available, trying direct call...');
+        // Direct fallback - call parent's function
+        try {
+          setFormData({
+            type: 'receipt',
+            sku: '',
+            itemName: '',
+            quantity: '',
+            unitCost: '',
+            fromLocation: '',
+            toLocation: '',
+            reference: '',
+            notes: '',
+            date: new Date().toISOString().split('T')[0]
+          });
+          setModalType('add_movement');
+          setShowModal(true);
+          console.log('✅ Modal opened via direct state setters');
+        } catch (error) {
+          console.error('❌ Error:', error);
+          alert('Error opening modal: ' + error.message);
+        }
       }
     };
 
@@ -7033,8 +7032,14 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={handleRecordClick}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  console.log('🔵 Button clicked directly');
+                  handleRecordClick(e);
+                }}
+                onMouseDown={(e) => e.preventDefault()}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors cursor-pointer"
                 type="button"
                 aria-label="Record Stock Movement"
               >
