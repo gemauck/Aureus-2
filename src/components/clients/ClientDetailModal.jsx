@@ -4099,23 +4099,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
                         {/* Footer Actions */}
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
-                            <div>
-                                {client && onDelete && (
-                                    <button 
-                                        type="button" 
-                                        onClick={() => {
-                                            if (confirm('Are you sure you want to delete this client? This action cannot be undone.')) {
-                                                onDelete(client.id);
-                                                onClose();
-                                            }
-                                        }}
-                                        className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                                    >
-                                        <i className="fas fa-trash mr-1.5"></i>
-                                        Delete Client
-                                    </button>
-                                )}
-                            </div>
+                            <div></div>
                             <div className="flex gap-3">
                                 <button 
                                     type="button" 

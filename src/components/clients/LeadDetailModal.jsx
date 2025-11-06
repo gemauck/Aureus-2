@@ -4149,21 +4149,6 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                         {/* Footer Actions */}
                         <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                             <div className="flex gap-2">
-                                {lead && onDelete && (
-                                    <button 
-                                        type="button"
-                                        onClick={() => {
-                                            if (confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
-                                                onDelete(lead.id);
-                                                onClose();
-                                            }
-                                        }}
-                                        className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center"
-                                    >
-                                        <i className="fas fa-trash mr-2"></i>
-                                        Delete Lead
-                                    </button>
-                                )}
                                 {lead && (
                                     <button 
                                         type="button"
