@@ -39,6 +39,7 @@ const Projects = () => {
     const [waitingForProjectDetail, setWaitingForProjectDetail] = useState(false);
     const [projectDetailAvailable, setProjectDetailAvailable] = useState(!!window.ProjectDetail);
     const [waitingForTracker, setWaitingForTracker] = useState(false);
+    const [forceRender, setForceRender] = useState(0); // Force re-render when ProjectDetail loads
     
     // Ensure storage is available
     useEffect(() => {
@@ -609,17 +610,21 @@ const Projects = () => {
         }
     }, [viewingProject]);
     
-    // Also listen for when ProjectDetail loads globally
+    // BULLETPROOF: Listen for when ProjectDetail loads globally and force re-render
     useEffect(() => {
         const checkProjectDetail = () => {
-            if (window.ProjectDetail && !projectDetailAvailable) {
-                console.log('✅ ProjectDetail became available, updating state');
-                setProjectDetailAvailable(true);
-                setWaitingForProjectDetail(false);
+            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                if (!projectDetailAvailable) {
+                    console.log('✅ ProjectDetail became available, updating state');
+                    setProjectDetailAvailable(true);
+                    setWaitingForProjectDetail(false);
+                    setForceRender(prev => prev + 1);
+                }
                 // Force a re-render by updating state if we're viewing a project
                 if (viewingProject) {
                     // Trigger a state update to force re-render
                     setViewingProject({ ...viewingProject });
+                    setForceRender(prev => prev + 1);
                 }
             }
         };
@@ -636,7 +641,9 @@ const Projects = () => {
         // Listen for custom event when components are loaded
         const handleComponentLoaded = (event) => {
             if (event.detail && event.detail.component === 'ProjectDetail') {
+                console.log('✅ ProjectDetail loaded via componentLoaded event - forcing re-render');
                 checkProjectDetail();
+                setForceRender(prev => prev + 1);
             }
         };
         window.addEventListener('componentLoaded', handleComponentLoaded);
@@ -788,25 +795,19 @@ const Projects = () => {
 
     const handleViewProject = async (project) => {
         console.log('Viewing project:', project);
-        console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'local:', !!ProjectDetail);
-        console.log('🔍 DatabaseAPI check:', {
-            exists: !!window.DatabaseAPI,
-            hasGetProject: !!(window.DatabaseAPI && window.DatabaseAPI.getProject),
-            getProjectType: window.DatabaseAPI?.getProject ? typeof window.DatabaseAPI.getProject : 'undefined',
-            apiExists: !!window.api,
-            apiHasGetProject: !!(window.api && window.api.getProject)
-        });
-        console.log('🔍 ProjectDetail availability check:', {
-            windowProjectDetail: typeof window.ProjectDetail,
-            projectDetailAvailable: projectDetailAvailable,
-            condition: !window.ProjectDetail && !projectDetailAvailable
+        console.log('ProjectDetail component exists:', !!window.ProjectDetail, 'type:', typeof window.ProjectDetail);
+        console.log('🔍 ProjectDetail initialization state:', {
+            exists: !!window.ProjectDetail,
+            type: typeof window.ProjectDetail,
+            isFunction: typeof window.ProjectDetail === 'function',
+            initializing: !!window._projectDetailInitializing,
+            projectDetailAvailable: projectDetailAvailable
         });
         
-        // BULLETPROOF: ALWAYS check if ProjectDetail is loaded, even if projectDetailAvailable is true
-        // This handles cases where the flag is set but component isn't actually loaded
-        if (!window.ProjectDetail) {
+        // BULLETPROOF: ALWAYS check if ProjectDetail is loaded AND initialized
+        // The lazy loader might say it's loaded, but initialization might still be waiting for dependencies
+        if (!window.ProjectDetail || typeof window.ProjectDetail !== 'function') {
             console.log('🔵 handleViewProject: ProjectDetail not available, loading NOW with all strategies...');
-            console.log('📥 Current state - projectDetailAvailable:', projectDetailAvailable, 'window.ProjectDetail:', typeof window.ProjectDetail);
             
             // Reset the flag if component isn't actually available
             if (projectDetailAvailable) {
@@ -816,35 +817,81 @@ const Projects = () => {
             
             setWaitingForProjectDetail(true);
             
-            // Use the bulletproof loader (it has all strategies built-in)
-            const loaded = await loadProjectDetail();
+            // BULLETPROOF: Try multiple strategies to load ProjectDetail
+            // Strategy 1: Wait for initialization to complete (up to 5 seconds)
+            // ProjectDetail might be loading but waiting for dependencies
+            let loaded = false;
+            console.log('⏳ Strategy 1: Waiting for ProjectDetail initialization to complete...');
+            for (let i = 0; i < 50; i++) {
+                if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                    console.log(`✅ ProjectDetail found after ${i * 100}ms wait (initialization completed)`);
+                    loaded = true;
+                    break;
+                }
+                // Check if it's still initializing
+                if (window._projectDetailInitializing) {
+                    console.log(`⏳ ProjectDetail still initializing... (attempt ${i + 1}/50)`);
+                }
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
             
-            if (loaded && window.ProjectDetail) {
-                console.log('✅ handleViewProject: ProjectDetail loaded successfully');
+            // Strategy 2: Use the bulletproof loader
+            if (!loaded) {
+                console.log('🚀 Strategy 2: Using bulletproof loader...');
+                loaded = await loadProjectDetail();
+            }
+            
+            // Strategy 3: Direct script injection as fallback
+            if (!loaded && (!window.ProjectDetail || typeof window.ProjectDetail !== 'function')) {
+                console.log('🚀 Strategy 3: Direct script injection...');
+                loaded = await new Promise((resolve) => {
+                    const script = document.createElement('script');
+                    script.src = '/dist/src/components/projects/ProjectDetail.js';
+                    script.async = true;
+                    script.onload = () => {
+                        // Wait for initialization to complete (up to 5 seconds)
+                        let initAttempts = 0;
+                        const checkInit = setInterval(() => {
+                            initAttempts++;
+                            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                                console.log('✅ Direct script injection successful, ProjectDetail initialized');
+                                clearInterval(checkInit);
+                                resolve(true);
+                            } else if (initAttempts >= 50) {
+                                console.warn('⚠️ Direct script loaded but ProjectDetail not initialized after 5s');
+                                clearInterval(checkInit);
+                                resolve(false);
+                            }
+                        }, 100);
+                    };
+                    script.onerror = () => {
+                        console.error('❌ Direct script injection failed');
+                        resolve(false);
+                    };
+                    document.body.appendChild(script);
+                });
+            }
+            
+            if (loaded && window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                console.log('✅ handleViewProject: ProjectDetail loaded and initialized successfully');
                 setProjectDetailAvailable(true);
                 setWaitingForProjectDetail(false);
+                setForceRender(prev => prev + 1);
             } else {
                 console.error('❌ handleViewProject: ProjectDetail failed to load after all strategies');
                 console.error('🔍 Final check - window.ProjectDetail:', typeof window.ProjectDetail);
+                console.error('🔍 Initialization state:', window._projectDetailInitializing);
                 console.error('🔍 Available components:', Object.keys(window).filter(k => k.includes('Project')));
-                
-                // Try one more time with a short wait (maybe lazy loader is finishing)
-                console.log('🔄 handleViewProject: Waiting 2 more seconds for lazy loader...');
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                if (window.ProjectDetail) {
-                    console.log('✅ handleViewProject: ProjectDetail appeared after wait!');
-                    setProjectDetailAvailable(true);
-                    setWaitingForProjectDetail(false);
-                } else {
-                    setWaitingForProjectDetail(false);
-                    // Don't return - still set viewingProject to show error UI
-                }
+                setWaitingForProjectDetail(false);
+                alert('Failed to load ProjectDetail component. Please refresh the page.');
+                return;
             }
         } else {
             // Component exists, ensure flag is set
             if (!projectDetailAvailable) {
+                console.log('✅ ProjectDetail is available, updating flag');
                 setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
             }
         }
         
@@ -1514,6 +1561,23 @@ const Projects = () => {
         return () => { cancelled = true; }; // Cleanup
     }, [viewingProject?.id]); // Only when project ID changes
 
+    // BULLETPROOF: Set up a listener for when ProjectDetail becomes available
+    React.useEffect(() => {
+        if (!viewingProject) return;
+        
+        const checkInterval = setInterval(() => {
+            if (window.ProjectDetail && typeof window.ProjectDetail === 'function') {
+                console.log('✅ ProjectDetail detected in render check, forcing re-render');
+                setProjectDetailAvailable(true);
+                setWaitingForProjectDetail(false);
+                setForceRender(prev => prev + 1);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+        
+        return () => clearInterval(checkInterval);
+    }, [viewingProject?.id, forceRender]);
+
     if (viewingProject) {
         try {
             // Check window.ProjectDetail directly (it may be loaded lazily)
@@ -1533,18 +1597,18 @@ const Projects = () => {
                     projectDetailAvailable: projectDetailAvailable,
                     waitingForProjectDetail: waitingForProjectDetail,
                     isValidComponent: isValidComponent,
-                    availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail'))
+                    availableComponents: Object.keys(window).filter(key => key.includes('Project') || key.includes('Detail')),
+                    forceRender: forceRender
                 });
                 
                 // CRITICAL: Try immediate check first (in case it just registered)
                 // This handles the race condition where lazy loader resolves but component isn't registered yet
-                if (window.ProjectDetail && !waitingForProjectDetail) {
+                if (window.ProjectDetail && typeof window.ProjectDetail === 'function' && !waitingForProjectDetail) {
                     // Component just became available - update state and re-render
                     console.log('✅ Render: ProjectDetail just became available!');
                     setProjectDetailAvailable(true);
                     setWaitingForProjectDetail(false);
-                    // Force re-render by updating viewingProject
-                    setViewingProject(prev => prev ? { ...prev } : null);
+                    setForceRender(prev => prev + 1);
                     // Return loading state - next render will show the component
                     return (
                         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-center">
@@ -1558,7 +1622,15 @@ const Projects = () => {
                 
                 // Try to load ProjectDetail if not already loading
                 if (!waitingForProjectDetail) {
-                    loadProjectDetail().catch(err => {
+                    console.log('🚀 Triggering ProjectDetail load from render...');
+                    loadProjectDetail().then(loaded => {
+                        if (loaded && window.ProjectDetail) {
+                            console.log('✅ ProjectDetail loaded successfully from render');
+                            setProjectDetailAvailable(true);
+                            setWaitingForProjectDetail(false);
+                            setForceRender(prev => prev + 1);
+                        }
+                    }).catch(err => {
                         console.warn('Failed to load ProjectDetail:', err);
                     });
                 }
@@ -1576,6 +1648,16 @@ const Projects = () => {
                             If this takes too long, try refreshing the page.
                         </p>
                         <button 
+                            onClick={() => {
+                                console.log('🔄 Manual reload button clicked');
+                                window.location.reload();
+                            }}
+                            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium mr-2"
+                        >
+                            <i className="fas fa-sync-alt mr-2"></i>
+                            Reload Page
+                        </button>
+                        <button 
                             onClick={() => setViewingProject(null)}
                             className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-medium"
                         >
@@ -1587,8 +1669,12 @@ const Projects = () => {
             }
             
             // Double-check before rendering
-            if (!window.ProjectDetail) {
-                console.error('❌ ProjectDetail component not loaded');
+            if (!window.ProjectDetail || typeof window.ProjectDetail !== 'function') {
+                console.error('❌ ProjectDetail component not loaded or invalid:', {
+                    exists: !!window.ProjectDetail,
+                    type: typeof window.ProjectDetail,
+                    isFunction: typeof window.ProjectDetail === 'function'
+                });
                 return (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
                         <i className="fas fa-exclamation-triangle text-3xl text-red-500 mb-3"></i>
@@ -1618,6 +1704,7 @@ const Projects = () => {
                 );
             }
             
+            console.log('✅ Rendering ProjectDetail component with project:', viewingProject.id);
             return <ProjectDetailComponent 
                 project={viewingProject} 
                 onBack={() => setViewingProject(null)}

@@ -1,6 +1,6 @@
 // Lazy loading script to defer non-critical component loading
-// VERSION: 1019-projectdetail-fixed - Allow ProjectDetail to load via lazy-loader after dependencies
-console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
+// VERSION: 1020-projectdetail-bulletproof - Multiple loading strategies ensure ProjectDetail ALWAYS loads
+console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded');
 (function() {
     // Note: Components already loaded in index.html are not included here to avoid duplicate loading
     // ClientDetailModal and LeadDetailModal are loaded before Clients.jsx in index.html to avoid race condition
@@ -58,7 +58,9 @@ console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
         './src/components/projects/MonthlyDocumentCollectionTracker.jsx',
         './src/components/projects/CommentsPopup.jsx',
         './src/components/projects/DocumentCollectionModal.jsx',
-        // ProjectDetail will be loaded AFTER dependencies via special handler (see loadBatch function)
+        // BULLETPROOF: ProjectDetail is loaded explicitly here AND via special handler
+        // This ensures it loads even if one method fails
+        './src/components/projects/ProjectDetail.jsx',
         './src/components/projects/Projects.jsx',
         './src/components/projects/ProjectsDatabaseFirst.jsx',
         './src/components/projects/ProjectsSimple.jsx',
@@ -472,35 +474,44 @@ console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
                         const batch = componentFiles.slice(index, index + batchSize);
                         if (batch.length === 0) {
                             console.log(`✅ Lazy loading complete: ${loadedComponents} components loaded`);
-                            // Final check for ProjectDetail - try loading if dependencies are ready
+                            // BULLETPROOF: ALWAYS try to load ProjectDetail if it's not loaded
+                            // Don't wait for dependencies - ProjectDetail has its own robust loader
                             if (!window.ProjectDetail) {
-                                const projectDependenciesLoaded = 
-                                    window.CustomFieldModal && 
-                                    window.TaskDetailModal && 
-                                    window.ListModal && 
-                                    window.ProjectModal &&
-                                    window.KanbanView &&
-                                    window.CommentsPopup &&
-                                    window.DocumentCollectionModal;
+                                console.log('🔵 Lazy loader: Final attempt - loading ProjectDetail (will wait for dependencies internally)...');
                                 
-                                if (projectDependenciesLoaded && !window._projectDetailLoadAttempted) {
-                                    console.log('🔵 Lazy loader: Final attempt - loading ProjectDetail...');
-                                    window._projectDetailLoadAttempted = true;
+                                // Try loading ProjectDetail multiple times with retries
+                                const attemptLoadProjectDetail = (attemptNumber = 1, maxAttempts = 5) => {
+                                    if (window.ProjectDetail) {
+                                        console.log(`✅ Lazy loader: ProjectDetail loaded on attempt ${attemptNumber}`);
+                                        return;
+                                    }
+                                    
+                                    if (attemptNumber > maxAttempts) {
+                                        console.error('❌ Lazy loader: ProjectDetail failed to load after all attempts - setting up fallback loader');
+                                        // Set up a global fallback loader that runs periodically
+                                        setupProjectDetailFallbackLoader();
+                                        return;
+                                    }
+                                    
+                                    console.log(`🔵 Lazy loader: Attempting to load ProjectDetail (attempt ${attemptNumber}/${maxAttempts})...`);
                                     loadComponent('./src/components/projects/ProjectDetail.jsx').then(() => {
                                         setTimeout(() => {
                                             if (window.ProjectDetail) {
-                                                console.log('✅ Lazy loader: ProjectDetail loaded on final attempt');
+                                                console.log(`✅ Lazy loader: ProjectDetail loaded successfully on attempt ${attemptNumber}`);
                                             } else {
-                                                console.warn('⚠️ Lazy loader: ProjectDetail still not available after all attempts');
+                                                console.warn(`⚠️ Lazy loader: ProjectDetail script loaded but component not registered (attempt ${attemptNumber})`);
+                                                // Retry after a delay
+                                                setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 1000);
                                             }
                                         }, 1000);
+                                    }).catch(err => {
+                                        console.warn(`⚠️ Lazy loader: Failed to load ProjectDetail (attempt ${attemptNumber}):`, err);
+                                        // Retry after a delay
+                                        setTimeout(() => attemptLoadProjectDetail(attemptNumber + 1, maxAttempts), 1000);
                                     });
-                                } else {
-                                    console.warn('⚠️ Lazy loading complete but ProjectDetail not loaded');
-                                    if (!projectDependenciesLoaded) {
-                                        console.warn('⚠️ ProjectDetail dependencies not all loaded yet');
-                                    }
-                                }
+                                };
+                                
+                                attemptLoadProjectDetail();
                             } else {
                                 console.log('✅ ProjectDetail successfully loaded');
                             }
@@ -519,9 +530,10 @@ console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
                                 window.CommentsPopup &&
                                 window.DocumentCollectionModal;
                             
-                            if (projectDependenciesLoaded && !window.ProjectDetail && !window._projectDetailLoadAttempted) {
+                            // BULLETPROOF: Try loading ProjectDetail whenever dependencies are ready
+                            // Don't check _projectDetailLoadAttempted - we want multiple attempts
+                            if (projectDependenciesLoaded && !window.ProjectDetail) {
                                 console.log('🔵 Lazy loader: ProjectDetail dependencies loaded, loading ProjectDetail now...');
-                                window._projectDetailLoadAttempted = true;
                                 
                                 // Load ProjectDetail with its robust dependency checker
                                 loadComponent('./src/components/projects/ProjectDetail.jsx').then(() => {
@@ -535,6 +547,18 @@ console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
                                 }).catch(err => {
                                     console.warn('⚠️ Lazy loader: Failed to load ProjectDetail:', err);
                                 });
+                            }
+                            
+                            // BULLETPROOF: Also try loading ProjectDetail even if dependencies aren't all ready
+                            // ProjectDetail has its own robust loader that will wait for dependencies
+                            if (!window.ProjectDetail && !projectDependenciesLoaded) {
+                                // Check if React is at least available (critical dependency)
+                                if (window.React && window.React.useState) {
+                                    console.log('🔵 Lazy loader: React available, attempting to load ProjectDetail (will wait for other dependencies)...');
+                                    loadComponent('./src/components/projects/ProjectDetail.jsx').catch(err => {
+                                        console.warn('⚠️ Lazy loader: Failed early ProjectDetail load:', err);
+                                    });
+                                }
                             }
                             
                             index += batchSize;
@@ -557,5 +581,80 @@ console.log('🚀 lazy-load-components.js v1019-projectdetail-fixed loaded');
         // Start checking after reduced initial delay (500ms -> 200ms)
         setTimeout(waitForCriticalComponents, 200);
     }
+    
+    // BULLETPROOF: Global fallback loader for ProjectDetail
+    // This runs periodically to ensure ProjectDetail loads even if all other methods fail
+    function setupProjectDetailFallbackLoader() {
+        // Prevent multiple fallback loaders
+        if (window._projectDetailFallbackLoaderActive) {
+            return;
+        }
+        window._projectDetailFallbackLoaderActive = true;
+        
+        console.log('🔄 Setting up ProjectDetail fallback loader (runs every 5 seconds until loaded)...');
+        
+        let attempts = 0;
+        const maxAttempts = 60; // Run for up to 5 minutes (60 * 5 seconds)
+        
+        const fallbackInterval = setInterval(() => {
+            attempts++;
+            
+            // Stop if ProjectDetail is loaded
+            if (window.ProjectDetail) {
+                console.log('✅ Fallback loader: ProjectDetail loaded! Stopping fallback loader.');
+                clearInterval(fallbackInterval);
+                window._projectDetailFallbackLoaderActive = false;
+                return;
+            }
+            
+            // Stop after max attempts
+            if (attempts >= maxAttempts) {
+                console.error('❌ Fallback loader: Max attempts reached. ProjectDetail still not loaded.');
+                clearInterval(fallbackInterval);
+                window._projectDetailFallbackLoaderActive = false;
+                return;
+            }
+            
+            // Try loading ProjectDetail
+            console.log(`🔄 Fallback loader: Attempt ${attempts}/${maxAttempts} - loading ProjectDetail...`);
+            
+            const scriptSrc = '/dist/src/components/projects/ProjectDetail.js';
+            const script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.async = true;
+            script.src = scriptSrc;
+            
+            script.onload = () => {
+                setTimeout(() => {
+                    if (window.ProjectDetail) {
+                        console.log('✅ Fallback loader: ProjectDetail loaded successfully!');
+                        clearInterval(fallbackInterval);
+                        window._projectDetailFallbackLoaderActive = false;
+                    }
+                }, 1000);
+            };
+            
+            script.onerror = () => {
+                console.warn(`⚠️ Fallback loader: Failed to load ProjectDetail (attempt ${attempts})`);
+            };
+            
+            // Remove any existing ProjectDetail script to avoid duplicates
+            const existingScript = document.querySelector(`script[src="${scriptSrc}"]`);
+            if (existingScript) {
+                existingScript.remove();
+            }
+            
+            document.body.appendChild(script);
+        }, 5000); // Check every 5 seconds
+    }
+    
+    // BULLETPROOF: Start fallback loader immediately as a safety net
+    // This ensures ProjectDetail loads even if lazy-loader fails completely
+    setTimeout(() => {
+        if (!window.ProjectDetail) {
+            console.log('🔄 Starting ProjectDetail fallback loader as safety net...');
+            setupProjectDetailFallbackLoader();
+        }
+    }, 10000); // Start after 10 seconds if ProjectDetail isn't loaded yet
 })();
 

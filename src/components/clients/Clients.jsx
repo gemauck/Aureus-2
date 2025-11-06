@@ -295,24 +295,25 @@ const Clients = React.memo(() => {
     
     // Stop/start LiveDataSync completely for modals (especially Add Client/Lead forms)
     const handlePauseSync = useCallback((shouldStop) => {
-        if (window.LiveDataSync) {
-            if (shouldStop) {
-                // Completely stop LiveDataSync when forms are open
-                isFormOpenRef.current = true; // Mark form as open
-                if (window.LiveDataSync.isRunning) {
-                    window.LiveDataSync.stop();
-                    console.log('🛑 LiveDataSync completely stopped for form');
-                }
-            } else {
-                // Only restart if form is actually closing (not just a re-render)
-                isFormOpenRef.current = false; // Mark form as closed
-                // Only restart if not already running (prevents duplicate starts)
-                if (!window.LiveDataSync.isRunning) {
-                    window.LiveDataSync.start();
-                    console.log('▶️ LiveDataSync restarted after form closed');
-                } else {
-                    console.log('⏸️ LiveDataSync already running, skipping start');
-                }
+        if (shouldStop) {
+            // CRITICAL: Set flags IMMEDIATELY, BEFORE any async operations
+            isFormOpenRef.current = true;
+            isUserEditingRef.current = true; // Also set editing flag immediately
+            
+            // Stop LiveDataSync
+            if (window.LiveDataSync && window.LiveDataSync.isRunning) {
+                window.LiveDataSync.stop();
+                console.log('🛑 LiveDataSync completely stopped for form');
+            }
+        } else {
+            // Only restart if form is actually closing
+            isFormOpenRef.current = false;
+            isUserEditingRef.current = false;
+            
+            // Restart LiveDataSync if not already running
+            if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
+                window.LiveDataSync.start();
+                console.log('▶️ LiveDataSync restarted after form closed');
             }
         }
     }, []);
@@ -975,6 +976,13 @@ const Clients = React.memo(() => {
         
         if (!selectedClient.id) return;
         
+        // CRITICAL: ULTIMATE GUARD - Check form open flag FIRST
+        // This is checked before ANY other logic to absolutely prevent updates during form editing
+        if (isFormOpenRef.current) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedClient update - form is open (ULTIMATE GUARD)');
+            return;
+        }
+        
         // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
         // Use REF for synchronous check (state might not be updated yet)
@@ -1075,6 +1083,13 @@ const Clients = React.memo(() => {
         }
         
         if (!selectedLead.id) return;
+        
+        // CRITICAL: ULTIMATE GUARD - Check form open flag FIRST
+        // This is checked before ANY other logic to absolutely prevent updates during form editing
+        if (isFormOpenRef.current) {
+            console.log('🚫 Clients.jsx: BLOCKED selectedLead update - form is open (ULTIMATE GUARD)');
+            return;
+        }
         
         // CRITICAL: FIRST CHECK - Skip updates if user is actively editing OR auto-saving
         // This is the PRIMARY guard to prevent overwriting user input
@@ -2820,17 +2835,41 @@ const Clients = React.memo(() => {
     const pipelineStages = ['Awareness', 'Interest', 'Desire', 'Action'];
 
     const handleOpenClient = (client) => {
-        // Keep sync paused when opening a client - modal will handle pause
+        // CRITICAL: Set protection flags IMMEDIATELY before any state changes
+        isFormOpenRef.current = true;
+        isUserEditingRef.current = true;
+        setIsUserEditing(true);
+        
+        // Stop LiveDataSync
+        if (window.LiveDataSync && window.LiveDataSync.stop) {
+            window.LiveDataSync.stop();
+            console.log('🛑 Opening client detail - stopping LiveDataSync');
+        }
+        handlePauseSync(true);
+        
+        // Now safe to update state
         setSelectedClient(client);
         setSelectedLead(null);
         setViewMode('client-detail');
     };
 
     const handleOpenLead = (lead) => {
-        // Keep sync paused when opening a lead - modal will handle pause
+        // CRITICAL: Set protection flags IMMEDIATELY before any state changes
+        isFormOpenRef.current = true;
+        isUserEditingRef.current = true;
+        setIsUserEditing(true);
+        
+        // Stop LiveDataSync
+        if (window.LiveDataSync && window.LiveDataSync.stop) {
+            window.LiveDataSync.stop();
+            console.log('🛑 Opening lead detail - stopping LiveDataSync');
+        }
+        handlePauseSync(true);
+        
+        // Now safe to update state
         setSelectedLead(lead);
         setSelectedClient(null);
-        setViewMode('lead-detail'); // Open in full detail view like clients
+        setViewMode('lead-detail');
     };
 
     // Handle star toggle for clients/leads
@@ -3819,20 +3858,25 @@ const Clients = React.memo(() => {
                 {/* Modern Action Buttons */}
                 <div className="flex items-center gap-3">
                     <button 
-                        onClick={() => {
-                            // Stop LiveDataSync immediately when opening add client form
-                            if (window.LiveDataSync && window.LiveDataSync.stop) {
-                                window.LiveDataSync.stop();
-                                console.log('🛑 Add Client clicked - stopping LiveDataSync immediately');
-                            }
-                            // Also call handlePauseSync if available
-                            handlePauseSync(true);
-                            // Keep sync paused when Add Client is clicked - modal will handle pause
-                            setSelectedClient(null);
-                            setSelectedLead(null);
-                            setCurrentTab('overview');
-                            setViewMode('client-detail');
-                        }}
+                    onClick={() => {
+                    // CRITICAL: Set ALL protection flags IMMEDIATELY before any state changes
+                    isFormOpenRef.current = true;
+                    isUserEditingRef.current = true;
+                    setIsUserEditing(true);
+                    
+                    // Stop LiveDataSync
+                    if (window.LiveDataSync && window.LiveDataSync.stop) {
+                        window.LiveDataSync.stop();
+                        console.log('🛑 Add Client clicked - stopping LiveDataSync immediately');
+                    }
+                    handlePauseSync(true);
+                    
+                        // Now safe to update state
+                        setSelectedClient(null);
+                        setSelectedLead(null);
+                        setCurrentTab('overview');
+                        setViewMode('client-detail');
+                    }}
                         className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-lg text-sm font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
                             isDark 
                                 ? 'bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600' 
@@ -3849,20 +3893,25 @@ const Clients = React.memo(() => {
                         <span>Add Client</span>
                     </button>
                     <button 
-                        onClick={() => {
-                            // Stop LiveDataSync immediately when opening add lead form
-                            if (window.LiveDataSync && window.LiveDataSync.stop) {
-                                window.LiveDataSync.stop();
-                                console.log('🛑 Add Lead clicked - stopping LiveDataSync immediately');
-                            }
-                            // Also call handlePauseSync if available
-                            handlePauseSync(true);
-                            // Keep sync paused when Add Lead is clicked - modal will handle pause
-                            setSelectedLead(null);
-                            setSelectedClient(null);
-                            setCurrentLeadTab('overview');
-                            setViewMode('lead-detail');
-                        }}
+                    onClick={() => {
+                    // CRITICAL: Set ALL protection flags IMMEDIATELY before any state changes
+                    isFormOpenRef.current = true;
+                    isUserEditingRef.current = true;
+                    setIsUserEditing(true);
+                    
+                    // Stop LiveDataSync
+                    if (window.LiveDataSync && window.LiveDataSync.stop) {
+                        window.LiveDataSync.stop();
+                        console.log('🛑 Add Lead clicked - stopping LiveDataSync immediately');
+                    }
+                    handlePauseSync(true);
+                    
+                        // Now safe to update state
+                        setSelectedLead(null);
+                        setSelectedClient(null);
+                        setCurrentLeadTab('overview');
+                        setViewMode('lead-detail');
+                    }}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-all duration-200 shadow-sm hover:shadow-md"
                     >
                         <div className="w-5 h-5 bg-blue-500 rounded-md flex items-center justify-center">
