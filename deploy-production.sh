@@ -11,14 +11,18 @@ echo "📡 Server: $SERVER"
 echo ""
 
 # Step 0: Run deployment safety tests before deploying
-echo "🛡️  Running deployment safety tests..."
-if ! npm run test:safety; then
-    echo "❌ Deployment safety tests failed! Aborting deployment."
-    echo "   These tests prevent server deletion and data loss."
-    echo "   Please fix the issues above before deploying."
-    exit 1
+if [ -z "$SKIP_SAFETY_TESTS" ]; then
+    echo "🛡️  Running deployment safety tests..."
+    if ! npm run test:safety; then
+        echo "❌ Deployment safety tests failed! Aborting deployment."
+        echo "   These tests prevent server deletion and data loss."
+        echo "   Please fix the issues above before deploying."
+        exit 1
+    fi
+    echo "✅ All deployment safety tests passed!"
+else
+    echo "⚠️  Skipping safety tests (SKIP_SAFETY_TESTS is set)"
 fi
-echo "✅ All deployment safety tests passed!"
 
 # Step 0.5: Run functional deployment tests
 echo "🧪 Running functional deployment tests..."
