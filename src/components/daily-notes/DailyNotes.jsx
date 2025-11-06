@@ -1734,10 +1734,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             // Skip cursor save/restore if Enter was just pressed (cursor is already in correct position)
             const skipCursorRestore = justPressedEnterRef.current;
             if (skipCursorRestore) {
-                // Clear the flag after a short delay
+                // Clear the flag after a short delay (but longer than input handler's delay)
                 setTimeout(() => {
                     justPressedEnterRef.current = false;
-                }, 100);
+                }, 200);
             } else {
                 // Save cursor position BEFORE reading innerHTML (which might trigger re-render)
                 saveCursorPosition();
@@ -2217,6 +2217,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 setTimeout(() => {
                                     isUserTypingRef.current = false;
                                     isUpdatingFromUserInputRef.current = false;
+                                    // Clear Enter flag after all operations complete
+                                    justPressedEnterRef.current = false;
                                 }, 3000); // Increased to 3 seconds to prevent sync interference
                                 
                                 return;
