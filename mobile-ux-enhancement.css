@@ -611,7 +611,11 @@
   }
   
   /* Ensure sidebar overlays instead of pushing */
-  aside {
+  /* Target the sidebar div (not aside) - it's the div with border-r class */
+  #root > div > div:first-child,
+  #root > div.flex > div:first-child,
+  div[class*="border-r"][class*="bg-white"],
+  div[class*="border-r"][class*="bg-gray-800"] {
     position: fixed !important;
     left: 0 !important;
     top: 0 !important;
@@ -621,32 +625,29 @@
     transition: transform 0.3s ease !important;
   }
   
-  /* When sidebar is visible, slide it in */
-  aside[style*="display: block"],
-  aside:not([style*="display: none"]) {
+  /* When sidebar is visible (has left: 0 in inline style), slide it in */
+  div[style*="left: 0"][style*="position: fixed"],
+  div[style*="left: 0"][style*="zIndex: 50"] {
     transform: translateX(0) !important;
   }
   
+  /* Ensure main content container doesn't overflow */
+  #root > div.flex > div:last-child,
+  #root > div > div.flex-1 {
+    max-width: 100vw !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    overflow-x: hidden !important;
+  }
+  
   /* Ensure main content doesn't move when sidebar opens */
-  body:has(aside[style*="display: block"]) main,
-  body:has(aside:not([style*="display: none"])) main {
+  main {
     margin-left: 0 !important;
     width: 100% !important;
     max-width: 100vw !important;
     transform: none !important;
-  }
-  
-  /* Add overlay when sidebar is open */
-  body:has(aside[style*="display: block"])::before,
-  body:has(aside:not([style*="display: none"]))::before {
-    content: '' !important;
-    position: fixed !important;
-    top: 0 !important;
+    position: relative !important;
     left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    background: rgba(0, 0, 0, 0.5) !important;
-    z-index: 49 !important;
   }
   
   /* Ensure all buttons meet touch target minimum */
