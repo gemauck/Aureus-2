@@ -101,24 +101,25 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
     // Ref for comment textarea to preserve cursor position
     const commentTextareaRef = useRef(null);
     
-    // Initialize formDataRef after formData is declared
+    // CRITICAL: Sync formDataRef with formData so guards can check current values
+    // Removed duplicate useEffect and debug logging that was causing re-renders
     useEffect(() => {
         formDataRef.current = formData;
-        
-        // Debug: Log when proposals change
-        if (formData.proposals && Array.isArray(formData.proposals)) {
-            console.log('📋 formData.proposals updated:', {
-                count: formData.proposals.length,
-                ids: formData.proposals.map(p => p?.id || 'no-id'),
-                titles: formData.proposals.map(p => p?.title || p?.name || 'no-title')
-            });
-        }
     }, [formData]);
     
-    // CRITICAL: Sync formDataRef with formData so guards can check current values
-    useEffect(() => {
-        formDataRef.current = formData;
-    }, [formData]);
+    // Track previous editing state to only call onEditingChange when state actually changes
+    const previousEditingStateRef = useRef(false);
+    
+    // Helper function to call onEditingChange only when state actually changes
+    const notifyEditingChange = (isEditing, autoSaving = false) => {
+        // Only call callback if editing state actually changed
+        if (previousEditingStateRef.current !== isEditing) {
+            previousEditingStateRef.current = isEditing;
+            if (onEditingChange) {
+                onEditingChange(isEditing, autoSaving);
+            }
+        }
+    };
     
     // Cleanup editing timeout on unmount
     useEffect(() => {
@@ -1756,18 +1757,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true, isAutoSavingRef.current);
+                                                notifyEditingChange(true, isAutoSavingRef.current);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name'); // Track that user has edited this field
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true); // Only notify if state changed
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false); // Only notify if state changed
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, name: e.target.value};
@@ -1780,7 +1781,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 // Clear editing flag after a delay to allow for final keystrokes
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false, isAutoSavingRef.current);
+                                                    notifyEditingChange(false, isAutoSavingRef.current);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent" 
@@ -1795,18 +1796,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('industry'); // Track that user has edited this field
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, industry: e.target.value};
@@ -1818,7 +1819,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onBlur={() => {
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1877,18 +1878,18 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus={() => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             }}
                                             onChange={(e) => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('source'); // Track that user has edited this field
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000); // Clear editing flag 5 seconds after user stops typing
                                                 setFormData(prev => {
                                                     const updated = {...prev, source: e.target.value};
@@ -1900,7 +1901,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onBlur={() => {
                                                 setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 500);
                                             }}
                                             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
@@ -1925,7 +1926,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
                                             // This prevents LiveDataSync from overwriting during the delay
                                             isAutoSavingRef.current = true;
-                                            if (onEditingChange) onEditingChange(false, true);
+                                            notifyEditingChange(false, true);
                                             
                                             console.log('🔒 Stage change: auto-save guards set immediately', newStage);
                                                 
@@ -1956,13 +1957,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             // Clear the flag and notify parent after save completes
                                                         setTimeout(() => {
                                                             isAutoSavingRef.current = false;
-                                                if (onEditingChange) onEditingChange(false, false);
+                                                notifyEditingChange(false, false);
                                                 console.log('🔓 Stage change: auto-save guards released');
                                                         }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
                                                                 isAutoSavingRef.current = false;
-                                                        if (onEditingChange) onEditingChange(false, false);
+                                                        notifyEditingChange(false, false);
                                                                 alert('Failed to save stage change. Please try again.');
                                                 }
                                                         }, 100); // Small delay to ensure state update is processed
@@ -1993,7 +1994,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         onFocus={() => {
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
-                                            if (onEditingChange) onEditingChange(true);
+                                            notifyEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
@@ -2006,11 +2007,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             isEditingRef.current = true;
                                             userHasStartedTypingRef.current = true;
                                             userEditedFieldsRef.current.add('notes');
-                                            if (onEditingChange) onEditingChange(true);
+                                            notifyEditingChange(true);
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                             editingTimeoutRef.current = setTimeout(() => {
                                                 isEditingRef.current = false;
-                                                if (onEditingChange) onEditingChange(false);
+                                                notifyEditingChange(false);
                                             }, 5000);
                                             
                                             // Preserve cursor position
@@ -2074,7 +2075,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             if (lead && !isNewLeadNotSavedRef.current) {
                                         // Mark as auto-saving to prevent useEffect from resetting
                                         isAutoSavingRef.current = true;
-                                        if (onEditingChange) onEditingChange(false, true); // Notify parent auto-save started
+                                        notifyEditingChange(false, true); // Notify parent auto-save started
                                         
                                                 // Get latest formData including the notes value from the textarea
                                         const latestNotes = e.target.value;
@@ -2095,7 +2096,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                         onSave(latest, true).finally(() => {
                                         // Clear auto-saving flag after save completes
                                             isAutoSavingRef.current = false;
-                                                if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
+                                                notifyEditingChange(false, false); // Notify parent auto-save complete
                                                 });
                                                 }, 100);
                                             }
@@ -4218,11 +4219,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('name');
                                                 isEditingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000);
                                                 
                                                 // Use functional update to avoid closure issues
@@ -4235,7 +4236,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus: () => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                             },
                                             ref: nameInputRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
@@ -4251,11 +4252,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('industry');
                                                 isEditingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000);
                                                 
                                                 // Use functional update to avoid closure issues
@@ -4268,7 +4269,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus: () => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                             },
                                             ref: industrySelectRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -4293,11 +4294,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('firstContactDate');
                                                 isEditingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000);
                                                 
                                                 // Use functional update to avoid closure issues
@@ -4310,7 +4311,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus: () => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                             },
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500'
                                         })
@@ -4329,11 +4330,11 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 userHasStartedTypingRef.current = true;
                                                 userEditedFieldsRef.current.add('source');
                                                 isEditingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                                 if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                                 editingTimeoutRef.current = setTimeout(() => {
                                                     isEditingRef.current = false;
-                                                    if (onEditingChange) onEditingChange(false);
+                                                    notifyEditingChange(false);
                                                 }, 5000);
                                                 
                                                 // Use functional update to avoid closure issues
@@ -4346,7 +4347,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                             onFocus: () => {
                                                 isEditingRef.current = true;
                                                 userHasStartedTypingRef.current = true;
-                                                if (onEditingChange) onEditingChange(true);
+                                                notifyEditingChange(true);
                                             },
                                             ref: sourceSelectRef,
                                             className: 'w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500',
@@ -4368,7 +4369,7 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                 // CRITICAL: Set auto-saving flags IMMEDIATELY before any setTimeout
                                                 // This prevents LiveDataSync from overwriting during the delay
                                                 isAutoSavingRef.current = true;
-                                                if (onEditingChange) onEditingChange(false, true);
+                                                notifyEditingChange(false, true);
                                                 
                                                 console.log('🔒 Stage change: auto-save guards set immediately', newStage);
                                                 
@@ -4398,13 +4399,13 @@ const LeadDetailModal = ({ lead, onSave, onUpdate, onClose, onDelete, onConvertT
                                                                 // Clear the flag after a longer delay to allow API response to propagate
                                                                 setTimeout(() => {
                                                                     isAutoSavingRef.current = false;
-                                                                    if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save complete
+                                                                    notifyEditingChange(false, false); // Notify parent auto-save complete
                                                                     console.log('🔓 Stage change: auto-save guards released');
                                                                 }, 3000);
                                                             } catch (error) {
                                                                 console.error('❌ Error saving stage:', error);
                                                                 isAutoSavingRef.current = false;
-                                                                if (onEditingChange) onEditingChange(false, false); // Notify parent auto-save failed
+                                                                notifyEditingChange(false, false); // Notify parent auto-save failed
                                                                 alert('Failed to save stage change. Please try again.');
                                                             }
                                                         }, 100); // Small delay to ensure state update is processed

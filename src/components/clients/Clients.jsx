@@ -3639,7 +3639,8 @@ const Clients = React.memo(() => {
                             console.log('📝 LeadDetailModal state changed:', { editing, autoSaving });
                             isUserEditingRef.current = editing; // Set ref IMMEDIATELY (synchronous)
                             isAutoSavingRef.current = autoSaving || false; // Track auto-save state
-                            setIsUserEditing(editing);
+                            // Only update state if it actually changed to prevent unnecessary re-renders
+                            setIsUserEditing(prev => prev !== editing ? editing : prev);
                             if (editing) {
                                 console.log('✏️ User started editing lead - blocking LiveDataSync updates');
                                 // Clear any existing timeout

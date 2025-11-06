@@ -29,7 +29,17 @@ const Manufacturing = () => {
   const [productionOrders, setProductionOrders] = useState([]);
   const [salesOrders, setSalesOrders] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
-  const [movements, setMovements] = useState([]);
+  // Initialize movements from localStorage if available
+  const [movements, setMovements] = useState(() => {
+    try {
+      const cached = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+      console.log('📋 Initialized movements from cache:', cached.length);
+      return cached;
+    } catch (e) {
+      console.error('Error loading cached movements:', e);
+      return [];
+    }
+  });
   const [selectedItem, setSelectedItem] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -6955,46 +6965,60 @@ const Manufacturing = () => {
               production: movementsData.filter(m => m.type === 'production').length,
               other: movementsData.filter(m => !['receipt', 'consumption', 'adjustment', 'transfer', 'production'].includes(m.type)).length
             });
+            console.log('📋 All movements:', movementsData);
             const processed = movementsData.map(movement => ({ ...movement, id: movement.id }));
             setMovements(processed);
             localStorage.setItem('manufacturing_movements', JSON.stringify(processed));
+          } else {
+            console.warn('⚠️ DatabaseAPI.getStockMovements not available');
+            // Fallback to localStorage
+            const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+            console.log('📋 Using cached movements:', cachedMovements.length);
+            setMovements(cachedMovements);
           }
         } catch (error) {
           console.error('Error refreshing movements:', error);
+          // Fallback to localStorage on error
+          const cachedMovements = JSON.parse(localStorage.getItem('manufacturing_movements') || '[]');
+          console.log('📋 Using cached movements after error:', cachedMovements.length);
+          setMovements(cachedMovements);
         }
       };
       refreshMovements();
     }, []); // Run once when component mounts
 
-    // Memoize the handler to prevent recreation on every render
+    // Handler for opening the record movement modal - simplified for reliability
     const handleRecordClick = useCallback((e) => {
+      console.log('🔵 Record Movement button clicked');
       if (e) {
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation?.();
       }
       
-      try {
-        const formDataInit = {
-          type: 'receipt',
-          sku: '',
-          itemName: '',
-          quantity: '',
-          unitCost: '',
-          fromLocation: '',
-          toLocation: '',
-          reference: '',
-          notes: '',
-          date: new Date().toISOString().split('T')[0]
-        };
-        
-        setFormData(formDataInit);
-        setModalType('add_movement');
-        setShowModal(true);
-      } catch (error) {
-        console.error('❌ Error opening movement modal:', error);
-        alert('Error opening movement modal: ' + error.message);
-      }
-    }, []); // Empty deps - React's useState setters are stable
+      // Prepare form data
+      const formDataInit = {
+        type: 'receipt',
+        sku: '',
+        itemName: '',
+        quantity: '',
+        unitCost: '',
+        fromLocation: '',
+        toLocation: '',
+        reference: '',
+        notes: '',
+        date: new Date().toISOString().split('T')[0]
+      };
+      
+      console.log('🔵 Setting modal state:', { modalType: 'add_movement', showModal: true });
+      
+      // Set all state synchronously - React will batch these
+      setFormData(formDataInit);
+      setModalType('add_movement');
+      setShowModal(true);
+      
+      console.log('✅ Record Movement modal should now be open');
+    }, []); // Empty deps - state setters are stable
 
     const handleRefreshMovements = async () => {
       try {
@@ -7040,8 +7064,11 @@ const Manufacturing = () => {
                 Filter
               </button>
               <button
-                onClick={handleRecordClick}
-                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                onClick={(e) => {
+                  console.log('🔵 Button onClick fired');
+                  handleRecordClick(e);
+                }}
+                className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2 transition-colors"
                 type="button"
                 aria-label="Record Stock Movement"
               >
