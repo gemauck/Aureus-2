@@ -2085,6 +2085,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                         value={formData.notes}
                                         onFocus={() => {
                                             isEditingRef.current = true;
+                                            userHasStartedTypingRef.current = true; // CRITICAL: Mark that user has started typing
+                                            userEditedFieldsRef.current.add('notes'); // CRITICAL: Track that user has edited this field
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
                                         }}
                                         onChange={(e) => {
@@ -2095,6 +2097,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             }
                                             
                                             isEditingRef.current = true;
+                                            userHasStartedTypingRef.current = true; // CRITICAL: Mark that user has started typing
                                             hasUserEditedForm.current = true;
                                             userEditedFieldsRef.current.add('notes');
                                             if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
