@@ -2933,6 +2933,7 @@ const Clients = React.memo(() => {
                         return (
                             <div 
                                 key={stage} 
+                                data-pipeline-stage={stage}
                                 className={`flex-1 min-w-[250px] ${isDark ? 'bg-gray-800' : 'bg-white'} rounded-xl shadow-lg border transition-all duration-300 ${
                                     isDark ? 'border-gray-700' : 'border-gray-200'
                                 } ${
