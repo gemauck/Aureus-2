@@ -93,6 +93,50 @@ git reset --hard HEAD || true
 git pull origin main || git pull origin master
 echo "✅ Code updated"
 
+# Ensure Digital Ocean database is configured
+echo "🔧 Ensuring Digital Ocean database configuration..."
+if [ ! -f .env ]; then
+    echo "📝 Creating .env file with Digital Ocean database..."
+    # Get DATABASE_URL from existing backups or environment
+    if [ -f .env.backup.* ] 2>/dev/null; then
+        EXISTING_DB_URL=$(grep "^DATABASE_URL=" .env.backup.* 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | sed 's/YOUR_PASSWORD_HERE/CHANGE_PASSWORD/g' || echo "")
+    fi
+    if [ -z "$EXISTING_DB_URL" ] || [[ ! "$EXISTING_DB_URL" =~ ondigitalocean.com ]]; then
+        EXISTING_DB_URL=${DATABASE_URL:-}
+    fi
+    cat > .env << 'ENVEOF'
+NODE_ENV=production
+PORT=3000
+DATABASE_URL="${EXISTING_DB_URL:-${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}}"
+JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
+APP_URL=https://abcoafrica.co.za
+ENVEOF
+    echo "✅ .env file created"
+else
+    # Check if .env has local database and fix it
+    if grep -q "localhost\|127.0.0.1" .env 2>/dev/null; then
+        echo "⚠️  Local database detected in .env - fixing..."
+        # Backup existing .env
+        cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+        # Update DATABASE_URL to Digital Ocean (preserve existing password if present)
+        EXISTING_PASSWORD=$(grep "^DATABASE_URL=" .env.backup.* 2>/dev/null | head -1 | sed -n 's/.*:\\/\\/[^:]*:\\([^@]*\\)@.*/\\1/p' || echo "")
+        if [ -z "$EXISTING_PASSWORD" ]; then
+            echo "⚠️  Please update DATABASE_URL in .env with the correct password"
+            echo "   Format: postgresql://doadmin:PASSWORD@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
+        fi
+        sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgresql://doadmin:${EXISTING_PASSWORD:-YOUR_PASSWORD_HERE}@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require\"|" .env
+        echo "✅ .env file updated to use Digital Ocean database"
+    else
+        # Ensure DATABASE_URL is set correctly
+        if ! grep -q "ondigitalocean.com" .env 2>/dev/null; then
+            echo "📝 Adding Digital Ocean database URL to .env..."
+            sed -i '/^DATABASE_URL=/d' .env || true
+            echo 'DATABASE_URL="${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}"' >> .env
+            echo "✅ Digital Ocean database URL added"
+        fi
+    fi
+fi
+
 echo "📦 Installing dependencies..."
 # Install all dependencies including dev deps for build
 if ! npm install; then

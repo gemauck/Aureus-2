@@ -47,6 +47,25 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
+// Prohibit local database connections (unless explicitly allowed for dev)
+if (process.env.DATABASE_URL && !isDevNoDb) {
+  const dbUrl = process.env.DATABASE_URL.toLowerCase()
+  const isLocalDatabase = 
+    dbUrl.includes('localhost') ||
+    dbUrl.includes('127.0.0.1') ||
+    dbUrl.includes('::1') ||
+    dbUrl.includes('0.0.0.0') ||
+    (dbUrl.startsWith('postgresql://') && !dbUrl.includes('ondigitalocean.com'))
+  
+  if (isLocalDatabase) {
+    console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
+    console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
+    console.error('   This application must connect to the Digital Ocean production database.')
+    console.error('   If you need to use a local database for development, set DEV_LOCAL_NO_DB=true')
+    process.exit(1)
+  }
+}
+
 console.log('✅ Environment variables validated')
 
 // Note: __filename and __dirname are already defined above

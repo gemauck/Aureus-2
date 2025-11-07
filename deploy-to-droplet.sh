@@ -54,24 +54,28 @@ fi
 echo "✅ All deployment tests passed!"
 
 echo "🔧 Setting up environment..."
-# Create .env file if it doesn't exist
+# Create .env file with Digital Ocean database
 if [ ! -f .env ]; then
     cat > .env << 'EOF'
 NODE_ENV=production
-DATABASE_URL="file:./prisma/dev.db"
-JWT_SECRET="CHANGE_THIS_TO_YOUR_JWT_SECRET"
+DATABASE_URL="${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}"
+JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
 PORT=3000
 APP_URL="https://abcoafrica.co.za"
 EOF
-    echo "⚠️  IMPORTANT: Edit .env file and add your JWT_SECRET!"
-fi
-
-# Ensure database file exists
-mkdir -p prisma
-if [ ! -f prisma/dev.db ]; then
-    touch prisma/dev.db
-    chmod 666 prisma/dev.db
-    echo "✅ Created empty database file"
+    echo "⚠️  IMPORTANT: Update DATABASE_URL in .env with the correct password from Digital Ocean"
+    echo "✅ .env file created with Digital Ocean database"
+else
+    # Ensure .env uses Digital Ocean database, not local
+    if grep -q "localhost\|127.0.0.1\|file:./prisma" .env 2>/dev/null; then
+        echo "⚠️  Local database detected in .env - updating to Digital Ocean..."
+        cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+        echo "⚠️  Please update DATABASE_URL in .env with the correct password"
+        echo "   Format: postgresql://doadmin:PASSWORD@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
+        # Update host but preserve password if it exists
+        sed -i 's|@[^/]*/|@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/|' .env || true
+        echo "✅ .env updated to use Digital Ocean database"
+    fi
 fi
 
 # Generate Prisma client
@@ -86,7 +90,7 @@ npx prisma db push || echo "⚠️  Database push failed - you may need to confi
 echo "⚙️  Setting up PM2..."
 npm install -g pm2
 
-# Create PM2 ecosystem file (use .mjs for ES modules)
+# Create PM2 ecosystem file with Digital Ocean database (use .mjs for ES modules)
 cat > ecosystem.config.mjs << 'EOFPM2'
 export default {
   apps: [{
@@ -97,7 +101,7 @@ export default {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
-      DATABASE_URL: 'file:./prisma/dev.db',
+      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require',
       APP_URL: 'https://abcoafrica.co.za'
     },
     error_file: './logs/pm2-error.log',

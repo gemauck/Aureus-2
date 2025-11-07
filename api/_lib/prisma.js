@@ -19,6 +19,22 @@ try {
     throw new Error('DATABASE_URL environment variable is required')
   }
   
+  // Prohibit local database connections
+  const dbUrl = process.env.DATABASE_URL.toLowerCase()
+  const isLocalDatabase = 
+    dbUrl.includes('localhost') ||
+    dbUrl.includes('127.0.0.1') ||
+    dbUrl.includes('::1') ||
+    dbUrl.includes('0.0.0.0') ||
+    (dbUrl.startsWith('postgresql://') && !dbUrl.includes('ondigitalocean.com'))
+  
+  if (isLocalDatabase) {
+    console.error('❌ SECURITY ERROR: Local database connections are prohibited!')
+    console.error('   Detected DATABASE_URL:', process.env.DATABASE_URL.substring(0, 100) + '...')
+    console.error('   This application must connect to the Digital Ocean production database.')
+    throw new Error('Local database connections are prohibited. Use the Digital Ocean production database.')
+  }
+  
   console.log('🔗 Creating new Prisma client with DATABASE_URL:', process.env.DATABASE_URL.substring(0, 80) + '...')
   global.__prisma = new PrismaClient({
     log: ['error', 'warn'],
