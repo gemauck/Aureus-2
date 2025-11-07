@@ -1,5 +1,5 @@
 // Get React hooks from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef, useLayoutEffect } = React;
 
 // Get useAuth from window
 const useAuth = window.useAuth;
@@ -16,6 +16,111 @@ const LoginPage = () => {
     const [showForgot, setShowForgot] = useState(false);
     const [resetEmail, setResetEmail] = useState('');
     const [resetStatus, setResetStatus] = useState('');
+    const [headerStyle, setHeaderStyle] = useState({ 
+        display: 'block', 
+        visibility: 'visible', 
+        opacity: 1 
+    });
+    const [cardStyle, setCardStyle] = useState({});
+    const cardRef = useRef(null);
+    const formContainerRef = useRef(null);
+    const wrapperRef = useRef(null);
+
+    // Set header and card styles based on viewport width
+    useEffect(() => {
+        const updateStyles = () => {
+            const isDesktop = window.innerWidth >= 768;
+            setHeaderStyle({
+                display: 'block',
+                visibility: 'visible',
+                opacity: 1,
+                maxHeight: isDesktop ? '200px' : '60px',
+                height: 'auto',
+                alignSelf: isDesktop ? 'start' : 'auto'
+            });
+        };
+        
+        updateStyles();
+        window.addEventListener('resize', updateStyles);
+        return () => window.removeEventListener('resize', updateStyles);
+    }, []);
+    
+    // Use useLayoutEffect to set card and form container styles synchronously before paint
+    useLayoutEffect(() => {
+        const updateStyles = () => {
+            const isDesktop = window.innerWidth >= 768;
+            
+            // Fix root element centering on mobile
+            const root = document.getElementById('root');
+            if (root && !isDesktop) {
+                root.style.setProperty('align-items', 'flex-start', 'important');
+                root.style.setProperty('justify-content', 'flex-start', 'important');
+                root.style.setProperty('padding', '0', 'important');
+            }
+            
+            // Update wrapper positioning
+            if (wrapperRef.current) {
+                if (!isDesktop) {
+                    wrapperRef.current.style.setProperty('position', 'relative', 'important');
+                    wrapperRef.current.style.setProperty('left', '0', 'important');
+                    wrapperRef.current.style.setProperty('margin-left', '0', 'important');
+                    wrapperRef.current.style.setProperty('padding-left', '0', 'important');
+                    wrapperRef.current.style.setProperty('transform', 'none', 'important');
+                    wrapperRef.current.style.setProperty('width', '100%', 'important');
+                    wrapperRef.current.style.setProperty('max-width', '100%', 'important');
+                }
+            }
+            
+            // Update card positioning
+            if (cardRef.current) {
+                if (!isDesktop) {
+                    // Directly set styles with !important to override external CSS
+                    cardRef.current.style.setProperty('position', 'relative', 'important');
+                    cardRef.current.style.setProperty('left', 'auto', 'important');
+                    cardRef.current.style.setProperty('right', 'auto', 'important');
+                    cardRef.current.style.setProperty('top', 'auto', 'important');
+                    cardRef.current.style.setProperty('bottom', 'auto', 'important');
+                    cardRef.current.style.setProperty('transform', 'none', 'important');
+                } else {
+                    // Clear mobile styles on desktop
+                    cardRef.current.style.removeProperty('position');
+                    cardRef.current.style.removeProperty('left');
+                    cardRef.current.style.removeProperty('right');
+                    cardRef.current.style.removeProperty('top');
+                    cardRef.current.style.removeProperty('bottom');
+                    cardRef.current.style.removeProperty('transform');
+                }
+            }
+            
+            // Update form container padding
+            if (formContainerRef.current) {
+                if (!isDesktop) {
+                    // Force padding on mobile
+                    formContainerRef.current.style.setProperty('padding', 'clamp(1.5rem, 5vw, 2rem) clamp(1.25rem, 4vw, 2rem)', 'important');
+                    formContainerRef.current.style.setProperty('padding-bottom', 'clamp(2rem, 6vw, 3rem)', 'important');
+                } else {
+                    // Use default padding on desktop
+                    formContainerRef.current.style.removeProperty('padding');
+                    formContainerRef.current.style.removeProperty('padding-bottom');
+                }
+            }
+        };
+        
+        // Use requestAnimationFrame to ensure DOM is ready, then setTimeout for external CSS
+        requestAnimationFrame(() => {
+            setTimeout(() => {
+                updateStyles();
+                // Also run again after a short delay to catch any late-loading CSS
+                setTimeout(updateStyles, 100);
+            }, 50);
+        });
+        
+        window.addEventListener('resize', updateStyles);
+        
+        return () => {
+            window.removeEventListener('resize', updateStyles);
+        };
+    }, []);
 
     // Load last used email on mount
     useEffect(() => {
@@ -119,7 +224,7 @@ const LoginPage = () => {
                     overflow-x: hidden;
                     overflow-y: auto;
                     -webkit-overflow-scrolling: touch;
-                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+                    background: #f3f4f6 !important;
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
                     -webkit-font-smoothing: antialiased;
                     -moz-osx-font-smoothing: grayscale;
@@ -138,7 +243,7 @@ const LoginPage = () => {
                 }
                 
                 /* Hide all non-login elements */
-                body.login-page header,
+                body.login-page header:not(.login-header),
                 body.login-page nav,
                 body.login-page aside,
                 body.login-page footer,
@@ -148,6 +253,16 @@ const LoginPage = () => {
                 body.login-page [class*="modal"]:not(.login-modal),
                 body.login-page #root > *:not(.login-wrapper) {
                     display: none !important;
+                }
+                
+                /* CRITICAL: Override any header hiding rules - must come after hiding rule */
+                body.login-page .login-wrapper .login-card .login-header,
+                body.login-page .login-card .login-header,
+                body.login-page header.login-header {
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                    height: auto !important;
                 }
                 
                 /* Login Wrapper - Fully Responsive Container */
@@ -165,6 +280,7 @@ const LoginPage = () => {
                     padding-left: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-left));
                     padding-right: max(clamp(0.75rem, 3vw, 1.5rem), env(safe-area-inset-right));
                     position: relative;
+                    background: #f3f4f6 !important;
                 }
                 
                 /* Login Card - Dynamic Sizing */
@@ -175,7 +291,7 @@ const LoginPage = () => {
                     background: #ffffff;
                     border-radius: clamp(1rem, 4vw, 1.5rem);
                     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
-                    overflow: hidden;
+                    overflow: visible;
                     position: relative;
                     animation: slideUp 0.4s ease-out;
                     display: flex;
@@ -194,27 +310,177 @@ const LoginPage = () => {
                 }
                 
                 /* Branding Header - Mobile Optimized (Thinner) */
-                .login-header {
-                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
-                    padding: clamp(1rem, 3vw, 1.5rem) clamp(1.25rem, 5vw, 2rem);
-                    text-align: center;
-                    color: #ffffff;
+                body.login-page .login-header,
+                .login-wrapper .login-header,
+                .login-card .login-header {
+                    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%) !important;
+                    padding: clamp(0.75rem, 2.5vw, 1rem) clamp(1.25rem, 5vw, 2rem) !important;
+                    text-align: center !important;
+                    color: #ffffff !important;
+                    flex-shrink: 0 !important;
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
                 }
                 
                 .login-brand {
-                    font-size: clamp(1.75rem, 6vw, 2.5rem);
+                    font-size: clamp(1.25rem, 4.5vw, 1.75rem);
                     font-weight: 700;
                     margin: 0;
                     letter-spacing: -0.02em;
                     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
                 }
                 
-                /* Form Container */
-                .login-form-container {
-                    padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 4vw, 2rem);
-                    overflow-y: auto;
-                    max-height: 100vh;
-                    -webkit-overflow-scrolling: touch;
+                /* Mobile: Stack header on top - Single scroll container */
+                @media (max-width: 767px) {
+                    body.login-page {
+                        overflow-y: auto !important;
+                        overflow-x: hidden !important;
+                    }
+                    
+                    .login-wrapper {
+                        min-height: 100vh !important;
+                        padding: 0 !important;
+                        align-items: flex-start !important;
+                        justify-content: flex-start !important;
+                        overflow: visible !important;
+                        position: relative !important;
+                        left: auto !important;
+                        right: auto !important;
+                        top: auto !important;
+                        bottom: auto !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                    }
+                    
+                    body.login-page .login-card,
+                    body.login-page .login-card.login-modal,
+                    body.login-page [class*="login-card"],
+                    body.login-page [class*="login-modal"] {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        width: 100% !important;
+                        max-width: 100% !important;
+                        max-height: none !important;
+                        height: auto !important;
+                        min-height: 100vh !important;
+                        overflow: visible !important;
+                        border-radius: 0 !important;
+                        box-shadow: none !important;
+                        background: #ffffff !important;
+                        margin: 0 !important;
+                        position: relative !important;
+                        left: auto !important;
+                        right: auto !important;
+                        top: auto !important;
+                        bottom: auto !important;
+                        transform: none !important;
+                    }
+                    
+                    .login-header {
+                        display: block !important;
+                        padding: clamp(0.75rem, 2.5vw, 1rem) clamp(1rem, 4vw, 1.5rem) !important;
+                        min-height: auto !important;
+                        max-height: 60px !important;
+                        height: auto !important;
+                        flex-shrink: 0 !important;
+                        overflow: hidden !important;
+                        position: relative !important;
+                        order: 1 !important;
+                    }
+                    
+                    .login-brand {
+                        font-size: clamp(1.25rem, 4.5vw, 1.5rem) !important;
+                        line-height: 1.2 !important;
+                        margin: 0 !important;
+                        white-space: nowrap !important;
+                    }
+                    
+                    .login-form-container {
+                        flex: 1 !important;
+                        display: flex !important;
+                        flex-direction: column !important;
+                        min-height: 0 !important;
+                        padding: clamp(1.5rem, 5vw, 2rem) clamp(1.25rem, 4vw, 2rem) !important;
+                        padding-bottom: clamp(2rem, 6vw, 3rem) !important;
+                        overflow: visible !important;
+                        background: #ffffff !important;
+                        position: relative !important;
+                        order: 2 !important;
+                        gap: 0 !important;
+                    }
+                    
+                    .login-form {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        justify-content: flex-start !important;
+                        gap: clamp(1rem, 3vw, 1.25rem) !important;
+                        width: 100% !important;
+                    }
+                    
+                    .form-group {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: 0.5rem !important;
+                        margin-bottom: 0 !important;
+                        width: 100% !important;
+                    }
+                    
+                    .form-label {
+                        margin-bottom: 0.5rem !important;
+                        display: block !important;
+                        font-size: clamp(0.875rem, 3vw, 0.9375rem) !important;
+                    }
+                    
+                    .form-input {
+                        width: 100% !important;
+                        margin: 0 !important;
+                        box-sizing: border-box !important;
+                        padding: clamp(0.875rem, 3vw, 1rem) clamp(0.875rem, 3vw, 1.125rem) !important;
+                        min-height: 48px !important;
+                    }
+                    
+                    .remember-me-container {
+                        margin: clamp(0.75rem, 2vw, 1rem) 0 !important;
+                        display: flex !important;
+                        visibility: visible !important;
+                        width: 100% !important;
+                    }
+                    
+                    .submit-button {
+                        width: 100% !important;
+                        margin-top: clamp(1rem, 3vw, 1.25rem) !important;
+                        margin-bottom: 0 !important;
+                        padding: clamp(0.875rem, 3vw, 1rem) clamp(1rem, 4vw, 1.5rem) !important;
+                        min-height: 48px !important;
+                    }
+                    
+                    .forgot-password {
+                        margin-top: clamp(0.75rem, 2vw, 1rem) !important;
+                        text-align: center !important;
+                        width: 100% !important;
+                    }
+                    
+                    .login-title {
+                        margin: 0 0 0.5rem 0 !important;
+                        font-size: clamp(1.5rem, 5vw, 1.875rem) !important;
+                    }
+                    
+                    .login-subtitle {
+                        margin: 0 0 clamp(1.5rem, 5vw, 2rem) 0 !important;
+                        font-size: clamp(0.875rem, 3vw, 1rem) !important;
+                    }
+                }
+                
+                /* Form Container - Desktop default */
+                @media (min-width: 768px) {
+                    .login-form-container {
+                        padding: clamp(1.5rem, 5vw, 2.5rem) clamp(1.25rem, 4vw, 2rem);
+                        overflow: visible;
+                        position: relative;
+                        display: flex;
+                        flex-direction: column;
+                    }
                 }
                 
                 .login-title {
@@ -454,21 +720,46 @@ const LoginPage = () => {
                 @media (min-width: 768px) {
                     .login-card {
                         max-width: 600px;
-                        display: grid;
-                        grid-template-columns: 0.8fr 1.5fr;
+                        display: grid !important;
+                        grid-template-columns: 200px 1fr !important;
                         border-radius: clamp(1rem, 2vw, 1.5rem);
+                        overflow: hidden !important;
                     }
                     
                     .login-header {
-                        display: flex;
-                        flex-direction: column;
-                        justify-content: center;
-                        align-items: center;
-                        padding: clamp(1.5rem, 3vw, 2rem);
+                        display: flex !important;
+                        flex-direction: column !important;
+                        justify-content: center !important;
+                        align-items: center !important;
+                        padding: clamp(1.5rem, 3vw, 2rem) clamp(1rem, 2.5vw, 1.5rem) !important;
+                        width: 100% !important;
+                        max-width: 200px !important;
+                        height: 100% !important;
+                        min-height: 100% !important;
+                        overflow: visible !important;
+                        position: relative !important;
+                        flex-shrink: 0 !important;
+                        align-self: stretch !important;
+                    }
+                    
+                    .login-brand {
+                        font-size: clamp(1.75rem, 6vw, 2.5rem);
+                        writing-mode: vertical-rl;
+                        text-orientation: mixed;
+                        transform: rotate(180deg);
+                        white-space: nowrap;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        height: auto !important;
+                        width: auto !important;
+                        text-align: center !important;
+                        line-height: 1.2 !important;
+                        letter-spacing: 0.05em !important;
                     }
                     
                     .login-form-container {
                         padding: clamp(2rem, 5vw, 3rem);
+                        overflow: visible !important;
                     }
                 }
                 
@@ -566,19 +857,19 @@ const LoginPage = () => {
                 }
             `}</style>
             
-            <div className="login-wrapper">
-                <div className="login-card login-modal">
+            <div className="login-wrapper" ref={wrapperRef}>
+                <div className="login-card login-modal" ref={cardRef} style={cardStyle}>
                     {/* Header */}
-                    <div className="login-header">
+                    <div className="login-header" style={headerStyle}>
                         <h1 className="login-brand abcotronics-logo">Abcotronics</h1>
                     </div>
                     
                     {/* Form */}
-                    <div className="login-form-container">
+                    <div className="login-form-container" ref={formContainerRef}>
                         <h2 className="login-title">Welcome Back</h2>
                         <p className="login-subtitle">Sign in to continue to your account</p>
                         
-                        <form onSubmit={handleSubmit} className="login-form">
+                        <form onSubmit={handleSubmit} className="login-form" autoComplete="on">
                                 {error && (
                                 <div className="error-message" role="alert">
                                         {error}
@@ -600,6 +891,7 @@ const LoginPage = () => {
                                         placeholder="you@company.com"
                                         autoFocus
                                         required
+                                        data-lpignore="false"
                                     />
                                 </div>
 
@@ -618,6 +910,7 @@ const LoginPage = () => {
                                             className="form-input"
                                             placeholder="Enter your password"
                                             required
+                                            data-lpignore="false"
                                             style={{ paddingRight: '3rem' }}
                                         />
                                         <button
