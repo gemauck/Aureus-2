@@ -443,9 +443,57 @@ export const sendPasswordResetEmail = async ({ email, name, resetLink }) => {
 };
 
 // Send notification email
-export const sendNotificationEmail = async (to, subject, message) => {
+export const sendNotificationEmail = async (to, subject, message, options = {}) => {
     const emailFrom = process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.GMAIL_USER || 'garethm@abcotronics.co.za';
     const fromAddress = emailFrom.includes('<') ? emailFrom : `Abcotronics <${emailFrom}>`;
+    
+    // Extract project-related information from options
+    const { clientDescription, projectDescription, commentLink, isProjectRelated } = options;
+    
+    // Helper function to escape HTML for security
+    const escapeHtml = (text) => {
+        if (!text) return '';
+        return String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    };
+    
+    // Build base URL for comment link (use environment variable or default)
+    const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const fullCommentLink = commentLink ? `${baseUrl}${commentLink.startsWith('/') ? commentLink : '/' + commentLink}` : null;
+    
+    // Build project information section HTML
+    let projectInfoHtml = '';
+    if (isProjectRelated) {
+        projectInfoHtml = `
+            <div style="background: #f8f9fa; border-left: 4px solid #007bff; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <h3 style="color: #333; margin-top: 0; margin-bottom: 15px; font-size: 16px;">Project Information</h3>
+                ${clientDescription ? `
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #555; display: block; margin-bottom: 5px;">Client Description:</strong>
+                        <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(clientDescription)}</p>
+                    </div>
+                ` : ''}
+                ${projectDescription ? `
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #555; display: block; margin-bottom: 5px;">Project Description:</strong>
+                        <p style="color: #666; margin: 0; line-height: 1.5;">${escapeHtml(projectDescription)}</p>
+                    </div>
+                ` : ''}
+                ${fullCommentLink ? `
+                    <div style="margin-top: 15px;">
+                        <a href="${fullCommentLink}" 
+                           style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                            View Comment Location
+                        </a>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
     
     const mailOptions = {
         from: fromAddress,
@@ -461,6 +509,7 @@ export const sendNotificationEmail = async (to, subject, message) => {
                 <div style="padding: 30px; background: #f8f9fa;">
                     <div style="background: white; border: 1px solid #ddd; border-radius: 8px; padding: 20px;">
                         ${message}
+                        ${projectInfoHtml}
                     </div>
                 </div>
                 
@@ -469,7 +518,22 @@ export const sendNotificationEmail = async (to, subject, message) => {
                 </div>
             </div>
         `,
-        text: subject + '\n\n' + message.replace(/<[^>]*>/g, '') // Plain text version
+        text: (() => {
+            let text = subject + '\n\n' + message.replace(/<[^>]*>/g, '');
+            if (isProjectRelated) {
+                text += '\n\n--- Project Information ---\n';
+                if (clientDescription) {
+                    text += `Client Description: ${clientDescription.replace(/<[^>]*>/g, '')}\n\n`;
+                }
+                if (projectDescription) {
+                    text += `Project Description: ${projectDescription.replace(/<[^>]*>/g, '')}\n\n`;
+                }
+                if (fullCommentLink) {
+                    text += `View Comment Location: ${fullCommentLink}\n`;
+                }
+            }
+            return text;
+        })()
     };
 
     try {

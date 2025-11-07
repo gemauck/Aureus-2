@@ -307,12 +307,19 @@ const TaskDetailModal = ({
                 if (window.MentionHelper && mentionedUsers.length > 0) {
                     const contextTitle = `Task: ${taskTitle}`;
                     const contextLink = projectLink;
+                    // Pass project information for email notifications
                     await window.MentionHelper.processMentions(
                         newComment,
                         contextTitle,
                         contextLink,
                         currentUser.name,
-                        users
+                        users,
+                        {
+                            projectId: project?.id,
+                            projectName: projectName,
+                            taskId: editedTask.id || task?.id,
+                            taskTitle: taskTitle
+                        }
                     );
                 }
                 

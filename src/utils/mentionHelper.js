@@ -71,9 +71,10 @@ const MentionHelper = {
      * @param {string} contextTitle - Title of the context (e.g., "Project: ABC", "Task: Build Feature")
      * @param {string} contextLink - Link to the context
      * @param {string} commentText - The full comment text
+     * @param {Object} projectInfo - Optional project information (projectId, projectName, taskId, taskTitle)
      * @returns {Promise} - API response
      */
-    async createMentionNotification(mentionedUserId, mentionedByName, contextTitle, contextLink, commentText) {
+    async createMentionNotification(mentionedUserId, mentionedByName, contextTitle, contextLink, commentText, projectInfo = {}) {
         // Version check - this log confirms new code is loaded
         console.log('🔔 MentionHelper v3: Creating notification for user:', mentionedUserId);
         console.log('🔔 Using DatabaseAPI.makeRequest() with built-in token refresh');
@@ -91,6 +92,23 @@ const MentionHelper = {
                 ? commentText.substring(0, 100) + '...' 
                 : commentText;
             
+            // Build metadata with project information if available
+            const metadata = {
+                mentionedBy: mentionedByName,
+                context: contextTitle,
+                fullComment: commentText
+            };
+            
+            // Add project information if available
+            if (projectInfo.projectId) {
+                metadata.projectId = projectInfo.projectId;
+                metadata.projectName = projectInfo.projectName;
+                if (projectInfo.taskId) {
+                    metadata.taskId = projectInfo.taskId;
+                    metadata.taskTitle = projectInfo.taskTitle;
+                }
+            }
+            
             // Use DatabaseAPI.makeRequest() which automatically handles:
             // - Token extraction from storage
             // - Token refresh on 401 errors
@@ -103,11 +121,7 @@ const MentionHelper = {
                     title: `${mentionedByName} mentioned you`,
                     message: `${mentionedByName} mentioned you in ${contextTitle}: "${previewText}"`,
                     link: contextLink,
-                    metadata: {
-                        mentionedBy: mentionedByName,
-                        context: contextTitle,
-                        fullComment: commentText
-                    }
+                    metadata: metadata
                 })
             });
             
@@ -137,9 +151,10 @@ const MentionHelper = {
      * @param {string} contextLink - Link to the context
      * @param {string} authorName - Name of the comment author
      * @param {Array} allUsers - Array of all users to match against
+     * @param {Object} projectInfo - Optional project information (projectId, projectName, taskId, taskTitle)
      * @returns {Promise<Array>} Array of notification results
      */
-    async processMentions(commentText, contextTitle, contextLink, authorName, allUsers) {
+    async processMentions(commentText, contextTitle, contextLink, authorName, allUsers, projectInfo = {}) {
         if (!this.hasMentions(commentText)) {
             return [];
         }
@@ -186,7 +201,8 @@ const MentionHelper = {
                         authorName,
                         contextTitle,
                         contextLink,
-                        commentText
+                        commentText,
+                        projectInfo
                     )
                 );
             } else {
