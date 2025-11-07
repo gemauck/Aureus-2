@@ -156,14 +156,20 @@
         
         const script = document.createElement('script');
         
+        // Add cache-busting for UserManagement to force reload of new permissions
+        let scriptSrc = finalPath;
+        if (path.includes('UserManagement')) {
+            scriptSrc += '?v=permissions-v2-' + Date.now();
+        }
+        
         if (isProduction) {
             // Production: Load pre-compiled JavaScript
-            script.src = finalPath;
+            script.src = scriptSrc;
             script.defer = true;
         } else {
             // Development: Load JSX with Babel
             script.type = 'text/babel';
-            script.src = finalPath;
+            script.src = scriptSrc;
         }
         
         script.onerror = () => {
