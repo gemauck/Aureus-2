@@ -189,33 +189,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding
 }))
 
-// Rate limiting - prevent brute force attacks
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs (increased from 5)
-  message: 'Too many authentication attempts, please try again later.',
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // Don't count successful requests
-  // Add retry-after header for better client experience
-  handler: (req, res) => {
-    // Calculate retry-after based on rate limit info
-    const rateLimitInfo = req.rateLimit || {}
-    const resetTime = rateLimitInfo.resetTime || Date.now() + authLimiter.windowMs
-    const retryAfter = Math.max(0, Math.ceil((resetTime - Date.now()) / 1000))
-    
-    res.setHeader('Retry-After', retryAfter)
-    res.status(429).json({
-      error: 'Too many authentication attempts',
-      message: 'Please try again later. Too many login attempts detected.',
-      retryAfter: retryAfter
-    })
-  }
-})
-
-// Apply rate limiting to auth endpoints
-app.use('/api/auth/login', authLimiter)
-app.use('/api/auth/2fa/verify', authLimiter)
+// Rate limiting removed - no 15 minute login restriction
+// Note: Consider implementing other security measures if needed
 
 // General API rate limiting
 const apiLimiter = rateLimit({
@@ -675,6 +650,31 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for leave platform approval/rejection endpoints
+app.all('/api/leave-platform/applications/:id/approve', async (req, res, next) => {
+  try {
+    req.params = req.params || {}
+    req.params.id = req.params.id || req.url.split('/').slice(-2, -1)[0]
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'applications', '[id]', 'approve.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/applications/:id/reject', async (req, res, next) => {
+  try {
+    req.params = req.params || {}
+    req.params.id = req.params.id || req.url.split('/').slice(-2, -1)[0]
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'applications', '[id]', 'reject.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for user operations with ID (GET, PUT, DELETE /api/users/[id])
 // IMPORTANT: This must come BEFORE /api/users route so Express matches it first
 app.all('/api/users/:id', async (req, res, next) => {
@@ -924,11 +924,39 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(rootDir, 'index.html'))
 })
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Railway Server running on port ${PORT}`)
   console.log(`📁 Serving from: ${rootDir}`)
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'production'}`)
   console.log(`📂 API directory: ${apiDir}`)
+  
+  // Setup daily leave notification cron job (runs at 8:00 AM daily)
+  if (process.env.ENABLE_LEAVE_EMAIL_NOTIFICATIONS !== 'false') {
+    try {
+      const cron = (await import('node-cron')).default
+      const { sendDailyLeaveNotifications } = await import('./api/leave-platform/daily-email-notification.js')
+      
+      // Schedule daily at 8:00 AM (South African time)
+      cron.schedule('0 8 * * *', async () => {
+        console.log('📧 Running daily leave notification job...')
+        try {
+          await sendDailyLeaveNotifications()
+          console.log('✅ Daily leave notification job completed')
+        } catch (error) {
+          console.error('❌ Daily leave notification job failed:', error)
+        }
+      }, {
+        timezone: 'Africa/Johannesburg'
+      })
+      
+      console.log('✅ Daily leave notification cron job scheduled (8:00 AM daily)')
+    } catch (error) {
+      console.warn('⚠️ Failed to setup leave notification cron job:', error.message)
+      console.warn('   Set ENABLE_LEAVE_EMAIL_NOTIFICATIONS=false to disable')
+    }
+  } else {
+    console.log('ℹ️ Leave email notifications disabled (ENABLE_LEAVE_EMAIL_NOTIFICATIONS=false)')
+  }
 })
 
 process.on('SIGTERM', () => {

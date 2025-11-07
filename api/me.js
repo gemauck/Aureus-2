@@ -29,14 +29,14 @@ async function handler(req, res) {
         phone: '',
         department: '',
         jobTitle: '',
-        permissions: '[]'
+        permissions: req.user.permissions || '[]'
       }
       return ok(res, { user })
     }
 
     let user
     try {
-      // Query without permissions field to avoid schema mismatch
+      // Query user with all fields including permissions
       const userQuery = await prisma.user.findUnique({ 
         where: { id: req.user.sub },
         select: {
@@ -44,7 +44,7 @@ async function handler(req, res) {
           email: true,
           name: true,
           role: true,
-          // permissions: true, // Temporarily removed - will add back after fixing schema
+          permissions: true,
           accessibleProjectIds: true,
           provider: true,
           lastLoginAt: true,
@@ -55,11 +55,11 @@ async function handler(req, res) {
         }
       })
       
-      // Add permissions field manually with default value
+      // Use user query result directly, with fallback for permissions if null
       if (userQuery) {
         user = {
           ...userQuery,
-          permissions: '[]' // Default permissions
+          permissions: userQuery.permissions || '[]' // Use database value or default to empty array
         }
       }
     } catch (dbError) {

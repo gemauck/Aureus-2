@@ -195,18 +195,34 @@ export class PermissionChecker {
             PERMISSIONS.EDIT_ASSIGNED
         ];
         
-        // If permission is public, grant access
+        // Check custom permissions first (they override role and public permissions)
+        // If custom permissions are explicitly set (not empty), they take precedence
+        if (this.customPermissions && this.customPermissions.length > 0) {
+            // If custom permissions include 'all', grant access (unless admin-only and not admin)
+            if (this.customPermissions.includes('all')) {
+                if (!isAdmin && adminOnlyPermissions.includes(permission)) {
+                    return false;
+                }
+                return true;
+            }
+            // If permission is explicitly in custom permissions, grant access
+            if (this.customPermissions.includes(permission)) {
+                return true;
+            }
+            // If custom permissions are set but don't include this permission, deny access
+            // This allows admins to restrict users by setting specific permissions
+            return false;
+        }
+        
+        // If no custom permissions are set, fall back to role-based and public permissions
+        
+        // Admin has all permissions by default
+        if (isAdmin) {
+            return true;
+        }
+        
+        // If permission is public, grant access (for non-admin users without custom permissions)
         if (publicPermissions.includes(permission)) {
-            return true;
-        }
-        
-        // Admin has all permissions (unless explicitly overridden)
-        if (isAdmin && !this.customPermissions.length) {
-            return true;
-        }
-        
-        // Check custom permissions first (they override role permissions)
-        if (this.customPermissions.includes('all') || this.customPermissions.includes(permission)) {
             return true;
         }
         

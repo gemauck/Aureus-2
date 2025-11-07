@@ -127,6 +127,9 @@
         'components/hr/Payroll.jsx',
         'components/hr/HR.jsx',
         
+        // Leave Platform
+        'components/leave-platform/LeavePlatform.jsx',
+        
         // Reports
         'components/reports/AuditTrail.jsx',
         'components/reports/Reports.jsx',

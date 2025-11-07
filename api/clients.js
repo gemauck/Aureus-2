@@ -100,33 +100,38 @@ async function handler(req, res) {
           
           // Use Prisma to include tags relation - needed for list view
           // Note: starredBy relation removed because StarredClient table doesn't exist in restored DB
-          // Query all records and filter in memory to handle null types correctly
-          // This is more reliable than trying to use OR with null in Prisma
-          console.log('🔍 Querying all Client records (will filter for clients/legacy)...')
+          // Query clients directly using WHERE clause for better performance
+          console.log('🔍 Querying Client records with type filter...')
           // IMPORTANT: Return ALL clients regardless of ownerId - all users should see all clients
-          const allRecords = await prisma.client.findMany({
+          // Use raw SQL to handle null types correctly (Prisma has issues with NOT and null values)
+          // Query: type='client' OR type IS NULL (exclude leads)
+          const rawClientsSQL = await prisma.$queryRaw`
+            SELECT c.*
+            FROM "Client" c
+            WHERE (c.type = 'client' OR c.type IS NULL)
+            AND c.type != 'lead'
+            ORDER BY c."createdAt" DESC
+          `
+          console.log(`🔍 Raw SQL query returned ${rawClientsSQL.length} clients`)
+          
+          // Convert raw SQL results to Prisma format and load relations
+          const clientIds = rawClientsSQL.map(c => c.id)
+          rawClients = await prisma.client.findMany({
+            where: {
+              id: { in: clientIds }
+            },
             include: {
               tags: {
                 include: {
                   tag: true
                 }
               }
-              // starredBy relation removed - StarredClient table doesn't exist in restored database
             },
             orderBy: {
               createdAt: 'desc'
             }
-            // No WHERE clause filtering by ownerId - all users see all clients
           })
-          console.log(`🔍 Raw query returned ${allRecords.length} total Client records`)
-          
-          // Filter to only clients (type='client' OR type=null/undefined, but NOT type='lead')
-          rawClients = allRecords.filter(c => {
-            const type = c.type;
-            // Include if type is 'client' or null/undefined (legacy), but exclude if type is 'lead'
-            return (type === 'client' || type === null || type === undefined) && type !== 'lead';
-          });
-          console.log(`🔍 After filtering: ${rawClients.length} clients (excluding ${allRecords.length - rawClients.length} leads/non-clients)`)
+          console.log(`🔍 Query returned ${rawClients.length} clients (with relations loaded)`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.error('❌ Type filter failed, trying without filter:', typeError.message)

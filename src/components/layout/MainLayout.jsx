@@ -300,6 +300,7 @@ const MainLayout = () => {
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
     const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
+    const LeavePlatform = window.LeavePlatform || (() => <div className="text-center py-12 text-gray-500">Leave Platform loading...</div>);
 
     // Filter menu items based on permissions
     const allMenuItems = [
@@ -309,6 +310,7 @@ const MainLayout = () => {
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
         { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: 'ACCESS_HR' }, // Admin only
+        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null }, // All users can access
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
@@ -481,6 +483,8 @@ const MainLayout = () => {
                         );
                     }
                     return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
+                case 'leave-platform': 
+                    return <ErrorBoundary key="leave-platform"><LeavePlatform /></ErrorBoundary>;
                 case 'manufacturing': 
                     return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
                 case 'tools': 
@@ -510,7 +514,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, LeavePlatform, Manufacturing, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;

@@ -49,7 +49,7 @@ async function handler(req, res) {
                             email: true,
                             name: true,
                             role: true,
-                            // permissions: true, // Temporarily removed - will add back after fixing schema
+                            permissions: true,
                             status: true,
                             department: true,
                             jobTitle: true,
@@ -75,10 +75,10 @@ async function handler(req, res) {
                         orderBy: { createdAt: 'desc' }
                     })
                     
-                    // Manually add permissions field (default to empty array if column doesn't exist)
+                    // Use permissions from database, with fallback to empty array if null
                     users = usersQuery.map(user => ({
                         ...user,
-                        permissions: '[]' // Default permissions
+                        permissions: user.permissions || '[]' // Use database value or default to empty array
                     }))
                     console.log(`✅ Users endpoint: Fetched ${users.length} users with full details`)
                     

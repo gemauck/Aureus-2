@@ -58,6 +58,12 @@ model User {
   notifications   Notification[]    @relation("NotificationRecipient")
   notificationSettings NotificationSetting?
   starredClients  StarredClient[]
+  leaveApplications LeaveApplication[] @relation("LeaveApplications")
+  approvedLeaveApplications LeaveApplication[] @relation("ApprovedLeaveApplications")
+  rejectedLeaveApplications LeaveApplication[] @relation("RejectedLeaveApplications")
+  leaveBalances   LeaveBalance[]    @relation("LeaveBalances")
+  leaveApprovers  LeaveApprover[]   @relation("LeaveApprovers")
+  birthday        Birthday?         @relation("Birthdays")
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 }
@@ -905,4 +911,81 @@ model SystemSettings {
   updatedAt      DateTime @updatedAt
 
   @@index([updatedBy])
+}
+
+// Leave Platform Models
+model LeaveApplication {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("LeaveApplications", fields: [userId], references: [id])
+  leaveType     String   // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
+  startDate     DateTime
+  endDate       DateTime
+  days          Int      // Working days (excluding weekends and public holidays)
+  reason        String
+  emergency     Boolean  @default(false)
+  status        String   @default("pending") // pending, approved, rejected, cancelled
+  appliedDate   DateTime @default(now())
+  approvedDate  DateTime?
+  rejectedDate  DateTime?
+  approvedById  String?
+  approvedBy    User?    @relation("ApprovedLeaveApplications", fields: [approvedById], references: [id])
+  rejectedById  String?
+  rejectedBy    User?    @relation("RejectedLeaveApplications", fields: [rejectedById], references: [id])
+  rejectionReason String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+  @@index([approvedById])
+}
+
+model LeaveBalance {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("LeaveBalances", fields: [userId], references: [id])
+  leaveType     String   // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
+  available     Float    @default(0) // Days available
+  used          Float    @default(0) // Days used
+  balance       Float    @default(0) // Available - Used
+  year          Int      // Year for this balance (e.g., 2025)
+  notes         String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, leaveType, year])
+  @@index([userId])
+  @@index([leaveType])
+  @@index([year])
+}
+
+model LeaveApprover {
+  id            String   @id @default(cuid())
+  department    String   // Department or team name
+  approverId    String
+  approver      User     @relation("LeaveApprovers", fields: [approverId], references: [id])
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([department, approverId])
+  @@index([department])
+  @@index([approverId])
+}
+
+model Birthday {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation("Birthdays", fields: [userId], references: [id])
+  date          DateTime // Birthday date (month and day only, year can be ignored)
+  notes         String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId])
+  @@index([userId])
+  @@index([date])
 }

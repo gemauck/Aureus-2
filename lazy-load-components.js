@@ -124,6 +124,9 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/hr/LeaveManagement.jsx',
         './src/components/hr/LeaveBalance.jsx',
         './src/components/hr/Attendance.jsx',
+        
+        // Leave Platform
+        './src/components/leave-platform/LeavePlatform.jsx',
         './src/components/hr/QuickBooksPayrollSync.jsx',
         './src/components/hr/Payroll.jsx',
         './src/components/hr/HR.jsx',

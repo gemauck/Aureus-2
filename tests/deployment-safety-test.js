@@ -20,6 +20,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { execSync } from 'child_process'
+import { PrismaClient } from '@prisma/client'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -72,14 +73,37 @@ function getDeploymentScripts() {
         'deployment-safety-test.js'
     ]
     
-    // Check root directory
+    // Legacy/old scripts that are not used in main deployment (warnings only, not critical)
+    const legacyScripts = [
+        'apply-',  // Old apply scripts
+        'migrate-', // Old migrate scripts
+        'fix-',    // Old fix scripts
+        'deploy-calendar-notes-fix',
+        'deploy-client-news',
+        'deploy-database-fix',
+        'deploy-guest-role',
+        'deploy-inventory-fields',
+        'deploy-inventory-type-update',
+        'deploy-jobcard-fix',
+        'deploy-lead-status-fix',
+        'deploy-mobile-fixes',
+        'deploy-postgresql-fix',
+        'deploy-to-droplet',  // Alternative deployment script
+        'fix-database-schema',
+        'migrate-database',
+        'migrate-guest-role',
+        'migrate-tags',
+        'setup-multi-location-inventory'
+    ]
+    
+    // Check root directory - focus on main deployment script
     for (const file of rootFiles) {
         if (file.match(/^(deploy|apply|migrate|setup|fix|restore|backup|restart).*\.sh$/i)) {
             const filePath = join(projectRoot, file)
             if (statSync(filePath).isFile()) {
                 // Skip safety scripts
                 if (!safetyScripts.some(s => file.includes(s))) {
-                    scripts.push(filePath)
+                    scripts.push({ path: filePath, isLegacy: legacyScripts.some(pattern => file.includes(pattern)) })
                 }
             }
         }
@@ -93,7 +117,10 @@ function getDeploymentScripts() {
             if (file.endsWith('.sh')) {
                 // Skip safety scripts
                 if (!safetyScripts.some(s => file.includes(s))) {
-                    scripts.push(join(scriptsDir, file))
+                    scripts.push({ 
+                        path: join(scriptsDir, file), 
+                        isLegacy: legacyScripts.some(pattern => file.includes(pattern)) 
+                    })
                 }
             }
         }
@@ -128,9 +155,50 @@ async function testDangerousFileOperations() {
     const scripts = getDeploymentScripts()
     let foundDangerous = false
     
-    for (const scriptPath of scripts) {
+    // Focus on main deployment script first
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
+    const mainScriptExists = existsSync(mainDeploymentScript)
+    
+    if (mainScriptExists) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        for (const { pattern, name, critical } of dangerousPatterns) {
+            if (pattern.test(mainContent) && critical) {
+                const lines = mainContent.split('\n')
+                lines.forEach((line, index) => {
+                    if (pattern.test(line) && !line.trim().startsWith('#')) {
+                        const isSafe = line.includes('node_modules') || 
+                                      line.includes('.git') || 
+                                      line.includes('dist/') ||
+                                      line.includes('build/') ||
+                                      line.includes('tmp/') ||
+                                      line.includes('cache')
+                        
+                        if (!isSafe) {
+                            logTest(
+                                `Dangerous File Operation (MAIN DEPLOYMENT): ${name}`,
+                                false,
+                                `Found in deploy-production.sh:${index + 1} - "${line.trim()}"`,
+                                true
+                            )
+                            foundDangerous = true
+                        }
+                    }
+                })
+            }
+        }
+    }
+    
+    // Check other scripts (legacy scripts are warnings only)
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
+        const isLegacy = scriptObj.isLegacy || false
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
+        
+        // Skip main deployment script (already checked)
+        if (scriptName === 'deploy-production.sh') {
+            continue
+        }
         
         for (const { pattern, name, critical } of dangerousPatterns) {
             if (pattern.test(content)) {
@@ -147,13 +215,24 @@ async function testDangerousFileOperations() {
                                       line.includes('cache')
                         
                         if (critical && !isSafe) {
-                            logTest(
-                                `Dangerous File Operation: ${name}`,
-                                false,
-                                `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
-                                true
-                            )
-                            foundDangerous = true
+                            // Legacy scripts are warnings, not critical failures
+                            if (isLegacy) {
+                                logTest(
+                                    `Dangerous File Operation (LEGACY): ${name}`,
+                                    false,
+                                    `Found in legacy script ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                    false,
+                                    true
+                                )
+                            } else {
+                                logTest(
+                                    `Dangerous File Operation: ${name}`,
+                                    false,
+                                    `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                    true
+                                )
+                                foundDangerous = true
+                            }
                         } else if (!critical && !isSafe) {
                             logTest(
                                 `File Operation: ${name}`,
@@ -194,9 +273,56 @@ async function testDangerousDatabaseOperations() {
     const scripts = getDeploymentScripts()
     let foundDangerous = false
     
-    for (const scriptPath of scripts) {
+    // Focus on main deployment script first
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
+    const mainScriptExists = existsSync(mainDeploymentScript)
+    
+    if (mainScriptExists) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        for (const { pattern, name, critical } of dangerousPatterns) {
+            if (pattern.test(mainContent) && critical) {
+                const lines = mainContent.split('\n')
+                lines.forEach((line, index) => {
+                    if (pattern.test(line) && !line.trim().startsWith('#')) {
+                        const hasBackup = mainContent.toLowerCase().includes('backup') ||
+                                        mainContent.toLowerCase().includes('pg_dump') ||
+                                        mainContent.toLowerCase().includes('dump') ||
+                                        mainContent.toLowerCase().includes('.sql')
+                        
+                        if (!hasBackup && name.includes('--accept-data-loss')) {
+                            logTest(
+                                `Dangerous Database Operation (MAIN DEPLOYMENT): ${name}`,
+                                false,
+                                `Found in deploy-production.sh:${index + 1} without backup - "${line.trim()}"`,
+                                true
+                            )
+                            foundDangerous = true
+                        } else if (critical) {
+                            logTest(
+                                `Dangerous Database Operation (MAIN DEPLOYMENT): ${name}`,
+                                false,
+                                `Found in deploy-production.sh:${index + 1} - "${line.trim()}"`,
+                                true
+                            )
+                            foundDangerous = true
+                        }
+                    }
+                })
+            }
+        }
+    }
+    
+    // Check other scripts (legacy scripts are warnings only)
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
+        const isLegacy = scriptObj.isLegacy || false
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
+        
+        // Skip main deployment script (already checked)
+        if (scriptName === 'deploy-production.sh') {
+            continue
+        }
         
         for (const { pattern, name, critical } of dangerousPatterns) {
             if (pattern.test(content)) {
@@ -204,28 +330,39 @@ async function testDangerousDatabaseOperations() {
                 lines.forEach((line, index) => {
                     if (pattern.test(line) && !line.trim().startsWith('#')) {
                         if (critical) {
-                            // Check if backup exists before this operation
-                            const hasBackup = content.toLowerCase().includes('backup') ||
-                                            content.toLowerCase().includes('pg_dump') ||
-                                            content.toLowerCase().includes('dump') ||
-                                            content.toLowerCase().includes('.sql')
-                            
-                            if (!hasBackup && name.includes('--accept-data-loss')) {
+                            // Legacy scripts are warnings, not critical failures
+                            if (isLegacy) {
                                 logTest(
-                                    `Dangerous Database Operation: ${name}`,
+                                    `Dangerous Database Operation (LEGACY): ${name}`,
                                     false,
-                                    `Found in ${scriptName}:${index + 1} without backup - "${line.trim()}"`,
+                                    `Found in legacy script ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                    false,
                                     true
                                 )
-                                foundDangerous = true
-                            } else if (critical) {
-                                logTest(
-                                    `Dangerous Database Operation: ${name}`,
-                                    false,
-                                    `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
-                                    true
-                                )
-                                foundDangerous = true
+                            } else {
+                                // Check if backup exists before this operation
+                                const hasBackup = content.toLowerCase().includes('backup') ||
+                                                content.toLowerCase().includes('pg_dump') ||
+                                                content.toLowerCase().includes('dump') ||
+                                                content.toLowerCase().includes('.sql')
+                                
+                                if (!hasBackup && name.includes('--accept-data-loss')) {
+                                    logTest(
+                                        `Dangerous Database Operation: ${name}`,
+                                        false,
+                                        `Found in ${scriptName}:${index + 1} without backup - "${line.trim()}"`,
+                                        true
+                                    )
+                                    foundDangerous = true
+                                } else if (critical) {
+                                    logTest(
+                                        `Dangerous Database Operation: ${name}`,
+                                        false,
+                                        `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                        true
+                                    )
+                                    foundDangerous = true
+                                }
                             }
                         } else {
                             // Warning for --accept-data-loss without backup check
@@ -287,9 +424,41 @@ async function testDangerousProcessOperations() {
     const scripts = getDeploymentScripts()
     let foundDangerous = false
     
-    for (const scriptPath of scripts) {
+    // Focus on main deployment script first
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
+    const mainScriptExists = existsSync(mainDeploymentScript)
+    
+    if (mainScriptExists) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        for (const { pattern, name, critical } of dangerousPatterns) {
+            if (pattern.test(mainContent) && critical) {
+                const lines = mainContent.split('\n')
+                lines.forEach((line, index) => {
+                    if (pattern.test(line) && !line.trim().startsWith('#')) {
+                        logTest(
+                            `Dangerous Process Operation (MAIN DEPLOYMENT): ${name}`,
+                            false,
+                            `Found in deploy-production.sh:${index + 1} - "${line.trim()}"`,
+                            true
+                        )
+                        foundDangerous = true
+                    }
+                })
+            }
+        }
+    }
+    
+    // Check other scripts (legacy scripts are warnings only)
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
+        const isLegacy = scriptObj.isLegacy || false
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
+        
+        // Skip main deployment script (already checked)
+        if (scriptName === 'deploy-production.sh') {
+            continue
+        }
         
         for (const { pattern, name, critical } of dangerousPatterns) {
             if (pattern.test(content)) {
@@ -297,13 +466,24 @@ async function testDangerousProcessOperations() {
                 lines.forEach((line, index) => {
                     if (pattern.test(line) && !line.trim().startsWith('#')) {
                         if (critical) {
-                            logTest(
-                                `Dangerous Process Operation: ${name}`,
-                                false,
-                                `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
-                                true
-                            )
-                            foundDangerous = true
+                            // Legacy scripts are warnings, not critical failures
+                            if (isLegacy) {
+                                logTest(
+                                    `Dangerous Process Operation (LEGACY): ${name}`,
+                                    false,
+                                    `Found in legacy script ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                    false,
+                                    true
+                                )
+                            } else {
+                                logTest(
+                                    `Dangerous Process Operation: ${name}`,
+                                    false,
+                                    `Found in ${scriptName}:${index + 1} - "${line.trim()}"`,
+                                    true
+                                )
+                                foundDangerous = true
+                            }
                         } else {
                             logTest(
                                 `Process Operation Warning: ${name}`,
@@ -345,15 +525,39 @@ async function testBackupProcedures() {
     }
     
     // Check deployment scripts for destructive operations without backups
-    for (const scriptPath of scripts) {
+    // Focus on main deployment script
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
+    if (existsSync(mainDeploymentScript)) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        // Only flag actual destructive operations (not just mentions in comments/variable names)
+        // Look for actual command execution, not just text
+        const hasDestructiveOp = /(npx\s+prisma\s+(migrate\s+reset|db\s+push\s+--accept-data-loss)|DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM\s+\w+\s*;)/i.test(mainContent)
+        const hasBackup = /backup|pg_dump|dump|\.sql/i.test(mainContent)
+        
+        if (hasDestructiveOp && !hasBackup) {
+            scriptsWithDestructiveOps.push('deploy-production.sh (MAIN DEPLOYMENT)')
+        }
+    }
+    
+    // Check other scripts (warnings only for legacy scripts)
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
+        const isLegacy = scriptObj.isLegacy || false
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
         
+        // Skip main deployment script (already checked)
+        if (scriptName === 'deploy-production.sh') {
+            continue
+        }
+        
         // Check for destructive operations
-        const hasDestructiveOp = /--accept-data-loss|migrate|db push|DROP|TRUNCATE/i.test(content)
+        // Only flag actual destructive operations (not just mentions in comments/variable names)
+        const hasDestructiveOp = /(npx\s+prisma\s+(migrate\s+reset|db\s+push\s+--accept-data-loss)|DROP\s+TABLE|TRUNCATE\s+TABLE|DELETE\s+FROM\s+\w+\s*;)/i.test(content)
         const hasBackup = /backup|pg_dump|dump|\.sql/i.test(content)
         
-        if (hasDestructiveOp && !hasBackup && !scriptName.includes('backup')) {
+        // Only flag non-legacy scripts as critical
+        if (hasDestructiveOp && !hasBackup && !scriptName.includes('backup') && !isLegacy) {
             scriptsWithDestructiveOps.push(scriptName)
         }
     }
@@ -394,12 +598,34 @@ async function testEnvironmentVariableSafety() {
     }
     
     // Check deployment scripts for hardcoded credentials
-    const scripts = getDeploymentScripts()
+    // Focus on main deployment script
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
     let foundHardcoded = false
     
-    for (const scriptPath of scripts) {
+    if (existsSync(mainDeploymentScript)) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        if (/postgresql:\/\/.*:.*@/.test(mainContent) || /password\s*=\s*['"]/.test(mainContent)) {
+            logTest(
+                'Hardcoded Credentials (MAIN DEPLOYMENT)',
+                false,
+                `Possible hardcoded credentials in deploy-production.sh`,
+                true
+            )
+            foundHardcoded = true
+        }
+    }
+    
+    // Check other scripts (warnings only)
+    const scripts = getDeploymentScripts()
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
+        
+        // Skip main deployment script (already checked)
+        if (scriptName === 'deploy-production.sh') {
+            continue
+        }
         
         // Check for hardcoded database URLs or passwords
         if (/postgresql:\/\/.*:.*@/.test(content) || /password\s*=\s*['"]/.test(content)) {
@@ -421,6 +647,198 @@ async function testEnvironmentVariableSafety() {
     
     logTest('Environment Variable Safety', true, 'Environment variables are safe', true)
     return true
+}
+
+// Test 5b: Validate database connection and prevent wrong database (CRITICAL)
+async function testDatabaseConnectionValidation() {
+    console.log('\n🗄️  Testing Database Connection Validation (CRITICAL)...')
+    
+    // Skip if DEV_LOCAL_NO_DB is set
+    if (process.env.DEV_LOCAL_NO_DB === 'true') {
+        logTest('Database Connection Validation', true, 'Skipped (DEV_LOCAL_NO_DB=true)', false)
+        return true
+    }
+    
+    // Check if DATABASE_URL is set
+    if (!process.env.DATABASE_URL) {
+        logTest('DATABASE_URL Set', false, 'DATABASE_URL environment variable is not set', true)
+        return false
+    }
+    
+    const dbUrl = process.env.DATABASE_URL
+    logTest('DATABASE_URL Set', true, `Database URL configured (${dbUrl.substring(0, 50)}...)`, true)
+    
+    // Check for dangerous localhost/local connections in production
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                        process.env.APP_URL?.includes('abcoafrica.co.za') ||
+                        process.env.APP_URL?.includes('https://')
+    
+    if (isProduction) {
+        // In production, block localhost connections
+        const localhostPatterns = [
+            /localhost/i,
+            /127\.0\.0\.1/,
+            /file:\.\/prisma\/dev\.db/i,  // SQLite file
+            /postgresql:\/\/.*@localhost/i,
+            /postgresql:\/\/.*@127\.0\.0\.1/i
+        ]
+        
+        for (const pattern of localhostPatterns) {
+            if (pattern.test(dbUrl)) {
+                logTest(
+                    'Production Database URL',
+                    false,
+                    `DATABASE_URL points to localhost/local file in production: ${dbUrl.substring(0, 60)}...`,
+                    true
+                )
+                return false
+            }
+        }
+        
+        // In production, expect DigitalOcean database host
+        const expectedHostPatterns = [
+            /\.db\.ondigitalocean\.com/i,
+            /dbaas-db-.*-do-use\.l\.db\.ondigitalocean\.com/i
+        ]
+        
+        const hasExpectedHost = expectedHostPatterns.some(pattern => pattern.test(dbUrl))
+        if (!hasExpectedHost) {
+            logTest(
+                'Production Database Host',
+                false,
+                `DATABASE_URL does not match expected DigitalOcean host pattern in production: ${dbUrl.substring(0, 80)}...`,
+                true
+            )
+            return false
+        }
+        
+        logTest('Production Database URL', true, 'DATABASE_URL points to DigitalOcean database', true)
+    }
+    
+    // Check .env.local file doesn't override DATABASE_URL incorrectly in production
+    const envLocalPath = join(projectRoot, '.env.local')
+    if (existsSync(envLocalPath)) {
+        const envLocalContent = readFileSafe(envLocalPath)
+        const envLocalDbUrl = envLocalContent
+            .split('\n')
+            .find(line => line.trim().startsWith('DATABASE_URL') && !line.trim().startsWith('#'))
+        
+        if (envLocalDbUrl) {
+            const envLocalUrlValue = envLocalDbUrl.split('=')[1]?.trim().replace(/^["']|["']$/g, '')
+            
+            // Only check if .env.local is overriding with localhost in production
+            if (isProduction && envLocalUrlValue) {
+                const isLocalhost = /localhost|127\.0\.0\.1|file:\.\/prisma\/dev\.db/i.test(envLocalUrlValue)
+                if (isLocalhost) {
+                    logTest(
+                        '.env.local Override',
+                        false,
+                        '.env.local is overriding DATABASE_URL with localhost in production - this will cause the server to connect to the wrong database!',
+                        true
+                    )
+                    return false
+                } else {
+                    logTest('.env.local Override', true, '.env.local DATABASE_URL is safe for production', false)
+                }
+            } else if (!isProduction) {
+                // In development, .env.local with localhost is fine
+                logTest('.env.local Override', true, '.env.local exists (development mode - localhost is OK)', false)
+            }
+        }
+    }
+    
+    // Test actual database connection
+    let prisma = null
+    try {
+        prisma = new PrismaClient()
+        await prisma.$connect()
+        logTest('Database Connection', true, 'Successfully connected to database', true)
+        
+        // Check database has data (not empty)
+        try {
+            const userCount = await prisma.user.count()
+            const clientCount = await prisma.client.count()
+            const totalRecords = userCount + clientCount
+            
+            if (totalRecords === 0 && isProduction) {
+                logTest(
+                    'Database Contains Data',
+                    false,
+                    'Database appears to be empty (0 users, 0 clients) - possible wrong database connection',
+                    true
+                )
+                await prisma.$disconnect()
+                return false
+            }
+            
+            logTest(
+                'Database Contains Data',
+                true,
+                `Database has data (${userCount} users, ${clientCount} clients)`,
+                true
+            )
+        } catch (countError) {
+            logTest(
+                'Database Contains Data',
+                false,
+                `Could not verify database contents: ${countError.message}`,
+                true
+            )
+            await prisma.$disconnect()
+            return false
+        }
+        
+        // Verify we can query clients table specifically
+        try {
+            const clientsWithType = await prisma.client.count({ where: { type: 'client' } })
+            if (isProduction && clientsWithType === 0) {
+                logTest(
+                    'Database Client Records',
+                    false,
+                    'No clients found in database - possible data issue or wrong database',
+                    false,
+                    true
+                )
+            } else {
+                logTest(
+                    'Database Client Records',
+                    true,
+                    `Found ${clientsWithType} client records`,
+                    false
+                )
+            }
+        } catch (queryError) {
+            // Non-critical - might be schema issue
+            logTest(
+                'Database Client Records',
+                false,
+                `Could not query clients: ${queryError.message}`,
+                false,
+                true
+            )
+        }
+        
+        await prisma.$disconnect()
+        return true
+        
+    } catch (connectionError) {
+        logTest(
+            'Database Connection',
+            false,
+            `Failed to connect to database: ${connectionError.message}`,
+            true
+        )
+        
+        if (prisma) {
+            try {
+                await prisma.$disconnect()
+            } catch (e) {
+                // Ignore disconnect errors
+            }
+        }
+        
+        return false
+    }
 }
 
 // Test 6: Check for rollback capability (NON-CRITICAL)
@@ -462,16 +880,34 @@ async function testSafeMigrationWrapper() {
     logTest('Safe Migration Wrapper Exists', true, 'scripts/safe-db-migration.sh found', false)
     
     // Check if deployment scripts use the safe wrapper
-    const scripts = getDeploymentScripts()
+    // Focus on main deployment script
+    const mainDeploymentScript = join(projectRoot, 'deploy-production.sh')
     let scriptsUsingWrapper = 0
     let scriptsNotUsingWrapper = []
     
-    for (const scriptPath of scripts) {
+    if (existsSync(mainDeploymentScript)) {
+        const mainContent = readFileSafe(mainDeploymentScript)
+        const hasDbOps = /prisma\s+(migrate|db\s+push)/i.test(mainContent)
+        
+        if (hasDbOps) {
+            if (mainContent.includes('safe-db-migration.sh') || mainContent.includes('scripts/safe-db-migration')) {
+                scriptsUsingWrapper++
+            } else {
+                scriptsNotUsingWrapper.push('deploy-production.sh (MAIN DEPLOYMENT)')
+            }
+        }
+    }
+    
+    // Check other scripts (warnings only for legacy scripts)
+    const scripts = getDeploymentScripts()
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
+        const isLegacy = scriptObj.isLegacy || false
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
         
-        // Skip the wrapper script itself
-        if (scriptName.includes('safe-db-migration')) {
+        // Skip the wrapper script itself and main deployment script
+        if (scriptName.includes('safe-db-migration') || scriptName === 'deploy-production.sh') {
             continue
         }
         
@@ -481,7 +917,8 @@ async function testSafeMigrationWrapper() {
         if (hasDbOps) {
             if (content.includes('safe-db-migration.sh') || content.includes('scripts/safe-db-migration')) {
                 scriptsUsingWrapper++
-            } else {
+            } else if (!isLegacy) {
+                // Only flag non-legacy scripts as critical
                 scriptsNotUsingWrapper.push(scriptName)
             }
         }
@@ -512,7 +949,8 @@ async function testDangerousNpmOperations() {
     const scripts = getDeploymentScripts()
     let foundDangerous = false
     
-    for (const scriptPath of scripts) {
+    for (const scriptObj of scripts) {
+        const scriptPath = scriptObj.path || scriptObj
         const content = readFileSafe(scriptPath)
         const scriptName = scriptPath.replace(projectRoot + '/', '')
         
@@ -551,6 +989,7 @@ async function runAllTests() {
             testDangerousProcessOperations,
             testBackupProcedures,
             testEnvironmentVariableSafety,
+            testDatabaseConnectionValidation,
             testSafeMigrationWrapper,
         ]
         

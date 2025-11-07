@@ -19,6 +19,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     const [isDrawing, setIsDrawing] = useState(false);
     const [recognizedText, setRecognizedText] = useState('');
     const [isRecognizing, setIsRecognizing] = useState(false);
+    const [penSize, setPenSize] = useState(3);
+    const [penColor, setPenColor] = useState(isDark ? '#ffffff' : '#000000');
     
     const editorRef = useRef(null);
     const canvasRef = useRef(null);
@@ -865,9 +867,9 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform
                 ctx.scale(dpr, dpr);
                 
-                // Set drawing styles
-                ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
-                ctx.lineWidth = 3;
+                // Set drawing styles - will be updated from state
+                ctx.strokeStyle = penColor || (isDark ? '#ffffff' : '#000000');
+                ctx.lineWidth = penSize || 3;
                 ctx.lineCap = 'round';
                 ctx.lineJoin = 'round';
                 ctx.globalAlpha = 1.0;
@@ -897,7 +899,21 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const ctx = canvasRef.current.getContext('2d');
             ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
         }
-    }, [showHandwriting, isDark]);
+    }, [showHandwriting, isDark, penSize, penColor]);
+    
+    // Update pen color when dark mode changes (if using default color)
+    useEffect(() => {
+        if (penColor === '#000000' || penColor === '#ffffff') {
+            const defaultColor = isDark ? '#ffffff' : '#000000';
+            if (penColor !== defaultColor) {
+                setPenColor(defaultColor);
+                if (canvasRef.current) {
+                    const ctx = canvasRef.current.getContext('2d');
+                    ctx.strokeStyle = defaultColor;
+                }
+            }
+        }
+    }, [isDark]);
 
     // Handle drawing on canvas
     const startDrawing = (e) => {
@@ -917,10 +933,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         const y = clientY - rect.top;
         
         // Restore drawing styles (in case they were reset)
-        ctx.strokeStyle = isDark ? '#ffffff' : '#000000';
-        ctx.lineWidth = 3; // Context is already scaled, so use CSS pixel size
+        ctx.strokeStyle = penColor || (isDark ? '#ffffff' : '#000000');
+        ctx.lineWidth = penSize || 3; // Context is already scaled, so use CSS pixel size
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
+        ctx.globalAlpha = 1.0;
         
         ctx.beginPath();
         ctx.moveTo(x, y);
@@ -2926,28 +2943,107 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     
                     {/* Handwriting controls overlay */}
                     {showHandwriting && (
-                        <div className={`absolute top-6 right-6 flex items-center space-x-2 p-2 rounded-lg shadow-lg ${
-                            isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
-                        }`}>
-                            <button
-                                onClick={clearHandwriting}
-                                className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
-                                title="Clear handwriting"
-                            >
-                                <i className="fas fa-eraser"></i>
-                            </button>
-                            <button
-                                onClick={recognizeHandwriting}
-                                disabled={isRecognizing}
-                                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Recognize handwriting as text"
-                            >
-                                {isRecognizing ? (
-                                    <i className="fas fa-spinner fa-spin"></i>
-                                ) : (
-                                    <i className="fas fa-magic"></i>
-                                )}
-                            </button>
+                        <div className={`absolute top-6 right-6 flex flex-col items-end space-y-3 z-20`}>
+                            {/* Main controls */}
+                            <div className={`flex items-center space-x-2 p-3 rounded-lg shadow-lg ${
+                                isDark ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'
+                            }`}>
+                                {/* Pen Size Control */}
+                                <div className="flex items-center space-x-2 px-2">
+                                    <label className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">Size:</label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="10"
+                                        value={penSize}
+                                        onChange={(e) => {
+                                            const newSize = parseInt(e.target.value);
+                                            setPenSize(newSize);
+                                            if (canvasRef.current) {
+                                                const ctx = canvasRef.current.getContext('2d');
+                                                ctx.lineWidth = newSize;
+                                            }
+                                        }}
+                                        className="w-20 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                        style={{
+                                            background: `linear-gradient(to right, ${isDark ? '#4b5563' : '#e5e7eb'} 0%, ${isDark ? '#4b5563' : '#e5e7eb'} ${(penSize - 1) / 9 * 100}%, ${isDark ? '#6b7280' : '#d1d5db'} ${(penSize - 1) / 9 * 100}%, ${isDark ? '#6b7280' : '#d1d5db'} 100%)`
+                                        }}
+                                    />
+                                    <span className="text-xs text-gray-700 dark:text-gray-300 w-6 text-center">{penSize}</span>
+                                </div>
+                                
+                                {/* Color Picker */}
+                                <div className="flex items-center space-x-1">
+                                    <label className="text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap">Color:</label>
+                                    <div className="flex items-center space-x-1">
+                                        {['#000000', '#ffffff', '#ef4444', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'].map((color) => (
+                                            <button
+                                                key={color}
+                                                onClick={() => {
+                                                    setPenColor(color);
+                                                    if (canvasRef.current) {
+                                                        const ctx = canvasRef.current.getContext('2d');
+                                                        ctx.strokeStyle = color;
+                                                    }
+                                                }}
+                                                className={`w-6 h-6 rounded border-2 transition-all ${
+                                                    penColor === color 
+                                                        ? 'border-blue-500 scale-110 shadow-md' 
+                                                        : isDark 
+                                                            ? 'border-gray-600 hover:border-gray-500' 
+                                                            : 'border-gray-300 hover:border-gray-400'
+                                                }`}
+                                                style={{ backgroundColor: color }}
+                                                title={color}
+                                            />
+                                        ))}
+                                        <input
+                                            type="color"
+                                            value={penColor}
+                                            onChange={(e) => {
+                                                const newColor = e.target.value;
+                                                setPenColor(newColor);
+                                                if (canvasRef.current) {
+                                                    const ctx = canvasRef.current.getContext('2d');
+                                                    ctx.strokeStyle = newColor;
+                                                }
+                                            }}
+                                            className="w-6 h-6 rounded border border-gray-300 dark:border-gray-600 cursor-pointer"
+                                            title="Custom color"
+                                        />
+                                    </div>
+                                </div>
+                                
+                                <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+                                
+                                <button
+                                    onClick={clearHandwriting}
+                                    className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"
+                                    title="Clear handwriting"
+                                >
+                                    <i className="fas fa-eraser"></i>
+                                </button>
+                                <button
+                                    onClick={recognizeHandwriting}
+                                    disabled={isRecognizing}
+                                    className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                    title="Recognize handwriting as text"
+                                >
+                                    {isRecognizing ? (
+                                        <i className="fas fa-spinner fa-spin"></i>
+                                    ) : (
+                                        <i className="fas fa-magic"></i>
+                                    )}
+                                </button>
+                            </div>
+                            
+                            {/* Info tooltip */}
+                            <div className={`text-xs px-3 py-2 rounded-lg shadow-md ${
+                                isDark ? 'bg-gray-800 border border-gray-700 text-gray-300' : 'bg-white border border-gray-200 text-gray-600'
+                            }`}>
+                                <i className="fas fa-info-circle mr-1"></i>
+                                Draw with your mouse or touch screen
+                            </div>
                         </div>
                     )}
                 </div>
