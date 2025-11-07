@@ -161,83 +161,103 @@ async function handler(req, res) {
             
             // Send email notification if enabled
             if (shouldSendEmail && targetUser.email) {
-                try {
-                    // For project-related notifications, fetch client and project details
-                    let clientDescription = null;
-                    let projectDescription = null;
-                    let commentLink = link || null;
-                    
-                    if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
-                        try {
-                            const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-                            const projectId = metadataObj?.projectId;
-                            
-                            if (projectId) {
-                                // Fetch project with client information
-                                const project = await prisma.project.findUnique({
-                                    where: { id: projectId },
-                                    include: {
-                                        client: true
-                                    }
-                                });
-                                
-                                if (project) {
-                                    // Get project description
-                                    projectDescription = project.description || null;
-                                    
-                                    // Get client description if client exists
-                                    if (project.client) {
-                                        clientDescription = project.client.notes || null;
-                                    } else if (project.clientId) {
-                                        // Try to fetch client separately if not included
-                                        const client = await prisma.client.findUnique({
-                                            where: { id: project.clientId }
-                                        });
-                                        if (client) {
-                                            clientDescription = client.notes || null;
-                                        }
-                                    }
-                                    
-                                    // Build comment link - include task ID if available
-                                    if (metadataObj?.taskId) {
-                                        commentLink = `${link || `/projects/${projectId}`}#task-${metadataObj.taskId}`;
-                                    } else {
-                                        commentLink = link || `/projects/${projectId}`;
-                                    }
-                                }
-                            }
-                        } catch (fetchError) {
-                            console.error('❌ Error fetching project/client details for email:', fetchError.message);
-                            // Continue with email even if fetch fails
-                        }
-                    }
-                    
-                    await sendNotificationEmail(
+                // PRIORITY: For @mentions, send email IMMEDIATELY without waiting for project details
+                // This ensures emails are sent right after tagging
+                if (type === 'mention') {
+                    // Send email immediately for mentions (don't wait for project/client fetch)
+                    sendNotificationEmail(
                         targetUser.email,
                         title,
                         message,
                         {
-                            clientDescription,
-                            projectDescription,
-                            commentLink,
+                            commentLink: link || null,
                             isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
                         }
-                    );
-                    console.log(`✅ Email notification sent to ${targetUser.email}`);
-                } catch (emailError) {
-                    console.error('❌ Failed to send email notification:', emailError.message);
-                    console.error('❌ Email notification error details:', {
-                        message: emailError.message,
-                        code: emailError.code,
-                        response: emailError.response,
-                        to: targetUser.email,
-                        subject: title
+                    ).then(() => {
+                        console.log(`✅ @Mention email sent immediately to ${targetUser.email}`);
+                    }).catch(emailError => {
+                        console.error('❌ Failed to send @mention email:', emailError.message);
                     });
-                    // Log full error for debugging
-                    if (emailError.stack) {
-                        console.error('❌ Email notification error stack:', emailError.stack);
+                } else {
+                    // For other notification types, fetch project details (can be async)
+                    try {
+                        // For project-related notifications, fetch client and project details
+                        let clientDescription = null;
+                        let projectDescription = null;
+                        let commentLink = link || null;
+                        
+                        if (metadata && (type === 'comment' || type === 'mention' || type === 'task')) {
+                            try {
+                                const metadataObj = typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+                                const projectId = metadataObj?.projectId;
+                                
+                                if (projectId) {
+                                    // Fetch project with client information (non-blocking for mentions)
+                                    const project = await prisma.project.findUnique({
+                                        where: { id: projectId },
+                                        include: {
+                                            client: true
+                                        }
+                                    });
+                                    
+                                    if (project) {
+                                        // Get project description
+                                        projectDescription = project.description || null;
+                                        
+                                        // Get client description if client exists
+                                        if (project.client) {
+                                            clientDescription = project.client.notes || null;
+                                        } else if (project.clientId) {
+                                            // Try to fetch client separately if not included
+                                            const client = await prisma.client.findUnique({
+                                                where: { id: project.clientId }
+                                            });
+                                            if (client) {
+                                                clientDescription = client.notes || null;
+                                            }
+                                        }
+                                        
+                                        // Build comment link - include task ID if available
+                                        if (metadataObj?.taskId) {
+                                            commentLink = `${link || `/projects/${projectId}`}#task-${metadataObj.taskId}`;
+                                        } else {
+                                            commentLink = link || `/projects/${projectId}`;
+                                        }
+                                    }
+                                }
+                            } catch (fetchError) {
+                                console.error('❌ Error fetching project/client details for email:', fetchError.message);
+                                // Continue with email even if fetch fails
+                            }
+                        }
+                        
+                        await sendNotificationEmail(
+                            targetUser.email,
+                            title,
+                            message,
+                            {
+                                clientDescription,
+                                projectDescription,
+                                commentLink,
+                                isProjectRelated: !!(metadata && (type === 'comment' || type === 'mention' || type === 'task'))
+                            }
+                        );
+                        console.log(`✅ Email notification sent to ${targetUser.email}`);
+                    } catch (emailError) {
+                        console.error('❌ Failed to send email notification:', emailError.message);
+                        console.error('❌ Email notification error details:', {
+                            message: emailError.message,
+                            code: emailError.code,
+                            response: emailError.response,
+                            to: targetUser.email,
+                            subject: title
+                        });
+                        // Log full error for debugging
+                        if (emailError.stack) {
+                            console.error('❌ Email notification error stack:', emailError.stack);
+                        }
+                        // Don't fail the request if email fails
                     }
-                    // Don't fail the request if email fails
                 }
             }
             

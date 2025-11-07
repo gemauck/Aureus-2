@@ -32,6 +32,19 @@ async function handler(req, res) {
     // Get Single Lead (GET /api/leads/[id])
     if (req.method === 'GET') {
       try {
+        const userId = req.user?.sub
+        let validUserId = null
+        if (userId) {
+          try {
+            const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+            if (userExists) {
+              validUserId = userId
+            }
+          } catch (userCheckError) {
+            // User doesn't exist, skip starredBy relation
+          }
+        }
+        
         const lead = await prisma.client.findFirst({ 
           where: { id, type: 'lead' },
           include: {
@@ -39,7 +52,18 @@ async function handler(req, res) {
               include: {
                 tag: true
               }
-            }
+            },
+            ...(validUserId ? {
+              starredBy: {
+                where: {
+                  userId: validUserId
+                },
+                select: {
+                  id: true,
+                  userId: true
+                }
+              }
+            } : {})
           }
         })
         if (!lead) return notFound(res)
@@ -66,6 +90,9 @@ async function handler(req, res) {
         
         // Parse tags from ClientTag relations
         parsedLead.tags = lead.tags ? lead.tags.map(ct => ct.tag).filter(Boolean) : []
+        
+        // Check if current user has starred this lead
+        parsedLead.isStarred = validUserId && lead.starredBy && Array.isArray(lead.starredBy) && lead.starredBy.length > 0
         
         console.log('✅ Lead retrieved successfully:', lead.id)
         console.log('✅ Parsed proposals count:', Array.isArray(parsedLead.proposals) ? parsedLead.proposals.length : 'not an array')

@@ -134,6 +134,22 @@ async function handler(req, res) {
         const userId = req.user?.sub
         const userEmail = req.user?.email || 'unknown'
         
+        // Verify userId exists before using it in relation
+        let validUserId = null
+        if (userId) {
+          try {
+            const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+            if (userExists) {
+              validUserId = userId
+            } else {
+              console.warn('⚠️ User does not exist in database:', userId)
+            }
+          } catch (userCheckError) {
+            // User doesn't exist, skip starredBy relation
+            console.warn('⚠️ User check failed, skipping starredBy relation:', userId, userCheckError.message)
+          }
+        }
+        
         // Include tags for list view - needed for Tags column
         let leads = []
         try {
@@ -151,8 +167,20 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
-              // starredBy relation removed - StarredClient table doesn't exist in restored database
+              },
+              // Include starredBy relation only if we have a valid userId
+              // If no validUserId, starredBy will be undefined and isStarred will be false
+              ...(validUserId ? {
+                starredBy: {
+                  where: {
+                    userId: validUserId
+                  },
+                  select: {
+                    id: true,
+                    userId: true
+                  }
+                }
+              } : {})
             },
             orderBy: { createdAt: 'desc' } 
           })
@@ -239,8 +267,18 @@ async function handler(req, res) {
                   include: {
                     tag: true
                   }
-                }
-                // starredBy relation removed - StarredClient table doesn't exist in restored database
+                },
+                ...(validUserId ? {
+                  starredBy: {
+                    where: {
+                      userId: validUserId
+                    },
+                    select: {
+                      id: true,
+                      userId: true
+                    }
+                  }
+                } : {})
               },
               orderBy: { createdAt: 'desc' }
               // No ownerId filter - all users see all leads
@@ -276,7 +314,17 @@ async function handler(req, res) {
         const parsedLeads = leads.map(lead => {
           const parsed = parseClientJsonFields(lead);
           // Check if current user has starred this lead
-          parsed.isStarred = false; // StarredClient table doesn't exist in restored database
+          // starredBy will always be an array (empty if no matches) due to Prisma relation behavior
+          const starredByArray = Array.isArray(lead.starredBy) ? lead.starredBy : []
+          const hasStarredBy = starredByArray.length > 0
+          parsed.isStarred = !!(validUserId && hasStarredBy)
+          
+          // Debug logging for starred status (log first few leads and any that should be starred)
+          // Use leads.length instead of parsedLeads.length since parsedLeads is still being created
+          if (leads.length < 5 || hasStarredBy || lead.id === 'c56d932babacbb86cab2c2b30') {
+            console.log(`🔍 Lead ${lead.id} (${lead.name}): validUserId=${validUserId}, starredBy.length=${starredByArray.length}, starredBy=${JSON.stringify(starredByArray)}, isStarred=${parsed.isStarred}`)
+          }
+          
           return parsed;
         });
         

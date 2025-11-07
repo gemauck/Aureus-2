@@ -3,32 +3,29 @@ import path from 'path'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 import { authRequired } from './_lib/authRequired.js'
+import { created, badRequest, serverError } from './_lib/response.js'
+import { parseJsonBody } from './_lib/body.js'
 
 async function handler(req, res) {
   try {
     if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method Not Allowed' })
-      return
+      return badRequest(res, 'Method not allowed')
     }
 
     // Expect JSON: { folder?: 'contracts', name: string, dataUrl: string }
-    let body = ''
-    for await (const chunk of req) body += chunk
-    const payload = JSON.parse(body || '{}')
+    const payload = await parseJsonBody(req)
 
     const name = (payload.name || '').toString()
     const dataUrl = (payload.dataUrl || '').toString()
     const folder = (payload.folder || 'uploads').toString()
     if (!name || !dataUrl.startsWith('data:')) {
-      res.status(400).json({ error: 'Invalid payload: name and dataUrl required' })
-      return
+      return badRequest(res, 'Invalid payload: name and dataUrl required')
     }
 
     // Parse data URL
     const match = dataUrl.match(/^data:(.*?);base64,(.*)$/)
     if (!match) {
-      res.status(400).json({ error: 'Invalid dataUrl format' })
-      return
+      return badRequest(res, 'Invalid dataUrl format')
     }
     const mimeType = match[1]
     const base64 = match[2]
@@ -37,8 +34,7 @@ async function handler(req, res) {
     // Security: restrict max size (~8MB)
     const MAX_BYTES = 8 * 1024 * 1024
     if (buffer.length > MAX_BYTES) {
-      res.status(413).json({ error: 'File too large (max 8MB)' })
-      return
+      return badRequest(res, 'File too large (max 8MB)')
     }
 
     // Ensure uploads directory exists
@@ -59,10 +55,10 @@ async function handler(req, res) {
 
     // Public URL (server serves static from root)
     const publicPath = `/uploads/${folder}/${fileName}`
-    res.status(201).json({ url: publicPath, name, size: buffer.length, mimeType })
+    return created(res, { url: publicPath, name, size: buffer.length, mimeType })
   } catch (e) {
     console.error('File upload error:', e)
-    res.status(500).json({ error: 'Upload failed', details: e.message })
+    return serverError(res, 'Upload failed', e.message)
   }
 }
 

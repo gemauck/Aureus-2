@@ -313,7 +313,7 @@ const MainLayout = () => {
     });
     const ServiceAndMaintenance = window.ServiceAndMaintenance || (() => {
         console.warn('⚠️ ServiceAndMaintenance component not loaded yet.');
-        return <div className="text-center py-12 text-gray-500">Service and Maintenance loading...</div>;
+        return <div className="text-center py-12 text-gray-500">Service & Maintenance loading...</div>;
     });
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
@@ -394,7 +394,7 @@ const MainLayout = () => {
         { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: 'ACCESS_HR' }, // Admin only
         { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null }, // All users can access
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
-        { id: 'service-maintenance', label: 'Service and Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
+        { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },

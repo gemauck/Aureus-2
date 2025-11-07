@@ -2,12 +2,14 @@
 // FIX: formData initialization order fixed - moved to top to prevent TDZ errors (v2)
 const { useState, useEffect, useRef } = React;
 
-const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange, onSave, onPauseSync = null }) => {
+const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProjects, isFullPage = false, initialTab = 'overview', onTabChange, onSave, onPauseSync = null, onEditingChange = null }) => {
     // Modal owns its state - fetch data when leadId changes
     const [lead, setLead] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isAutoSaving, setIsAutoSaving] = useState(false);
     const [activeTab, setActiveTab] = useState(initialTab);
+    const [hasBeenSaved, setHasBeenSaved] = useState(false); // Track if lead has been saved at least once
     
     // Fetch lead data when leadId changes
     useEffect(() => {
@@ -118,9 +120,14 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             // Lead was just created and got an ID - clear the flag to allow auto-saves
             console.log('✅ New lead created with ID, enabling auto-saves');
             isNewLeadNotSavedRef.current = false;
+            setHasBeenSaved(true); // Mark as saved after first creation
         } else if (!lead) {
             // Lead is null - reset flag for next new lead
             isNewLeadNotSavedRef.current = true;
+            setHasBeenSaved(false); // Reset saved flag for new lead
+        } else if (lead && lead.id) {
+            // Existing lead - mark as saved
+            setHasBeenSaved(true);
         }
     }, [lead?.id]);
     
@@ -394,8 +401,86 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
     //     }
     // }, [lead?.status, lead?.stage]);
     
-    // Handle tab change and notify parent
-    const handleTabChange = (tab) => {
+    // Auto-save function that handles both new and existing leads
+    const handleAutoSave = async (currentFormData, skipIfNewLead = false) => {
+        // Don't save if there's no name (required field)
+        if (!currentFormData.name || currentFormData.name.trim() === '') {
+            return false;
+        }
+
+        // For new leads, if skipIfNewLead is true and lead hasn't been saved, skip
+        if (skipIfNewLead && !leadId && !hasBeenSaved) {
+            return false;
+        }
+
+        // Check if we're already saving to prevent duplicate saves
+        if (isAutoSavingRef.current || isSaving) {
+            return false;
+        }
+
+        try {
+            isAutoSavingRef.current = true;
+            setIsAutoSaving(true);
+
+            const leadData = {
+                ...currentFormData,
+                projectIds: selectedProjectIds,
+                lastContact: new Date().toISOString().split('T')[0]
+            };
+
+            // Use onSave prop if provided
+            if (onSave && typeof onSave === 'function') {
+                await onSave(leadData, true); // true = stay in edit mode after save
+                console.log('✅ Auto-saved lead data when switching tabs');
+                setHasBeenSaved(true); // Mark as saved after successful save
+                return true;
+            } else {
+                // Fallback to direct API calls if onSave is not provided
+                if (leadId) {
+                    await window.api.updateLead(leadId, leadData);
+                } else {
+                    const apiResponse = await window.api.createLead(leadData);
+                    const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                    // Update leadId if we just created the lead
+                    if (savedLead && savedLead.id) {
+                        // Update the lead state so the modal recognizes it as existing
+                        setLead(savedLead);
+                        // Update formData with the saved lead ID
+                        setFormData(prev => ({ ...prev, id: savedLead.id }));
+                    }
+                }
+                setHasBeenSaved(true);
+                return true;
+            }
+        } catch (error) {
+            console.error('❌ Error auto-saving lead:', error);
+            // Don't show alert for auto-save errors to avoid interrupting user flow
+            return false;
+        } finally {
+            isAutoSavingRef.current = false;
+            setIsAutoSaving(false);
+        }
+    };
+
+    // Handle tab change with auto-save
+    const handleTabChange = async (tab) => {
+        // Auto-save current form data before switching tabs
+        // Only save if there's actual data to save (name is required)
+        const currentFormData = formDataRef.current || formData;
+        
+        // Auto-save logic:
+        // 1. For existing leads (leadId exists): Always save when switching tabs
+        // 2. For new leads (no leadId): Create lead when switching away from overview tab (if name exists)
+        if (currentFormData.name && currentFormData.name.trim() !== '') {
+            if (leadId) {
+                // Existing lead: Always save on tab change
+                await handleAutoSave(currentFormData, false);
+            } else if (tab !== 'overview') {
+                // New lead: Create when switching away from overview
+                await handleAutoSave(currentFormData, false);
+            }
+        }
+
         setActiveTab(tab);
         if (onTabChange) {
             onTabChange(tab);
@@ -1564,13 +1649,20 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             // Use onSave prop if provided, otherwise fall back to direct API calls
             if (onSave && typeof onSave === 'function') {
                 await onSave(leadData, false); // false = don't stay in edit mode after save
+                setHasBeenSaved(true); // Mark as saved after successful save
             } else {
                 // Fallback to direct API calls if onSave is not provided
                 if (leadId) {
                     await window.api.updateLead(leadId, leadData);
                 } else {
-                    await window.api.createLead(leadData);
+                    const apiResponse = await window.api.createLead(leadData);
+                    const savedLead = apiResponse?.data?.lead || apiResponse?.lead || apiResponse;
+                    if (savedLead && savedLead.id) {
+                        setLead(savedLead);
+                        setFormData(prev => ({ ...prev, id: savedLead.id }));
+                    }
                 }
+                setHasBeenSaved(true);
                 onClose();
             }
         } catch (error) {
@@ -1664,9 +1756,17 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                 {/* Header */}
                 <div className="flex justify-between items-center px-6 py-4 border-b border-gray-200">
                     <div>
-                        <h2 className="text-xl font-semibold text-gray-900">
-                            {lead ? formData.name : 'Add New Lead'}
-                        </h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-semibold text-gray-900">
+                                {lead ? formData.name : 'Add New Lead'}
+                            </h2>
+                            {isAutoSaving && (
+                                <span className="text-xs text-gray-500 flex items-center gap-1">
+                                    <i className="fas fa-spinner fa-spin"></i>
+                                    Saving...
+                                </span>
+                            )}
+                        </div>
                         {lead && (
                             <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-sm text-gray-600">{formData.industry}</span>
@@ -3195,21 +3295,37 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                                                 <div className="flex items-center gap-2">
                                                                     <input
                                                                         type="text"
-                                                                        defaultValue={proposal.workingDocumentLink || ''}
+                                                                        value={formData.proposals[proposalIndex]?.workingDocumentLink || ''}
                                                                         onChange={(e) => {
+                                                                            const newLink = e.target.value;
                                                                             const updatedProposals = formData.proposals.map((p, idx) => 
-                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: e.target.value } : p
+                                                                                idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
                                                                             );
-                                                                            setFormData({ ...formData, proposals: updatedProposals });
+                                                                            setFormData(prev => ({ ...prev, proposals: updatedProposals }));
                                                                         }}
-                                                                        onBlur={async (e) => {
-                                                                            const oldLink = proposal.workingDocumentLink || '';
-                                                                            const newLink = e.target.value || '';
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                const saveButton = e.target.nextElementSibling;
+                                                                                if (saveButton) saveButton.click();
+                                                                            }
+                                                                        }}
+                                                                        placeholder="https://..."
+                                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={async () => {
+                                                                            const currentProposal = formData.proposals[proposalIndex];
+                                                                            const oldLink = (proposal.workingDocumentLink || '').trim();
+                                                                            const newLink = (currentProposal?.workingDocumentLink || '').trim();
+                                                                            
                                                                             if (oldLink !== newLink) {
                                                                                 const updatedProposals = formData.proposals.map((p, idx) => 
                                                                                     idx === proposalIndex ? { ...p, workingDocumentLink: newLink } : p
                                                                                 );
                                                                                 const updatedProposal = updatedProposals[proposalIndex];
+                                                                                
+                                                                                console.log('💾 Saving working document link:', { oldLink, newLink, proposalId: updatedProposal.id });
                                                                                 await saveProposals(updatedProposals);
                                                                                 
                                                                                 // Notify all assigned parties of the document link change
@@ -3221,12 +3337,15 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                                                                 );
                                                                             }
                                                                         }}
-                                                                        placeholder="https://..."
-                                                                        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                                                    />
-                                                                    {proposal.workingDocumentLink && (
+                                                                        className="px-3 py-1.5 text-xs bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-1"
+                                                                        title="Save working document link"
+                                                                    >
+                                                                        <i className="fas fa-save mr-1"></i>
+                                                                        Save
+                                                                    </button>
+                                                                    {formData.proposals[proposalIndex]?.workingDocumentLink && (
                                                                         <a 
-                                                                            href={proposal.workingDocumentLink} 
+                                                                            href={formData.proposals[proposalIndex].workingDocumentLink} 
                                                                             target="_blank" 
                                                                             rel="noopener noreferrer"
                                                                             className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
@@ -4178,7 +4297,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                     {isSaving ? (
                                         <><i className="fas fa-spinner fa-spin mr-2"></i>Saving...</>
                                     ) : (
-                                        <><i className="fas fa-save mr-2"></i>{leadId ? 'Update Lead' : 'Create Lead'}</>
+                                        <><i className="fas fa-save mr-2"></i>{hasBeenSaved || leadId ? 'Update Lead' : 'Create Lead'}</>
                                     )}
                                 </button>
                             </div>
@@ -4197,8 +4316,14 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             React.createElement('div', { className: 'bg-white rounded-lg w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col', onClick: (e) => e.stopPropagation() },
                 React.createElement('div', { className: 'flex justify-between items-center px-6 py-4 border-b border-gray-200' },
                     React.createElement('div', null,
-                        React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' },
-                            lead ? formData.name : 'Add New Lead'
+                        React.createElement('div', { className: 'flex items-center gap-2' },
+                            React.createElement('h2', { className: 'text-xl font-semibold text-gray-900' },
+                                lead ? formData.name : 'Add New Lead'
+                            ),
+                            isAutoSaving && React.createElement('span', { className: 'text-xs text-gray-500 flex items-center gap-1' },
+                                React.createElement('i', { className: 'fas fa-spinner fa-spin' }),
+                                'Saving...'
+                            )
                         ),
                         lead && React.createElement('div', { className: 'flex items-center gap-2 mt-0.5' },
                             React.createElement('span', { className: 'text-sm text-gray-600' }, formData.industry)
@@ -4541,7 +4666,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                         'Saving...'
                                     ) : React.createElement(React.Fragment, null,
                                         React.createElement('i', { className: 'fas fa-save mr-2' }),
-                                        leadId ? 'Update Lead' : 'Create Lead'
+                                        hasBeenSaved || leadId ? 'Update Lead' : 'Create Lead'
                                     )
                                 )
                             )

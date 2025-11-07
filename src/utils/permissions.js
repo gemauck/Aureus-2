@@ -86,9 +86,9 @@ export const PERMISSION_CATEGORIES = {
     },
     SERVICE_MAINTENANCE: {
         id: 'service_maintenance',
-        label: 'Service and Maintenance',
+        label: 'Service & Maintenance',
         permission: PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
-        description: 'Service and Maintenance Operations',
+        description: 'Service & Maintenance Operations',
         adminOnly: false
     },
     TOOL: {
@@ -175,6 +175,12 @@ export class PermissionChecker {
             return false;
         }
         
+        // CRITICAL: Admins always have all permissions, regardless of custom permissions
+        // This ensures admins can always access everything, even if custom permissions are set
+        if (isAdmin) {
+            return true;
+        }
+        
         // All users (including non-admins) have access to these modules by default
         const publicPermissions = [
             PERMISSIONS.ACCESS_CRM,
@@ -204,7 +210,7 @@ export class PermissionChecker {
             PERMISSIONS.EDIT_ASSIGNED
         ];
         
-        // Check custom permissions first (they override role and public permissions)
+        // Check custom permissions (they override role and public permissions for non-admins)
         // If custom permissions are explicitly set (not empty), they take precedence
         if (this.customPermissions && this.customPermissions.length > 0) {
             // If custom permissions include 'all', grant access (unless admin-only and not admin)
@@ -224,11 +230,6 @@ export class PermissionChecker {
         }
         
         // If no custom permissions are set, fall back to role-based and public permissions
-        
-        // Admin has all permissions by default
-        if (isAdmin) {
-            return true;
-        }
         
         // If permission is public, grant access (for non-admin users without custom permissions)
         if (publicPermissions.includes(permission)) {

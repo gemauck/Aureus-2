@@ -3639,6 +3639,58 @@ const Clients = React.memo(() => {
         );
     };
 
+    // Full-page Opportunity Detail View
+    const OpportunityDetailView = ({ opportunityId, client, onClose }) => {
+        return (
+            <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'}`}>
+                {/* Header with breadcrumb */}
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <button 
+                                onClick={onClose}
+                                className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
+                                title="Go back"
+                            >
+                                <i className="fas fa-arrow-left"></i>
+                            </button>
+                            <div className="flex items-center space-x-3">
+                                <div className={`w-2 h-2 rounded-full ${isDark ? 'bg-green-400' : 'bg-green-500'}`}></div>
+                                <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    Opportunity Details
+                                </h1>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Full-page opportunity detail content */}
+                <div className="p-6">
+                    {(() => {
+                        const Modal = window.OpportunityDetailModal;
+                        if (!Modal) {
+                            return (
+                                <div className="text-center py-8 text-gray-500">
+                                    <i className="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                                    <p>OpportunityDetailModal component is not loaded yet. Please refresh the page.</p>
+                                </div>
+                            );
+                        }
+                        return (
+                            <Modal
+                                key={opportunityId}
+                                opportunityId={opportunityId}
+                                client={client}
+                                onClose={onClose}
+                                isFullPage={true}
+                            />
+                        );
+                    })()}
+                </div>
+            </div>
+        );
+    };
+
     console.log('🎨 Clients component rendering...', { clientsLength: clients.length, leadsLength: leads.length });
 
     return (

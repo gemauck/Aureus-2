@@ -14,14 +14,53 @@ const AuditTrail = () => {
 
     const AuditLogger = window.AuditLogger;
     
-    // Get current user info from localStorage instead of auth hook
+    // Get current user info - try multiple methods
     const getCurrentUser = () => {
         try {
-            const userData = localStorage.getItem('currentUser');
-            return userData ? JSON.parse(userData) : { username: 'System', role: 'System' };
+            // Method 1: Try storage.getUser() (most reliable)
+            if (window.storage && window.storage.getUser) {
+                const user = window.storage.getUser();
+                if (user && (user.id || user.email)) {
+                    return user;
+                }
+            }
+            
+            // Method 2: Try localStorage directly
+            const userData = localStorage.getItem('abcotronics_user');
+            if (userData && userData !== 'null' && userData !== 'undefined') {
+                const parsed = JSON.parse(userData);
+                const user = parsed.user || parsed.data?.user || parsed;
+                if (user && (user.id || user.email)) {
+                    return user;
+                }
+            }
+            
+            // Method 3: Try currentUser from localStorage (legacy)
+            const currentUserData = localStorage.getItem('currentUser');
+            if (currentUserData && currentUserData !== 'null' && currentUserData !== 'undefined') {
+                const parsed = JSON.parse(currentUserData);
+                if (parsed && (parsed.id || parsed.email || parsed.username)) {
+                    return {
+                        id: parsed.id || parsed.email || parsed.username,
+                        name: parsed.name || parsed.username || 'System',
+                        email: parsed.email || 'system',
+                        role: parsed.role || 'System'
+                    };
+                }
+            }
+            
+            // Fallback
+            return { id: 'system', name: 'System', role: 'System' };
         } catch (e) {
-            return { username: 'System', role: 'System' };
+            console.error('Error getting current user:', e);
+            return { id: 'system', name: 'System', role: 'System' };
         }
+    };
+    
+    // Check if current user is admin
+    const isAdmin = () => {
+        const user = getCurrentUser();
+        return user?.role?.toLowerCase() === 'admin';
     };
 
     // Load logs
@@ -50,6 +89,35 @@ const AuditTrail = () => {
 
     const applyFilters = () => {
         let filtered = [...logs];
+        
+        const currentUser = getCurrentUser();
+        const userIsAdmin = isAdmin();
+
+        // Role-based filtering: Admin users see all activity, non-admin users see only their own
+        if (!userIsAdmin && currentUser && currentUser.id && currentUser.id !== 'system') {
+            // Non-admin users only see their own activity
+            filtered = filtered.filter(log => {
+                // Skip system logs for non-admin users (unless they're the system user)
+                if (log.userId === 'system' || log.user === 'System') {
+                    return false;
+                }
+                
+                // Match by userId if available
+                if (log.userId) {
+                    return log.userId === currentUser.id || 
+                           log.userId === currentUser._id || 
+                           log.userId === currentUser.email;
+                }
+                
+                // Fallback: match by user name or email
+                const logUser = (log.user || '').toLowerCase().trim();
+                const currentUserName = (currentUser.name || '').toLowerCase().trim();
+                const currentUserEmail = (currentUser.email || '').toLowerCase().trim();
+                
+                return (logUser && (logUser === currentUserName || logUser === currentUserEmail));
+            });
+        }
+        // Admin users see all logs (no filtering by user)
 
         // Date range filter
         if (dateRange !== 'all') {
@@ -69,7 +137,7 @@ const AuditTrail = () => {
             filtered = filtered.filter(log => log.action === filterAction);
         }
 
-        // User filter
+        // User filter (only applies if admin, or if filtering own logs)
         if (filterUser !== 'all') {
             filtered = filtered.filter(log => log.userId === filterUser);
         }
@@ -209,8 +277,28 @@ const AuditTrail = () => {
         }
     };
 
+    const userIsAdmin = isAdmin();
+    const currentUser = getCurrentUser();
+
     return (
         <div className="space-y-3">
+            {/* View Mode Indicator */}
+            {userIsAdmin ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
+                    <i className="fas fa-shield-alt text-blue-600"></i>
+                    <p className="text-xs text-blue-800 font-medium">
+                        Admin View: Showing all activity for all users
+                    </p>
+                </div>
+            ) : (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-2 flex items-center gap-2">
+                    <i className="fas fa-user text-gray-600"></i>
+                    <p className="text-xs text-gray-700 font-medium">
+                        Showing your activity only ({currentUser.name || currentUser.email || 'User'})
+                    </p>
+                </div>
+            )}
+
             {/* Summary Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">

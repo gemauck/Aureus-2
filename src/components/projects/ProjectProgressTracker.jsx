@@ -455,12 +455,11 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     };
     
     // Render progress cell - editable input fields
-    const renderProgressCell = (project, month, field, rowBgColor = '#ffffff') => {
+    const renderProgressCell = (project, month, field, rowBgColor = '#ffffff', providedKey = null) => {
         // Validate inputs
         if (!project || !project.id || !month || !field) {
             const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f3f4f6';
             return React.createElement('td', {
-                key: (project?.id || 'unknown') + '-' + String(month) + '-' + String(field),
                 style: {
                     backgroundColor: defaultBgColor,
                     border: '1px solid #d1d5db'
@@ -520,72 +519,103 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
             }
         };
         
-        // Spreadsheet-style cell with borders
-        // Use more visible alternate color
-        const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f3f4f6';
+        // Modern cell styling with enhanced visual design
+        const defaultBgColor = rowBgColor === '#ffffff' ? '#ffffff' : '#f8fafc';
         const cellStyle = {
-            padding: '2px 8px',
-            border: '1px solid #d1d5db',
-            backgroundColor: isWorking ? '#f0f9ff' : defaultBgColor,
-            minHeight: field === 'comments' ? '40px' : '24px',
+            padding: '8px 12px',
+            border: 'none',
+            borderBottom: '1px solid #e5e7eb',
+            backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.05)' : defaultBgColor,
+            minHeight: field === 'comments' ? '60px' : '40px',
             verticalAlign: 'top',
-            width: field === 'comments' ? '150px' : field === 'compliance' ? '120px' : '120px',
-            minWidth: field === 'comments' ? '150px' : field === 'compliance' ? '120px' : '120px'
+            width: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
+            minWidth: field === 'comments' ? '160px' : field === 'compliance' ? '130px' : '130px',
+            transition: 'all 0.2s ease',
+            position: 'relative'
         };
         
-        // Always show input boxes (spreadsheet style)
+        // Modern input styling with better UX
         if (field === 'comments') {
             return React.createElement('td', {
-                key: cellKey,
+                key: providedKey || `${project.id}-${safeMonth}-${field}`,
                 style: cellStyle,
-                className: 'relative'
+                className: 'relative group'
             }, React.createElement('textarea', {
                 value: displayValue || '',
                 onChange: handleChange,
                 onFocus: handleStartEdit,
                 onBlur: handleBlur,
                 onKeyDown: handleKeyDown,
-                placeholder: 'Enter comments...',
+                placeholder: 'Add comments...',
                 style: {
                     width: '100%',
                     height: '100%',
-                    minHeight: '36px',
-                    padding: '2px 6px',
-                    fontSize: '11px',
+                    minHeight: '44px',
+                    padding: '8px 12px',
+                    fontSize: '12px',
                     fontFamily: 'inherit',
-                    border: 'none',
+                    border: isEditing ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                    borderRadius: '8px',
                     outline: 'none',
-                    backgroundColor: 'transparent',
-                    resize: 'none',
-                    lineHeight: '1.3'
+                    backgroundColor: isEditing ? '#ffffff' : 'transparent',
+                    resize: 'vertical',
+                    lineHeight: '1.5',
+                    transition: 'all 0.2s ease',
+                    boxShadow: isEditing ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none'
                 },
-                className: isEditing ? 'ring-1 ring-blue-500' : ''
+                className: isEditing ? '' : 'hover:border-blue-300 hover:bg-blue-50'
             }));
         } else {
-            // For compliance and data - always show input box
+            // Modern input for compliance and data fields
             return React.createElement('td', {
-                key: cellKey,
-                style: cellStyle
-            }, React.createElement('input', {
-                type: 'text',
-                value: displayValue || '',
-                onChange: handleChange,
-                onFocus: handleStartEdit,
-                onBlur: handleBlur,
-                onKeyDown: handleKeyDown,
-                placeholder: field === 'compliance' ? 'Link...' : 'Link...',
-                style: {
-                    width: '100%',
-                    height: '20px',
-                    padding: '1px 4px',
-                    fontSize: '11px',
-                    fontFamily: 'inherit',
-                    border: 'none',
-                    outline: 'none',
-                    backgroundColor: 'transparent'
-                },
-                className: isEditing ? 'ring-1 ring-blue-500' : ''
-            }));
+                key: providedKey || `${project.id}-${safeMonth}-${field}`,
+                style: cellStyle,
+                className: 'relative group'
+            }, React.createElement('div', { style: { position: 'relative', width: '100%' } },
+                React.createElement('input', {
+                    type: 'text',
+                    value: displayValue || '',
+                    onChange: handleChange,
+                    onFocus: handleStartEdit,
+                    onBlur: handleBlur,
+                    onKeyDown: handleKeyDown,
+                    placeholder: field === 'compliance' ? 'Enter link...' : 'Enter link...',
+                    style: {
+                        width: '100%',
+                        height: '36px',
+                        padding: '8px 12px',
+                        paddingRight: displayValue ? '32px' : '12px',
+                        fontSize: '12px',
+                        fontFamily: 'inherit',
+                        border: isEditing ? '2px solid #3b82f6' : '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        outline: 'none',
+                        backgroundColor: isEditing ? '#ffffff' : 'transparent',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isEditing ? '0 0 0 3px rgba(59, 130, 246, 0.1)' : 'none'
+                    },
+                    className: isEditing ? '' : 'hover:border-blue-300 hover:bg-blue-50'
+                }),
+                displayValue && displayValue.trim() ? React.createElement('a', {
+                    href: displayValue.startsWith('http') ? displayValue : `https://${displayValue}`,
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                    style: {
+                        position: 'absolute',
+                        right: '8px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        color: '#3b82f6',
+                        fontSize: '12px',
+                        textDecoration: 'none',
+                        padding: '4px',
+                        borderRadius: '4px',
+                        transition: 'all 0.2s ease'
+                    },
+                    className: 'hover:bg-blue-100',
+                    onClick: (e) => e.stopPropagation()
+                }, React.createElement('i', { className: 'fas fa-external-link-alt' })) : null
+            ));
         }
     };
     
@@ -601,215 +631,377 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     }
     
     // Main render using React.createElement
-    return React.createElement('div', { className: 'space-y-3' },
-        // Header
-        React.createElement('div', { className: 'flex items-center justify-between' },
-            React.createElement('div', { className: 'flex items-center gap-2' },
-                React.createElement('button', {
-                    onClick: onBack,
-                    className: 'p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors'
-                }, React.createElement('i', { className: 'fas fa-arrow-left' })),
-                React.createElement('div', null,
-                    React.createElement('h1', { className: 'text-lg font-semibold text-gray-900' }, 'Project Progress Tracker'),
-                    React.createElement('p', { className: 'text-xs text-gray-500' }, 'Track monthly progress in arrears')
-                )
-            ),
-            React.createElement('div', { className: 'flex items-center gap-2' },
-                React.createElement('label', { className: 'text-[10px] font-medium text-gray-600' }, 'Year:'),
-                React.createElement('select', {
-                    value: String(safeYear),
-                    onChange: (e) => {
-                        const newYear = parseInt(e.target.value);
-                        if (!isNaN(newYear)) setSelectedYear(newYear);
+    return React.createElement('div', { className: 'space-y-4 p-4 md:p-6' },
+        // Modern Header with Card Design
+        React.createElement('div', { 
+            className: 'bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6',
+            style: { backgroundImage: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)' }
+        },
+            React.createElement('div', { className: 'flex flex-col md:flex-row md:items-center md:justify-between gap-4' },
+                React.createElement('div', { className: 'flex items-center gap-3' },
+                    React.createElement('button', {
+                        onClick: onBack,
+                        className: 'p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95',
+                        style: { minWidth: '40px', minHeight: '40px' }
+                    }, React.createElement('i', { className: 'fas fa-arrow-left text-lg' })),
+                    React.createElement('div', null,
+                        React.createElement('h1', { 
+                            className: 'text-xl md:text-2xl font-bold text-gray-900 mb-1',
+                            style: { letterSpacing: '-0.02em' }
+                        }, 'Project Progress Tracker'),
+                        React.createElement('p', { className: 'text-sm text-gray-500 flex items-center gap-2' },
+                            React.createElement('i', { className: 'fas fa-info-circle text-xs' }),
+                            'Track monthly progress in arrears - highlighted working months (2 months back)'
+                        )
+                    )
+                ),
+                React.createElement('div', { className: 'flex items-center gap-3' },
+                    React.createElement('div', { className: 'flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200' },
+                        React.createElement('i', { className: 'fas fa-calendar-alt text-gray-400 text-sm' }),
+                        React.createElement('label', { className: 'text-sm font-medium text-gray-700' }, 'Year:'),
+                        React.createElement('select', {
+                            value: String(safeYear),
+                            onChange: (e) => {
+                                const newYear = parseInt(e.target.value);
+                                if (!isNaN(newYear)) setSelectedYear(newYear);
+                            },
+                            className: 'ml-1 px-3 py-1.5 text-sm font-semibold border-0 bg-transparent text-gray-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 rounded',
+                            style: { appearance: 'none', backgroundImage: 'none' }
+                        }, (Array.isArray(yearOptions) ? yearOptions : []).map(y => 
+                            React.createElement('option', { key: String(y), value: String(y) }, String(y) + (y === currentYear ? ' (Current)' : ''))
+                        ))
+                    ),
+                    React.createElement('button', {
+                        onClick: () => {
+                            // Export functionality can be added here
+                            console.log('Export to Excel');
+                        },
+                        className: 'px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all duration-200 hover:shadow-md active:scale-95 flex items-center gap-2',
                     },
-                    className: 'px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white text-gray-700'
-                }, Array.isArray(yearOptions) && yearOptions.map(y => 
-                    React.createElement('option', { key: String(y), value: String(y) }, String(y) + (y === currentYear ? ' (Current)' : ''))
-                ))
+                        React.createElement('i', { className: 'fas fa-file-excel' }),
+                        React.createElement('span', { className: 'hidden md:inline' }, 'Export')
+                    )
+                )
             )
         ),
-        // Error state
-        loadError ? React.createElement('div', { className: 'bg-red-50 border border-red-200 rounded-lg p-4' },
-            React.createElement('p', { className: 'text-red-800' }, 'Error: ' + String(loadError)),
-            React.createElement('button', {
-                onClick: () => window.location.reload(),
-                className: 'mt-2 px-3 py-1.5 bg-red-600 text-white rounded text-xs'
-            }, 'Reload')
+        // Error state - Modern Design
+        loadError ? React.createElement('div', { 
+            className: 'bg-red-50 border-l-4 border-red-500 rounded-lg p-4 shadow-sm'
+        },
+            React.createElement('div', { className: 'flex items-start gap-3' },
+                React.createElement('i', { className: 'fas fa-exclamation-circle text-red-500 text-xl mt-0.5' }),
+                React.createElement('div', { className: 'flex-1' },
+                    React.createElement('p', { className: 'text-red-800 font-semibold mb-1' }, 'Error loading projects'),
+                    React.createElement('p', { className: 'text-red-600 text-sm mb-3' }, String(loadError)),
+                    React.createElement('button', {
+                        onClick: () => window.location.reload(),
+                        className: 'px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors'
+                    }, 'Reload Page')
+                )
+            )
         ) : null,
-        // Working Months Info - aligned with PROJECT column
+        // Working Months Info - Modern Badge Design
         React.createElement('div', { 
-            className: 'mb-2',
+            className: 'flex flex-col md:flex-row md:items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200',
             style: { 
                 paddingLeft: '1px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
             }
         },
-            React.createElement('button', {
-                className: 'px-3 py-1.5 bg-blue-100 text-blue-800 rounded-lg text-xs font-medium hover:bg-blue-200 transition-colors',
+            React.createElement('div', {
+                className: 'px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm',
                 style: { 
-                    width: '320px',
-                    textAlign: 'left',
+                    width: '100%',
+                    maxWidth: '320px',
                     flexShrink: 0
                 }
-            }, 'Working Months'),
-            React.createElement('span', { 
-                className: 'text-xs text-gray-600'
-            }, 'Highlighted columns show current focus months (2 months in arrears).')
+            },
+                React.createElement('i', { className: 'fas fa-calendar-check' }),
+                React.createElement('span', null, 'Working Months')
+            ),
+            React.createElement('div', { className: 'flex-1 flex items-center gap-2' },
+                React.createElement('i', { className: 'fas fa-lightbulb text-blue-500' }),
+                React.createElement('span', { 
+                    className: 'text-sm text-gray-700'
+                }, 'Highlighted columns show current focus months (2 months in arrears)')
+            )
         ),
-        // Table - Spreadsheet style
-        React.createElement('div', { ref: tableRef, className: 'overflow-x-auto bg-white border border-gray-300 shadow-sm' },
+        // Modern Table Container with Enhanced Styling
+        React.createElement('div', { 
+            ref: tableRef, 
+            className: 'overflow-x-auto bg-white rounded-xl shadow-lg border border-gray-200',
+            style: { 
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
+            }
+        },
             React.createElement('table', { 
-                className: 'text-left border-collapse',
+                className: 'text-left border-collapse w-full',
                 style: { borderSpacing: 0, tableLayout: 'auto' }
             },
-                React.createElement('thead', { className: 'bg-gray-100 border-b-2 border-gray-400' },
-                    // First row: Month headers
+                React.createElement('thead', { 
+                    className: 'bg-gradient-to-r from-gray-50 to-gray-100',
+                    style: { 
+                        borderBottom: '2px solid #e5e7eb',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 20
+                    }
+                },
+                    // First row: Month headers - Modern Design
                     React.createElement('tr', null,
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '6px 10px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af',
-                                borderRight: '2px solid #6b7280',
+                                padding: '12px 16px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                backgroundColor: '#1f2937',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderRight: '2px solid #374151',
                                 position: 'sticky',
                                 left: 0,
-                                zIndex: 10,
+                                zIndex: 15,
                                 minWidth: '320px',
-                                width: '320px'
+                                width: '320px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
                             },
-                            className: 'text-left sticky left-0 z-10'
-                        }, 'Project'),
-                        Array.isArray(months) && months.map((month, idx) => {
+                            className: 'text-left sticky left-0'
+                        }, 
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', { className: 'fas fa-project-diagram text-sm' }),
+                                React.createElement('span', null, 'Project')
+                            )
+                        ),
+                        (Array.isArray(months) ? months : []).map((month, idx) => {
                             const safeMonth = String(month || '');
                             const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
                             return React.createElement('th', {
                                 key: safeMonth + '-header',
                                 colSpan: 3,
                                 style: {
-                                    padding: '6px 10px',
-                                    fontSize: '11px',
-                                    fontWeight: '600',
+                                    padding: '12px 16px',
+                                    fontSize: '12px',
+                                    fontWeight: '700',
                                     textAlign: 'center',
-                                    backgroundColor: isWorking ? '#eff6ff' : '#f3f4f6',
-                                    border: '1px solid #9ca3af',
-                                    borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #9ca3af',
+                                    backgroundColor: isWorking ? '#3b82f6' : '#f9fafb',
+                                    backgroundImage: isWorking ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' : 'none',
+                                    color: isWorking ? '#ffffff' : '#374151',
+                                    border: 'none',
+                                    borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
+                                    borderBottom: '2px solid ' + (isWorking ? '#1e40af' : '#e5e7eb'),
                                     minWidth: '390px',
-                                    width: '390px'
+                                    width: '390px',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.05em',
+                                    position: 'relative'
                                 }
-                            }, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2));
+                            }, 
+                                isWorking ? React.createElement('div', { className: 'flex items-center justify-center gap-2' },
+                                    React.createElement('i', { className: 'fas fa-star text-xs' }),
+                                    React.createElement('span', null, safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)),
+                                    React.createElement('span', { 
+                                        className: 'ml-1 px-1.5 py-0.5 bg-white bg-opacity-20 rounded text-[10px] font-bold'
+                                    }, 'WORKING')
+                                ) : safeMonth.slice(0, 3) + " '" + String(safeYear).slice(-2)
+                            );
                         }),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '6px 10px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af',
-                                borderLeft: '2px solid #6b7280',
-                                minWidth: '100px',
-                                width: '100px'
-                            }
-                        }, 'PM'),
-                        React.createElement('th', { 
-                            rowSpan: 2,
-                            style: {
-                                padding: '6px 10px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af',
+                                padding: '12px 16px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                backgroundColor: '#1f2937',
+                                color: '#ffffff',
+                                border: 'none',
+                                borderLeft: '2px solid #374151',
                                 minWidth: '120px',
-                                width: '120px'
+                                width: '120px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
                             }
-                        }, 'Type'),
+                        }, 
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', { className: 'fas fa-user-tie text-sm' }),
+                                React.createElement('span', null, 'PM')
+                            )
+                        ),
                         React.createElement('th', { 
                             rowSpan: 2,
                             style: {
-                                padding: '6px 10px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                backgroundColor: '#f3f4f6',
-                                border: '1px solid #9ca3af',
-                                minWidth: '100px',
-                                width: '100px'
+                                padding: '12px 16px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                backgroundColor: '#1f2937',
+                                color: '#ffffff',
+                                border: 'none',
+                                minWidth: '140px',
+                                width: '140px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
                             }
-                        }, 'Status')
+                        }, 
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', { className: 'fas fa-tag text-sm' }),
+                                React.createElement('span', null, 'Type')
+                            )
+                        ),
+                        React.createElement('th', { 
+                            rowSpan: 2,
+                            style: {
+                                padding: '12px 16px',
+                                fontSize: '12px',
+                                fontWeight: '700',
+                                backgroundColor: '#1f2937',
+                                color: '#ffffff',
+                                border: 'none',
+                                minWidth: '120px',
+                                width: '120px',
+                                textTransform: 'uppercase',
+                                letterSpacing: '0.05em'
+                            }
+                        }, 
+                            React.createElement('div', { className: 'flex items-center gap-2' },
+                                React.createElement('i', { className: 'fas fa-circle-check text-sm' }),
+                                React.createElement('span', null, 'Status')
+                            )
+                        )
                     ),
-                    // Second row: Sub-headers (Compliance, Data, Comments) for each month
+                    // Second row: Sub-headers (Compliance, Data, Comments) - Modern Design
                     React.createElement('tr', null,
-                        Array.isArray(months) && months.map((month, idx) => {
+                        (Array.isArray(months) ? months : []).map((month, idx) => {
                             const safeMonth = String(month || '');
                             const isWorking = Array.isArray(workingMonths) && workingMonths.includes(idx) && safeYear === currentYear;
                             return React.createElement(React.Fragment, { key: safeMonth + '-subheaders' },
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '4px 8px',
-                                        fontSize: '10px',
-                                        fontWeight: '500',
+                                        padding: '8px 12px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
-                                        border: '1px solid #d1d5db',
-                                        borderTop: 'none',
-                                        borderLeft: idx === 0 ? '2px solid #6b7280' : '1px solid #d1d5db',
-                                        minWidth: '120px',
-                                        width: '120px'
+                                        backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.1)' : '#ffffff',
+                                        color: isWorking ? '#1e40af' : '#6b7280',
+                                        border: 'none',
+                                        borderLeft: idx === 0 ? '2px solid #374151' : '1px solid #e5e7eb',
+                                        borderBottom: '1px solid #e5e7eb',
+                                        minWidth: '130px',
+                                        width: '130px',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em'
                                     }
-                                }, 'Compliance'),
+                                }, 
+                                    React.createElement('div', { className: 'flex items-center gap-1.5' },
+                                        React.createElement('i', { className: 'fas fa-shield-check text-xs' }),
+                                        React.createElement('span', null, 'Compliance')
+                                    )
+                                ),
                                 React.createElement('th', { 
                                     style: {
-                                        padding: '4px 8px',
-                                        fontSize: '10px',
-                                        fontWeight: '500',
+                                        padding: '8px 12px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
-                                        border: '1px solid #d1d5db',
-                                        borderTop: 'none',
-                                        minWidth: '120px',
-                                        width: '120px'
+                                        backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.1)' : '#ffffff',
+                                        color: isWorking ? '#1e40af' : '#6b7280',
+                                        border: 'none',
+                                        borderBottom: '1px solid #e5e7eb',
+                                        minWidth: '130px',
+                                        width: '130px',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em'
                                     }
-                                }, 'Data'),
+                                }, 
+                                    React.createElement('div', { className: 'flex items-center gap-1.5' },
+                                        React.createElement('i', { className: 'fas fa-database text-xs' }),
+                                        React.createElement('span', null, 'Data')
+                                    )
+                                ),
                                 React.createElement('th', {
                                     style: {
-                                        padding: '4px 8px',
-                                        fontSize: '10px',
-                                        fontWeight: '500',
+                                        padding: '8px 12px',
+                                        fontSize: '11px',
+                                        fontWeight: '600',
                                         textAlign: 'left',
-                                        backgroundColor: isWorking ? '#eff6ff' : '#f9fafb',
-                                        border: '1px solid #d1d5db',
-                                        borderTop: 'none',
-                                        minWidth: '150px',
-                                        width: '150px'
+                                        backgroundColor: isWorking ? 'rgba(59, 130, 246, 0.1)' : '#ffffff',
+                                        color: isWorking ? '#1e40af' : '#6b7280',
+                                        border: 'none',
+                                        borderBottom: '1px solid #e5e7eb',
+                                        minWidth: '160px',
+                                        width: '160px',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.03em'
                                     }
-                                }, 'Comments')
+                                }, 
+                                    React.createElement('div', { className: 'flex items-center gap-1.5' },
+                                        React.createElement('i', { className: 'fas fa-comment-dots text-xs' }),
+                                        React.createElement('span', null, 'Comments')
+                                    )
+                                )
                             );
                         })
                     )
                 ),
                 React.createElement('tbody', null,
                     safeProjects.length === 0 ? React.createElement('tr', null,
-                        React.createElement('td', { colSpan: months.length * 3 + 4, className: 'px-4 py-8 text-center text-gray-500' }, 
+                        React.createElement('td', { 
+                            colSpan: months.length * 3 + 4, 
+                            className: 'px-8 py-16 text-center',
+                            style: { 
+                                backgroundColor: '#f8fafc',
+                                border: 'none'
+                            }
+                        }, 
                             loadError 
-                                ? React.createElement('div', { className: 'flex flex-col items-center gap-2' },
-                                    React.createElement('i', { className: 'fas fa-exclamation-triangle text-yellow-500 text-2xl' }),
-                                    React.createElement('span', { className: 'text-red-600 font-medium' }, 'Error loading projects'),
-                                    React.createElement('span', { className: 'text-xs text-gray-400' }, loadError)
+                                ? React.createElement('div', { 
+                                    className: 'flex flex-col items-center gap-4 max-w-md mx-auto',
+                                    style: { padding: '24px' }
+                                },
+                                    React.createElement('div', {
+                                        className: 'w-16 h-16 rounded-full bg-red-100 flex items-center justify-center',
+                                        style: { backgroundColor: '#fee2e2' }
+                                    },
+                                        React.createElement('i', { className: 'fas fa-exclamation-triangle text-red-600 text-2xl' })
+                                    ),
+                                    React.createElement('div', { className: 'space-y-2' },
+                                        React.createElement('h3', { className: 'text-lg font-semibold text-gray-900' }, 'Error loading projects'),
+                                        React.createElement('p', { className: 'text-sm text-gray-600' }, String(loadError))
+                                    ),
+                                    React.createElement('button', {
+                                        onClick: () => window.location.reload(),
+                                        className: 'px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors shadow-sm'
+                                    }, 'Reload Page')
                                 )
                                 : projects.length === 0
-                                    ? React.createElement('div', { className: 'flex flex-col items-center gap-2' },
-                                        React.createElement('i', { className: 'fas fa-filter text-gray-400 text-2xl' }),
-                                        React.createElement('span', null, 'No projects with monthly progress found'),
-                                        React.createElement('span', { className: 'text-xs text-gray-400' }, 'Projects need monthly progress data or MONTHLY type to appear here')
+                                    ? React.createElement('div', { 
+                                        className: 'flex flex-col items-center gap-4 max-w-md mx-auto',
+                                        style: { padding: '24px' }
+                                    },
+                                        React.createElement('div', {
+                                            className: 'w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center',
+                                            style: { backgroundColor: '#dbeafe' }
+                                        },
+                                            React.createElement('i', { className: 'fas fa-filter text-blue-600 text-2xl' })
+                                        ),
+                                        React.createElement('div', { className: 'space-y-2 text-center' },
+                                            React.createElement('h3', { className: 'text-lg font-semibold text-gray-900' }, 'No projects found'),
+                                            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Projects need monthly progress data or MONTHLY type to appear here')
+                                        )
                                     )
-                                    : React.createElement('div', { className: 'flex flex-col items-center gap-2' },
-                                        React.createElement('i', { className: 'fas fa-info-circle text-gray-400 text-2xl' }),
-                                        React.createElement('span', null, 'No valid MONTHLY projects to display'),
-                                        React.createElement('span', { className: 'text-xs text-gray-400' }, 'Projects may be missing required fields')
+                                    : React.createElement('div', { 
+                                        className: 'flex flex-col items-center gap-4 max-w-md mx-auto',
+                                        style: { padding: '24px' }
+                                    },
+                                        React.createElement('div', {
+                                            className: 'w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center',
+                                            style: { backgroundColor: '#f3f4f6' }
+                                        },
+                                            React.createElement('i', { className: 'fas fa-info-circle text-gray-500 text-2xl' })
+                                        ),
+                                        React.createElement('div', { className: 'space-y-2 text-center' },
+                                            React.createElement('h3', { className: 'text-lg font-semibold text-gray-900' }, 'No valid projects to display'),
+                                            React.createElement('p', { className: 'text-sm text-gray-600' }, 'Projects may be missing required fields')
+                                        )
                                     )
                         )
                     ) : (Array.isArray(safeProjects) && safeProjects.length > 0 ? safeProjects.map((project, rowIndex) => {
@@ -819,97 +1011,155 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             return null;
                         }
                         
-                        // Alternate row colors - more visible
+                        // Modern row styling with subtle gradients
                         const isEvenRow = rowIndex % 2 === 0;
-                        const rowBgColor = isEvenRow ? '#ffffff' : '#f3f4f6';
+                        const rowBgColor = isEvenRow ? '#ffffff' : '#f8fafc';
                         
-                        return React.createElement('tr', { 
-                            key: String(project.id),
-                            style: {
-                                borderBottom: '1px solid #d1d5db',
-                                backgroundColor: rowBgColor
-                            },
-                            onMouseEnter: (e) => {
-                                e.currentTarget.style.backgroundColor = '#f9fafb';
-                            },
-                            onMouseLeave: (e) => {
-                                e.currentTarget.style.backgroundColor = rowBgColor;
-                            }
-                        },
+                        // Build all cells for this row
+                        const monthCells = (Array.isArray(months) ? months : []).reduce((acc, month) => {
+                            const safeMonth = String(month || '');
+                            acc.push(
+                                renderProgressCell(project, safeMonth, 'compliance', rowBgColor, `${project.id}-${safeMonth}-compliance`),
+                                renderProgressCell(project, safeMonth, 'data', rowBgColor, `${project.id}-${safeMonth}-data`),
+                                renderProgressCell(project, safeMonth, 'comments', rowBgColor, `${project.id}-${safeMonth}-comments`)
+                            );
+                            return acc;
+                        }, []);
+                        
+                        // Build all children for the row - flatten monthCells to ensure no nested arrays
+                        const rowChildren = [
                             React.createElement('td', { 
                                 style: {
-                                    padding: '4px 10px',
-                                    fontSize: '11px',
+                                    padding: '12px 16px',
+                                    fontSize: '13px',
                                     backgroundColor: rowBgColor,
-                                    border: '1px solid #d1d5db',
-                                    borderRight: '2px solid #6b7280',
+                                    border: 'none',
+                                    borderRight: '2px solid #374151',
                                     position: 'sticky',
                                     left: 0,
                                     zIndex: 9,
                                     minWidth: '320px',
-                                    width: '320px'
+                                    width: '320px',
+                                    transition: 'background-color 0.2s ease'
                                 },
-                                className: 'sticky left-0 z-10'
+                                className: 'sticky left-0'
                             },
-                                React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
-                                    React.createElement('span', { style: { fontWeight: '600', color: '#111827', fontSize: '11px' } }, String(project.name || 'Unnamed Project')),
-                                    project.type && project.type !== '-' && project.type.trim() ? React.createElement('span', { style: { color: '#4b5563', fontSize: '10px' } }, String(project.type)) : null,
-                                    React.createElement('span', { style: { color: '#6b7280', fontSize: '10px' } }, String(project.client || 'No Client'))
+                                React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: '4px' } },
+                                    React.createElement('span', { 
+                                        style: { 
+                                            fontWeight: '600', 
+                                            color: '#111827', 
+                                            fontSize: '13px',
+                                            lineHeight: '1.4'
+                                        } 
+                                    }, String(project.name || 'Unnamed Project')),
+                                    project.type && project.type !== '-' && project.type.trim() ? React.createElement('span', { 
+                                        style: { 
+                                            color: '#6b7280', 
+                                            fontSize: '11px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        } 
+                                    },
+                                        React.createElement('i', { className: 'fas fa-tag text-[9px]' }),
+                                        String(project.type)
+                                    ) : null,
+                                    React.createElement('span', { 
+                                        style: { 
+                                            color: '#9ca3af', 
+                                            fontSize: '11px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '4px'
+                                        } 
+                                    },
+                                        React.createElement('i', { className: 'fas fa-building text-[9px]' }),
+                                        String(project.client || 'No Client')
+                                    )
                                 )
                             ),
-                            Array.isArray(months) && months.map(month => {
-                                const safeMonth = String(month || '');
-                                return React.createElement(React.Fragment, { key: safeMonth },
-                                    renderProgressCell(project, safeMonth, 'compliance', rowBgColor),
-                                    renderProgressCell(project, safeMonth, 'data', rowBgColor),
-                                    renderProgressCell(project, safeMonth, 'comments', rowBgColor)
-                                );
-                            }),
+                            ...monthCells,
                             React.createElement('td', { 
                                 style: {
-                                    padding: '2px 6px',
-                                    fontSize: '11px',
-                                    border: '1px solid #d1d5db',
-                                    borderLeft: '2px solid #6b7280',
+                                    padding: '12px 16px',
+                                    fontSize: '12px',
+                                    border: 'none',
+                                    borderLeft: '2px solid #374151',
                                     backgroundColor: rowBgColor,
-                                    color: '#4b5563',
-                                    minWidth: '100px',
-                                    width: '100px'
+                                    color: '#374151',
+                                    minWidth: '120px',
+                                    width: '120px',
+                                    fontWeight: '500'
                                 }
-                            }, String(project.manager || '-')),
+                            }, 
+                                project.manager && project.manager !== '-' ? React.createElement('div', { className: 'flex items-center gap-2' },
+                                    React.createElement('div', {
+                                        className: 'w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center',
+                                        style: { backgroundColor: '#dbeafe' }
+                                    },
+                                        React.createElement('i', { className: 'fas fa-user text-blue-600 text-xs' })
+                                    ),
+                                    React.createElement('span', null, String(project.manager))
+                                ) : React.createElement('span', { className: 'text-gray-400' }, '-')
+                            ),
                             React.createElement('td', { 
                                 style: {
-                                    padding: '2px 6px',
-                                    fontSize: '11px',
-                                    border: '1px solid #d1d5db',
+                                    padding: '12px 16px',
+                                    fontSize: '12px',
+                                    border: 'none',
                                     backgroundColor: rowBgColor,
-                                    color: '#4b5563',
+                                    color: '#374151',
+                                    minWidth: '140px',
+                                    width: '140px',
+                                    fontWeight: '500'
+                                }
+                            }, 
+                                project.type && project.type !== '-' ? React.createElement('span', {
+                                    className: 'px-2.5 py-1 bg-purple-100 text-purple-700 rounded-md text-xs font-semibold',
+                                    style: { display: 'inline-block' }
+                                }, String(project.type)) : React.createElement('span', { className: 'text-gray-400' }, '-')
+                            ),
+                            React.createElement('td', { 
+                                style: {
+                                    padding: '12px 16px',
+                                    border: 'none',
+                                    backgroundColor: rowBgColor,
                                     minWidth: '120px',
                                     width: '120px'
                                 }
-                            }, String(project.type || '-')),
-                            React.createElement('td', { 
-                                style: {
-                                    padding: '2px 6px',
-                                    fontSize: '11px',
-                                    border: '1px solid #d1d5db',
-                                    backgroundColor: rowBgColor,
-                                    minWidth: '100px',
-                                    width: '100px'
-                                }
                             },
                                 React.createElement('span', {
-                                    style: {
-                                        padding: '1px 6px',
-                                        fontSize: '10px',
-                                        borderRadius: '4px',
-                                        fontWeight: '500',
-                                        backgroundColor: '#f3f4f6',
-                                        color: '#374151'
+                                    className: 'px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1.5',
+                                    style: { 
+                                        display: 'inline-flex',
+                                        backgroundColor: '#d1fae5',
+                                        color: '#065f46'
                                     }
-                                }, String(project.status || 'Unknown'))
+                                },
+                                    React.createElement('i', { className: 'fas fa-circle-check text-[8px]' }),
+                                    String(project.status || 'Active')
+                                )
                             )
-                        );
+                        ];
+                        
+                        // Use React.createElement with all children as separate arguments
+                        return React.createElement('tr', { 
+                            key: String(project.id),
+                            style: {
+                                borderBottom: '1px solid #e5e7eb',
+                                backgroundColor: rowBgColor,
+                                transition: 'all 0.2s ease'
+                            },
+                            onMouseEnter: (e) => {
+                                e.currentTarget.style.backgroundColor = '#f1f5f9';
+                                e.currentTarget.style.boxShadow = 'inset 0 0 0 1px rgba(59, 130, 246, 0.1)';
+                            },
+                            onMouseLeave: (e) => {
+                                e.currentTarget.style.backgroundColor = rowBgColor;
+                                e.currentTarget.style.boxShadow = 'none';
+                            }
+                        }, ...rowChildren);
                     }).filter(item => item !== null) : []
                     )
                 )

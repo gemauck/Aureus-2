@@ -1,21 +1,25 @@
 // Get dependencies from window
-const { useState } = React;
+const { useState, useEffect } = React;
 
 const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
     const [formData, setFormData] = useState({
+        name: '',
         email: '',
         role: 'user',
         department: '',
-        message: ''
+        message: '',
+        accessibleProjectIds: []
     });
 
     const [isLoading, setIsLoading] = useState(false);
+    const [availableProjects, setAvailableProjects] = useState([]);
+    const [loadingProjects, setLoadingProjects] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         
         // Validation
-        if (!formData.email || !formData.role) {
+        if (!formData.name || !formData.email || !formData.role) {
             alert('Please fill in all required fields');
             return;
         }
@@ -30,6 +34,14 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
         setIsLoading(true);
         
         try {
+            console.log('InviteUserModal: Submitting invitation with data:', {
+                email: formData.email,
+                name: formData.name,
+                role: formData.role,
+                accessibleProjectIds: formData.accessibleProjectIds,
+                accessibleProjectIdsLength: formData.accessibleProjectIds?.length || 0
+            });
+            
             // Simulate API call delay
             await new Promise(resolve => setTimeout(resolve, 1000));
             onSave(formData);
@@ -40,6 +52,102 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
             setIsLoading(false);
         }
     };
+
+    // Load projects when role is guest
+    useEffect(() => {
+        const loadProjects = async () => {
+            if (formData.role === 'guest') {
+                setLoadingProjects(true);
+                try {
+                    const token = window.storage?.getToken?.();
+                    if (!token) {
+                        console.warn('No token available for loading projects');
+                        setAvailableProjects([]);
+                        setLoadingProjects(false);
+                        return;
+                    }
+
+                    let projects = [];
+                    
+                    // Try DatabaseAPI first (preferred)
+                    if (window.DatabaseAPI && typeof window.DatabaseAPI.getProjects === 'function') {
+                        try {
+                            const response = await window.DatabaseAPI.getProjects();
+                            if (response?.data?.projects) {
+                                projects = response.data.projects;
+                            } else if (response?.projects) {
+                                projects = response.projects;
+                            } else if (Array.isArray(response?.data)) {
+                                projects = response.data;
+                            } else if (Array.isArray(response)) {
+                                projects = response;
+                            }
+                        } catch (dbError) {
+                            console.warn('DatabaseAPI.getProjects failed, trying window.api:', dbError);
+                        }
+                    }
+                    
+                    // Fallback to window.api if DatabaseAPI didn't work or returned empty
+                    if (projects.length === 0 && window.api && typeof window.api.getProjects === 'function') {
+                        try {
+                            const response = await window.api.getProjects();
+                            if (response?.data?.projects) {
+                                projects = response.data.projects;
+                            } else if (response?.projects) {
+                                projects = response.projects;
+                            } else if (Array.isArray(response?.data)) {
+                                projects = response.data;
+                            } else if (Array.isArray(response)) {
+                                projects = response;
+                            }
+                        } catch (apiError) {
+                            console.error('window.api.getProjects failed:', apiError);
+                        }
+                    }
+                    
+                    // Final fallback: try direct fetch
+                    if (projects.length === 0) {
+                        try {
+                            const response = await fetch('/api/projects', {
+                                headers: {
+                                    'Authorization': `Bearer ${token}`,
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            if (response.ok) {
+                                const data = await response.json();
+                                if (data?.data?.projects) {
+                                    projects = data.data.projects;
+                                } else if (data?.projects) {
+                                    projects = data.projects;
+                                } else if (Array.isArray(data?.data)) {
+                                    projects = data.data;
+                                } else if (Array.isArray(data)) {
+                                    projects = data;
+                                }
+                            }
+                        } catch (fetchError) {
+                            console.error('Direct fetch failed:', fetchError);
+                        }
+                    }
+                    
+                    console.log('Loaded projects for guest invitation:', projects.length);
+                    setAvailableProjects(projects);
+                } catch (error) {
+                    console.error('Error loading projects:', error);
+                    setAvailableProjects([]);
+                } finally {
+                    setLoadingProjects(false);
+                }
+            } else {
+                // Clear projects when role changes away from guest
+                setAvailableProjects([]);
+                setFormData({ ...formData, accessibleProjectIds: [] });
+            }
+        };
+        
+        loadProjects();
+    }, [formData.role]);
 
     const getRoleDescription = () => {
         const role = roleDefinitions[formData.role];
@@ -70,6 +178,22 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
 
                 {/* Form */}
                 <form onSubmit={handleSubmit} className="p-4 space-y-3">
+                    {/* Name */}
+                    <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Full Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                            className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                            placeholder="John Doe"
+                            required
+                            disabled={isLoading}
+                        />
+                    </div>
+
                     {/* Email Address */}
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -135,6 +259,83 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
                         </select>
                     </div>
 
+                    {/* Project Access (for Guest users) */}
+                    {formData.role === 'guest' && (
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-900 mb-2">Project Access</h3>
+                            <p className="text-xs text-gray-600 mb-3">
+                                Select which projects this guest user can view. Guest users can only access the Projects section.
+                            </p>
+                            {loadingProjects ? (
+                                <div className="text-center py-4 text-gray-500 text-xs">
+                                    <i className="fas fa-spinner fa-spin mr-2"></i>
+                                    Loading projects...
+                                </div>
+                            ) : availableProjects.length === 0 ? (
+                                <div className="text-center py-4 text-gray-500 text-xs">
+                                    <i className="fas fa-exclamation-triangle text-yellow-500 mb-2"></i>
+                                    <p>No projects available. Create projects first before assigning guest access.</p>
+                                    <p className="mt-2 text-[10px]">If you have projects, try refreshing the page.</p>
+                                </div>
+                            ) : (
+                                <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 max-h-60 overflow-y-auto">
+                                    <div className="space-y-2">
+                                        {availableProjects.map(project => {
+                                            const isSelected = formData.accessibleProjectIds.includes(project.id);
+                                            return (
+                                                <label
+                                                    key={project.id}
+                                                    className="flex items-center gap-2 p-2 rounded cursor-pointer hover:bg-gray-100"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={(e) => {
+                                                            const wasChecked = isSelected;
+                                                            const willBeChecked = e.target.checked;
+                                                            
+                                                            console.log('Project checkbox changed:', {
+                                                                projectId: project.id,
+                                                                projectName: project.name,
+                                                                wasChecked,
+                                                                willBeChecked,
+                                                                currentIds: formData.accessibleProjectIds
+                                                            });
+                                                            
+                                                            if (willBeChecked) {
+                                                                const newIds = [...formData.accessibleProjectIds, project.id];
+                                                                console.log('Adding project, new IDs:', newIds);
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    accessibleProjectIds: newIds
+                                                                });
+                                                            } else {
+                                                                const newIds = formData.accessibleProjectIds.filter(id => id !== project.id);
+                                                                console.log('Removing project, new IDs:', newIds);
+                                                                setFormData({
+                                                                    ...formData,
+                                                                    accessibleProjectIds: newIds
+                                                                });
+                                                            }
+                                                        }}
+                                                        className="w-3.5 h-3.5 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                                                        disabled={isLoading}
+                                                    />
+                                                    <span className="text-xs text-gray-700 flex-1">
+                                                        {project.name}
+                                                        {project.clientName && (
+                                                            <span className="text-gray-500 ml-1">({project.clientName})</span>
+                                                        )}
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Custom Message */}
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -160,9 +361,13 @@ const InviteUserModal = ({ onClose, onSave, roleDefinitions, departments }) => {
                             Invitation Preview
                         </h4>
                         <div className="text-xs text-gray-600 space-y-1">
+                            <p><strong>Name:</strong> {formData.name || 'Not specified'}</p>
                             <p><strong>To:</strong> {formData.email || 'email@example.com'}</p>
                             <p><strong>Role:</strong> {roleDefinitions[formData.role]?.name || 'Role'}</p>
                             {formData.department && <p><strong>Department:</strong> {formData.department}</p>}
+                            {formData.role === 'guest' && (
+                                <p><strong>Project Access:</strong> {formData.accessibleProjectIds?.length || 0} project(s) selected</p>
+                            )}
                             <p><strong>Expires:</strong> 7 days from now</p>
                             {formData.message && (
                                 <div className="mt-2 p-2 bg-white rounded border-l-2 border-blue-500">

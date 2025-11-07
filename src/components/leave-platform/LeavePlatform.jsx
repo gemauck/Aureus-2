@@ -2,16 +2,29 @@
 const { useState, useEffect } = React;
 
 const LeavePlatform = () => {
-    const { user } = window.useAuth ? window.useAuth() : { user: null };
-    const [currentTab, setCurrentTab] = useState('my-leave');
-    const [loading, setLoading] = useState(false);
-    const [leaveApplications, setLeaveApplications] = useState([]);
-    const [leaveBalances, setLeaveBalances] = useState([]);
-    const [employees, setEmployees] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    const [leaveApprovers, setLeaveApprovers] = useState([]);
-    const [birthdays, setBirthdays] = useState([]);
-    const [calendarView, setCalendarView] = useState('month');
+    try {
+        // Get auth hook safely
+        const authHook = window.useAuth || (() => ({ user: null }));
+        let user = null;
+        try {
+            const authResult = authHook();
+            user = authResult?.user || authResult || null;
+        } catch (e) {
+            console.warn('⚠️ LeavePlatform: Error getting user from useAuth:', e);
+            user = null;
+        }
+        
+        const [currentTab, setCurrentTab] = useState('my-leave');
+        const [loading, setLoading] = useState(false);
+        const [leaveApplications, setLeaveApplications] = useState([]);
+        const [leaveBalances, setLeaveBalances] = useState([]);
+        const [employees, setEmployees] = useState([]);
+        const [departments, setDepartments] = useState([]);
+        const [leaveApprovers, setLeaveApprovers] = useState([]);
+        const [birthdays, setBirthdays] = useState([]);
+        const [calendarView, setCalendarView] = useState('month');
+        
+        console.log('✅ LeavePlatform component rendering, user:', user?.email || 'none');
 
     // South African leave types as per BCEA
     const leaveTypes = [
@@ -26,55 +39,199 @@ const LeavePlatform = () => {
         { value: 'religious', label: 'Religious Holiday', days: 0, color: 'amber' }
     ];
 
-    // Load data on mount
+    // Load data on mount - only essential data initially
     useEffect(() => {
-        loadData();
+        // Don't block rendering - load data in background
+        if (window.storage?.getToken?.()) {
+            loadEssentialData();
+        } else {
+            // Wait for storage to be ready
+            const checkStorage = setInterval(() => {
+                if (window.storage?.getToken?.()) {
+                    clearInterval(checkStorage);
+                    loadEssentialData();
+                }
+            }, 100);
+            
+            // Timeout after 5 seconds
+            setTimeout(() => clearInterval(checkStorage), 5000);
+        }
     }, []);
 
+    // Load essential data first (applications and balances for current user)
+    const loadEssentialData = async () => {
+        try {
+            const headers = getAuthHeaders();
+            if (!headers.Authorization) {
+                console.warn('⚠️ Leave Platform: No auth token available');
+                return;
+            }
+            
+            console.log('⚡ Leave Platform: Loading essential data...');
+            const startTime = performance.now();
+            
+            // Only load what's needed for the initial "My Leave" tab
+            const [appsResponse, balancesResponse] = await Promise.allSettled([
+                fetch('/api/leave-platform/applications', { headers }).catch(e => {
+                    console.warn('Leave applications fetch error:', e);
+                    return { ok: false, status: 0 };
+                }),
+                fetch('/api/leave-platform/balances', { headers }).catch(e => {
+                    console.warn('Leave balances fetch error:', e);
+                    return { ok: false, status: 0 };
+                })
+            ]);
+
+            if (appsResponse.status === 'fulfilled' && appsResponse.value.ok) {
+                try {
+                    const apps = await appsResponse.value.json();
+                    setLeaveApplications(apps.applications || apps.data?.applications || []);
+                    console.log(`✅ Loaded ${apps.applications?.length || apps.data?.applications?.length || 0} leave applications`);
+                } catch (e) {
+                    console.warn('Error parsing applications:', e);
+                }
+            } else if (appsResponse.value?.status === 401) {
+                console.warn('⚠️ Leave Platform: Authentication failed for applications');
+            }
+
+            if (balancesResponse.status === 'fulfilled' && balancesResponse.value.ok) {
+                try {
+                    const balances = await balancesResponse.value.json();
+                    setLeaveBalances(balances.balances || balances.data?.balances || []);
+                    console.log(`✅ Loaded ${balances.balances?.length || balances.data?.balances?.length || 0} leave balances`);
+                } catch (e) {
+                    console.warn('Error parsing balances:', e);
+                }
+            } else if (balancesResponse.value?.status === 401) {
+                console.warn('⚠️ Leave Platform: Authentication failed for balances');
+            }
+
+            const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`⚡ Leave Platform: Essential data loaded (${loadTime}s)`);
+
+            // Load remaining data in background (non-blocking)
+            setTimeout(() => {
+                loadRemainingData();
+            }, 100);
+        } catch (error) {
+            console.error('Error loading essential data:', error);
+        }
+    };
+
+    // Load remaining data in background
+    const loadRemainingData = async () => {
+        try {
+            const headers = getAuthHeaders();
+            if (!headers.Authorization) {
+                console.warn('⚠️ Leave Platform: No auth token for remaining data');
+                return;
+            }
+            
+            console.log('⚡ Leave Platform: Loading remaining data in background...');
+            const startTime = performance.now();
+            
+            const [employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
+                fetch('/api/users', { headers }).catch(e => ({ ok: false, status: 0 })),
+                fetch('/api/leave-platform/departments', { headers }).catch(e => ({ ok: false, status: 0 })),
+                fetch('/api/leave-platform/approvers', { headers }).catch(e => ({ ok: false, status: 0 })),
+                fetch('/api/leave-platform/birthdays', { headers }).catch(e => ({ ok: false, status: 0 }))
+            ]);
+
+            if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
+                try {
+                    const users = await employeesResponse.value.json();
+                    setEmployees(users.users || users.data?.users || []);
+                    console.log(`✅ Loaded ${users.users?.length || users.data?.users?.length || 0} employees`);
+                } catch (e) {
+                    console.warn('Error parsing employees:', e);
+                }
+            }
+
+            if (deptsResponse.status === 'fulfilled' && deptsResponse.value.ok) {
+                try {
+                    const depts = await deptsResponse.value.json();
+                    setDepartments(depts.departments || depts.data?.departments || []);
+                } catch (e) {
+                    console.warn('Error parsing departments:', e);
+                }
+            }
+
+            if (approversResponse.status === 'fulfilled' && approversResponse.value.ok) {
+                try {
+                    const approvers = await approversResponse.value.json();
+                    setLeaveApprovers(approvers.approvers || approvers.data?.approvers || []);
+                } catch (e) {
+                    console.warn('Error parsing approvers:', e);
+                }
+            }
+
+            if (birthdaysResponse.status === 'fulfilled' && birthdaysResponse.value.ok) {
+                try {
+                    const bdays = await birthdaysResponse.value.json();
+                    setBirthdays(bdays.birthdays || bdays.data?.birthdays || []);
+                } catch (e) {
+                    console.warn('Error parsing birthdays:', e);
+                }
+            }
+
+            const loadTime = ((performance.now() - startTime) / 1000).toFixed(2);
+            console.log(`⚡ Leave Platform: Remaining data loaded (${loadTime}s)`);
+        } catch (error) {
+            console.error('Error loading remaining data:', error);
+        }
+    };
+
+    // Full data reload (for refresh/update actions)
     const loadData = async () => {
         setLoading(true);
         try {
-            // Load leave applications
-            const appsResponse = await fetch('/api/leave-platform/applications');
-            if (appsResponse.ok) {
-                const apps = await appsResponse.json();
-                setLeaveApplications(apps.applications || []);
+            const headers = getAuthHeaders();
+            const startTime = performance.now();
+            
+            // Load all data in parallel
+            const [appsResponse, balancesResponse, employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
+                fetch('/api/leave-platform/applications', { headers }),
+                fetch('/api/leave-platform/balances', { headers }),
+                fetch('/api/users', { headers }),
+                fetch('/api/leave-platform/departments', { headers }),
+                fetch('/api/leave-platform/approvers', { headers }),
+                fetch('/api/leave-platform/birthdays', { headers })
+            ]);
+
+            // Process responses
+            if (appsResponse.status === 'fulfilled' && appsResponse.value.ok) {
+                const apps = await appsResponse.value.json();
+                setLeaveApplications(apps.applications || apps.data?.applications || []);
             }
 
-            // Load leave balances
-            const balancesResponse = await fetch('/api/leave-platform/balances');
-            if (balancesResponse.ok) {
-                const balances = await balancesResponse.json();
-                setLeaveBalances(balances.balances || []);
+            if (balancesResponse.status === 'fulfilled' && balancesResponse.value.ok) {
+                const balances = await balancesResponse.value.json();
+                setLeaveBalances(balances.balances || balances.data?.balances || []);
             }
 
-            // Load employees
-            const employeesResponse = await fetch('/api/users');
-            if (employeesResponse.ok) {
-                const users = await employeesResponse.json();
-                setEmployees(users.users || []);
+            if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
+                const users = await employeesResponse.value.json();
+                setEmployees(users.users || users.data?.users || []);
             }
 
-            // Load departments
-            const deptsResponse = await fetch('/api/leave-platform/departments');
-            if (deptsResponse.ok) {
-                const depts = await deptsResponse.json();
-                setDepartments(depts.departments || []);
+            if (deptsResponse.status === 'fulfilled' && deptsResponse.value.ok) {
+                const depts = await deptsResponse.value.json();
+                setDepartments(depts.departments || depts.data?.departments || []);
             }
 
-            // Load leave approvers
-            const approversResponse = await fetch('/api/leave-platform/approvers');
-            if (approversResponse.ok) {
-                const approvers = await approversResponse.json();
-                setLeaveApprovers(approvers.approvers || []);
+            if (approversResponse.status === 'fulfilled' && approversResponse.value.ok) {
+                const approvers = await approversResponse.value.json();
+                setLeaveApprovers(approvers.approvers || approvers.data?.approvers || []);
             }
 
-            // Load birthdays
-            const birthdaysResponse = await fetch('/api/leave-platform/birthdays');
-            if (birthdaysResponse.ok) {
-                const bdays = await birthdaysResponse.json();
-                setBirthdays(bdays.birthdays || []);
+            if (birthdaysResponse.status === 'fulfilled' && birthdaysResponse.value.ok) {
+                const bdays = await birthdaysResponse.value.json();
+                setBirthdays(bdays.birthdays || bdays.data?.birthdays || []);
             }
+
+            const endTime = performance.now();
+            const loadTime = ((endTime - startTime) / 1000).toFixed(2);
+            console.log(`⚡ Leave Platform: Data reloaded (${loadTime}s)`);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
@@ -145,17 +302,6 @@ const LeavePlatform = () => {
         }
     };
 
-    if (loading && leaveApplications.length === 0) {
-        return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-4xl text-primary-500 mb-4"></i>
-                    <p className="text-gray-600">Loading Leave Platform...</p>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="space-y-4">
             {/* Header */}
@@ -191,11 +337,36 @@ const LeavePlatform = () => {
 
                 {/* Tab Content */}
                 <div className="p-6">
-                    {renderContent()}
+                    {loading && leaveApplications.length === 0 && leaveBalances.length === 0 ? (
+                        <div className="text-center py-12">
+                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+                            <p className="mt-4 text-gray-600">Loading leave data...</p>
+                        </div>
+                    ) : (
+                        renderContent()
+                    )}
                 </div>
             </div>
         </div>
     );
+    } catch (error) {
+        console.error('❌ LeavePlatform: Error rendering component:', error);
+        return (
+            <div className="p-8 text-center">
+                <div className="text-red-600 mb-4">
+                    <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                    <h2 className="text-xl font-semibold mb-2">Error Loading Leave Platform</h2>
+                    <p className="text-sm text-gray-600">{error.message || 'Unknown error'}</p>
+                    <button 
+                        onClick={() => window.location.reload()} 
+                        className="mt-4 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            </div>
+        );
+    }
 };
 
 // My Leave View
@@ -306,9 +477,10 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
         e.preventDefault();
         setSubmitting(true);
         try {
+            const headers = getAuthHeaders();
             const response = await fetch('/api/leave-platform/applications', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({
                     ...formData,
                     days: workingDays,
@@ -584,15 +756,28 @@ const LeaveCalendarView = ({ applications, employees, view, onViewChange }) => {
     );
 };
 
+// Helper function to get auth headers (accessible to all components)
+const getAuthHeaders = () => {
+    const token = window.storage?.getToken?.();
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+};
+
 // Approvals View
 const ApprovalsView = ({ applications, user, onUpdate }) => {
     const pendingApplications = applications.filter(app => app.status === 'pending');
 
     const handleApprove = async (id) => {
         try {
+            const headers = getAuthHeaders();
             const response = await fetch(`/api/leave-platform/applications/${id}/approve`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ approvedBy: user?.id })
             });
 
@@ -606,9 +791,10 @@ const ApprovalsView = ({ applications, user, onUpdate }) => {
 
     const handleReject = async (id, reason) => {
         try {
+            const headers = getAuthHeaders();
             const response = await fetch(`/api/leave-platform/applications/${id}/reject`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 body: JSON.stringify({ rejectedBy: user?.id, reason })
             });
 
@@ -775,11 +961,18 @@ const ImportBalancesView = ({ employees, onImport }) => {
         if (!file) return;
         setImporting(true);
         try {
+            const token = window.storage?.getToken?.();
+            const headers = {};
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+            
             const formData = new FormData();
             formData.append('file', file);
 
             const response = await fetch('/api/leave-platform/import-balances', {
                 method: 'POST',
+                headers,
                 body: formData
             });
 
@@ -836,6 +1029,30 @@ const ImportBalancesView = ({ employees, onImport }) => {
 };
 
 // Make available globally
-window.LeavePlatform = LeavePlatform;
-console.log('✅ LeavePlatform component loaded');
+try {
+    if (typeof window !== 'undefined') {
+        window.LeavePlatform = LeavePlatform;
+        console.log('✅ LeavePlatform component loaded and registered on window.LeavePlatform');
+        console.log('✅ LeavePlatform component type:', typeof LeavePlatform);
+        console.log('✅ LeavePlatform is function:', typeof LeavePlatform === 'function');
+        
+        // Dispatch event to notify that component is ready
+        if (typeof window.dispatchEvent !== 'undefined') {
+            try {
+                window.dispatchEvent(new CustomEvent('leavePlatformComponentReady'));
+                console.log('✅ LeavePlatform: Dispatched leavePlatformComponentReady event');
+            } catch (e) {
+                console.warn('⚠️ LeavePlatform: Failed to dispatch event:', e);
+            }
+        }
+    } else {
+        console.warn('⚠️ LeavePlatform: window object not available');
+    }
+} catch (error) {
+    console.error('❌ LeavePlatform: Error registering component:', error);
+    // Still try to register even if event dispatch fails
+    if (typeof window !== 'undefined') {
+        window.LeavePlatform = LeavePlatform;
+    }
+}
 

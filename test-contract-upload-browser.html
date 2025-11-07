@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contract Upload Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .test-section {
+            border: 1px solid #ddd;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        .log {
+            background: #f5f5f5;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-family: monospace;
+            white-space: pre-wrap;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Contract Upload Test</h1>
+    
+    <div class="test-section">
+        <h2>Test 1: Upload Contract</h2>
+        <input type="file" id="fileInput" accept=".pdf,.doc,.docx">
+        <button onclick="testUpload()">Upload Contract</button>
+        <div id="uploadResult" class="log"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Verify Response Handling</h2>
+        <button onclick="testResponseHandling()">Test Response Parsing</button>
+        <div id="responseResult" class="log"></div>
+    </div>
+
+    <script>
+        function log(elementId, message, isError = false) {
+            const element = document.getElementById(elementId);
+            const timestamp = new Date().toLocaleTimeString();
+            const className = isError ? 'error' : 'success';
+            element.innerHTML += `<span class="${className}">[${timestamp}] ${message}</span>\n`;
+            element.scrollTop = element.scrollHeight;
+        }
+
+        async function testUpload() {
+            const fileInput = document.getElementById('fileInput');
+            const resultDiv = document.getElementById('uploadResult');
+            resultDiv.innerHTML = '';
+
+            if (!fileInput.files[0]) {
+                log('uploadResult', '❌ Please select a file first', true);
+                return;
+            }
+
+            const file = fileInput.files[0];
+            log('uploadResult', `📤 Starting upload for: ${file.name}`);
+            log('uploadResult', `   Size: ${file.size} bytes`);
+            log('uploadResult', `   Type: ${file.type}`);
+
+            try {
+                // Read file as data URL
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const dataUrl = event.target.result;
+                        log('uploadResult', '✅ File read successfully');
+                        log('uploadResult', `   Data URL length: ${dataUrl.length}`);
+
+                        // Get token from storage
+                        const token = window.storage?.getToken?.();
+                        if (!token) {
+                            log('uploadResult', '❌ No authentication token found. Please log in first.', true);
+                            return;
+                        }
+
+                        log('uploadResult', '✅ Token found');
+
+                        // Upload to server
+                        log('uploadResult', '📤 Sending upload request...');
+                        const res = await fetch('/api/files', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify({
+                                folder: 'contracts',
+                                name: file.name,
+                                dataUrl
+                            })
+                        });
+
+                        log('uploadResult', `📥 Response status: ${res.status} ${res.statusText}`);
+
+                        if (!res.ok) {
+                            const errorData = await res.json().catch(() => ({}));
+                            log('uploadResult', `❌ Upload failed: ${errorData.error?.message || res.statusText}`, true);
+                            log('uploadResult', `   Full error: ${JSON.stringify(errorData, null, 2)}`, true);
+                            return;
+                        }
+
+                        const json = await res.json();
+                        log('uploadResult', '✅ Upload successful!');
+                        log('uploadResult', `   Response: ${JSON.stringify(json, null, 2)}`);
+
+                        // Handle both wrapped { data: { url: ... } } and direct { url: ... } responses
+                        const fileUrl = json.data?.url || json.url;
+                        if (!fileUrl) {
+                            log('uploadResult', '❌ No URL returned from server', true);
+                            return;
+                        }
+
+                        log('uploadResult', `✅ File URL: ${fileUrl}`);
+                        
+                        // Create contract object (simulating what the client does)
+                        const newContract = {
+                            id: Date.now(),
+                            name: file.name,
+                            size: file.size,
+                            type: file.type,
+                            uploadDate: new Date().toISOString(),
+                            url: fileUrl
+                        };
+
+                        log('uploadResult', '✅ Contract object created:');
+                        log('uploadResult', `   ${JSON.stringify(newContract, null, 2)}`);
+
+                        // Test download link
+                        log('uploadResult', `\n🔗 Test download link: ${fileUrl}`);
+                        log('uploadResult', `   Contract URL property: ${newContract.url}`);
+
+                    } catch (err) {
+                        log('uploadResult', `❌ Error: ${err.message}`, true);
+                        console.error('Upload error:', err);
+                    }
+                };
+                reader.onerror = (error) => {
+                    log('uploadResult', `❌ File read error: ${error}`, true);
+                };
+                reader.readAsDataURL(file);
+            } catch (readErr) {
+                log('uploadResult', `❌ File read error: ${readErr.message}`, true);
+            }
+        }
+
+        function testResponseHandling() {
+            const resultDiv = document.getElementById('responseResult');
+            resultDiv.innerHTML = '';
+
+            log('responseResult', '🧪 Testing response handling...');
+
+            // Test wrapped response (new format)
+            const wrappedResponse = {
+                data: {
+                    url: '/uploads/contracts/test-file.pdf',
+                    name: 'test-file.pdf',
+                    size: 1234,
+                    mimeType: 'application/pdf'
+                }
+            };
+
+            log('responseResult', 'Test 1: Wrapped response (new format)');
+            log('responseResult', `   Response: ${JSON.stringify(wrappedResponse, null, 2)}`);
+            const url1 = wrappedResponse.data?.url || wrappedResponse.url;
+            log('responseResult', `   Extracted URL: ${url1}`);
+            log('responseResult', url1 ? '✅ Success' : '❌ Failed');
+
+            // Test direct response (old format - for backwards compatibility)
+            const directResponse = {
+                url: '/uploads/contracts/test-file.pdf',
+                name: 'test-file.pdf',
+                size: 1234,
+                mimeType: 'application/pdf'
+            };
+
+            log('responseResult', '\nTest 2: Direct response (old format)');
+            log('responseResult', `   Response: ${JSON.stringify(directResponse, null, 2)}`);
+            const url2 = directResponse.data?.url || directResponse.url;
+            log('responseResult', `   Extracted URL: ${url2}`);
+            log('responseResult', url2 ? '✅ Success' : '❌ Failed');
+
+            log('responseResult', '\n✅ Response handling test complete');
+        }
+    </script>
+</body>
+</html>
+

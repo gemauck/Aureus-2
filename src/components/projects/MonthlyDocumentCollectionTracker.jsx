@@ -717,41 +717,14 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         
         console.log('💬 Creating comment with user:', currentUser.name, currentUser.email);
         
-        // Process @mentions if MentionHelper is available
-        if (window.MentionHelper && window.MentionHelper.hasMentions(commentText)) {
-            try {
-                // Fetch all users for mention matching
-                const token = window.storage?.getToken?.();
-                if (token) {
-                    const usersResponse = await fetch('/api/users', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (usersResponse.ok) {
-                        const usersData = await usersResponse.json();
-                        const allUsers = usersData.data?.users || usersData.users || [];
-                        
-                        // Get section and document names for context
-                        const section = sections.find(s => s.id === sectionId);
-                        const document = section?.documents.find(d => d.id === documentId);
-                        const contextTitle = `${document?.name || 'Document'} in ${section?.name || 'Section'}`;
-                        const contextLink = `#/projects/${project.id}`;
-                        
-                        // Process mentions
-                        await window.MentionHelper.processMentions(
-                            commentText,
-                            contextTitle,
-                            contextLink,
-                            currentUser.name || currentUser.email || 'Unknown',
-                            allUsers
-                        );
-                        console.log('✅ @Mention notifications processed');
-                    }
-                }
-            } catch (error) {
-                console.error('❌ Error processing @mentions:', error);
-                // Don't fail the comment if mention processing fails
-            }
-        }
+        // Get section and document names for context
+        const section = sections.find(s => s.id === sectionId);
+        const document = section?.documents.find(d => d.id === documentId);
+        const documentName = document?.name || 'Document';
+        const sectionName = section?.name || 'Section';
+        const contextTitle = `${documentName} in ${sectionName}`;
+        const contextLink = `/projects/${project.id}`;
+        const projectName = project?.name || 'Project';
 
         const monthKey = `${month}-${selectedYear}`;
         const newComment = {
@@ -765,10 +738,7 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
             authorRole: currentUser.role
         };
 
-        // Get section and document names for audit trail
-        const section = sections.find(s => s.id === sectionId);
-        const document = section?.documents.find(d => d.id === documentId);
-
+        // OPTIMISTIC UI UPDATE - Update UI immediately for better UX
         const updatedSections = sections.map(s => {
             if (s.id === sectionId) {
                 return {
@@ -792,22 +762,257 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
         });
 
         setSections(updatedSections);
+        setQuickComment(''); // Clear input immediately
         
         // Update timestamp to prevent sync from overwriting
         lastLocalUpdateRef.current = Date.now();
 
-        // Save to database
-        try {
-            const updatePayload = {
-                documentSections: JSON.stringify(updatedSections)
-            };
-            await window.DatabaseAPI.updateProject(project.id, updatePayload);
-            console.log('✅ Comment saved to database');
-        } catch (error) {
-            console.error('❌ Error saving comment to database:', error);
-        }
+        // PRIORITY: Process @mentions FIRST (emails must be sent immediately after tagging)
+        // This runs in parallel with save but prioritizes mention notifications
+        const mentionNotificationPromise = (async () => {
+            const hasMentions = window.MentionHelper && window.MentionHelper.hasMentions(commentText);
+            if (!hasMentions) return [];
+            
+            try {
+                // Fetch users immediately for @mentions
+                const token = window.storage?.getToken?.();
+                if (!token) return [];
+                
+                const usersResponse = await fetch('/api/users', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!usersResponse.ok) return [];
+                
+                const usersData = await usersResponse.json();
+                const allUsers = usersData.data?.users || usersData.users || [];
+                
+                if (allUsers.length === 0) return [];
+                
+                // Extract mentioned users
+                const mentionedUsernames = window.MentionHelper.getMentionedUsernames(commentText);
+                const mentionedUsers = allUsers.filter(user => {
+                    const userNameLower = (user.name || '').toLowerCase().replace(/\s+/g, '');
+                    const emailUsername = (user.email || '').split('@')[0].toLowerCase();
+                    
+                    return mentionedUsernames.some(username => {
+                        const usernameLower = username.toLowerCase();
+                        return userNameLower === usernameLower ||
+                               userNameLower.includes(usernameLower) ||
+                               usernameLower.includes(userNameLower) ||
+                               emailUsername === usernameLower;
+                    });
+                }).filter(user => user.id !== currentUser.id);
+                
+                if (mentionedUsers.length === 0) return [];
+                
+                // Process mentions IMMEDIATELY - this sends notifications and emails synchronously
+                console.log(`📧 Processing @mentions immediately for ${mentionedUsers.length} user(s)`);
+                await window.MentionHelper.processMentions(
+                    commentText,
+                    contextTitle,
+                    contextLink,
+                    currentUser.name || currentUser.email || 'Unknown',
+                    allUsers,
+                    {
+                        projectId: project?.id,
+                        projectName: projectName
+                    }
+                );
+                console.log('✅ @Mention notifications and emails sent immediately');
+                return mentionedUsers;
+            } catch (error) {
+                console.error('❌ Error processing @mentions:', error);
+                return [];
+            }
+        })();
 
-        // Log to audit trail
+        // Save to database (in parallel with mention processing)
+        const savePromise = (async () => {
+            try {
+                const updatePayload = {
+                    documentSections: JSON.stringify(updatedSections)
+                };
+                await window.DatabaseAPI.updateProject(project.id, updatePayload);
+                console.log('✅ Comment saved to database');
+            } catch (error) {
+                console.error('❌ Error saving comment to database:', error);
+            }
+        })();
+
+        // Process other comment notifications (previous commenters, team members) in background
+        const commentNotificationPromise = (async () => {
+            try {
+                // Wait for mention processing to complete first
+                const mentionedUsers = await mentionNotificationPromise;
+                
+                // Fetch users if we need to notify previous commenters or team members
+                let allUsers = [];
+                const hasPreviousComments = document?.comments && Object.keys(document.comments).length > 0;
+                const hasTeam = project.team;
+                
+                if (hasPreviousComments || hasTeam) {
+                    try {
+                        const token = window.storage?.getToken?.();
+                        if (token) {
+                            const usersResponse = await fetch('/api/users', {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            if (usersResponse.ok) {
+                                const usersData = await usersResponse.json();
+                                allUsers = usersData.data?.users || usersData.users || [];
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Error fetching users:', error);
+                        return;
+                    }
+                } else {
+                    // If no previous comments or team, we already have users from mention processing
+                    if (mentionedUsers.length > 0) {
+                        // Get users from the mention processing (they were already fetched)
+                        try {
+                            const token = window.storage?.getToken?.();
+                            if (token) {
+                                const usersResponse = await fetch('/api/users', {
+                                    headers: { 'Authorization': `Bearer ${token}` }
+                                });
+                                if (usersResponse.ok) {
+                                    const usersData = await usersResponse.json();
+                                    allUsers = usersData.data?.users || usersData.users || [];
+                                }
+                            }
+                        } catch (error) {
+                            console.error('❌ Error fetching users:', error);
+                            return;
+                        }
+                    }
+                }
+
+                // Send comment notifications to relevant users (only if we have users loaded)
+                if (allUsers.length > 0) {
+                    console.log(`📧 Processing comment notifications - allUsers: ${allUsers.length}`);
+                    
+                    // Get the updated document from updatedSections to include all previous comments
+                    const updatedSection = updatedSections.find(s => s.id === sectionId);
+                    const updatedDocument = updatedSection?.documents.find(d => d.id === documentId);
+                    
+                    // Get all users who have previously commented on this document (across all months)
+                    const previousCommenters = new Set();
+                    if (updatedDocument && updatedDocument.comments) {
+                        Object.values(updatedDocument.comments).forEach(commentArray => {
+                            if (Array.isArray(commentArray)) {
+                                commentArray.forEach(comment => {
+                                    // Exclude the comment we just added (by ID) and the current user
+                                    if (comment.id !== newComment.id && comment.authorId && comment.authorId !== currentUser.id) {
+                                        previousCommenters.add(comment.authorId);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    console.log(`📧 Previous commenters found: ${previousCommenters.size}`);
+                    
+                    // Get project team members if available
+                    const projectTeamIds = new Set();
+                    if (project.team) {
+                        try {
+                            const team = typeof project.team === 'string' ? JSON.parse(project.team || '[]') : (project.team || []);
+                            if (Array.isArray(team)) {
+                                team.forEach(member => {
+                                    if (typeof member === 'string') {
+                                        const teamUser = allUsers.find(u => 
+                                            u.name === member || u.email === member || u.id === member
+                                        );
+                                        if (teamUser && teamUser.id) {
+                                            projectTeamIds.add(teamUser.id);
+                                        }
+                                    } else if (member && member.id) {
+                                        projectTeamIds.add(member.id);
+                                    }
+                                });
+                            }
+                        } catch (e) {
+                            console.warn('Error parsing project team:', e);
+                        }
+                    }
+                    console.log(`📧 Project team members found: ${projectTeamIds.size}`);
+                    
+                    // Combine previous commenters and team members
+                    const usersToNotify = new Set([...previousCommenters, ...projectTeamIds]);
+                    
+                    // Remove comment author and mentioned users
+                    usersToNotify.delete(currentUser.id);
+                    mentionedUsers.forEach(user => usersToNotify.delete(user.id));
+                    
+                    console.log(`📧 Total users to notify (after filtering): ${usersToNotify.size}`);
+                    
+                    // Send notifications to each user (fire and forget - don't await)
+                    if (usersToNotify.size > 0) {
+                        console.log(`📧 Sending comment notifications to ${usersToNotify.size} user(s)`);
+                        const notificationPromises = [];
+                        for (const userId of usersToNotify) {
+                            const user = allUsers.find(u => u.id === userId);
+                            if (user) {
+                                console.log(`📧 Creating notification for: ${user.name} (${user.email})`);
+                                notificationPromises.push(
+                                    window.DatabaseAPI.makeRequest('/notifications', {
+                                        method: 'POST',
+                                        body: JSON.stringify({
+                                            userId: user.id,
+                                            type: 'comment',
+                                            title: `New comment on document: ${documentName}`,
+                                            message: `${currentUser.name} commented on "${documentName}" in ${sectionName} (${projectName}): "${commentText.substring(0, 100)}${commentText.length > 100 ? '...' : ''}"`,
+                                            link: contextLink,
+                                            metadata: {
+                                                projectId: project?.id,
+                                                projectName: projectName,
+                                                sectionId: sectionId,
+                                                sectionName: sectionName,
+                                                documentId: documentId,
+                                                documentName: documentName,
+                                                month: month,
+                                                year: selectedYear,
+                                                commentAuthor: currentUser.name,
+                                                commentText: commentText
+                                            }
+                                        })
+                                    }).then(response => {
+                                        console.log(`✅ Notification created for ${user.name}:`, response);
+                                        return response;
+                                    }).catch(err => {
+                                        console.error(`❌ Failed to send notification to user ${user.name}:`, err);
+                                        console.error(`❌ Error details:`, {
+                                            message: err.message,
+                                            status: err.status,
+                                            response: err.response
+                                        });
+                                        return null;
+                                    })
+                                );
+                            }
+                        }
+                        
+                        // Don't await - let notifications send in background, but log results
+                        Promise.all(notificationPromises).then(results => {
+                            const successCount = results.filter(r => r !== null).length;
+                            console.log(`✅ Comment notifications processed: ${successCount}/${notificationPromises.length} successful`);
+                        }).catch(err => {
+                            console.error('❌ Error sending comment notifications:', err);
+                        });
+                    } else {
+                        console.log(`⏭️ No users to notify (no previous commenters or team members found)`);
+                    }
+                }
+            } catch (error) {
+                console.error('❌ Error in notification processing:', error);
+            }
+        })();
+
+        // Wait for save and mention processing to complete
+        // This ensures @mention emails are sent immediately after tagging
+        await Promise.all([savePromise, mentionNotificationPromise]);
+
+        // Log to audit trail (non-blocking)
         if (window.AuditLogger) {
             window.AuditLogger.log(
                 'comment',
@@ -825,8 +1030,6 @@ const MonthlyDocumentCollectionTracker = ({ project, onBack }) => {
                 currentUser
             );
         }
-
-        setQuickComment('');
     };
 
     const handleDeleteComment = async (sectionId, documentId, month, commentId) => {

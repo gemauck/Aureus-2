@@ -90,10 +90,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 }
             }
             
-            // Also try to fetch from server
+            // Also try to fetch from server - only fetch the specific date note for performance
             const token = window.storage?.getToken?.();
             if (token) {
-                fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                // Fetch only the specific date note instead of all notes
+                fetch(`/api/calendar-notes/${dateString}?t=${Date.now()}`, {
                     headers: { 
                         Authorization: `Bearer ${token}`,
                         'Cache-Control': 'no-cache'
@@ -102,8 +103,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    const serverNotes = data?.data?.notes || data?.notes || {};
-                    let serverNote = serverNotes[dateString] || '';
+                    // Single date endpoint returns { note: "..." } not { notes: { date: "..." } }
+                    let serverNote = data?.data?.note || data?.note || '';
                     
                     // Clean &nbsp; entities from server note
                     serverNote = cleanHtmlContent(serverNote);
@@ -175,11 +176,18 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const canvas = canvasRef.current;
             if (canvas) {
                 const ctx = canvas.getContext('2d');
-                // Check if canvas has any drawing (more thorough check)
+                // Improved drawing detection - check for any visible content
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const hasDrawing = imageData.data.some((channel, index) => {
-                    return index % 4 !== 3 && channel !== 0; // Check non-alpha channels for non-zero values
-                });
+                const data = imageData.data;
+                let hasDrawing = false;
+                
+                // Check for any non-transparent pixels (more lenient)
+                for (let i = 3; i < data.length; i += 4) { // Check alpha channel (every 4th byte starting at index 3)
+                    if (data[i] > 10) { // If alpha > 10, there's visible content
+                        hasDrawing = true;
+                        break;
+                    }
+                }
                 
                 if (hasDrawing) {
                     console.log('🎨 Found handwriting/drawing content, saving to note...');
@@ -200,37 +208,34 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         console.log('➕ Added handwriting image to note');
                     }
                     
-                    // Update editor content with image
+                    // Update editor content with image - always ensure it's in the editor
                     if (editorRef.current) {
-                        // Check if editor already has the image
-                        const editorHasImage = editorRef.current.innerHTML.includes(canvasDataUrl.substring(0, 50));
+                        // Check if editor already has this exact image
+                        const editorHasImage = editorRef.current.innerHTML.includes(canvasDataUrl.substring(0, 100));
                         if (!editorHasImage) {
-                            // Insert image at cursor position or append
-                            const selection = window.getSelection();
-                            if (selection.rangeCount > 0) {
-                                const range = selection.getRangeAt(0);
-                                const img = document.createElement('img');
-                                img.src = canvasDataUrl;
-                                img.alt = 'Handwriting';
-                                img.style.maxWidth = '100%';
-                                img.style.height = 'auto';
-                                img.style.margin = '10px 0';
-                                range.insertNode(img);
-                                range.setStartAfter(img);
-                                selection.removeAllRanges();
-                                selection.addRange(range);
-                            } else {
-                                // Append to end
-                                const img = document.createElement('img');
-                                img.src = canvasDataUrl;
-                                img.alt = 'Handwriting';
-                                img.style.maxWidth = '100%';
-                                img.style.height = 'auto';
-                                img.style.margin = '10px 0';
-                                editorRef.current.appendChild(img);
+                            // Always append to end to ensure it's saved
+                            const img = document.createElement('img');
+                            img.src = canvasDataUrl;
+                            img.alt = 'Handwriting';
+                            img.style.maxWidth = '100%';
+                            img.style.height = 'auto';
+                            img.style.margin = '10px 0';
+                            img.setAttribute('data-handwriting', 'true');
+                            
+                            // Add a line break before the image if there's content
+                            if (editorRef.current.innerHTML.trim().length > 0) {
+                                const br = document.createElement('br');
+                                editorRef.current.appendChild(br);
                             }
+                            editorRef.current.appendChild(img);
+                            
                             // Update content after inserting image
                             noteContent = editorRef.current.innerHTML;
+                            console.log('✅ Image inserted into editor, content length:', noteContent.length);
+                        } else {
+                            // Image exists, but update noteContent to ensure it's saved
+                            noteContent = editorRef.current.innerHTML;
+                            console.log('✅ Image already in editor, using editor content');
                         }
                     }
                 }
@@ -353,7 +358,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                             return;
                         }
 
-                        const verifyRes = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                        // Fetch only the specific date note for verification
+                        const verifyRes = await fetch(`/api/calendar-notes/${dateString}?t=${Date.now()}`, {
                             headers: { 
                                 Authorization: `Bearer ${token}`,
                                 'Cache-Control': 'no-cache, no-store, must-revalidate'
@@ -363,8 +369,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         });
                         if (verifyRes.ok) {
                             const verifyData = await verifyRes.json();
-                            const serverNotes = verifyData?.data?.notes || verifyData?.notes || {};
-                            const serverNote = serverNotes[dateString] || '';
+                            // Single date endpoint returns { note: "..." }
+                            const serverNote = verifyData?.data?.note || verifyData?.note || '';
                             
                             // Normalize both contents for comparison
                             const normalizedLocal = normalizeHtmlForComparison(noteContent);
@@ -586,10 +592,10 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 }
             }
             
-            // Also fetch from server
+            // Also fetch from server - only fetch the specific date note
             const token = window.storage?.getToken?.();
             if (token) {
-                fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                fetch(`/api/calendar-notes/${dateString}?t=${Date.now()}`, {
                     headers: { 
                         Authorization: `Bearer ${token}`,
                         'Cache-Control': 'no-cache'
@@ -598,8 +604,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 })
                 .then(res => res.json())
                 .then(data => {
-                    const serverNotes = data?.data?.notes || data?.notes || {};
-                    let serverNote = serverNotes[dateString] || '';
+                    // Single date endpoint returns { note: "..." }
+                    let serverNote = data?.data?.note || data?.note || '';
                     serverNote = cleanHtmlContent(serverNote);
                     
                     if (serverNote && serverNote !== note) {
@@ -685,9 +691,18 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     }
                 }
                 
-                // Then sync from server
+                // Then sync from server - only load notes from last 12 months for performance
                 if (token) {
-                    const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                    // Calculate date range: last 12 months to future 3 months
+                    const endDate = new Date();
+                    endDate.setMonth(endDate.getMonth() + 3); // 3 months in future
+                    const startDate = new Date();
+                    startDate.setMonth(startDate.getMonth() - 12); // 12 months ago
+                    
+                    const startDateStr = startDate.toISOString().split('T')[0];
+                    const endDateStr = endDate.toISOString().split('T')[0];
+                    
+                    const res = await fetch(`/api/calendar-notes?startDate=${startDateStr}&endDate=${endDateStr}&t=${Date.now()}`, {
                         headers: { 
                             Authorization: `Bearer ${token}`,
                             'Cache-Control': 'no-cache'
@@ -976,6 +991,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             setTimeout(() => {
                 if (canvasRef.current && showHandwriting) {
                     const ctx = canvasRef.current.getContext('2d');
+                    // Check entire canvas for drawing
                     const imageData = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
                     const hasDrawing = imageData.data.some((channel, index) => {
                         return index % 4 !== 3 && channel !== 0;
@@ -983,10 +999,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     
                     if (hasDrawing) {
                         console.log('💾 Auto-saving drawing after stopDrawing...');
+                        // Force immediate save with canvas content
                         saveNote().catch(err => console.error('Error auto-saving drawing:', err));
+                    } else {
+                        console.log('⚠️ No drawing detected on canvas');
                     }
                 }
-            }, 100);
+            }, 150);
         }
         if (e) {
             e.preventDefault();
@@ -1401,10 +1420,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
             
-            // Check a larger sample to see if there's actual drawing
-            const sampleWidth = Math.min(canvas.width, 200);
-            const sampleHeight = Math.min(canvas.height, 200);
-            const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+            // Check entire canvas for drawing (not just a sample)
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
             const hasDrawing = imageData.data.some((channel, index) => {
                 return index % 4 !== 3 && channel !== 0;
             });
@@ -1625,11 +1642,11 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
             }, 100);
         }
         
-        // Also try to fetch fresh from server
+        // Also try to fetch fresh from server - only fetch the specific date note
         try {
             const token = window.storage?.getToken?.();
             if (token) {
-                const res = await fetch(`/api/calendar-notes?t=${Date.now()}`, {
+                const res = await fetch(`/api/calendar-notes/${dateString}?t=${Date.now()}`, {
                     headers: { 
                         Authorization: `Bearer ${token}`,
                         'Cache-Control': 'no-cache'
@@ -1639,8 +1656,8 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 
                 if (res.ok) {
                     const data = await res.json();
-                    const serverNotes = data?.data?.notes || data?.notes || {};
-                    const serverNote = serverNotes[dateString] || '';
+                    // Single date endpoint returns { note: "..." }
+                    const serverNote = data?.data?.note || data?.note || '';
                     
                     console.log('📝 Server note for date:', dateString, 'length:', serverNote.length);
                     
@@ -2401,12 +2418,13 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                     </button>
                 </div>
                 
-                {/* Handwriting Tool */}
-                <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                {/* Handwriting Tool - Always Visible - PROMINENT */}
+                <div className="flex items-center space-x-1 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/30 dark:to-purple-900/30 rounded-lg p-1 border-2 border-blue-300 dark:border-blue-600 shadow-md">
                     <button
                         onClick={() => {
                             const newHandwritingState = !showHandwriting;
                             setShowHandwriting(newHandwritingState);
+                            console.log('🖊️ Handwriting toggled:', newHandwritingState);
                             // When enabling handwriting, disable contentEditable temporarily
                             if (editorRef.current) {
                                 if (newHandwritingState) {
@@ -2418,16 +2436,18 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 }
                             }
                         }}
-                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${
+                        className={`px-5 py-2.5 rounded-lg transition-all duration-200 font-bold flex items-center space-x-2 hover:shadow-lg hover:scale-105 ${
                             showHandwriting 
-                                ? 'bg-blue-500 text-white shadow-md' 
+                                ? 'bg-blue-600 text-white shadow-lg ring-4 ring-blue-300 dark:ring-blue-500' 
                                 : isDark 
-                                    ? 'text-gray-300 hover:text-white hover:bg-gray-600' 
-                                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'
+                                    ? 'text-white hover:text-white hover:bg-blue-600 bg-blue-700' 
+                                    : 'text-white hover:text-white hover:bg-blue-600 bg-blue-500'
                         }`}
-                        title={showHandwriting ? 'Disable Handwriting' : 'Enable Handwriting'}
+                        title={showHandwriting ? 'Disable Handwriting (Click to stop drawing)' : 'Enable Handwriting (Click to start drawing)'}
+                        style={{ minWidth: '100px' }}
                     >
-                        <i className="fas fa-pen"></i>
+                        <i className="fas fa-pen text-lg"></i>
+                        <span className="text-sm font-bold">{showHandwriting ? 'Drawing' : 'Draw'}</span>
                     </button>
                 </div>
             </div>
@@ -3016,6 +3036,25 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 
                                 <div className="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
                                 
+                                <button
+                                    onClick={() => {
+                                        if (canvasRef.current) {
+                                            console.log('💾 Manual save button clicked...');
+                                            // Always try to save - let saveNote function handle detection
+                                            saveNote().catch(err => {
+                                                console.error('Error saving drawing:', err);
+                                                alert('Error saving drawing. Please try again.');
+                                            });
+                                        } else {
+                                            alert('Canvas not initialized. Please try drawing again.');
+                                        }
+                                    }}
+                                    className="px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                                    title="Save drawing to note"
+                                >
+                                    <i className="fas fa-save mr-1"></i>
+                                    Save
+                                </button>
                                 <button
                                     onClick={clearHandwriting}
                                     className="px-3 py-1.5 text-sm bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded transition-colors"

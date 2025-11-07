@@ -49,6 +49,9 @@ const DashboardSimple = () => {
         );
     }, [calendarReady, isDark]); // Re-evaluate when calendarReady changes or theme changes
 
+    // Get TaskManagement component (may be lazy loaded)
+    const TaskManagement = window.TaskManagement || (() => <div>Loading task management...</div>);
+
     return (
         <div className="space-y-4">
             {/* Calendar Component */}
@@ -56,11 +59,9 @@ const DashboardSimple = () => {
                 <Calendar />
             </div>
             
-            {/* Other dashboard items coming soon */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-4`}>
-                <p className={`text-sm text-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                    Other dashboard items coming soon
-                </p>
+            {/* Task Management Component */}
+            <div>
+                <TaskManagement />
             </div>
         </div>
     );

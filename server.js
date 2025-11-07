@@ -650,6 +650,50 @@ app.all('/api/projects/:id', async (req, res, next) => {
   }
 })
 
+// Explicit mapping for user tasks list and create operations (GET, POST /api/user-tasks)
+app.all('/api/user-tasks', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-tasks.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user task operations with ID (GET, PUT, DELETE /api/user-tasks/[id])
+app.all('/api/user-tasks/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-tasks.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user task tags list and create operations (GET, POST /api/user-task-tags)
+app.all('/api/user-task-tags', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-task-tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for user task tag operations with ID (GET, PUT, DELETE /api/user-task-tags/[id])
+app.all('/api/user-task-tags/:id', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'user-task-tags.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    return next(e)
+  }
+})
+
 // Explicit mapping for leave platform approval/rejection endpoints
 app.all('/api/leave-platform/applications/:id/approve', async (req, res, next) => {
   try {
@@ -671,6 +715,73 @@ app.all('/api/leave-platform/applications/:id/reject', async (req, res, next) =>
     if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
     return handler(req, res)
   } catch (e) {
+    return next(e)
+  }
+})
+
+// Explicit mapping for leave platform base endpoints
+app.all('/api/leave-platform/applications', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'applications.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform applications API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/balances', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'balances.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform balances API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/approvers', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'approvers.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform approvers API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/birthdays', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'birthdays.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform birthdays API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/departments', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'departments.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform departments API error:', e)
+    return next(e)
+  }
+})
+
+app.all('/api/leave-platform/import-balances', async (req, res, next) => {
+  try {
+    const handler = await loadHandler(path.join(apiDir, 'leave-platform', 'import-balances.js'))
+    if (!handler) return res.status(404).json({ error: 'API endpoint not found' })
+    return handler(req, res)
+  } catch (e) {
+    console.error('❌ Leave Platform import-balances API error:', e)
     return next(e)
   }
 })

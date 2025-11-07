@@ -100,6 +100,22 @@ async function handler(req, res) {
         // Hash password
         const passwordHash = await bcrypt.hash(password, 10)
 
+        // Prepare accessibleProjectIds from invitation
+        let accessibleProjectIdsJson = '[]';
+        if (invitation.accessibleProjectIds) {
+            if (typeof invitation.accessibleProjectIds === 'string') {
+                // Validate it's valid JSON
+                try {
+                    JSON.parse(invitation.accessibleProjectIds);
+                    accessibleProjectIdsJson = invitation.accessibleProjectIds;
+                } catch (e) {
+                    accessibleProjectIdsJson = '[]';
+                }
+            } else if (Array.isArray(invitation.accessibleProjectIds)) {
+                accessibleProjectIdsJson = JSON.stringify(invitation.accessibleProjectIds);
+            }
+        }
+
         // Create user account
         let newUser
         try {
@@ -109,6 +125,7 @@ async function handler(req, res) {
                     name: name || invitation.name,
                     passwordHash,
                     role: invitation.role,
+                    accessibleProjectIds: accessibleProjectIdsJson,
                     status: 'active',
                     provider: 'local',
                     invitedBy: invitation.invitedBy,

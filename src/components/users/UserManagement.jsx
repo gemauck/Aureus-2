@@ -105,19 +105,22 @@ const UserManagement = () => {
                 
                 const usersList = (data.users || []).map(user => {
                     // Parse permissions from JSON string to array
+                    console.log('🔍 Processing user:', user.email, 'permissions (raw):', user.permissions, 'type:', typeof user.permissions);
                     if (user.permissions) {
                         try {
                             if (typeof user.permissions === 'string') {
                                 const parsed = JSON.parse(user.permissions);
                                 user.permissions = Array.isArray(parsed) ? parsed : [];
+                                console.log('✅ Parsed permissions for', user.email, ':', user.permissions);
                             } else if (!Array.isArray(user.permissions)) {
                                 user.permissions = [];
                             }
                         } catch (e) {
-                            console.warn('Failed to parse permissions for user:', user.email, e);
+                            console.warn('❌ Failed to parse permissions for user:', user.email, e);
                             user.permissions = [];
                         }
                     } else {
+                        console.log('⚠️ No permissions field for user:', user.email);
                         user.permissions = [];
                     }
                     return user;
@@ -494,6 +497,14 @@ const UserManagement = () => {
     const handleEditUser = async (userId, userData) => {
         try {
             const token = window.storage?.getToken?.();
+            
+            console.log('📤 UserManagement handleEditUser: Sending request:', {
+                userId,
+                userData,
+                accessibleProjectIds: userData.accessibleProjectIds,
+                accessibleProjectIdsType: typeof userData.accessibleProjectIds
+            });
+            
             const response = await fetch('/api/users', {
                 method: 'PUT',
                 headers: {
@@ -504,18 +515,25 @@ const UserManagement = () => {
             });
 
             const data = await response.json();
+            
+            console.log('📥 UserManagement handleEditUser: Response:', {
+                status: response.status,
+                ok: response.ok,
+                data
+            });
 
             if (response.ok) {
                 loadUsers();
                 alert('User updated successfully');
                 return true;
             } else {
-                alert(data.message || 'Failed to update user');
+                console.error('❌ UserManagement handleEditUser: Failed:', data);
+                alert(data.message || data.error?.message || 'Failed to update user');
                 return false;
             }
         } catch (error) {
-            console.error('Error updating user:', error);
-            alert('Failed to update user');
+            console.error('❌ UserManagement handleEditUser: Error:', error);
+            alert(`Failed to update user: ${error.message || 'Network error'}`);
             return false;
         }
     };
@@ -1554,12 +1572,15 @@ const UserManagement = () => {
                             const formData = new FormData(e.target);
                             // Parse accessibleProjectIds if role is guest
                             let accessibleProjectIds = [];
-                            if (formData.get('role') === 'guest') {
+                            const role = formData.get('role');
+                            if (role === 'guest') {
                                 const projectIdsInput = formData.get('accessibleProjectIds');
                                 if (projectIdsInput) {
                                     try {
-                                        accessibleProjectIds = JSON.parse(projectIdsInput);
+                                        const parsed = JSON.parse(projectIdsInput);
+                                        accessibleProjectIds = Array.isArray(parsed) ? parsed : [];
                                     } catch (e) {
+                                        console.warn('Failed to parse accessibleProjectIds:', e);
                                         accessibleProjectIds = [];
                                     }
                                 }
@@ -1568,12 +1589,20 @@ const UserManagement = () => {
                             const userData = {
                                 name: formData.get('name'),
                                 email: formData.get('email'),
-                                role: formData.get('role'),
+                                role: role,
                                 status: formData.get('status'),
-                                department: formData.get('department'),
-                                phone: formData.get('phone'),
-                                accessibleProjectIds: formData.get('role') === 'guest' ? accessibleProjectIds : undefined
+                                department: formData.get('department') || '',
+                                phone: formData.get('phone') || '',
+                                ...(role === 'guest' && { accessibleProjectIds: accessibleProjectIds })
                             };
+                            
+                            console.log('📤 UserManagement: Sending user update:', {
+                                userId: editingUser.id,
+                                role: userData.role,
+                                hasAccessibleProjectIds: userData.accessibleProjectIds !== undefined,
+                                accessibleProjectIds: userData.accessibleProjectIds,
+                                accessibleProjectIdsLength: userData.accessibleProjectIds?.length || 0
+                            });
                             
                             const success = await handleEditUser(editingUser.id, userData);
                             if (success) {
@@ -1987,14 +2016,23 @@ const UserManagement = () => {
                                 onClick={async () => {
                                     try {
                                         const token = window.storage?.getToken?.();
+                                        // Ensure selectedPermissions is an array, not a string
+                                        const permissionsArray = Array.isArray(selectedPermissions) 
+                                            ? selectedPermissions 
+                                            : (typeof selectedPermissions === 'string' 
+                                                ? JSON.parse(selectedPermissions) 
+                                                : []);
+                                        
                                         const requestBody = {
                                             userId: editingUserPermissions.id,
-                                            permissions: JSON.stringify(selectedPermissions)
+                                            permissions: permissionsArray  // Send as array, not stringified
                                         };
                                         console.log('📤 Sending permissions update:', {
                                             userId: editingUserPermissions.id,
                                             selectedPermissions,
-                                            permissionsString: JSON.stringify(selectedPermissions),
+                                            selectedPermissionsType: typeof selectedPermissions,
+                                            isArray: Array.isArray(selectedPermissions),
+                                            permissionsArray,
                                             requestBody
                                         });
                                         
@@ -2011,11 +2049,51 @@ const UserManagement = () => {
                                         console.log('📥 Response from server:', { status: response.status, data });
                                         
                                         if (response.ok) {
+                                            // Handle response format: {data: {success, message, user}}
+                                            // The ok() function wraps everything in {data: ...}
+                                            const responseUser = data.data?.user || data.user;
+                                            console.log('✅ Permissions saved successfully, response user:', responseUser);
+                                            // Update the user in the local state immediately with the response data
+                                            if (responseUser) {
+                                                // Parse permissions from response
+                                                let parsedPermissions = [];
+                                                if (responseUser.permissions) {
+                                                    try {
+                                                        if (typeof responseUser.permissions === 'string') {
+                                                            const parsed = JSON.parse(responseUser.permissions);
+                                                            parsedPermissions = Array.isArray(parsed) ? parsed : [];
+                                                        } else if (Array.isArray(responseUser.permissions)) {
+                                                            parsedPermissions = responseUser.permissions;
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn('Failed to parse permissions from response:', e);
+                                                    }
+                                                }
+                                                
+                                                // Update the user in the users array
+                                                setUsers(prevUsers => {
+                                                    return prevUsers.map(u => {
+                                                        if (u.id === responseUser.id) {
+                                                            return {
+                                                                ...u,
+                                                                ...responseUser,
+                                                                permissions: parsedPermissions
+                                                            };
+                                                        }
+                                                        return u;
+                                                    });
+                                                });
+                                                
+                                                console.log('✅ Updated user in state with permissions:', parsedPermissions);
+                                            }
+                                            
                                             alert('Permissions updated successfully');
-                                            await loadUsers();
+                                            // Close modal first
                                             setShowPermissionsModal(false);
                                             setEditingUserPermissions(null);
                                             setSelectedPermissions([]);
+                                            // Then reload users to get fresh data from server
+                                            await loadUsers();
                                         } else {
                                             alert(data.message || 'Failed to update permissions');
                                         }

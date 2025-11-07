@@ -72,84 +72,61 @@ async function handler(req, res) {
         const userEmail = req.user?.email || 'unknown'
         console.log(`🔍 Querying clients for user: ${userEmail} (${userId})`)
         
+        // Verify userId exists before using it in relation
+        let validUserId = null
+        if (userId) {
+          try {
+            const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+            if (userExists) {
+              validUserId = userId
+            } else {
+              console.warn('⚠️ User does not exist in database:', userId)
+            }
+          } catch (userCheckError) {
+            // User doesn't exist, skip starredBy relation
+            console.warn('⚠️ User check failed, skipping starredBy relation:', userId, userCheckError.message)
+          }
+        }
+        
         // Try query with type filter first, fallback to all clients if type column doesn't exist
         let rawClients
         try {
-          // Verify userId exists before using it in relation
-          let validUserId = null
-          if (userId) {
-            try {
-              const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
-              if (userExists) {
-                validUserId = userId
-              } else {
-                console.warn('⚠️ User does not exist in database:', userId)
-              }
-            } catch (userCheckError) {
-              // User doesn't exist, skip starredBy relation
-              console.warn('⚠️ User check failed, skipping starredBy relation:', userId, userCheckError.message)
-            }
-          }
           
-          // TEMPORARY DEBUG: Test simple query first
-          console.log('🔍 DEBUG: Testing simple count query...')
-          const simpleCount = await prisma.client.count({ where: { type: 'client' } })
-          const nullCount = await prisma.client.count({ where: { type: null } })
-          const totalCount = await prisma.client.count()
-          console.log(`🔍 DEBUG: Counts - type=client: ${simpleCount}, type=null: ${nullCount}, total: ${totalCount}`)
-          
-          // Use Prisma to include tags relation - needed for list view
-          // Note: starredBy relation removed because StarredClient table doesn't exist in restored DB
-          // Query clients directly using WHERE clause for better performance
-          console.log('🔍 Querying Client records with type filter...')
-          // IMPORTANT: Return ALL clients regardless of ownerId - all users should see all clients
-          // Use raw SQL to handle null types correctly (Prisma has issues with NOT and null values)
-          // Query: type='client' OR type IS NULL (exclude leads)
-          const rawClientsSQL = await prisma.$queryRaw`
-            SELECT c.*
-            FROM "Client" c
-            WHERE (c.type = 'client' OR c.type IS NULL)
-            AND c.type != 'lead'
-            ORDER BY c."createdAt" DESC
-          `
-          console.log(`🔍 Raw SQL query returned ${rawClientsSQL.length} clients`)
-          
-          // Convert raw SQL results to Prisma format and load relations
-          const clientIds = rawClientsSQL.map(c => c.id)
+          // Query clients directly using Prisma (we confirmed there are no NULL types, all are 'client' or 'lead')
+          console.log('🔍 Querying clients using Prisma (type = "client")...')
           rawClients = await prisma.client.findMany({
             where: {
-              id: { in: clientIds }
+              type: 'client'
             },
             include: {
               tags: {
                 include: {
                   tag: true
                 }
-              }
+              },
+              ...(validUserId ? {
+                starredBy: {
+                  where: {
+                    userId: validUserId
+                  },
+                  select: {
+                    id: true,
+                    userId: true
+                  }
+                }
+              } : {})
             },
             orderBy: {
               createdAt: 'desc'
             }
           })
-          console.log(`🔍 Query returned ${rawClients.length} clients (with relations loaded)`)
+          console.log(`🔍 Prisma query returned ${rawClients.length} clients`)
         } catch (typeError) {
           // If type column doesn't exist or query fails, try without type filter
           console.error('❌ Type filter failed, trying without filter:', typeError.message)
           console.error('❌ Type error stack:', typeError.stack)
           
-          // Verify userId exists before using it in relation
-          let validUserId = null
-          if (userId) {
-            try {
-              const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
-              if (userExists) {
-                validUserId = userId
-              }
-            } catch (userCheckError) {
-              // User doesn't exist, skip starredBy relation
-              console.warn('⚠️ User does not exist, skipping starredBy relation:', userId)
-            }
-          }
+          // Note: validUserId is already set above, no need to reset it
           
           // Also check total count for debugging
           const totalCount = await prisma.client.count()
@@ -162,8 +139,18 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
-              // starredBy relation removed - StarredClient table doesn't exist in restored database
+              },
+              ...(validUserId ? {
+                starredBy: {
+                  where: {
+                    userId: validUserId
+                  },
+                  select: {
+                    id: true,
+                    userId: true
+                  }
+                }
+              } : {})
             },
             orderBy: {
               createdAt: 'desc'
@@ -238,8 +225,8 @@ async function handler(req, res) {
         // Parse JSON fields before returning and add starred status
         const parsedClients = clients.map(client => {
           const parsed = parseClientJsonFields(client)
-          // Check if current user has starred this client (skip if starredBy doesn't exist)
-          parsed.isStarred = false // StarredClient table doesn't exist in restored database
+          // Check if current user has starred this client
+          parsed.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
           return parsed
         })
         
@@ -254,6 +241,14 @@ async function handler(req, res) {
         try {
           const dbInfo = await prisma.$queryRaw`SELECT current_database() as db_name, current_user as db_user`
           console.log(`🔍 Database connection for ${userEmail}:`, dbInfo)
+          
+          // Also test a direct count query
+          const directCount = await prisma.$queryRaw`SELECT COUNT(*) as count FROM "Client" WHERE type = 'client'`
+          console.log(`🔍 Direct SQL count query: ${directCount[0].count} clients`)
+          
+          // Test Prisma count
+          const prismaCount = await prisma.client.count({ where: { type: 'client' } })
+          console.log(`🔍 Prisma count query: ${prismaCount} clients`)
         } catch (e) {
           console.warn('⚠️ Could not get database info:', e.message)
         }
@@ -443,6 +438,19 @@ async function handler(req, res) {
     if (pathSegments.length === 2 && pathSegments[0] === 'clients' && id) {
       if (req.method === 'GET') {
         try {
+          const userId = req.user?.sub
+          let validUserId = null
+          if (userId) {
+            try {
+              const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+              if (userExists) {
+                validUserId = userId
+              }
+            } catch (userCheckError) {
+              // User doesn't exist, skip starredBy relation
+            }
+          }
+          
           // Include tags for detail view (single client queries are fast)
           const client = await prisma.client.findUnique({ 
             where: { id },
@@ -451,12 +459,25 @@ async function handler(req, res) {
                 include: {
                   tag: true
                 }
-              }
+              },
+              ...(validUserId ? {
+                starredBy: {
+                  where: {
+                    userId: validUserId
+                  },
+                  select: {
+                    id: true,
+                    userId: true
+                  }
+                }
+              } : {})
             }
           })
           if (!client) return notFound(res)
           // Parse JSON fields before returning
           const parsedClient = parseClientJsonFields(client)
+          // Check if current user has starred this client
+          parsedClient.isStarred = validUserId && client.starredBy && Array.isArray(client.starredBy) && client.starredBy.length > 0
           return ok(res, { client: parsedClient })
         } catch (dbError) {
           console.error('❌ Database error getting client:', dbError)

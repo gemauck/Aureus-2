@@ -63,16 +63,45 @@ const Users = () => {
         loadInvitations();
     }, []);
 
-    const loadUsers = () => {
-        let savedUsers = storage.getUsers() || [];
-        
-		// Do not seed default users; keep empty until created via UI/API
-		if (savedUsers.length === 0) {
-			savedUsers = [];
-			storage.setUsers(savedUsers);
-		}
-        
-        setUsers(savedUsers);
+    const loadUsers = async () => {
+        try {
+            // Try to load from API first
+            const token = window.storage?.getToken?.();
+            if (token) {
+                const response = await fetch('/api/users', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const responseData = data.data || data;
+                    const apiUsers = responseData.users || [];
+                    if (apiUsers.length > 0) {
+                        setUsers(apiUsers);
+                        return;
+                    }
+                }
+            }
+            
+            // Fallback to local storage
+            let savedUsers = storage.getUsers() || [];
+            if (savedUsers.length === 0) {
+                savedUsers = [];
+                storage.setUsers(savedUsers);
+            }
+            setUsers(savedUsers);
+        } catch (error) {
+            console.error('Error loading users:', error);
+            // Fallback to local storage on error
+            let savedUsers = storage.getUsers() || [];
+            if (savedUsers.length === 0) {
+                savedUsers = [];
+                storage.setUsers(savedUsers);
+            }
+            setUsers(savedUsers);
+        }
     };
 
     const loadInvitations = async () => {
@@ -140,55 +169,159 @@ const Users = () => {
         storage.setUsers(updatedUsers);
     };
 
-    const handleSaveUser = (userData) => {
-        if (selectedUser) {
-            // Update existing user
-            const updatedUsers = users.map(u => 
-                u.id === selectedUser.id ? { ...userData, id: selectedUser.id } : u
-            );
-            setUsers(updatedUsers);
-            storage.setUsers(updatedUsers);
-        } else {
-            // Add new user
-            const newUser = {
-                ...userData,
-                id: Date.now().toString(),
-                createdAt: new Date().toISOString()
-            };
-            const updatedUsers = [...users, newUser];
-            setUsers(updatedUsers);
-            storage.setUsers(updatedUsers);
+    const handleSaveUser = async (userData) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication error: Please refresh the page and try again');
+                return;
+            }
+
+            if (selectedUser) {
+                // Update existing user via API
+                console.log('📝 Updating user via API:', selectedUser.id);
+                
+                // Prepare accessibleProjectIds - ensure it's an array
+                let accessibleProjectIds = userData.accessibleProjectIds || [];
+                if (typeof accessibleProjectIds === 'string') {
+                    try {
+                        accessibleProjectIds = JSON.parse(accessibleProjectIds);
+                    } catch (e) {
+                        accessibleProjectIds = [];
+                    }
+                }
+
+                const response = await fetch('/api/users', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        userId: selectedUser.id,
+                        name: userData.name,
+                        email: userData.email,
+                        role: userData.role,
+                        status: userData.status,
+                        department: userData.department || '',
+                        phone: userData.phone || '',
+                        accessibleProjectIds: accessibleProjectIds
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Failed to update user' }));
+                    alert(errorData.message || 'Failed to update user');
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('✅ User updated successfully:', data);
+
+                // Reload users from API
+                await loadUsers();
+                
+                setShowUserModal(false);
+                setSelectedUser(null);
+            } else {
+                // Add new user via API
+                console.log('➕ Creating new user via API');
+                
+                // Prepare accessibleProjectIds - ensure it's an array
+                let accessibleProjectIds = userData.accessibleProjectIds || [];
+                if (typeof accessibleProjectIds === 'string') {
+                    try {
+                        accessibleProjectIds = JSON.parse(accessibleProjectIds);
+                    } catch (e) {
+                        accessibleProjectIds = [];
+                    }
+                }
+
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        name: userData.name,
+                        email: userData.email,
+                        role: userData.role,
+                        status: userData.status,
+                        department: userData.department || '',
+                        phone: userData.phone || '',
+                        accessibleProjectIds: accessibleProjectIds
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Failed to create user' }));
+                    alert(errorData.message || 'Failed to create user');
+                    return;
+                }
+
+                const data = await response.json();
+                console.log('✅ User created successfully:', data);
+
+                // Reload users from API
+                await loadUsers();
+                
+                setShowUserModal(false);
+            }
+        } catch (error) {
+            console.error('❌ Error saving user:', error);
+            alert(`Failed to save user: ${error.message}`);
         }
-        setShowUserModal(false);
     };
 
-    const handleSaveInvitation = (invitationData) => {
-        const newInvitation = {
-            ...invitationData,
-            id: Date.now().toString(),
-            status: 'pending',
-            token: generateInviteToken(),
-            createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() // 7 days
-        };
-        
-        const updatedInvitations = [...invitations, newInvitation];
-        setInvitations(updatedInvitations);
-        storage.setInvitations(updatedInvitations);
-        
-        // Simulate sending email (in real app, this would call an API)
-        console.log('Sending invitation email to:', invitationData.email);
-        console.log('Invitation token:', newInvitation.token);
-        
-        setShowInviteModal(false);
-        
-        // Show success message
-        alert(`Invitation sent to ${invitationData.email}! They will receive an email with instructions to create their account.`);
+    const handleSaveInvitation = async (invitationData) => {
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                alert('Authentication error: Please refresh the page and try again');
+                return;
+            }
+
+            console.log('📧 Sending invitation via API:', invitationData);
+
+            // Call the invite API
+            const response = await fetch('/api/users/invite', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    email: invitationData.email,
+                    name: invitationData.name || invitationData.email.split('@')[0], // Use provided name or email prefix as default
+                    role: invitationData.role,
+                    department: invitationData.department || '',
+                    accessibleProjectIds: invitationData.accessibleProjectIds || []
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ message: 'Failed to send invitation' }));
+                alert(errorData.message || 'Failed to send invitation');
+                return;
+            }
+
+            const data = await response.json();
+            console.log('✅ Invitation sent successfully:', data);
+
+            // Reload invitations from API
+            await loadInvitations();
+            
+            setShowInviteModal(false);
+            
+            // Show success message
+            alert(`Invitation sent to ${invitationData.email}! They will receive an email with instructions to create their account.`);
+        } catch (error) {
+            console.error('❌ Error sending invitation:', error);
+            alert(`Failed to send invitation: ${error.message}`);
+        }
     };
 
-    const generateInviteToken = () => {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-    };
 
     const handleResendInvitation = (invitation) => {
         console.log('Resending invitation to:', invitation.email);

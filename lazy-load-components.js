@@ -25,6 +25,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/dashboard/DashboardLive.jsx',
         './src/components/dashboard/DashboardDatabaseFirst.jsx',
         './src/components/dashboard/DashboardEnhanced.jsx',
+        './src/components/tasks/TaskManagement.jsx',
         
         // Clients and related modals
         // ClientDetailModal, LeadDetailModal, Clients.jsx, and ClientDetailModalMobile are loaded early in index.html - DO NOT load here to avoid conflicts
@@ -76,6 +77,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/teams/ChecklistModal.jsx',
         './src/components/teams/NoticeModal.jsx',
         './src/components/teams/WorkflowExecutionModal.jsx',
+        './src/components/teams/ManagementMeetingNotes.jsx',
         './src/components/teams/JobCardModal.jsx',
         './src/components/teams/TeamModals.jsx',
         './src/components/teams/Teams.jsx',
@@ -229,19 +231,19 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 });
             };
             
-            // Add cache-busting for DailyNotes, Manufacturing, and UserManagement to ensure fresh version loads
+            // Add cache-busting for DailyNotes, Manufacturing, UserManagement, and ProjectProgressTracker to ensure fresh version loads
             // Use timestamp-based version for critical components that change frequently
-            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
-                scriptSrc = scriptSrc + separator + 'v=permissions-v2-' + Date.now();
+                scriptSrc = scriptSrc + separator + 'v=ui-overhaul-' + Date.now();
             }
             
             // Wait for React if needed (for ProjectDetail), then proceed with loading
             ensureReactForProjectDetail().then(() => {
                 // First, fetch the file to validate it's JavaScript before loading as script
                 // This prevents HTML (404 pages) from being executed as JavaScript
-                // Use no-cache for DailyNotes and Manufacturing to ensure fresh version, default for others
-                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') ? 'no-cache' : 'default';
+                // Use no-cache for DailyNotes, Manufacturing, and ProjectProgressTracker to ensure fresh version, default for others
+                const cachePolicy = scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('ProjectProgressTracker') ? 'no-cache' : 'default';
                 return fetch(scriptSrc, { cache: cachePolicy })
                 .then(response => {
                     if (!response.ok) {

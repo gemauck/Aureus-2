@@ -32,6 +32,43 @@ async function handler(req, res) {
                 orderBy: { createdAt: 'desc' }
             })
 
+            // Parse permissions and accessibleProjectIds from JSON strings to arrays
+            const parsedUsers = users.map(user => {
+                let parsedPermissions = [];
+                if (user.permissions) {
+                    try {
+                        if (typeof user.permissions === 'string') {
+                            const parsed = JSON.parse(user.permissions);
+                            parsedPermissions = Array.isArray(parsed) ? parsed : [];
+                        } else if (Array.isArray(user.permissions)) {
+                            parsedPermissions = user.permissions;
+                        }
+                    } catch (e) {
+                        parsedPermissions = [];
+                    }
+                }
+
+                let parsedAccessibleProjectIds = [];
+                if (user.accessibleProjectIds) {
+                    try {
+                        if (typeof user.accessibleProjectIds === 'string') {
+                            const parsed = JSON.parse(user.accessibleProjectIds);
+                            parsedAccessibleProjectIds = Array.isArray(parsed) ? parsed : [];
+                        } else if (Array.isArray(user.accessibleProjectIds)) {
+                            parsedAccessibleProjectIds = user.accessibleProjectIds;
+                        }
+                    } catch (e) {
+                        parsedAccessibleProjectIds = [];
+                    }
+                }
+
+                return {
+                    ...user,
+                    permissions: parsedPermissions,
+                    accessibleProjectIds: parsedAccessibleProjectIds
+                };
+            });
+
             // Get all invitations (graceful if table missing)
             let invitations = []
             try {
@@ -44,7 +81,7 @@ async function handler(req, res) {
             }
 
             return ok(res, {
-                users,
+                users: parsedUsers,
                 invitations
             })
 
@@ -158,7 +195,14 @@ async function handler(req, res) {
                 return unauthorized(res, 'Permission required: manage_users')
             }
 
-            const { userId, name, email, role, status, department, phone, accessibleProjectIds } = req.body || {}
+            const { userId, name, email, role, status, department, phone, accessibleProjectIds, permissions } = req.body || {}
+            
+            console.log('📝 PUT /api/users - Received update request:', {
+                userId,
+                hasPermissions: permissions !== undefined,
+                permissionsType: typeof permissions,
+                permissionsValue: permissions
+            })
             
             if (!userId) {
                 return badRequest(res, 'User ID is required')
@@ -178,48 +222,172 @@ async function handler(req, res) {
                 }
             }
 
-            // Prepare accessibleProjectIds - ensure it's a JSON string
+            // Prepare updateData - ensure it's a JSON string
             let updateData = {
                 ...(name && { name }),
                 ...(email && { email }),
                 ...(role && { role }),
                 ...(status && { status }),
+                ...(department !== undefined && { department }),
+                ...(phone !== undefined && { phone }),
             };
             
+            // Handle permissions - ALWAYS process if provided (even if empty array)
+            if (permissions !== undefined && permissions !== null) {
+                console.log('🔧 Processing permissions update:', { permissions, type: typeof permissions });
+                if (Array.isArray(permissions)) {
+                    updateData.permissions = JSON.stringify(permissions);
+                    console.log('✅ Permissions is array, stringified to:', updateData.permissions);
+                } else if (typeof permissions === 'string') {
+                    // Validate it's valid JSON
+                    try {
+                        const parsed = JSON.parse(permissions);
+                        // If it parses to an array, use the stringified version
+                        if (Array.isArray(parsed)) {
+                            updateData.permissions = permissions; // Already a valid JSON string
+                            console.log('✅ Permissions is valid JSON string:', updateData.permissions);
+                        } else {
+                            // If it's not an array, wrap it
+                            updateData.permissions = JSON.stringify([parsed]);
+                            console.log('⚠️ Permissions parsed to non-array, wrapped:', updateData.permissions);
+                        }
+                    } catch (e) {
+                        console.warn('❌ Invalid permissions JSON, defaulting to empty array:', e);
+                        updateData.permissions = '[]';
+                    }
+                } else {
+                    console.warn('❌ Permissions is neither array nor string, defaulting to empty array');
+                    updateData.permissions = '[]';
+                }
+            } else {
+                console.log('ℹ️ No permissions field in request body (undefined or null)');
+            }
+            
+            // Log what we're about to update
+            console.log('📋 Final updateData:', JSON.stringify(updateData, null, 2));
+            
             // Handle accessibleProjectIds if provided
-            if (accessibleProjectIds !== undefined) {
+            if (accessibleProjectIds !== undefined && accessibleProjectIds !== null) {
+                console.log('🔧 Processing accessibleProjectIds update:', { 
+                    accessibleProjectIds, 
+                    type: typeof accessibleProjectIds,
+                    isArray: Array.isArray(accessibleProjectIds)
+                });
+                
                 if (Array.isArray(accessibleProjectIds)) {
                     updateData.accessibleProjectIds = JSON.stringify(accessibleProjectIds);
+                    console.log('✅ accessibleProjectIds is array, stringified to:', updateData.accessibleProjectIds);
                 } else if (typeof accessibleProjectIds === 'string') {
                     // Validate it's valid JSON
                     try {
-                        JSON.parse(accessibleProjectIds);
-                        updateData.accessibleProjectIds = accessibleProjectIds;
+                        const parsed = JSON.parse(accessibleProjectIds);
+                        if (Array.isArray(parsed)) {
+                            updateData.accessibleProjectIds = accessibleProjectIds; // Already a valid JSON string
+                            console.log('✅ accessibleProjectIds is valid JSON string:', updateData.accessibleProjectIds);
+                        } else {
+                            // If it's not an array, wrap it
+                            updateData.accessibleProjectIds = JSON.stringify([parsed]);
+                            console.log('⚠️ accessibleProjectIds parsed to non-array, wrapped:', updateData.accessibleProjectIds);
+                        }
                     } catch (e) {
+                        console.warn('❌ Invalid accessibleProjectIds JSON, defaulting to empty array:', e);
                         updateData.accessibleProjectIds = '[]';
                     }
                 } else {
+                    console.warn('❌ accessibleProjectIds is neither array nor string, defaulting to empty array');
                     updateData.accessibleProjectIds = '[]';
+                }
+            } else {
+                console.log('ℹ️ No accessibleProjectIds field in request body (undefined or null)');
+            }
+
+            console.log('💾 Updating user with data:', JSON.stringify(updateData, null, 2));
+            console.log('🔍 Permissions in updateData:', updateData.permissions, 'Type:', typeof updateData.permissions);
+            
+            // Update user
+            let updatedUser;
+            try {
+                updatedUser = await prisma.user.update({
+                    where: { id: userId },
+                    data: updateData,
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        role: true,
+                        permissions: true,
+                        status: true,
+                        department: true,
+                        phone: true,
+                        accessibleProjectIds: true,
+                        updatedAt: true
+                    }
+                })
+                
+                console.log('💾 Database update completed. Permissions in response:', updatedUser.permissions, 'Type:', typeof updatedUser.permissions);
+            } catch (dbError) {
+                console.error('❌ Database update error:', {
+                    message: dbError.message,
+                    code: dbError.code,
+                    meta: dbError.meta,
+                    userId: userId,
+                    updateData: JSON.stringify(updateData, null, 2),
+                    hasPermissions: 'permissions' in updateData,
+                    permissionsValue: updateData.permissions
+                });
+                throw dbError;
+            }
+
+            console.log('✅ User updated successfully:', {
+                id: updatedUser.id,
+                email: updatedUser.email,
+                permissions: updatedUser.permissions,
+                permissionsType: typeof updatedUser.permissions
+            })
+
+            // Parse permissions from JSON string to array for response
+            let parsedPermissions = [];
+            if (updatedUser.permissions) {
+                try {
+                    if (typeof updatedUser.permissions === 'string') {
+                        const parsed = JSON.parse(updatedUser.permissions);
+                        parsedPermissions = Array.isArray(parsed) ? parsed : [];
+                    } else if (Array.isArray(updatedUser.permissions)) {
+                        parsedPermissions = updatedUser.permissions;
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Failed to parse permissions, using empty array:', e);
+                    parsedPermissions = [];
                 }
             }
 
-            // Update user
-            const updatedUser = await prisma.user.update({
-                where: { id: userId },
-                data: updateData
-            })
+            // Parse accessibleProjectIds from JSON string to array for response
+            let parsedAccessibleProjectIds = [];
+            if (updatedUser.accessibleProjectIds) {
+                try {
+                    if (typeof updatedUser.accessibleProjectIds === 'string') {
+                        const parsed = JSON.parse(updatedUser.accessibleProjectIds);
+                        parsedAccessibleProjectIds = Array.isArray(parsed) ? parsed : [];
+                    } else if (Array.isArray(updatedUser.accessibleProjectIds)) {
+                        parsedAccessibleProjectIds = updatedUser.accessibleProjectIds;
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Failed to parse accessibleProjectIds, using empty array:', e);
+                    parsedAccessibleProjectIds = [];
+                }
+            }
+
+            // Return user with parsed permissions and accessibleProjectIds
+            const responseUser = {
+                ...updatedUser,
+                permissions: parsedPermissions,
+                accessibleProjectIds: parsedAccessibleProjectIds
+            };
 
             return ok(res, { 
                 success: true, 
                 message: 'User updated successfully',
-                user: {
-                    id: updatedUser.id,
-                    name: updatedUser.name,
-                    email: updatedUser.email,
-                    role: updatedUser.role,
-                    status: updatedUser.status,
-                    updatedAt: updatedUser.updatedAt
-                }
+                user: responseUser
             })
 
         } catch (error) {

@@ -18,20 +18,42 @@ async function handler(req, res) {
         try {
             console.log('🔧 Ensuring Invitation table exists...')
             await prisma.$queryRawUnsafe(
-                'CREATE TABLE IF NOT EXISTS "Invitation" ("id" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT \'' + 'user' + '\', "token" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT \'' + 'pending' + '\', "invitedBy" TEXT, "expiresAt" TIMESTAMP(3) NOT NULL, "acceptedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Invitation_pkey" PRIMARY KEY ("id"));'
+                'CREATE TABLE IF NOT EXISTS "Invitation" ("id" TEXT NOT NULL, "email" TEXT NOT NULL, "name" TEXT NOT NULL, "role" TEXT NOT NULL DEFAULT \'' + 'user' + '\', "accessibleProjectIds" TEXT NOT NULL DEFAULT \'[]\', "token" TEXT NOT NULL, "status" TEXT NOT NULL DEFAULT \'' + 'pending' + '\', "invitedBy" TEXT, "expiresAt" TIMESTAMP(3) NOT NULL, "acceptedAt" TIMESTAMP(3), "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP(3) NOT NULL, CONSTRAINT "Invitation_pkey" PRIMARY KEY ("id"));'
             )
             await prisma.$queryRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "Invitation_email_key" ON "Invitation"("email");')
             await prisma.$queryRawUnsafe('CREATE UNIQUE INDEX IF NOT EXISTS "Invitation_token_key" ON "Invitation"("token");')
+            // Add accessibleProjectIds column if it doesn't exist (for existing tables)
+            try {
+                await prisma.$queryRawUnsafe('ALTER TABLE "Invitation" ADD COLUMN IF NOT EXISTS "accessibleProjectIds" TEXT DEFAULT \'[]\';')
+            } catch (e) {
+                // Column might already exist, ignore
+                console.log('⚠️ accessibleProjectIds column may already exist:', e.message)
+            }
             console.log('✅ Invitation table structure verified')
         } catch (e) {
             console.log('⚠️ Table creation skipped (permissions or already exists):', e.message)
             // Ignore if permissions disallow DDL; proceed and let Prisma error if table truly missing
         }
 
-        const { email, name, role = 'user', invitedBy } = req.body || {}
+        const { email, name, role = 'user', invitedBy, accessibleProjectIds = [] } = req.body || {}
         // Use authenticated user's ID as the inviter, fallback to body or 'system'
         const inviterId = req.user?.sub || invitedBy || 'system'
-        console.log('📝 Processing invitation for:', { email, name, role, invitedBy: inviterId })
+        
+        // Prepare accessibleProjectIds - ensure it's a JSON string
+        let accessibleProjectIdsJson = '[]';
+        if (Array.isArray(accessibleProjectIds)) {
+            accessibleProjectIdsJson = JSON.stringify(accessibleProjectIds);
+        } else if (typeof accessibleProjectIds === 'string') {
+            // Validate it's valid JSON
+            try {
+                JSON.parse(accessibleProjectIds);
+                accessibleProjectIdsJson = accessibleProjectIds;
+            } catch (e) {
+                accessibleProjectIdsJson = '[]';
+            }
+        }
+        
+        console.log('📝 Processing invitation for:', { email, name, role, invitedBy: inviterId, accessibleProjectIds: accessibleProjectIdsJson })
         
         if (!email || !name) {
             console.log('❌ Missing required fields:', { email: !!email, name: !!name })
@@ -68,6 +90,7 @@ async function handler(req, res) {
                             token: invitationToken,
                             expiresAt,
                             invitedBy: inviterId || existingInvitation.invitedBy || 'system',
+                            accessibleProjectIds: accessibleProjectIdsJson,
                             updatedAt: new Date()
                         }
                     })
@@ -83,6 +106,7 @@ async function handler(req, res) {
                             status: 'pending',
                             expiresAt,
                             invitedBy: inviterId || 'system',
+                            accessibleProjectIds: accessibleProjectIdsJson,
                             acceptedAt: null,
                             updatedAt: new Date()
                         }
@@ -95,6 +119,7 @@ async function handler(req, res) {
                         email,
                         name,
                         role,
+                        accessibleProjectIds: accessibleProjectIdsJson,
                         token: invitationToken,
                         expiresAt,
                         invitedBy: inviterId || 'system',

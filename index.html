@@ -394,8 +394,14 @@
                     (allErrorText.includes('connection') && allErrorText.includes('failed') && allErrorText.includes('database')) ||
                     (allErrorText.includes('server') && allErrorText.includes('unreachable'));
                 
-                // Only log non-database errors
-                if (!isDatabaseError) {
+                // Check for opportunities API errors (500s) - these are server-side issues
+                const isOpportunitiesApiError = 
+                    allErrorText.includes('failed to list opportunities') ||
+                    (allErrorText.includes('opportunities') && (allErrorText.includes('500') || allErrorText.includes('server error'))) ||
+                    (allErrorText.includes('/opportunities') && (allErrorText.includes('500') || allErrorText.includes('internal server error')));
+                
+                // Only log non-database and non-opportunities-api errors
+                if (!isDatabaseError && !isOpportunitiesApiError) {
                     console.error('🚨 Unhandled Promise Rejection:', {
                         reason: error,
                         promise: event.promise,
@@ -485,7 +491,7 @@
     <!-- Critical utilities that must load BEFORE components -->
     <script src="./dist/src/utils/authStorage.js"></script>
     <!-- Permissions system - Load early so PERMISSION_CATEGORIES is available -->
-    <script src="./dist/src/utils/permissions.js?v=permissions-v2"></script>
+    <script src="./dist/src/utils/permissions.js?v=permissions-v6-admin-fix"></script>
     <script>
         // Verify critical dependencies loaded
         if (!window.storage) {
@@ -672,6 +678,9 @@
     <!-- Reports moved to lazy -->
     
     <script defer src="./dist/src/components/settings/NotificationSettings.js"></script>
+    
+    <!-- Leave Platform - Load before MainLayout -->
+    <script defer src="./dist/src/components/leave-platform/LeavePlatform.js"></script>
     
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
     <script defer src="./dist/src/components/layout/MainLayout.js"></script>
