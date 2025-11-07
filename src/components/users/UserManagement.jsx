@@ -103,7 +103,25 @@ const UserManagement = () => {
                 const data = responseData.data || responseData;
                 console.log('📦 Extracted data:', data);
                 
-                const usersList = data.users || [];
+                const usersList = (data.users || []).map(user => {
+                    // Parse permissions from JSON string to array
+                    if (user.permissions) {
+                        try {
+                            if (typeof user.permissions === 'string') {
+                                const parsed = JSON.parse(user.permissions);
+                                user.permissions = Array.isArray(parsed) ? parsed : [];
+                            } else if (!Array.isArray(user.permissions)) {
+                                user.permissions = [];
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse permissions for user:', user.email, e);
+                            user.permissions = [];
+                        }
+                    } else {
+                        user.permissions = [];
+                    }
+                    return user;
+                });
                 const invitationsList = data.invitations || [];
                 
                 console.log('✅ Users loaded:', usersList.length);
@@ -952,39 +970,47 @@ const UserManagement = () => {
                                                 </button>
                                                 <button
                                                     onClick={() => {
-                                                        // Parse user permissions
-                                                        let userPermissions = [];
-                                                        if (user.permissions) {
-                                                            try {
-                                                                if (typeof user.permissions === 'string') {
-                                                                    userPermissions = JSON.parse(user.permissions);
-                                                                } else if (Array.isArray(user.permissions)) {
-                                                                    userPermissions = user.permissions;
-                                                                }
+                                                    // Parse user permissions
+                                                    let userPermissions = [];
+                                                    if (user.permissions) {
+                                                        try {
+                                                            if (typeof user.permissions === 'string') {
+                                                                const parsed = JSON.parse(user.permissions);
+                                                                userPermissions = Array.isArray(parsed) ? parsed : [];
+                                                            } else if (Array.isArray(user.permissions)) {
+                                                                userPermissions = user.permissions;
+                                                            }
                                                         } catch (e) {
+                                                            console.warn('Failed to parse user permissions:', e);
                                                             userPermissions = [];
                                                         }
                                                     }
                                                     
-                                                    // Initialize permissions based on new structure
-                                                    // All users get access to public modules by default
-                                                    const permissionCategories = window.PERMISSION_CATEGORIES || {};
-                                                    const isAdmin = user?.role?.toLowerCase() === 'admin';
-                                                    const defaultPermissions = [];
+                                                    // If user has custom permissions set, use ONLY those (don't merge with defaults)
+                                                    // Otherwise, use default permissions based on role
+                                                    let finalPermissions = [];
                                                     
-                                                    Object.values(permissionCategories).forEach(category => {
-                                                        // Add public permissions (all users)
-                                                        if (!category.adminOnly) {
-                                                            defaultPermissions.push(category.permission);
-                                                        }
-                                                        // Add admin-only permissions if user is admin
-                                                        if (category.adminOnly && isAdmin) {
-                                                            defaultPermissions.push(category.permission);
-                                                        }
-                                                    });
-                                                    
-                                                    // Merge with existing custom permissions
-                                                    const finalPermissions = [...new Set([...defaultPermissions, ...userPermissions])];
+                                                    if (userPermissions && userPermissions.length > 0) {
+                                                        // User has custom permissions - use them exclusively
+                                                        console.log('📋 Loading custom permissions for user:', user.email, userPermissions);
+                                                        finalPermissions = userPermissions;
+                                                    } else {
+                                                        // No custom permissions - use defaults based on role
+                                                        const permissionCategories = window.PERMISSION_CATEGORIES || {};
+                                                        const isAdmin = user?.role?.toLowerCase() === 'admin';
+                                                        
+                                                        Object.values(permissionCategories).forEach(category => {
+                                                            // Add public permissions (all users)
+                                                            if (!category.adminOnly) {
+                                                                finalPermissions.push(category.permission);
+                                                            }
+                                                            // Add admin-only permissions if user is admin
+                                                            if (category.adminOnly && isAdmin) {
+                                                                finalPermissions.push(category.permission);
+                                                            }
+                                                        });
+                                                        console.log('📋 Using default permissions for user:', user.email, finalPermissions);
+                                                    }
                                                     
                                                     setEditingUserPermissions(user);
                                                     setSelectedPermissions(finalPermissions);
@@ -1961,19 +1987,28 @@ const UserManagement = () => {
                                 onClick={async () => {
                                     try {
                                         const token = window.storage?.getToken?.();
+                                        const requestBody = {
+                                            userId: editingUserPermissions.id,
+                                            permissions: JSON.stringify(selectedPermissions)
+                                        };
+                                        console.log('📤 Sending permissions update:', {
+                                            userId: editingUserPermissions.id,
+                                            selectedPermissions,
+                                            permissionsString: JSON.stringify(selectedPermissions),
+                                            requestBody
+                                        });
+                                        
                                         const response = await fetch('/api/users', {
                                             method: 'PUT',
                                             headers: {
                                                 'Content-Type': 'application/json',
                                                 'Authorization': `Bearer ${token}`
                                             },
-                                            body: JSON.stringify({
-                                                userId: editingUserPermissions.id,
-                                                permissions: JSON.stringify(selectedPermissions)
-                                            })
+                                            body: JSON.stringify(requestBody)
                                         });
 
                                         const data = await response.json();
+                                        console.log('📥 Response from server:', { status: response.status, data });
                                         
                                         if (response.ok) {
                                             alert('Permissions updated successfully');
