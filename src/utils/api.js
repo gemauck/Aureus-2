@@ -224,8 +224,9 @@ const api = {
       return res
     } catch (error) {
       // Silently fail heartbeat errors to avoid console spam
-      // Don't log 401/500/502/503/504/400 errors or database errors as they're expected when auth is in flux or server hasn't updated or DB is down
+      // Don't log 401/404/500/502/503/504/400 errors or database errors as they're expected when auth is in flux or server hasn't updated or DB is down
       const errorMessage = error.message || '';
+      const errorStatus = error.status || '';
       const isDatabaseError = errorMessage.includes('Database connection failed') ||
                             errorMessage.includes('unreachable');
       const isServerError = errorMessage.includes('500') || 
@@ -233,9 +234,16 @@ const api = {
                            errorMessage.includes('503') || 
                            errorMessage.includes('504') ||
                            errorMessage.includes('Server unavailable');
+      const isAuthError = errorMessage.includes('401') || 
+                         errorMessage.includes('404') || 
+                         errorMessage.includes('Unauthorized') ||
+                         errorMessage.includes('token may be invalid') ||
+                         errorStatus === 401 ||
+                         errorStatus === 404;
       
+      // Only log unexpected errors (not auth, server, or database errors)
       if (errorMessage && 
-          !errorMessage.includes('401') && 
+          !isAuthError &&
           !errorMessage.includes('500') && 
           !errorMessage.includes('502') &&
           !errorMessage.includes('503') &&

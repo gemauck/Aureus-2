@@ -8,7 +8,11 @@ export function authRequired(handler) {
       const token = auth.startsWith('Bearer ') ? auth.slice(7) : null
       if (!token) {
         console.log('❌ No token provided')
-        return unauthorized(res)
+        // Ensure response hasn't been sent before attempting to send
+        if (!res.headersSent && !res.writableEnded) {
+          return unauthorized(res)
+        }
+        return
       }
       
       console.log('🔍 Verifying token:', token.substring(0, 20) + '...')
@@ -16,18 +20,34 @@ export function authRequired(handler) {
       
       if (!payload || !payload.sub) {
         console.log('❌ Invalid or expired token')
-        return unauthorized(res)
+        // Ensure response hasn't been sent before attempting to send
+        if (!res.headersSent && !res.writableEnded) {
+          return unauthorized(res)
+        }
+        return
       }
       
       console.log('✅ Token verified for user:', payload.sub)
       req.user = payload
       
       // Await the handler to properly catch async errors
-      const result = handler(req, res)
-      if (result && typeof result.then === 'function') {
-        return await result
+      try {
+        const result = handler(req, res)
+        if (result && typeof result.then === 'function') {
+          return await result
+        }
+        return result
+      } catch (handlerError) {
+        // If handler throws an error and response hasn't been sent, handle it
+        if (!res.headersSent && !res.writableEnded) {
+          console.error('❌ Handler error in authRequired:', handlerError)
+          // Re-throw to be caught by outer error handler
+          throw handlerError
+        }
+        // If response already sent, just log the error
+        console.error('❌ Handler error after response sent:', handlerError)
+        throw handlerError
       }
-      return result
     } catch (e) {
       console.error('❌ Token verification failed:', e.message)
       console.error('❌ Auth middleware error stack:', e.stack)
