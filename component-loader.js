@@ -107,9 +107,16 @@
         'components/users/Users.jsx',
         'components/users/UserManagement.jsx',
         
+        // Leave Platform - Load before HR and Manufacturing for better availability
+        'components/leave-platform/LeavePlatform.jsx',
+        
         // Manufacturing
         'components/manufacturing/locations/StockLocations.jsx',
         'components/manufacturing/Manufacturing.jsx',
+        
+        // Service and Maintenance
+        'components/manufacturing/JobCards.jsx',
+        'components/service-maintenance/ServiceAndMaintenance.jsx',
         
         // Tools
         'components/tools/TankSizeCalculator.jsx',
@@ -126,9 +133,6 @@
         'components/hr/QuickBooksPayrollSync.jsx',
         'components/hr/Payroll.jsx',
         'components/hr/HR.jsx',
-        
-        // Leave Platform
-        'components/leave-platform/LeavePlatform.jsx',
         
         // Reports
         'components/reports/AuditTrail.jsx',

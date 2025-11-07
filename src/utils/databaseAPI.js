@@ -291,8 +291,11 @@ const DatabaseAPI = {
                     const isRetryableServerError = response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504;
                     
                     if (isRetryableServerError && attempt < maxRetries) {
-                        // Retry on 500/502/503/504 with exponential backoff
-                        const delay = baseDelay * Math.pow(2, attempt);
+                        // Use shorter delays for 502 errors (Bad Gateway - often transient)
+                        // 502 errors typically resolve quickly, so retry faster
+                        const is502Error = response.status === 502;
+                        const retryBaseDelay = is502Error ? 300 : baseDelay; // 300ms for 502, 1000ms for others
+                        const delay = retryBaseDelay * Math.pow(2, attempt);
                         // Suppress warnings for 500 errors (expected when backend has issues)
                         // Only log warnings for 502/503/504 (gateway/proxy errors)
                         if (attempt === 0 && response.status !== 500) {
@@ -1427,6 +1430,123 @@ const DatabaseAPI = {
         console.log('📡 Checking database health...');
         const response = await this.makeRequest('/health');
         console.log('✅ Database health check completed');
+        return response;
+    },
+
+    // MEETING NOTES OPERATIONS
+    async getMeetingNotes(monthKey = null) {
+        console.log('📡 Fetching meeting notes from database...');
+        const url = monthKey ? `/meeting-notes?monthKey=${monthKey}` : '/meeting-notes';
+        const response = await this.makeRequest(url);
+        console.log('✅ Meeting notes fetched from database');
+        return response;
+    },
+
+    async createMonthlyNotes(monthKey, monthlyGoals = '') {
+        console.log('📡 Creating monthly meeting notes in database...');
+        const response = await this.makeRequest('/meeting-notes', {
+            method: 'POST',
+            body: JSON.stringify({ monthKey, monthlyGoals })
+        });
+        console.log('✅ Monthly meeting notes created in database');
+        return response;
+    },
+
+    async updateMonthlyNotes(id, data) {
+        console.log(`📡 Updating monthly meeting notes ${id} in database...`);
+        const response = await this.makeRequest('/meeting-notes', {
+            method: 'PUT',
+            body: JSON.stringify({ id, ...data })
+        });
+        console.log('✅ Monthly meeting notes updated in database');
+        return response;
+    },
+
+    async createWeeklyNotes(monthlyNotesId, weekKey, weekStart, weekEnd = null) {
+        console.log('📡 Creating weekly meeting notes in database...');
+        const response = await this.makeRequest('/meeting-notes?action=weekly', {
+            method: 'POST',
+            body: JSON.stringify({ monthlyNotesId, weekKey, weekStart, weekEnd })
+        });
+        console.log('✅ Weekly meeting notes created in database');
+        return response;
+    },
+
+    async updateDepartmentNotes(id, data) {
+        console.log(`📡 Updating department notes ${id} in database...`);
+        const response = await this.makeRequest('/meeting-notes?action=department', {
+            method: 'PUT',
+            body: JSON.stringify({ id, ...data })
+        });
+        console.log('✅ Department notes updated in database');
+        return response;
+    },
+
+    async createActionItem(data) {
+        console.log('📡 Creating action item in database...');
+        const response = await this.makeRequest('/meeting-notes?action=action-item', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        console.log('✅ Action item created in database');
+        return response;
+    },
+
+    async updateActionItem(id, data) {
+        console.log(`📡 Updating action item ${id} in database...`);
+        const response = await this.makeRequest('/meeting-notes?action=action-item', {
+            method: 'PUT',
+            body: JSON.stringify({ id, ...data })
+        });
+        console.log('✅ Action item updated in database');
+        return response;
+    },
+
+    async deleteActionItem(id) {
+        console.log(`📡 Deleting action item ${id} from database...`);
+        const response = await this.makeRequest(`/meeting-notes?action=action-item&id=${id}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ Action item deleted from database');
+        return response;
+    },
+
+    async createComment(data) {
+        console.log('📡 Creating comment in database...');
+        const response = await this.makeRequest('/meeting-notes?action=comment', {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+        console.log('✅ Comment created in database');
+        return response;
+    },
+
+    async updateUserAllocation(monthlyNotesId, departmentId, userId, role = 'contributor') {
+        console.log('📡 Updating user allocation in database...');
+        const response = await this.makeRequest('/meeting-notes?action=allocation', {
+            method: 'POST',
+            body: JSON.stringify({ monthlyNotesId, departmentId, userId, role })
+        });
+        console.log('✅ User allocation updated in database');
+        return response;
+    },
+
+    async deleteUserAllocation(monthlyNotesId, departmentId, userId) {
+        console.log('📡 Deleting user allocation from database...');
+        const response = await this.makeRequest(`/meeting-notes?action=allocation&monthlyNotesId=${monthlyNotesId}&departmentId=${departmentId}&userId=${userId}`, {
+            method: 'DELETE'
+        });
+        console.log('✅ User allocation deleted from database');
+        return response;
+    },
+
+    async generateMonthlyPlan(monthKey, copyFromMonthKey = null) {
+        console.log('📡 Generating monthly plan in database...');
+        const response = await this.makeRequest('/meeting-notes?action=generate-month', {
+            method: 'POST',
+            body: JSON.stringify({ monthKey, copyFromMonthKey })
+        });
+        console.log('✅ Monthly plan generated in database');
         return response;
     }
 };

@@ -10,23 +10,23 @@ datasource db {
 }
 
 model User {
-  id                 String    @id @default(cuid())
-  email              String    @unique
-  name               String?
-  passwordHash       String?
-  provider           String    @default("local")
-  role               String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
-  permissions        String    @default("[]") // JSON array of custom permissions that override role permissions
-  accessibleProjectIds String  @default("[]") // JSON array of project IDs that guest users can access
-  status             String    @default("active") // active, suspended, inactive
-  department         String    @default("")
-  jobTitle           String    @default("")
-  phone              String    @default("")
-  avatar             String    @default("")
-  invitedBy          String?
-  mustChangePassword Boolean   @default(false)
-  lastLoginAt        DateTime?
-  lastSeenAt         DateTime?
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  name                 String?
+  passwordHash         String?
+  provider             String    @default("local")
+  role                 String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
+  permissions          String    @default("[]") // JSON array of custom permissions that override role permissions
+  accessibleProjectIds String    @default("[]") // JSON array of project IDs that guest users can access
+  status               String    @default("active") // active, suspended, inactive
+  department           String    @default("")
+  jobTitle             String    @default("")
+  phone                String    @default("")
+  avatar               String    @default("")
+  invitedBy            String?
+  mustChangePassword   Boolean   @default(false)
+  lastLoginAt          DateTime?
+  lastSeenAt           DateTime?
 
   // HR/Employee Fields
   employeeNumber   String?   @unique
@@ -42,30 +42,36 @@ model User {
   address          String    @default("")
   emergencyContact String    @default("")
 
-  memberships     Membership[]
-  ownedClients    Client[]          @relation("ClientOwner")
-  ownedProjects   Project[]         @relation("ProjectOwner")
-  tasks           Task[]            @relation("TaskAssignee")
-  auditLogs       AuditLog[]        @relation("AuditActor")
-  feedback        Feedback[]        @relation("UserFeedback")
-  sentMessages    Message[]         @relation("MessageSender")
-  passwordResets  PasswordReset[]
-  calendarNotes   CalendarNote[]
-  sessions        Session[]
-  twoFactor       TwoFactor?
-  securityEvents  SecurityEvent[]
-  passwordHistory PasswordHistory[]
-  notifications   Notification[]    @relation("NotificationRecipient")
-  notificationSettings NotificationSetting?
-  starredClients  StarredClient[]
-  leaveApplications LeaveApplication[] @relation("LeaveApplications")
-  approvedLeaveApplications LeaveApplication[] @relation("ApprovedLeaveApplications")
-  rejectedLeaveApplications LeaveApplication[] @relation("RejectedLeaveApplications")
-  leaveBalances   LeaveBalance[]    @relation("LeaveBalances")
-  leaveApprovers  LeaveApprover[]   @relation("LeaveApprovers")
-  birthday        Birthday?         @relation("Birthdays")
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  memberships               Membership[]
+  ownedClients              Client[]                @relation("ClientOwner")
+  ownedProjects             Project[]               @relation("ProjectOwner")
+  tasks                     Task[]                  @relation("TaskAssignee")
+  auditLogs                 AuditLog[]              @relation("AuditActor")
+  feedback                  Feedback[]              @relation("UserFeedback")
+  sentMessages              Message[]               @relation("MessageSender")
+  passwordResets            PasswordReset[]
+  calendarNotes             CalendarNote[]
+  sessions                  Session[]
+  twoFactor                 TwoFactor?
+  securityEvents            SecurityEvent[]
+  passwordHistory           PasswordHistory[]
+  notifications             Notification[]          @relation("NotificationRecipient")
+  notificationSettings      NotificationSetting?
+  starredClients            StarredClient[]
+  leaveApplications         LeaveApplication[]      @relation("LeaveApplications")
+  approvedLeaveApplications LeaveApplication[]      @relation("ApprovedLeaveApplications")
+  rejectedLeaveApplications LeaveApplication[]      @relation("RejectedLeaveApplications")
+  leaveBalances             LeaveBalance[]          @relation("LeaveBalances")
+  leaveApprovers            LeaveApprover[]         @relation("LeaveApprovers")
+  birthday                  Birthday?               @relation("Birthdays")
+  meetingComments           MeetingComment[]        @relation("MeetingCommentAuthor")
+  meetingAllocations        MeetingUserAllocation[] @relation("MeetingUserAllocations")
+  departmentNotesAssigned   DepartmentNotes[]       @relation("DepartmentNotesAssignee")
+  actionItemsAssigned       MeetingActionItem[]     @relation("ActionItemAssignee")
+  userTasks                 UserTask[]              @relation("UserTaskOwner")
+  userTaskTags              UserTaskTag[]           @relation("UserTaskTagOwner")
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
 }
 
 model Team {
@@ -87,33 +93,33 @@ model Membership {
 }
 
 model Client {
-  id            String        @id @default(cuid())
+  id            String          @id @default(cuid())
   name          String
   type          String // "client" or "lead"
-  industry      String        @default("Other")
-  status        String        @default("Potential") // "Potential", "Active", "Disinterested" for leads; "active", "inactive" for clients
-  stage         String        @default("Awareness") // AIDIA stage for leads
-  revenue       Float         @default(0)
-  value         Float         @default(0)
-  probability   Int           @default(0)
-  lastContact   DateTime      @default(now())
-  address       String        @default("")
-  website       String        @default("")
-  notes         String        @default("")
-  contacts      String        @default("[]")
-  followUps     String        @default("[]")
-  projectIds    String        @default("[]")
-  comments      String        @default("[]")
-  sites         String        @default("[]")
-  contracts     String        @default("[]")
-  activityLog   String        @default("[]")
-  billingTerms  String        @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
-  proposals     String        @default("[]")
-  services      String        @default("[]") // JSON array of service level tags
-  thumbnail     String        @default("") // Image URL for client/lead thumbnail
-  rssSubscribed Boolean       @default(true) // RSS news feed subscription status
+  industry      String          @default("Other")
+  status        String          @default("Potential") // "Potential", "Active", "Disinterested" for leads; "active", "inactive" for clients
+  stage         String          @default("Awareness") // AIDIA stage for leads
+  revenue       Float           @default(0)
+  value         Float           @default(0)
+  probability   Int             @default(0)
+  lastContact   DateTime        @default(now())
+  address       String          @default("")
+  website       String          @default("")
+  notes         String          @default("")
+  contacts      String          @default("[]")
+  followUps     String          @default("[]")
+  projectIds    String          @default("[]")
+  comments      String          @default("[]")
+  sites         String          @default("[]")
+  contracts     String          @default("[]")
+  activityLog   String          @default("[]")
+  billingTerms  String          @default("{\"paymentTerms\":\"Net 30\",\"billingFrequency\":\"Monthly\",\"currency\":\"ZAR\",\"retainerAmount\":0,\"taxExempt\":false,\"notes\":\"\"}")
+  proposals     String          @default("[]")
+  services      String          @default("[]") // JSON array of service level tags
+  thumbnail     String          @default("") // Image URL for client/lead thumbnail
+  rssSubscribed Boolean         @default(true) // RSS news feed subscription status
   ownerId       String?
-  owner         User?         @relation("ClientOwner", fields: [ownerId], references: [id])
+  owner         User?           @relation("ClientOwner", fields: [ownerId], references: [id])
   projects      Project[]
   invoices      Invoice[]
   opportunities Opportunity[]
@@ -121,8 +127,8 @@ model Client {
   tags          ClientTag[]
   newsArticles  ClientNews[]
   starredBy     StarredClient[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([createdAt])
   @@index([type])
@@ -216,28 +222,28 @@ model Opportunity {
 }
 
 model SalesOrder {
-  id               String    @id @default(cuid())
-  orderNumber      String    @unique // Auto-generated: SO0001, SO0002, etc.
-  clientId         String?
-  clientName       String    @default("")
-  opportunityId    String?   // Link to originating opportunity
-  status           String    @default("draft") // draft, confirmed, in_production, completed, shipped, cancelled
-  priority         String    @default("normal") // low, normal, high, urgent
-  orderDate        DateTime  @default(now())
-  requiredDate     DateTime?
-  shippedDate      DateTime?
-  subtotal         Float     @default(0)
-  tax              Float     @default(0)
-  total            Float     @default(0)
-  items            String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
-  shippingAddress  String    @default("")
-  shippingMethod   String    @default("")
-  notes            String    @default("")
-  internalNotes    String    @default("")
-  ownerId          String?
-  client           Client?   @relation(fields: [clientId], references: [id])
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  orderNumber     String    @unique // Auto-generated: SO0001, SO0002, etc.
+  clientId        String?
+  clientName      String    @default("")
+  opportunityId   String? // Link to originating opportunity
+  status          String    @default("draft") // draft, confirmed, in_production, completed, shipped, cancelled
+  priority        String    @default("normal") // low, normal, high, urgent
+  orderDate       DateTime  @default(now())
+  requiredDate    DateTime?
+  shippedDate     DateTime?
+  subtotal        Float     @default(0)
+  tax             Float     @default(0)
+  total           Float     @default(0)
+  items           String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  shippingAddress String    @default("")
+  shippingMethod  String    @default("")
+  notes           String    @default("")
+  internalNotes   String    @default("")
+  ownerId         String?
+  client          Client?   @relation(fields: [clientId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([clientId])
   @@index([status])
@@ -312,17 +318,18 @@ model AuditLog {
 }
 
 model Invitation {
-  id         String    @id @default(cuid())
-  email      String    @unique
-  name       String
-  role       String    @default("user") // admin, manager, user (Admin > Manager > User hierarchy)
-  token      String    @unique
-  status     String    @default("pending") // pending, accepted, expired, cancelled
-  invitedBy  String?
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id                   String    @id @default(cuid())
+  email                String    @unique
+  name                 String
+  role                 String    @default("user") // admin, manager, user, guest (Admin > Manager > User > Guest hierarchy)
+  accessibleProjectIds String    @default("[]") // JSON array of project IDs that guest users can access
+  token                String    @unique
+  status               String    @default("pending") // pending, accepted, expired, cancelled
+  invitedBy            String?
+  expiresAt            DateTime
+  acceptedAt           DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 }
 
 // User feedback on pages/sections for product/dev
@@ -434,33 +441,33 @@ model TeamTask {
 
 // Manufacturing Models
 model InventoryItem {
-  id                   String         @id @default(cuid())
-  sku                  String
-  name                 String
-  thumbnail            String         @default("")
-  category             String         @default("components") // components, packaging, accessories, finished_goods, work_in_progress
-  type                 String         @default("component") // component, final_product
-  quantity             Float          @default(0)
-  allocatedQuantity    Float          @default(0) // Quantity reserved/allocated to production orders
-  inProductionQuantity Float          @default(0) // For final_product type: units currently in production
-  completedQuantity    Float          @default(0) // For final_product type: units completed and ready
-  unit                 String         @default("pcs")
-  reorderPoint         Float          @default(0)
-  reorderQty           Float          @default(0)
-  location             String         @default("")
-  locationId           String? // Link to StockLocation - each location has its own inventory
-  stockLocation        StockLocation? @relation(fields: [locationId], references: [id])
-  unitCost             Float          @default(0)
-  totalValue           Float          @default(0)
-  supplier             String         @default("")
-  supplierPartNumbers  String         @default("[]") // JSON array of {supplier: string, partNumber: string}
-  manufacturingPartNumber String      @default("")
-  legacyPartNumber     String         @default("")
-  status               String         @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
-  lastRestocked        DateTime?
-  ownerId              String?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  id                      String         @id @default(cuid())
+  sku                     String
+  name                    String
+  thumbnail               String         @default("")
+  category                String         @default("components") // components, packaging, accessories, finished_goods, work_in_progress
+  type                    String         @default("component") // component, final_product
+  quantity                Float          @default(0)
+  allocatedQuantity       Float          @default(0) // Quantity reserved/allocated to production orders
+  inProductionQuantity    Float          @default(0) // For final_product type: units currently in production
+  completedQuantity       Float          @default(0) // For final_product type: units completed and ready
+  unit                    String         @default("pcs")
+  reorderPoint            Float          @default(0)
+  reorderQty              Float          @default(0)
+  location                String         @default("")
+  locationId              String? // Link to StockLocation - each location has its own inventory
+  stockLocation           StockLocation? @relation(fields: [locationId], references: [id])
+  unitCost                Float          @default(0)
+  totalValue              Float          @default(0)
+  supplier                String         @default("")
+  supplierPartNumbers     String         @default("[]") // JSON array of {supplier: string, partNumber: string}
+  manufacturingPartNumber String         @default("")
+  legacyPartNumber        String         @default("")
+  status                  String         @default("in_stock") // in_stock, low_stock, out_of_stock, in_production
+  lastRestocked           DateTime?
+  ownerId                 String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime       @updatedAt
 
   // Relation: BOMs that produce this finished product
   boms BOM[] @relation("BOMFinishedProduct")
@@ -595,21 +602,21 @@ model LocationInventory {
 }
 
 model Supplier {
-  id            String         @id @default(cuid())
-  code          String         @default("")
-  name          String
-  contactPerson String         @default("")
-  email         String         @default("")
-  phone         String         @default("")
-  website       String         @default("")
-  address       String         @default("")
-  paymentTerms  String         @default("Net 30")
-  status        String         @default("active") // active, inactive
-  notes         String         @default("")
-  ownerId       String?
+  id             String          @id @default(cuid())
+  code           String          @default("")
+  name           String
+  contactPerson  String          @default("")
+  email          String          @default("")
+  phone          String          @default("")
+  website        String          @default("")
+  address        String          @default("")
+  paymentTerms   String          @default("Net 30")
+  status         String          @default("active") // active, inactive
+  notes          String          @default("")
+  ownerId        String?
   purchaseOrders PurchaseOrder[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([name])
   @@index([status])
@@ -617,27 +624,27 @@ model Supplier {
 }
 
 model PurchaseOrder {
-  id               String    @id @default(cuid())
-  orderNumber      String    @unique // Auto-generated: PO0001, PO0002, etc.
-  supplierId       String
-  supplierName     String    @default("")
-  supplier         Supplier  @relation(fields: [supplierId], references: [id])
-  status           String    @default("draft") // draft, sent, confirmed, received, cancelled
-  priority         String    @default("normal") // low, normal, high, urgent
-  orderDate        DateTime  @default(now())
-  expectedDate     DateTime?
-  receivedDate     DateTime?
-  subtotal         Float     @default(0)
-  tax              Float     @default(0)
-  total            Float     @default(0)
-  items            String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
-  shippingAddress  String    @default("")
-  shippingMethod   String    @default("")
-  notes            String    @default("")
-  internalNotes    String    @default("")
-  ownerId          String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  orderNumber     String    @unique // Auto-generated: PO0001, PO0002, etc.
+  supplierId      String
+  supplierName    String    @default("")
+  supplier        Supplier  @relation(fields: [supplierId], references: [id])
+  status          String    @default("draft") // draft, sent, confirmed, received, cancelled
+  priority        String    @default("normal") // low, normal, high, urgent
+  orderDate       DateTime  @default(now())
+  expectedDate    DateTime?
+  receivedDate    DateTime?
+  subtotal        Float     @default(0)
+  tax             Float     @default(0)
+  total           Float     @default(0)
+  items           String    @default("[]") // JSON array of order items: [{sku, name, quantity, unitPrice, total}]
+  shippingAddress String    @default("")
+  shippingMethod  String    @default("")
+  notes           String    @default("")
+  internalNotes   String    @default("")
+  ownerId         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([supplierId])
   @@index([status])
@@ -751,19 +758,19 @@ model PasswordHistory {
 
 // Vehicles - Company vehicles for job cards
 model Vehicle {
-  id          String    @id @default(cuid())
-  name        String    // Vehicle name/identifier
-  model       String    @default("") // Vehicle model
-  type        String    @default("") // Vehicle type (van, truck, car, etc.)
-  reg         String    @unique // Registration number
-  assetNumber String    @default("") // Asset number
-  status      String    @default("active") // active, inactive, maintenance
-  notes       String    @default("")
+  id          String   @id @default(cuid())
+  name        String // Vehicle name/identifier
+  model       String   @default("") // Vehicle model
+  type        String   @default("") // Vehicle type (van, truck, car, etc.)
+  reg         String   @unique // Registration number
+  assetNumber String   @default("") // Asset number
+  status      String   @default("active") // active, inactive, maintenance
+  notes       String   @default("")
   ownerId     String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  jobCards    JobCard[]
+  jobCards JobCard[]
 
   @@index([status])
   @@index([ownerId])
@@ -772,17 +779,17 @@ model Vehicle {
 
 // Field Agent Job Cards
 model JobCard {
-  id                 String    @id @default(cuid())
-  jobCardNumber      String    @unique // Auto-generated: JC0001, JC0002, etc.
-  agentName          String    @default("") // Name of agent filling out the form
-  otherTechnicians   String    @default("[]") // JSON array of technician names
-  clientId           String? // Reference to client
-  clientName         String    @default("") // Client name
-  siteId             String    @default("") // Site/location ID
-  siteName           String    @default("") // Site name
-  location           String    @default("") // Specific location details
-  locationLatitude   String    @default("") // GPS latitude
-  locationLongitude  String    @default("") // GPS longitude
+  id                  String    @id @default(cuid())
+  jobCardNumber       String    @unique // Auto-generated: JC0001, JC0002, etc.
+  agentName           String    @default("") // Name of agent filling out the form
+  otherTechnicians    String    @default("[]") // JSON array of technician names
+  clientId            String? // Reference to client
+  clientName          String    @default("") // Client name
+  siteId              String    @default("") // Site/location ID
+  siteName            String    @default("") // Site name
+  location            String    @default("") // Specific location details
+  locationLatitude    String    @default("") // GPS latitude
+  locationLongitude   String    @default("") // GPS longitude
   vehicleId           String? // Reference to Vehicle
   vehicleUsed         String    @default("") // Vehicle information (legacy/fallback)
   vehicle             Vehicle?  @relation(fields: [vehicleId], references: [id])
@@ -839,9 +846,9 @@ model ClientNews {
 // Notification System
 model Notification {
   id        String   @id @default(cuid())
-  userId    String   // Recipient user ID
+  userId    String // Recipient user ID
   user      User     @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // mention, comment, task_assigned, invoice_due, etc.
+  type      String // mention, comment, task_assigned, invoice_due, etc.
   title     String
   message   String
   link      String   @default("") // Optional link to relevant resource
@@ -857,21 +864,21 @@ model Notification {
 }
 
 model NotificationSetting {
-  id                        String   @id @default(cuid())
-  userId                    String   @unique
-  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailMentions             Boolean  @default(true)
-  emailComments             Boolean  @default(true)
-  emailTasks                Boolean  @default(false)
-  emailInvoices             Boolean  @default(true)
-  emailSystem               Boolean  @default(true)
-  inAppMentions             Boolean  @default(true)
-  inAppComments             Boolean  @default(true)
-  inAppTasks                Boolean  @default(true)
-  inAppInvoices             Boolean  @default(true)
-  inAppSystem               Boolean  @default(true)
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailMentions Boolean  @default(true)
+  emailComments Boolean  @default(true)
+  emailTasks    Boolean  @default(false)
+  emailInvoices Boolean  @default(true)
+  emailSystem   Boolean  @default(true)
+  inAppMentions Boolean  @default(true)
+  inAppComments Boolean  @default(true)
+  inAppTasks    Boolean  @default(true)
+  inAppInvoices Boolean  @default(true)
+  inAppSystem   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@index([userId])
 }
@@ -892,49 +899,49 @@ model StarredClient {
 
 // System Settings - Global application configuration
 model SystemSettings {
-  id             String   @id @default("system") // Single row for global settings
-  companyName    String   @default("Abcotronics")
-  timezone       String   @default("Africa/Johannesburg")
-  currency       String   @default("ZAR")
-  dateFormat     String   @default("DD/MM/YYYY")
-  language       String   @default("en")
-  sessionTimeout Int      @default(30)
-  requirePasswordChange Boolean @default(false)
-  twoFactorAuth  Boolean  @default(false)
-  auditLogging   Boolean  @default(true)
-  emailProvider  String   @default("gmail")
-  googleCalendar Boolean  @default(false)
-  quickbooks     Boolean  @default(false)
-  slack          Boolean  @default(false)
-  updatedBy      String?  // User ID who last updated
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                    String   @id @default("system") // Single row for global settings
+  companyName           String   @default("Abcotronics")
+  timezone              String   @default("Africa/Johannesburg")
+  currency              String   @default("ZAR")
+  dateFormat            String   @default("DD/MM/YYYY")
+  language              String   @default("en")
+  sessionTimeout        Int      @default(30)
+  requirePasswordChange Boolean  @default(false)
+  twoFactorAuth         Boolean  @default(false)
+  auditLogging          Boolean  @default(true)
+  emailProvider         String   @default("gmail")
+  googleCalendar        Boolean  @default(false)
+  quickbooks            Boolean  @default(false)
+  slack                 Boolean  @default(false)
+  updatedBy             String? // User ID who last updated
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   @@index([updatedBy])
 }
 
 // Leave Platform Models
 model LeaveApplication {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation("LeaveApplications", fields: [userId], references: [id])
-  leaveType     String   // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
-  startDate     DateTime
-  endDate       DateTime
-  days          Int      // Working days (excluding weekends and public holidays)
-  reason        String
-  emergency     Boolean  @default(false)
-  status        String   @default("pending") // pending, approved, rejected, cancelled
-  appliedDate   DateTime @default(now())
-  approvedDate  DateTime?
-  rejectedDate  DateTime?
-  approvedById  String?
-  approvedBy    User?    @relation("ApprovedLeaveApplications", fields: [approvedById], references: [id])
-  rejectedById  String?
-  rejectedBy    User?    @relation("RejectedLeaveApplications", fields: [rejectedById], references: [id])
+  id              String    @id @default(cuid())
+  userId          String
+  user            User      @relation("LeaveApplications", fields: [userId], references: [id])
+  leaveType       String // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
+  startDate       DateTime
+  endDate         DateTime
+  days            Int // Working days (excluding weekends and public holidays)
+  reason          String
+  emergency       Boolean   @default(false)
+  status          String    @default("pending") // pending, approved, rejected, cancelled
+  appliedDate     DateTime  @default(now())
+  approvedDate    DateTime?
+  rejectedDate    DateTime?
+  approvedById    String?
+  approvedBy      User?     @relation("ApprovedLeaveApplications", fields: [approvedById], references: [id])
+  rejectedById    String?
+  rejectedBy      User?     @relation("RejectedLeaveApplications", fields: [rejectedById], references: [id])
   rejectionReason String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([userId])
   @@index([status])
@@ -944,17 +951,17 @@ model LeaveApplication {
 }
 
 model LeaveBalance {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation("LeaveBalances", fields: [userId], references: [id])
-  leaveType     String   // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
-  available     Float    @default(0) // Days available
-  used          Float    @default(0) // Days used
-  balance       Float    @default(0) // Available - Used
-  year          Int      // Year for this balance (e.g., 2025)
-  notes         String   @default("")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("LeaveBalances", fields: [userId], references: [id])
+  leaveType String // annual, sick, family, maternity, paternity, study, unpaid, compassionate, religious
+  available Float    @default(0) // Days available
+  used      Float    @default(0) // Days used
+  balance   Float    @default(0) // Available - Used
+  year      Int // Year for this balance (e.g., 2025)
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId, leaveType, year])
   @@index([userId])
@@ -963,13 +970,13 @@ model LeaveBalance {
 }
 
 model LeaveApprover {
-  id            String   @id @default(cuid())
-  department    String   // Department or team name
-  approverId    String
-  approver      User     @relation("LeaveApprovers", fields: [approverId], references: [id])
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String   @id @default(cuid())
+  department String // Department or team name
+  approverId String
+  approver   User     @relation("LeaveApprovers", fields: [approverId], references: [id])
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   @@unique([department, approverId])
   @@index([department])
@@ -977,15 +984,207 @@ model LeaveApprover {
 }
 
 model Birthday {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation("Birthdays", fields: [userId], references: [id])
-  date          DateTime // Birthday date (month and day only, year can be ignored)
-  notes         String   @default("")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation("Birthdays", fields: [userId], references: [id])
+  date      DateTime // Birthday date (month and day only, year can be ignored)
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([userId])
   @@index([userId])
   @@index([date])
+}
+
+// Management Meeting Notes Models
+model MonthlyMeetingNotes {
+  id           String   @id @default(cuid())
+  monthKey     String   @unique // Format: "YYYY-MM" (e.g., "2025-01")
+  monthlyGoals String   @default("")
+  status       String   @default("active") // active, archived
+  ownerId      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  weeklyNotes     WeeklyMeetingNotes[]
+  actionItems     MeetingActionItem[]
+  comments        MeetingComment[]
+  userAllocations MeetingUserAllocation[]
+
+  @@index([monthKey])
+  @@index([status])
+  @@index([ownerId])
+}
+
+model WeeklyMeetingNotes {
+  id             String              @id @default(cuid())
+  monthlyNotesId String
+  monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  weekKey        String // Format: "YYYY-MM-DD" (week start date)
+  weekStart      DateTime
+  weekEnd        DateTime?
+  ownerId        String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  departmentNotes DepartmentNotes[]
+  actionItems     MeetingActionItem[]
+
+  @@unique([monthlyNotesId, weekKey])
+  @@index([monthlyNotesId])
+  @@index([weekKey])
+  @@index([ownerId])
+}
+
+model DepartmentNotes {
+  id             String             @id @default(cuid())
+  weeklyNotesId  String
+  weeklyNotes    WeeklyMeetingNotes @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
+  departmentId   String // compliance, finance, technical, data, support, commercial, business-development
+  successes      String             @default("") // Last week's successes
+  weekToFollow   String             @default("") // This week's plan
+  frustrations   String             @default("") // Frustrations/challenges
+  agendaPoints   String             @default("[]") // JSON array of agenda points
+  assignedUserId String? // User assigned to complete this department's notes
+  assignedUser   User?              @relation("DepartmentNotesAssignee", fields: [assignedUserId], references: [id])
+  ownerId        String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  comments    MeetingComment[]
+  actionItems MeetingActionItem[]
+
+  @@unique([weeklyNotesId, departmentId])
+  @@index([weeklyNotesId])
+  @@index([departmentId])
+  @@index([assignedUserId])
+}
+
+model MeetingActionItem {
+  id                String               @id @default(cuid())
+  monthlyNotesId    String?
+  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  weeklyNotesId     String?
+  weeklyNotes       WeeklyMeetingNotes?  @relation(fields: [weeklyNotesId], references: [id], onDelete: Cascade)
+  departmentNotesId String?
+  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
+  title             String
+  description       String               @default("")
+  status            String               @default("open") // open, in_progress, completed, cancelled
+  priority          String               @default("medium") // low, medium, high, critical
+  assignedUserId    String?
+  assignedUser      User?                @relation("ActionItemAssignee", fields: [assignedUserId], references: [id])
+  dueDate           DateTime?
+  completedDate     DateTime?
+  ownerId           String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  comments MeetingComment[]
+
+  @@index([monthlyNotesId])
+  @@index([weeklyNotesId])
+  @@index([departmentNotesId])
+  @@index([assignedUserId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+model MeetingComment {
+  id                String               @id @default(cuid())
+  monthlyNotesId    String?
+  monthlyNotes      MonthlyMeetingNotes? @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  departmentNotesId String?
+  departmentNotes   DepartmentNotes?     @relation(fields: [departmentNotesId], references: [id], onDelete: Cascade)
+  actionItemId      String?
+  actionItem        MeetingActionItem?   @relation(fields: [actionItemId], references: [id], onDelete: Cascade)
+  content           String
+  authorId          String
+  author            User                 @relation("MeetingCommentAuthor", fields: [authorId], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([monthlyNotesId])
+  @@index([departmentNotesId])
+  @@index([actionItemId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model MeetingUserAllocation {
+  id             String              @id @default(cuid())
+  monthlyNotesId String
+  monthlyNotes   MonthlyMeetingNotes @relation(fields: [monthlyNotesId], references: [id], onDelete: Cascade)
+  departmentId   String // compliance, finance, technical, data, support, commercial, business-development
+  userId         String
+  user           User                @relation("MeetingUserAllocations", fields: [userId], references: [id])
+  role           String              @default("contributor") // contributor, reviewer, owner
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([monthlyNotesId, departmentId, userId])
+  @@index([monthlyNotesId])
+  @@index([departmentId])
+  @@index([userId])
+}
+
+// User Task Management - Personal task tracking system
+model UserTask {
+  id            String                @id @default(cuid())
+  title         String
+  description   String                @default("")
+  status        String                @default("todo") // todo, in-progress, completed, cancelled
+  priority      String                @default("medium") // low, medium, high, urgent
+  category      String                @default("") // User-defined category
+  dueDate       DateTime?
+  completedDate DateTime?
+  ownerId       String
+  owner         User                  @relation("UserTaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  clientId      String? // Optional link to client
+  projectId     String? // Optional link to project
+  checklist     String                @default("[]") // JSON array of {id, text, completed}
+  photos        String                @default("[]") // JSON array of photo URLs
+  files         String                @default("[]") // JSON array of file objects {name, url, size, type}
+  tags          UserTaskTagRelation[]
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([ownerId])
+  @@index([status])
+  @@index([category])
+  @@index([dueDate])
+  @@index([clientId])
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+// Tags for user tasks (separate from client tags)
+model UserTaskTag {
+  id        String                @id @default(cuid())
+  name      String
+  color     String                @default("#3B82F6")
+  ownerId   String
+  owner     User                  @relation("UserTaskTagOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  tasks     UserTaskTagRelation[]
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([ownerId, name])
+  @@index([ownerId])
+  @@index([name])
+}
+
+// Many-to-many relationship between UserTask and UserTaskTag
+model UserTaskTagRelation {
+  id        String      @id @default(cuid())
+  taskId    String
+  tagId     String
+  task      UserTask    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag       UserTaskTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([taskId, tagId])
+  @@index([taskId])
+  @@index([tagId])
 }
