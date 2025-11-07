@@ -301,21 +301,27 @@ const MainLayout = () => {
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
     const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
 
-    // Filter menu items based on user role
+    // Filter menu items based on permissions
     const allMenuItems = [
-        { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large' },
-        { id: 'clients', label: 'CRM', icon: 'fa-users' },
-        { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
-        { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
-        { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
-        { id: 'hr', label: 'HR', icon: 'fa-id-card', adminOnly: true },
-        { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
-        { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
-        { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
-        { id: 'reports', label: 'Reports', icon: 'fa-chart-bar' },
+        { id: 'dashboard', label: 'Dashboard', icon: 'fa-th-large', permission: null }, // Always accessible
+        { id: 'clients', label: 'CRM', icon: 'fa-users', permission: 'ACCESS_CRM' },
+        { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
+        { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
+        { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
+        { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: 'ACCESS_HR' }, // Admin only
+        { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
+        { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
+        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
+        { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
     ];
 
     const [refreshingRole, setRefreshingRole] = React.useState(false);
+    
+    // Get permission checker for current user
+    const permissionChecker = React.useMemo(() => {
+        if (!user || !window.PermissionChecker) return null;
+        return new window.PermissionChecker(user);
+    }, [user]);
     
     const menuItems = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
@@ -337,19 +343,38 @@ const MainLayout = () => {
             }
         }
         
+        // Guest users can only see Projects
         if (userRole === 'guest') {
             return allMenuItems.filter(item => item.id === 'projects');
         }
         
+        // Filter menu items based on permissions
         const filtered = allMenuItems.filter(item => {
-            if (item.adminOnly) {
+            // If no permission specified, always show (dashboard, documents)
+            if (!item.permission) {
+                return true;
+            }
+            
+            // Check permission using PermissionChecker
+            if (permissionChecker && window.PERMISSIONS) {
+                const permissionKey = window.PERMISSIONS[item.permission];
+                if (permissionKey) {
+                    return permissionChecker.hasPermission(permissionKey);
+                }
+            }
+            
+            // Fallback: if PermissionChecker not available, use role-based check
+            // This handles the case where permissions.js hasn't loaded yet
+            if (item.permission === 'ACCESS_USERS' || item.permission === 'ACCESS_HR') {
                 return userRole === 'admin';
             }
+            
+            // All other permissions are public (accessible to all non-guest users)
             return true;
         });
         
         return filtered;
-    }, [user?.role, user?.id, user?.email, refreshingRole]);
+    }, [user?.role, user?.id, user?.email, refreshingRole, permissionChecker]);
 
     const isAdmin = React.useMemo(() => {
         const userRole = user?.role?.toLowerCase();
@@ -359,16 +384,37 @@ const MainLayout = () => {
     React.useEffect(() => {
         const userRole = user?.role?.toLowerCase();
         
-        if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
-            console.warn(`Access denied: ${currentPage} page requires admin role`);
-            navigateToPage('dashboard');
+        // Check permissions for admin-only pages
+        if (permissionChecker && window.PERMISSIONS) {
+            if (currentPage === 'users') {
+                if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_USERS)) {
+                    console.warn(`Access denied: Users page requires admin access`);
+                    navigateToPage('dashboard');
+                    return;
+                }
+            }
+            if (currentPage === 'hr') {
+                if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_HR)) {
+                    console.warn(`Access denied: HR page requires admin access`);
+                    navigateToPage('dashboard');
+                    return;
+                }
+            }
+        } else {
+            // Fallback: use role-based check if PermissionChecker not available
+            if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
+                console.warn(`Access denied: ${currentPage} page requires admin role`);
+                navigateToPage('dashboard');
+                return;
+            }
         }
         
+        // Guest users can only access Projects
         if (userRole === 'guest' && currentPage !== 'projects') {
             console.warn(`Access denied: Guest users can only access Projects`);
             navigateToPage('projects');
         }
-    }, [currentPage, isAdmin, user?.role]);
+    }, [currentPage, isAdmin, user?.role, permissionChecker]);
 
     const renderPage = React.useMemo(() => {
         try {
@@ -382,7 +428,19 @@ const MainLayout = () => {
                 case 'teams': 
                     return <ErrorBoundary key="teams"><Teams /></ErrorBoundary>;
                 case 'users': 
-                    if (!isAdmin) {
+                    if (permissionChecker && window.PERMISSIONS) {
+                        if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_USERS)) {
+                            return (
+                                <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                    <div className="text-center">
+                                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                                        <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
+                                        <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access this page.</p>
+                                    </div>
+                                </div>
+                            );
+                        }
+                    } else if (!isAdmin) {
                         return (
                             <div key="users-access-denied" className="flex items-center justify-center min-h-[400px]">
                                 <div className="text-center">
@@ -399,7 +457,19 @@ const MainLayout = () => {
                 case 'time': 
                     return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
                 case 'hr': 
-                    if (!isAdmin) {
+                    if (permissionChecker && window.PERMISSIONS) {
+                        if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_HR)) {
+                            return (
+                                <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
+                                    <div className="text-center">
+                                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+                                        <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
+                                        <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access the HR page.</p>
+                                    </div>
+                                </div>
+                            );
+                        }
+                    } else if (!isAdmin) {
                         return (
                             <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
                                 <div className="text-center">
