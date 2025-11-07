@@ -1,15 +1,54 @@
 // Use React from window
-const { useState } = React;
+const { useState, useEffect } = React;
 
 const Reports = () => {
     // Get report components from window
     const AuditTrail = window.AuditTrail;
-    const FeedbackViewer = window.FeedbackViewer;
+    const [feedbackViewerReady, setFeedbackViewerReady] = useState(!!window.FeedbackViewer);
     const [activeTab, setActiveTab] = useState('audit');
     const { isDark } = window.useTheme();
     const { user } = window.useAuth();
 
     const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+    // Wait for FeedbackViewer to load
+    useEffect(() => {
+        // Check if FeedbackViewer is already available
+        if (window.FeedbackViewer) {
+            setFeedbackViewerReady(true);
+            return;
+        }
+        
+        // Check periodically for FeedbackViewer if it's not loaded yet
+        const checkInterval = setInterval(() => {
+            if (window.FeedbackViewer) {
+                setFeedbackViewerReady(true);
+                clearInterval(checkInterval);
+            }
+        }, 200);
+        
+        // Stop checking after 10 seconds
+        const timeout = setTimeout(() => {
+            clearInterval(checkInterval);
+            if (!window.FeedbackViewer) {
+                console.warn('⚠️ FeedbackViewer component not loaded after 10 seconds');
+            }
+        }, 10000);
+        
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+        };
+    }, []); // Only run once on mount
+
+    // Also check when switching to feedback tab
+    useEffect(() => {
+        if (activeTab === 'feedback' && window.FeedbackViewer && !feedbackViewerReady) {
+            setFeedbackViewerReady(true);
+        }
+    }, [activeTab, feedbackViewerReady]);
+
+    const FeedbackViewer = window.FeedbackViewer;
 
     return (
         <div className="space-y-3">
@@ -48,13 +87,11 @@ const Reports = () => {
                             }`}
                         >
                             User Feedback
-                            {FeedbackViewer && (
-                                <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
-                                    isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
-                                }`}>
-                                    Admin Only
-                                </span>
-                            )}
+                            <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${
+                                isDark ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'
+                            }`}>
+                                Admin Only
+                            </span>
                         </button>
                     )}
                 </nav>
@@ -69,7 +106,17 @@ const Reports = () => {
                 )}
                 {activeTab === 'feedback' && isAdmin && (
                     <div>
-                        {FeedbackViewer ? <FeedbackViewer /> : <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Loading feedback viewer...</div>}
+                        {FeedbackViewer && feedbackViewerReady ? (
+                            <FeedbackViewer />
+                        ) : (
+                            <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                <p>Loading feedback viewer...</p>
+                                {!feedbackViewerReady && (
+                                    <p className="text-xs mt-2 opacity-75">If this persists, please refresh the page</p>
+                                )}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>
