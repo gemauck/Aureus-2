@@ -6,7 +6,7 @@
 const { useState, useEffect, useRef } = React;
 const GoogleCalendarSync = window.GoogleCalendarSync;
 
-const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange }) => {
+const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
     const [formData, setFormData] = useState(() => {
@@ -1015,10 +1015,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         );
         const updatedFormData = {...formData, contacts: updatedContacts};
         setFormData(updatedFormData);
-        logActivity('Contact Updated', `Updated contact: ${newContact.name}`);
         
-        // Save contact changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Contact Updated', `Updated contact: ${newContact.name}`, null, false, updatedFormData);
+        
+        // Save contact changes and activity log immediately - stay in edit mode
+        onSave(finalFormData, true);
         
         setEditingContact(null);
         setNewContact({
@@ -1042,14 +1044,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleDeleteContact = (contactId) => {
         if (confirm('Remove this contact?')) {
+            const contact = formData.contacts.find(c => c.id === contactId);
             const updatedFormData = {
                 ...formData,
                 contacts: formData.contacts.filter(c => c.id !== contactId)
             };
             setFormData(updatedFormData);
             
-            // Save contact deletion immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Contact Deleted', `Deleted contact: ${contact?.name || 'Unknown'}`, null, false, updatedFormData);
+            
+            // Save contact deletion and activity log immediately - stay in edit mode
+            onSave(finalFormData, true);
             // Stay in contacts tab (use setTimeout to ensure it happens after re-render)
             setTimeout(() => {
                 handleTabChange('contacts');
@@ -1075,35 +1081,18 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         const updatedFollowUps = [...currentFollowUps, newFollowUpItem];
         
         // Get current user info
-        const user = window.storage?.getUser?.() || {};
-        const currentUser = {
-            name: user?.name || 'System',
-            email: user?.email || 'system',
-            id: user?.id || 'system'
-        };
-        
-        const newActivityLog = [...(formData.activityLog || []), {
-            id: Date.now() + 1,
-            type: 'Follow-up Added',
-            description: `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`,
-            timestamp: new Date().toISOString(),
-            user: currentUser.name,
-            userId: currentUser.id,
-            userEmail: currentUser.email,
-            relatedId: null
-        }];
-        
         const updatedFormData = {
             ...formData,
-            followUps: updatedFollowUps,
-            activityLog: newActivityLog
+            followUps: updatedFollowUps
         };
-        
         setFormData(updatedFormData);
         
-        // Save follow-up changes immediately - stay in edit mode
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Follow-up Added', `Scheduled ${newFollowUp.type} for ${newFollowUp.date}`, null, false, updatedFormData);
+        
+        // Save follow-up changes and activity log immediately - stay in edit mode
         isAutoSavingRef.current = true;
-        onSave(updatedFormData, true);
+        onSave(finalFormData, true);
         
         // Clear the flag after a delay to allow API response to propagate
         setTimeout(() => {
@@ -1127,33 +1116,21 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         );
         
         const updatedFormData = {...formData, followUps: updatedFollowUps};
-        
-        if (followUp && !followUp.completed) {
-            // Get current user info
-            const user = window.storage?.getUser?.() || {};
-            const currentUser = {
-                name: user?.name || 'System',
-                email: user?.email || 'system',
-                id: user?.id || 'system'
-            };
-            
-            updatedFormData.activityLog = [...(formData.activityLog || []), {
-                id: Date.now(),
-                type: 'Follow-up Completed',
-                description: `Completed: ${followUp.description}`,
-                timestamp: new Date().toISOString(),
-                user: currentUser.name,
-                userId: currentUser.id,
-                userEmail: currentUser.email,
-                relatedId: null
-            }];
-        }
-        
         setFormData(updatedFormData);
         
-        // Save follow-up toggle immediately - stay in edit mode
-        isAutoSavingRef.current = true;
-        onSave(updatedFormData, true);
+        // Log activity when follow-up is completed
+        if (followUp && !followUp.completed) {
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Follow-up Completed', `Completed: ${followUp.description}`, null, false, updatedFormData);
+            
+            // Save follow-up toggle and activity log immediately - stay in edit mode
+            isAutoSavingRef.current = true;
+            onSave(finalFormData, true);
+        } else {
+            // Just save the follow-up toggle (no activity log needed for uncompleting)
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true);
+        }
         
         // Clear the flag after a delay to allow API response to propagate
         setTimeout(() => {
@@ -1164,15 +1141,19 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
 
     const handleDeleteFollowUp = (followUpId) => {
         if (confirm('Delete this follow-up?')) {
+            const followUp = formData.followUps.find(f => f.id === followUpId);
             const updatedFormData = {
                 ...formData,
                 followUps: formData.followUps.filter(f => f.id !== followUpId)
             };
             setFormData(updatedFormData);
             
-            // Save follow-up deletion immediately - stay in edit mode
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Follow-up Deleted', `Deleted follow-up: ${followUp?.description || followUp?.type || 'Unknown'}`, null, false, updatedFormData);
+            
+            // Save follow-up deletion and activity log immediately - stay in edit mode
             isAutoSavingRef.current = true;
-            onSave(updatedFormData, true);
+            onSave(finalFormData, true);
             
             // Clear the flag after a delay to allow API response to propagate
             setTimeout(() => {
@@ -1311,7 +1292,6 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         
         const updatedFormData = {...formData, comments: updatedComments};
         setFormData(updatedFormData);
-        logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`);
         
         // Log to audit trail
         if (window.AuditLogger) {
@@ -1328,9 +1308,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             );
         }
         
-        // Save comment changes immediately - stay in edit mode
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Comment Added', `Added note: ${newComment.substring(0, 50)}${newComment.length > 50 ? '...' : ''}`, null, false, updatedFormData);
+        
+        // Save comment changes and activity log immediately - stay in edit mode
         isAutoSavingRef.current = true;
-        onSave(updatedFormData, true);
+        onSave(finalFormData, true);
         
         // Clear the flag after a delay to allow API response to propagate
         setTimeout(() => {
@@ -1485,10 +1468,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         );
         const updatedFormData = {...formData, sites: updatedSites};
         setFormData(updatedFormData);
-        logActivity('Site Updated', `Updated site: ${newSite.name}`);
         
-        // Save site changes immediately - stay in edit mode
-        onSave(updatedFormData, true);
+        // Log activity and get updated formData with activity log, then save everything
+        const finalFormData = logActivity('Site Updated', `Updated site: ${newSite.name}`, null, false, updatedFormData);
+        
+        // Save site changes and activity log immediately - stay in edit mode
+        onSave(finalFormData, true);
         
         setEditingSite(null);
             setNewSite({
@@ -1519,10 +1504,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 sites: formData.sites.filter(s => s.id !== siteId)
             };
             setFormData(updatedFormData);
-            logActivity('Site Deleted', `Deleted site: ${site?.name}`);
             
-            // Save site deletion immediately - stay in edit mode
-            onSave(updatedFormData, true);
+            // Log activity and get updated formData with activity log, then save everything
+            const finalFormData = logActivity('Site Deleted', `Deleted site: ${site?.name}`, null, false, updatedFormData);
+            
+            // Save site deletion and activity log immediately - stay in edit mode
+            onSave(finalFormData, true);
             handleTabChange('sites'); // Stay in sites tab
             
             console.log('✅ Site deleted and saved:', site?.name);
@@ -1695,7 +1682,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 const updatedFormData = {...formData, opportunities: updatedOpportunities};
                 setFormData(updatedFormData);
                 
-                logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`);
+                // Log activity and auto-save (activity log will be saved automatically)
+                logActivity('Opportunity Updated', `Updated opportunity: ${newOpportunity.name}`, null, true, updatedFormData);
                 
                 alert('✅ Opportunity updated in database successfully!');
                 
@@ -1744,7 +1732,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 };
                 setFormData(updatedFormData);
                 
-                logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`);
+                // Log activity and auto-save (activity log will be saved automatically)
+                logActivity('Opportunity Deleted', `Deleted opportunity: ${opportunity?.name}`, null, true, updatedFormData);
                 
                 alert('✅ Opportunity deleted from database successfully!');
                 
@@ -1756,7 +1745,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         }
     };
 
-    const logActivity = (type, description, relatedId = null) => {
+    const logActivity = (type, description, relatedId = null, autoSave = true, formDataToUpdate = null) => {
         // Get current user info
         const user = window.storage?.getUser?.() || {};
         const currentUser = {
@@ -1775,10 +1764,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             userEmail: currentUser.email,
             relatedId
         };
-        setFormData({
-            ...formData,
-            activityLog: [...(formData.activityLog || []), activity]
-        });
+        
+        // Use provided formData or current formData
+        const baseFormData = formDataToUpdate || formData;
+        const updatedFormData = {
+            ...baseFormData,
+            activityLog: [...(baseFormData.activityLog || []), activity]
+        };
+        
+        setFormData(updatedFormData);
+        
+        // Auto-save activity log to database if enabled (default: true)
+        if (autoSave && client && onSave) {
+            isAutoSavingRef.current = true;
+            onSave(updatedFormData, true);
+            
+            // Clear the flag after a delay to allow API response to propagate
+            setTimeout(() => {
+                isAutoSavingRef.current = false;
+                console.log('✅ Activity log auto-save completed');
+            }, 3000);
+        }
+        
+        // Return updated formData so callers can use it if needed
+        return updatedFormData;
     };
 
 
@@ -3317,7 +3326,17 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 'bg-gray-100 text-gray-700';
 
                                             return (
-                                                <div key={opportunity.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:border-green-300 transition">
+                                                <div 
+                                                    key={opportunity.id} 
+                                                    className="bg-white border border-gray-200 rounded-lg p-3 hover:border-green-300 transition cursor-pointer"
+                                                    onClick={(e) => {
+                                                        // Don't open if clicking edit/delete buttons
+                                                        if (e.target.closest('button')) return;
+                                                        if (onOpenOpportunity) {
+                                                            onOpenOpportunity(opportunity.id, client);
+                                                        }
+                                                    }}
+                                                >
                                                     <div className="flex justify-between items-start">
                                                         <div className="flex-1">
                                                             <div className="flex items-center gap-2 mb-2">
@@ -3744,22 +3763,30 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                         })
                                                                     });
                                                                     if (!res.ok) {
-                                                                        throw new Error(`Upload failed (${res.status})`);
+                                                                        const errorData = await res.json().catch(() => ({}));
+                                                                        throw new Error(errorData.error?.message || `Upload failed (${res.status})`);
                                                                     }
                                                                     const json = await res.json();
+                                                                    // Handle both wrapped { data: { url: ... } } and direct { url: ... } responses
+                                                                    const fileUrl = json.data?.url || json.url;
+                                                                    if (!fileUrl) {
+                                                                        throw new Error('No URL returned from server');
+                                                                    }
                                                                     const newContract = {
                                                                         id: Date.now(),
                                                                         name: file.name,
                                                                         size: file.size,
                                                                         type: file.type,
                                                                         uploadDate: new Date().toISOString(),
-                                                                        url: json.url
+                                                                        url: fileUrl
                                                                     };
-                                                                    setFormData({
+                                                                    const updatedFormData = {
                                                                         ...formData,
                                                                         contracts: [...(formData.contracts || []), newContract]
-                                                                    });
-                                                                    logActivity('Contract Uploaded', `Uploaded to server: ${file.name}`);
+                                                                    };
+                                                                    setFormData(updatedFormData);
+                                                                    // Log activity and auto-save (activity log will be saved automatically)
+                                                                    logActivity('Contract Uploaded', `Uploaded to server: ${file.name}`, null, true, updatedFormData);
                                                                 } catch (err) {
                                                                     console.error('Contract upload error:', err);
                                                                     alert('Failed to upload contract to server.');
@@ -3802,10 +3829,12 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                         </div>
                                                         <div className="flex gap-2">
                                                             <a
-                                                                href={contract.data}
+                                                                href={contract.url}
                                                                 download={contract.name}
                                                                 className="text-primary-600 hover:text-primary-700 p-1"
                                                                 title="Download"
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
                                                             >
                                                                 <i className="fas fa-download"></i>
                                                             </a>
@@ -3814,11 +3843,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                                 onClick={() => {
                                                                     if (confirm('Delete this contract?')) {
                                                                         const contractToDelete = formData.contracts.find(c => c.id === contract.id);
-                                                                        setFormData({
+                                                                        const updatedFormData = {
                                                                             ...formData,
                                                                             contracts: formData.contracts.filter(c => c.id !== contract.id)
-                                                                        });
-                                                                        logActivity('Contract Deleted', `Deleted: ${contractToDelete?.name}`);
+                                                                        };
+                                                                        setFormData(updatedFormData);
+                                                                        // Log activity and auto-save (activity log will be saved automatically)
+                                                                        logActivity('Contract Deleted', `Deleted: ${contractToDelete?.name}`, null, true, updatedFormData);
                                                                     }
                                                                 }}
                                                                 className="text-red-600 hover:text-red-700 p-1"
@@ -3876,6 +3907,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                 const activityIcon = 
                                                     activity.type === 'Contact Added' ? 'user-plus' :
                                                     activity.type === 'Contact Updated' ? 'user-edit' :
+                                                    activity.type === 'Contact Deleted' ? 'user-minus' :
                                                     activity.type === 'Site Added' ? 'map-marker-alt' :
                                                     activity.type === 'Site Updated' ? 'map-marked-alt' :
                                                     activity.type === 'Site Deleted' ? 'map-marker-slash' :
@@ -3884,6 +3916,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                                     activity.type === 'Opportunity Deleted' ? 'times-circle' :
                                                     activity.type === 'Follow-up Added' ? 'calendar-plus' :
                                                     activity.type === 'Follow-up Completed' ? 'calendar-check' :
+                                                    activity.type === 'Follow-up Deleted' ? 'calendar-times' :
                                                     activity.type === 'Comment Added' ? 'comment' :
                                                     activity.type === 'Contract Uploaded' ? 'file-upload' :
                                                     activity.type === 'Contract Deleted' ? 'file-times' :

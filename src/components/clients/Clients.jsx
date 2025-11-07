@@ -259,6 +259,8 @@ const Clients = React.memo(() => {
     // Just store IDs - modals fetch their own data
     const [editingClientId, setEditingClientId] = useState(null);
     const [editingLeadId, setEditingLeadId] = useState(null);
+    const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
+    const [selectedOpportunityClient, setSelectedOpportunityClient] = useState(null);
     const [currentTab, setCurrentTab] = useState('overview');
     const [currentLeadTab, setCurrentLeadTab] = useState('overview');
     const [searchTerm, setSearchTerm] = useState('');
@@ -406,7 +408,13 @@ const Clients = React.memo(() => {
                             setClients(updated);
                             safeStorage.setClients(updated);
                         })
-                        .catch(error => console.warn('⚠️ Failed to load opportunities in bulk from cache:', error));
+                        .catch(error => {
+                            // Handle error gracefully - don't log for server errors (500s)
+                            const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                            if (!isServerError) {
+                                console.warn('⚠️ Failed to load opportunities in bulk from cache:', error.message || error);
+                            }
+                        });
                 }
             }
             
@@ -461,7 +469,13 @@ const Clients = React.memo(() => {
                             setClients(updated);
                             safeStorage.setClients(updated);
                         })
-                        .catch(error => console.warn('⚠️ Failed to refresh opportunities in background:', error));
+                        .catch(error => {
+                            // Handle error gracefully - don't log for server errors (500s)
+                            const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                            if (!isServerError) {
+                                console.warn('⚠️ Failed to refresh opportunities in background:', error.message || error);
+                            }
+                        });
                 }
                 return; // Use cached data, skip API call
             }
@@ -580,7 +594,11 @@ const Clients = React.memo(() => {
                             safeStorage.setClients(updated);
                         })
                         .catch(error => {
-                            console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error);
+                            // Handle error gracefully - don't log for server errors (500s)
+                            const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                            if (!isServerError) {
+                                console.warn('⚠️ Failed to load opportunities in bulk, falling back to cached opportunities:', error.message || error);
+                            }
                             // Keep existing opportunities from cache
                         });
                 }
@@ -1041,7 +1059,11 @@ const Clients = React.memo(() => {
                             setClients(clientsWithOpportunities);
                             safeStorage.setClients(clientsWithOpportunities);
                         } catch (error) {
-                            console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, preserving existing opportunities:', error);
+                            // Handle error gracefully - don't log for server errors (500s)
+                            const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                            if (!isServerError) {
+                                console.warn('⚠️ LiveDataSync: Failed to load opportunities in bulk, preserving existing opportunities:', error.message || error);
+                            }
                             // Preserve existing opportunities even when API call fails
                             const clientsWithPreservedOpps = processed.map(client => ({
                                 ...client,
@@ -1429,8 +1451,20 @@ const Clients = React.memo(() => {
                 // Update ref immediately so LiveDataSync can see the opportunities
                 clientsRef.current = clientsWithOpportunities;
             } catch (error) {
-                console.error('❌ Pipeline: Failed to load opportunities in bulk:', error);
-                // Keep existing opportunities on error
+                // Handle error gracefully - don't show error for 500s (server issue)
+                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                if (!isServerError) {
+                    console.warn('⚠️ Pipeline: Failed to load opportunities in bulk:', error.message || error);
+                } else {
+                    console.warn('⚠️ Pipeline: Opportunities API temporarily unavailable. Using existing data.');
+                }
+                // Keep existing opportunities on error - preserve what we have
+                const clientsWithPreservedOpps = clients.map(client => ({
+                    ...client,
+                    opportunities: client.opportunities || []
+                }));
+                setClients(clientsWithPreservedOpps);
+                safeStorage.setClients(clientsWithPreservedOpps);
             }
         };
         
@@ -2228,6 +2262,13 @@ const Clients = React.memo(() => {
                                     notes: parsedSavedLead.notes?.substring(0, 20)
                                 });
                                 selectedLeadRef.current = parsedSavedLead; // Update ref with parsed saved lead
+                                
+                                // CRITICAL: Update editingLeadId when creating a new lead with stayInEditMode=true
+                                // This ensures the modal re-renders with the new leadId and can continue working properly
+                                if (stayInEditMode && parsedSavedLead.id) {
+                                    console.log('🔄 Updating editingLeadId to new lead ID:', parsedSavedLead.id);
+                                    setEditingLeadId(parsedSavedLead.id);
+                                }
                             }
                             
                             // CRITICAL: Save to localStorage immediately to ensure persistence
@@ -2638,9 +2679,7 @@ const Clients = React.memo(() => {
         
         try {
             if (window.DatabaseAPI && typeof window.DatabaseAPI.toggleStarClient === 'function') {
-                await window.DatabaseAPI.toggleStarClient(clientId);
-                
-                // Update local state optimistically
+                // Update local state optimistically first
                 if (isLead) {
                     setLeads(prevLeads => 
                         prevLeads.map(l => 
@@ -2655,12 +2694,38 @@ const Clients = React.memo(() => {
                     );
                 }
                 
+                // Call API to persist the change
+                await window.DatabaseAPI.toggleStarClient(clientId);
+                
+                // Refetch to ensure we have the latest data from the database
+                if (isLead) {
+                    console.log('🔄 Refetching leads after star toggle...');
+                    await loadLeads(true); // Force refresh
+                } else {
+                    console.log('🔄 Refetching clients after star toggle...');
+                    await loadClients(true); // Force refresh
+                }
+                
                 console.log(`⭐ Client/lead ${currentStarred ? 'unstarred' : 'starred'}`);
             } else {
                 console.error('❌ Star API not available');
             }
         } catch (error) {
             console.error('❌ Failed to toggle star:', error);
+            // Revert optimistic update on error
+            if (isLead) {
+                setLeads(prevLeads => 
+                    prevLeads.map(l => 
+                        l.id === clientId ? { ...l, isStarred: currentStarred } : l
+                    )
+                );
+            } else {
+                setClients(prevClients => 
+                    prevClients.map(c => 
+                        c.id === clientId ? { ...c, isStarred: currentStarred } : c
+                    )
+                );
+            }
             alert('Failed to update star. Please try again.');
         }
     };
@@ -2759,7 +2824,11 @@ const Clients = React.memo(() => {
                         return updatedClients;
                     });
                 } catch (error) {
-                    console.error(`❌ Failed to reload opportunities in bulk:`, error);
+                    // Handle error gracefully - don't log for server errors (500s)
+                    const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error') || error?.message?.includes('Failed to list opportunities');
+                    if (!isServerError) {
+                        console.warn(`⚠️ Failed to reload opportunities in bulk:`, error.message || error);
+                    }
                 }
             };
             
@@ -3488,6 +3557,11 @@ const Clients = React.memo(() => {
                         isFullPage={true}
                         initialTab={currentTab}
                         onTabChange={setCurrentTab}
+                        onOpenOpportunity={(opportunityId, client) => {
+                            setSelectedOpportunityId(opportunityId);
+                            setSelectedOpportunityClient(client || selectedClient);
+                            setViewMode('opportunity-detail');
+                        }}
                     />
                     );
                 })()}
@@ -3697,45 +3771,60 @@ const Clients = React.memo(() => {
                             return; // Already loaded
                         }
                         
-                        try {
-                            console.log('📡 Pipeline tab clicked: Loading all opportunities in bulk...');
-                            const oppResponse = await window.DatabaseAPI.getOpportunities();
-                            const allOpportunities = oppResponse?.data?.opportunities || [];
-                            
-                            // Group opportunities by clientId
-                            const opportunitiesByClient = {};
-                            allOpportunities.forEach(opp => {
-                                const clientId = opp.clientId || opp.client?.id;
-                                if (clientId) {
-                                    if (!opportunitiesByClient[clientId]) {
-                                        opportunitiesByClient[clientId] = [];
-                                    }
-                                    opportunitiesByClient[clientId].push(opp);
-                                }
-                            });
-                            
-                            // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
-                            // Don't merge with cached opportunities - they may have stale stage data
-                            const clientsWithOpps = clients.map(client => {
-                                const apiOpps = opportunitiesByClient[client.id] || [];
+                        // Wrap in async IIFE to properly handle promise rejections
+                        (async () => {
+                            try {
+                                console.log('📡 Pipeline tab clicked: Loading all opportunities in bulk...');
+                                const oppResponse = await window.DatabaseAPI.getOpportunities();
+                                const allOpportunities = oppResponse?.data?.opportunities || [];
                                 
-                                // Use API opportunities only - they have the correct, up-to-date stages
-                                // This prevents stale cached stage data from showing wrong columns
-                                return {
+                                // Group opportunities by clientId
+                                const opportunitiesByClient = {};
+                                allOpportunities.forEach(opp => {
+                                    const clientId = opp.clientId || opp.client?.id;
+                                    if (clientId) {
+                                        if (!opportunitiesByClient[clientId]) {
+                                            opportunitiesByClient[clientId] = [];
+                                        }
+                                        opportunitiesByClient[clientId].push(opp);
+                                    }
+                                });
+                                
+                                // Attach opportunities to clients - ALWAYS use API opportunities (they have correct stages)
+                                // Don't merge with cached opportunities - they may have stale stage data
+                                const clientsWithOpps = clients.map(client => {
+                                    const apiOpps = opportunitiesByClient[client.id] || [];
+                                    
+                                    // Use API opportunities only - they have the correct, up-to-date stages
+                                    // This prevents stale cached stage data from showing wrong columns
+                                    return {
+                                        ...client,
+                                        opportunities: apiOpps
+                                    };
+                                });
+                                
+                                const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
+                                console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
+                                setClients(clientsWithOpps);
+                                safeStorage.setClients(clientsWithOpps);
+                                // Update ref immediately so LiveDataSync can see the opportunities
+                                clientsRef.current = clientsWithOpps;
+                            } catch (error) {
+                                // Handle error gracefully - don't show error for 500s (server issue)
+                                const isServerError = error?.message?.includes('500') || error?.message?.includes('Server error');
+                                if (!isServerError) {
+                                    console.warn('⚠️ Error loading opportunities:', error.message || error);
+                                } else {
+                                    console.warn('⚠️ Opportunities API temporarily unavailable. Pipeline view will work with existing data.');
+                                }
+                                // Preserve existing opportunities on error
+                                const clientsWithPreservedOpps = clients.map(client => ({
                                     ...client,
-                                    opportunities: apiOpps
-                                };
-                            });
-                            
-                            const totalOpps = clientsWithOpps.reduce((sum, c) => sum + (c.opportunities?.length || 0), 0);
-                            console.log(`✅ Pipeline tab: Attached ${totalOpps} opportunities from API (using API stages only - no stale cached data)`);
-                            setClients(clientsWithOpps);
-                            safeStorage.setClients(clientsWithOpps);
-                            // Update ref immediately so LiveDataSync can see the opportunities
-                            clientsRef.current = clientsWithOpps;
-                        } catch (error) {
-                            console.error('❌ Error loading opportunities:', error);
-                        }
+                                    opportunities: client.opportunities || []
+                                }));
+                                setClients(clientsWithPreservedOpps);
+                            }
+                        })();
                     }}
                     className={`px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                         viewMode === 'pipeline' 
@@ -3897,6 +3986,17 @@ const Clients = React.memo(() => {
             {viewMode === 'news-feed' && (window.ClientNewsFeed ? <window.ClientNewsFeed /> : <div className="text-center py-12 text-gray-500">Loading News Feed...</div>)}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}
+            {viewMode === 'opportunity-detail' && selectedOpportunityId && (
+                <OpportunityDetailView 
+                    opportunityId={selectedOpportunityId}
+                    client={selectedOpportunityClient}
+                    onClose={() => {
+                        setSelectedOpportunityId(null);
+                        setSelectedOpportunityClient(null);
+                        setViewMode('clients');
+                    }}
+                />
+            )}
         </div>
     );
 });
