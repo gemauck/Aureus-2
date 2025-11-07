@@ -82,6 +82,9 @@ const UserManagement = () => {
             const token = window.storage?.getToken?.();
             if (!token) {
                 console.error('❌ No token available');
+                setUsers([]);
+                setInvitations([]);
+                setLoading(false);
                 return;
             }
 
@@ -120,6 +123,10 @@ const UserManagement = () => {
                     console.error('❌ Failed to load users, status:', response.status);
                     console.error('Error response:', errorText);
                 }
+                
+                // Set empty arrays on error so UI can still render
+                setUsers([]);
+                setInvitations([]);
             }
         } catch (error) {
             // Suppress error logs for database connection errors and server errors
@@ -136,6 +143,10 @@ const UserManagement = () => {
             if (!isDatabaseError && !isServerError) {
                 console.error('❌ Error loading users:', error);
             }
+            
+            // Set empty arrays on error so UI can still render
+            setUsers([]);
+            setInvitations([]);
         } finally {
             setLoading(false);
         }
