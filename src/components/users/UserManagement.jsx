@@ -1895,8 +1895,8 @@ const UserManagement = () => {
                                 
                                 return Object.values(permissionCategories).map((category) => {
                                     const isAdminOnly = category.adminOnly;
-                                    const hasAccess = !isAdminOnly || isAdmin;
-                                    const isChecked = hasAccess || selectedPermissions.includes(category.permission);
+                                    const isChecked = selectedPermissions.includes(category.permission);
+                                    const canEdit = !isAdminOnly || isAdmin; // Can edit if not admin-only OR user is admin
                                     
                                     return (
                                         <div 
@@ -1918,13 +1918,13 @@ const UserManagement = () => {
                                                         </span>
                                                     )}
                                                 </div>
-                                                <label className="flex items-center cursor-pointer">
+                                                <label className={`flex items-center ${canEdit ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
                                                     <input
                                                         type="checkbox"
                                                         checked={isChecked}
-                                                        disabled={isAdminOnly && !isAdmin}
+                                                        disabled={!canEdit}
                                                         onChange={(e) => {
-                                                            if (isAdminOnly && !isAdmin) return;
+                                                            if (!canEdit) return;
                                                             
                                                             if (e.target.checked) {
                                                                 if (!selectedPermissions.includes(category.permission)) {
