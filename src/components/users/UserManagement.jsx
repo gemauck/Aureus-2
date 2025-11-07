@@ -979,10 +979,12 @@ const UserManagement = () => {
                                                     setSelectedPermissions(finalPermissions);
                                                     setShowPermissionsModal(true);
                                                     }}
-                                                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                                                    className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 rounded-lg transition-colors flex items-center gap-2 border border-blue-200 dark:border-blue-800"
                                                     title="Manage Permissions"
+                                                    style={{ minWidth: '100px' }}
                                                 >
-                                                    <i className="fas fa-key"></i>
+                                                    <i className="fas fa-key text-xs"></i>
+                                                    <span className="text-xs font-semibold">Permissions</span>
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteUser(user.id, user.name)}
@@ -1799,7 +1801,85 @@ const UserManagement = () => {
                         <div className="space-y-4">
                             {/* Permission Categories */}
                             {(() => {
-                                const permissionCategories = window.PERMISSION_CATEGORIES || {};
+                                // Get permission categories - ensure it's loaded
+                                let permissionCategories = window.PERMISSION_CATEGORIES;
+                                
+                                // If not loaded, try to get from permissions module
+                                if (!permissionCategories || Object.keys(permissionCategories).length === 0) {
+                                    console.warn('PERMISSION_CATEGORIES not loaded, checking permissions.js...');
+                                    // Fallback: create categories from PERMISSIONS if available
+                                    if (window.PERMISSIONS) {
+                                        permissionCategories = {
+                                            CRM: {
+                                                id: 'crm',
+                                                label: 'CRM',
+                                                permission: window.PERMISSIONS.ACCESS_CRM,
+                                                description: 'Customer Relationship Management',
+                                                adminOnly: false
+                                            },
+                                            PROJECTS: {
+                                                id: 'projects',
+                                                label: 'Projects',
+                                                permission: window.PERMISSIONS.ACCESS_PROJECTS,
+                                                description: 'Project Management',
+                                                adminOnly: false
+                                            },
+                                            TEAM: {
+                                                id: 'team',
+                                                label: 'Team',
+                                                permission: window.PERMISSIONS.ACCESS_TEAM,
+                                                description: 'Team Management',
+                                                adminOnly: false
+                                            },
+                                            USERS: {
+                                                id: 'users',
+                                                label: 'Users',
+                                                permission: window.PERMISSIONS.ACCESS_USERS,
+                                                description: 'User Management',
+                                                adminOnly: true
+                                            },
+                                            HR: {
+                                                id: 'hr',
+                                                label: 'HR',
+                                                permission: window.PERMISSIONS.ACCESS_HR,
+                                                description: 'Human Resources',
+                                                adminOnly: true
+                                            },
+                                            MANUFACTURING: {
+                                                id: 'manufacturing',
+                                                label: 'Manufacturing',
+                                                permission: window.PERMISSIONS.ACCESS_MANUFACTURING,
+                                                description: 'Manufacturing Operations',
+                                                adminOnly: false
+                                            },
+                                            TOOL: {
+                                                id: 'tool',
+                                                label: 'Tool',
+                                                permission: window.PERMISSIONS.ACCESS_TOOL,
+                                                description: 'Tool Management',
+                                                adminOnly: false
+                                            },
+                                            REPORTS: {
+                                                id: 'reports',
+                                                label: 'Reports',
+                                                permission: window.PERMISSIONS.ACCESS_REPORTS,
+                                                description: 'Reports and Analytics',
+                                                adminOnly: false
+                                            }
+                                        };
+                                    } else {
+                                        console.error('PERMISSIONS not available!');
+                                        return (
+                                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900 rounded-lg">
+                                                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                                    <i className="fas fa-exclamation-triangle mr-2"></i>
+                                                    Permissions system not loaded. Please refresh the page.
+                                                </p>
+                                            </div>
+                                        );
+                                    }
+                                }
+                                
                                 const isAdmin = editingUserPermissions?.role?.toLowerCase() === 'admin';
                                 
                                 return Object.values(permissionCategories).map((category) => {
