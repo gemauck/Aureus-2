@@ -8360,7 +8360,6 @@ const Manufacturing = () => {
                 { id: 'purchase', label: 'Purchase Orders', icon: 'fa-file-invoice-dollar' },
                 { id: 'movements', label: 'Stock Movements', icon: 'fa-exchange-alt' },
                 { id: 'suppliers', label: 'Suppliers', icon: 'fa-truck' },
-                { id: 'jobcards', label: 'Job Cards', icon: 'fa-clipboard' },
                 { id: 'locations', label: 'Stock Locations', icon: 'fa-map-marker-alt' }
               ].map(tab => (
                 <button
@@ -8393,12 +8392,6 @@ const Manufacturing = () => {
               />
             )}
             {activeTab === 'suppliers' && <SuppliersView />}
-            {activeTab === 'jobcards' && window.JobCards && (
-              <window.JobCards 
-                clients={clients}
-                users={users}
-              />
-            )}
             {activeTab === 'locations' && window.StockLocations && (
               <window.StockLocations 
                 inventory={inventory}

@@ -5,16 +5,24 @@ if (window.debug && !window.debug.performanceMode) {
 const { useState } = React;
 
 const MainLayout = () => {
-    // Initialize currentPage to dashboard on refresh
+    // Initialize currentPage from URL or default to dashboard
     const getPageFromURL = () => {
-        // Always return dashboard on refresh/initial load
+        const pathname = (window.location.pathname || '').toLowerCase();
+        if (pathname === '/' || pathname === '') {
+            return 'dashboard';
+        }
+        // Extract page from URL (e.g., /leave-platform -> leave-platform)
+        const page = pathname.replace(/^\//, '').split('/')[0];
+        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'hr', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking'];
+        if (validPages.includes(page)) {
+            return page;
+        }
         return 'dashboard';
     };
 
     const [currentPage, setCurrentPage] = useState(getPageFromURL());
     
-    // Update URL to root on initial load to ensure refresh always goes to dashboard
-    // BUT: Don't redirect public routes (job-card, accept-invitation, reset-password)
+    // Sync currentPage with URL on mount (but don't redirect)
     React.useEffect(() => {
         const pathname = (window.location.pathname || '').toLowerCase();
         const publicRoutes = ['/job-card', '/jobcard', '/accept-invitation', '/reset-password'];
@@ -23,8 +31,15 @@ const MainLayout = () => {
             return pathname === lowerRoute || pathname.startsWith(lowerRoute + '/');
         });
         
-        if (pathname !== '/' && !isPublicRoute) {
+        // Only redirect to dashboard if it's not a valid app route and not a public route
+        const page = getPageFromURL();
+        if (page === 'dashboard' && pathname !== '/' && !isPublicRoute) {
+            // This is an unknown route, redirect to dashboard
             window.history.replaceState({ page: 'dashboard' }, '', '/');
+        } else if (page !== 'dashboard' && pathname.startsWith(`/${page}`)) {
+            // Valid route, set the page state
+            setCurrentPage(page);
+            window.history.replaceState({ page }, '', `/${page}`);
         }
     }, []);
     
@@ -296,11 +311,78 @@ const MainLayout = () => {
         console.warn('⚠️ Manufacturing component not loaded yet.');
         return <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
     });
+    const ServiceAndMaintenance = window.ServiceAndMaintenance || (() => {
+        console.warn('⚠️ ServiceAndMaintenance component not loaded yet.');
+        return <div className="text-center py-12 text-gray-500">Service and Maintenance loading...</div>;
+    });
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
     const Account = window.Account || (() => <div className="text-center py-12 text-gray-500">Account loading...</div>);
-    const LeavePlatform = window.LeavePlatform || (() => <div className="text-center py-12 text-gray-500">Leave Platform loading...</div>);
+    
+    // Check for LeavePlatform component availability
+    const [leavePlatformReady, setLeavePlatformReady] = React.useState(false);
+    
+    React.useEffect(() => {
+        const checkLeavePlatform = () => {
+            const LeavePlatformComponent = window.LeavePlatform;
+            if (LeavePlatformComponent && typeof LeavePlatformComponent === 'function' && !leavePlatformReady) {
+                console.log('✅ MainLayout: LeavePlatform component became available');
+                setLeavePlatformReady(true);
+                return true;
+            }
+            return false;
+        };
+        
+        // Listen for component ready event
+        const handleLeavePlatformReady = () => {
+            console.log('✅ MainLayout: Received leavePlatformComponentReady event');
+            if (!leavePlatformReady) {
+                setLeavePlatformReady(true);
+            }
+        };
+        
+        window.addEventListener('leavePlatformComponentReady', handleLeavePlatformReady);
+        
+        if (checkLeavePlatform()) return;
+        
+        const interval = setInterval(() => {
+            if (!leavePlatformReady) {
+                checkLeavePlatform();
+            } else {
+                clearInterval(interval);
+            }
+        }, 200);
+        
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!leavePlatformReady) {
+                console.warn('⚠️ MainLayout: LeavePlatform component not loaded after 10 seconds');
+            }
+        }, 10000);
+        
+        return () => {
+            clearInterval(interval);
+            clearTimeout(timeout);
+            window.removeEventListener('leavePlatformComponentReady', handleLeavePlatformReady);
+        };
+    }, [leavePlatformReady]);
+    
+    const LeavePlatform = React.useMemo(() => {
+        const component = window.LeavePlatform;
+        if (component && typeof component === 'function') {
+            console.log('✅ MainLayout: LeavePlatform component available in useMemo');
+            return component;
+        }
+        console.warn('⚠️ MainLayout: LeavePlatform component not available, using fallback');
+        return () => (
+            <div className="text-center py-12 text-gray-500">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                <p>Leave Platform loading...</p>
+                <p className="text-xs text-gray-400 mt-2">Component status: {typeof window.LeavePlatform}</p>
+            </div>
+        );
+    }, [leavePlatformReady]);
 
     // Filter menu items based on permissions
     const allMenuItems = [
@@ -312,6 +394,7 @@ const MainLayout = () => {
         { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: 'ACCESS_HR' }, // Admin only
         { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null }, // All users can access
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
+        { id: 'service-maintenance', label: 'Service and Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
@@ -484,9 +567,23 @@ const MainLayout = () => {
                     }
                     return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
                 case 'leave-platform': 
+                    console.log('🔄 MainLayout: Rendering leave-platform, component type:', typeof LeavePlatform);
+                    console.log('🔄 MainLayout: window.LeavePlatform exists:', typeof window.LeavePlatform);
+                    if (!window.LeavePlatform) {
+                        console.warn('⚠️ MainLayout: window.LeavePlatform is not available!');
+                        return <div key="leave-platform-error" className="p-8 text-center">
+                            <div className="text-red-600 mb-4">
+                                <i className="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                                <p>Leave Platform component not loaded. Please refresh the page.</p>
+                                <p className="text-sm text-gray-500 mt-2">Checking component availability...</p>
+                            </div>
+                        </div>;
+                    }
                     return <ErrorBoundary key="leave-platform"><LeavePlatform /></ErrorBoundary>;
                 case 'manufacturing': 
                     return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
+                case 'service-maintenance': 
+                    return <ErrorBoundary key="service-maintenance"><ServiceAndMaintenance /></ErrorBoundary>;
                 case 'tools': 
                     return <ErrorBoundary key="tools"><Tools /></ErrorBoundary>;
                 case 'reports': 
@@ -514,7 +611,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, LeavePlatform, Manufacturing, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;

@@ -8,6 +8,7 @@ export const PERMISSIONS = {
     ACCESS_USERS: 'access_users', // Admin only
     ACCESS_HR: 'access_hr', // Admin only
     ACCESS_MANUFACTURING: 'access_manufacturing',
+    ACCESS_SERVICE_MAINTENANCE: 'access_service_maintenance',
     ACCESS_TOOL: 'access_tool',
     ACCESS_REPORTS: 'access_reports',
     
@@ -81,6 +82,13 @@ export const PERMISSION_CATEGORIES = {
         label: 'Manufacturing',
         permission: PERMISSIONS.ACCESS_MANUFACTURING,
         description: 'Manufacturing Operations',
+        adminOnly: false
+    },
+    SERVICE_MAINTENANCE: {
+        id: 'service_maintenance',
+        label: 'Service and Maintenance',
+        permission: PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
+        description: 'Service and Maintenance Operations',
         adminOnly: false
     },
     TOOL: {
@@ -173,6 +181,7 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_PROJECTS,
             PERMISSIONS.ACCESS_TEAM,
             PERMISSIONS.ACCESS_MANUFACTURING,
+            PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
             PERMISSIONS.ACCESS_TOOL,
             PERMISSIONS.ACCESS_REPORTS,
             // Legacy permissions for backward compatibility
@@ -268,6 +277,10 @@ export class PermissionChecker {
 
     canAccessManufacturing() {
         return this.hasPermission(PERMISSIONS.ACCESS_MANUFACTURING);
+    }
+
+    canAccessServiceMaintenance() {
+        return this.hasPermission(PERMISSIONS.ACCESS_SERVICE_MAINTENANCE);
     }
 
     canAccessTool() {
@@ -391,6 +404,7 @@ export function usePermissions(user) {
         canAccessProjects: () => checker.canAccessProjects(),
         canAccessTeam: () => checker.canAccessTeam(),
         canAccessManufacturing: () => checker.canAccessManufacturing(),
+        canAccessServiceMaintenance: () => checker.canAccessServiceMaintenance(),
         canAccessTool: () => checker.canAccessTool(),
         canAccessReports: () => checker.canAccessReports(),
         canManageProjects: () => checker.canManageProjects(),
