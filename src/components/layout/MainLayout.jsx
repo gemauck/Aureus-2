@@ -440,11 +440,26 @@ const MainLayout = () => {
                 return true;
             }
             
+            // Admin users always have access to everything
+            if (userRole === 'admin') {
+                return true;
+            }
+            
             // Check permission using PermissionChecker
             if (permissionChecker && window.PERMISSIONS) {
                 const permissionKey = window.PERMISSIONS[item.permission];
                 if (permissionKey) {
-                    return permissionChecker.hasPermission(permissionKey);
+                    const hasAccess = permissionChecker.hasPermission(permissionKey);
+                    // Log for debugging
+                    if (!hasAccess && (item.permission === 'ACCESS_CRM' || item.permission === 'ACCESS_PROJECTS' || item.permission === 'ACCESS_SERVICE_MAINTENANCE')) {
+                        console.log(`⚠️ Permission check failed for ${item.label}:`, {
+                            permission: item.permission,
+                            permissionKey,
+                            userRole,
+                            hasAccess
+                        });
+                    }
+                    return hasAccess;
                 }
             }
             
@@ -455,6 +470,7 @@ const MainLayout = () => {
             }
             
             // All other permissions are public (accessible to all non-guest users)
+            // This ensures Projects, CRM, Service & Maintenance, etc. are always visible
             return true;
         });
         

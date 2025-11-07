@@ -462,13 +462,61 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     const [newTagName, setNewTagName] = useState('');
     const [newTagColor, setNewTagColor] = useState('#3B82F6');
     
+    // Job cards state
+    const [jobCards, setJobCards] = useState([]);
+    const [loadingJobCards, setLoadingJobCards] = useState(false);
+    
     // Load tags when client changes
     useEffect(() => {
         if (client?.id) {
             loadClientTags();
             loadAllTags();
+            loadJobCards();
+        } else {
+            setJobCards([]);
         }
     }, [client?.id]);
+    
+    // Load job cards for this client
+    const loadJobCards = async () => {
+        if (!client?.id) {
+            setJobCards([]);
+            return;
+        }
+        
+        setLoadingJobCards(true);
+        try {
+            const token = window.storage?.getToken?.();
+            if (!token) {
+                setLoadingJobCards(false);
+                return;
+            }
+            
+            const response = await fetch('/api/jobcards', {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                // Filter job cards by clientId or clientName
+                const clientJobCards = (data.jobCards || []).filter(jc => 
+                    jc.clientId === client.id || jc.clientName === client.name
+                );
+                setJobCards(clientJobCards);
+            } else {
+                console.error('Failed to load job cards:', response.statusText);
+                setJobCards([]);
+            }
+        } catch (error) {
+            console.error('Error loading job cards:', error);
+            setJobCards([]);
+        } finally {
+            setLoadingJobCards(false);
+        }
+    };
     
     // Load client tags
     const loadClientTags = async () => {
@@ -1879,7 +1927,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 {/* Tabs */}
                 <div className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'} px-3 sm:px-6`}>
                     <div className={`flex ${isFullPage ? 'gap-4 sm:gap-8' : 'gap-2 sm:gap-6'} overflow-x-auto scrollbar-hide`} style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'contracts', 'activity', 'notes'].map(tab => (
+                        {['overview', 'contacts', 'sites', 'opportunities', 'calendar', 'projects', 'service', 'maintenance', 'contracts', 'activity', 'notes'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => handleTabChange(tab)}
@@ -1899,6 +1947,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                     tab === 'opportunities' ? 'bullseye' :
                                     tab === 'calendar' ? 'calendar-alt' :
                                     tab === 'projects' ? 'folder-open' :
+                                    tab === 'service' ? 'tools' :
+                                    tab === 'maintenance' ? 'wrench' :
                                     tab === 'contracts' ? 'file-contract' :
                                     tab === 'activity' ? 'history' :
                                     'comment-alt'
@@ -1923,6 +1973,16 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                 {tab === 'projects' && clientProjects.length > 0 && (
                                     <span className="ml-1.5 px-1.5 py-0.5 bg-primary-100 text-primary-600 rounded text-xs">
                                         {clientProjects.length}
+                                    </span>
+                                )}
+                                {tab === 'service' && jobCards.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded text-xs">
+                                        {jobCards.length}
+                                    </span>
+                                )}
+                                {tab === 'maintenance' && jobCards.length > 0 && (
+                                    <span className="ml-1.5 px-1.5 py-0.5 bg-orange-100 text-orange-600 rounded text-xs">
+                                        {jobCards.length}
                                     </span>
                                 )}
                                 {tab === 'calendar' && upcomingFollowUps.length > 0 && (
@@ -3633,6 +3693,170 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                                             <p className="text-xs text-blue-800">
                                                 Projects are automatically shown here when their "Client" field matches this client's name. 
                                                 Click on any project to view its full details in the Projects module.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Service Tab */}
+                        {activeTab === 'service' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Service Job Cards</h3>
+                                    <div className="text-sm text-gray-600">
+                                        {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+
+                                {loadingJobCards ? (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2"></div>
+                                        <p>Loading job cards...</p>
+                                    </div>
+                                ) : jobCards.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {jobCards.map(jobCard => (
+                                            <div 
+                                                key={jobCard.id} 
+                                                className="bg-white border border-gray-200 rounded-lg p-3 hover:border-blue-300 hover:shadow-sm transition"
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">
+                                                                {jobCard.jobCardNumber || `Job Card #${jobCard.id.slice(0, 8)}`}
+                                                            </h4>
+                                                            <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                jobCard.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                                jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                                                                'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                                {jobCard.status || 'draft'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 space-y-0.5">
+                                                            {jobCard.reasonForVisit && (
+                                                                <div><i className="fas fa-info-circle mr-1.5 w-4"></i>{jobCard.reasonForVisit}</div>
+                                                            )}
+                                                            {jobCard.siteName && (
+                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{jobCard.siteName}</div>
+                                                            )}
+                                                            {jobCard.agentName && (
+                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{jobCard.agentName}</div>
+                                                            )}
+                                                            {jobCard.createdAt && (
+                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString()}</div>
+                                                            )}
+                                                            {jobCard.diagnosis && (
+                                                                <div className="mt-1 text-xs text-gray-500 italic">{jobCard.diagnosis.substring(0, 100)}{jobCard.diagnosis.length > 100 ? '...' : ''}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <i className="fas fa-tools text-3xl mb-2"></i>
+                                        <p>No service job cards found for this client</p>
+                                        <p className="text-xs mt-1">Service job cards will appear here when created for this client</p>
+                                    </div>
+                                )}
+
+                                {/* Info box */}
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                                    <div className="flex items-start">
+                                        <i className="fas fa-info-circle text-blue-600 text-xs mt-0.5 mr-2"></i>
+                                        <div>
+                                            <p className="text-xs font-medium text-blue-900 mb-1">Service Job Cards</p>
+                                            <p className="text-xs text-blue-800">
+                                                Service job cards are automatically shown here when they are created for this client. 
+                                                View the full Service & Maintenance module to create new job cards.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Maintenance Tab */}
+                        {activeTab === 'maintenance' && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold text-gray-900">Maintenance Job Cards</h3>
+                                    <div className="text-sm text-gray-600">
+                                        {jobCards.length} job card{jobCards.length !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+
+                                {loadingJobCards ? (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-2"></div>
+                                        <p>Loading job cards...</p>
+                                    </div>
+                                ) : jobCards.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {jobCards.map(jobCard => (
+                                            <div 
+                                                key={jobCard.id} 
+                                                className="bg-white border border-gray-200 rounded-lg p-3 hover:border-orange-300 hover:shadow-sm transition"
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-semibold text-gray-900 text-sm">
+                                                                {jobCard.jobCardNumber || `Job Card #${jobCard.id.slice(0, 8)}`}
+                                                            </h4>
+                                                            <span className={`px-2 py-0.5 text-xs rounded font-medium ${
+                                                                jobCard.status === 'completed' ? 'bg-green-100 text-green-700' :
+                                                                jobCard.status === 'submitted' ? 'bg-blue-100 text-blue-700' :
+                                                                'bg-gray-100 text-gray-700'
+                                                            }`}>
+                                                                {jobCard.status || 'draft'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-xs text-gray-600 space-y-0.5">
+                                                            {jobCard.reasonForVisit && (
+                                                                <div><i className="fas fa-info-circle mr-1.5 w-4"></i>{jobCard.reasonForVisit}</div>
+                                                            )}
+                                                            {jobCard.siteName && (
+                                                                <div><i className="fas fa-map-marker-alt mr-1.5 w-4"></i>{jobCard.siteName}</div>
+                                                            )}
+                                                            {jobCard.agentName && (
+                                                                <div><i className="fas fa-user mr-1.5 w-4"></i>{jobCard.agentName}</div>
+                                                            )}
+                                                            {jobCard.createdAt && (
+                                                                <div><i className="fas fa-calendar mr-1.5 w-4"></i>{new Date(jobCard.createdAt).toLocaleDateString()}</div>
+                                                            )}
+                                                            {jobCard.diagnosis && (
+                                                                <div className="mt-1 text-xs text-gray-500 italic">{jobCard.diagnosis.substring(0, 100)}{jobCard.diagnosis.length > 100 ? '...' : ''}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-8 text-gray-500 text-sm">
+                                        <i className="fas fa-wrench text-3xl mb-2"></i>
+                                        <p>No maintenance job cards found for this client</p>
+                                        <p className="text-xs mt-1">Maintenance job cards will appear here when created for this client</p>
+                                    </div>
+                                )}
+
+                                {/* Info box */}
+                                <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                    <div className="flex items-start">
+                                        <i className="fas fa-info-circle text-orange-600 text-xs mt-0.5 mr-2"></i>
+                                        <div>
+                                            <p className="text-xs font-medium text-orange-900 mb-1">Maintenance Job Cards</p>
+                                            <p className="text-xs text-orange-800">
+                                                Maintenance job cards are automatically shown here when they are created for this client. 
+                                                View the full Service & Maintenance module to create new job cards.
                                             </p>
                                         </div>
                                     </div>
