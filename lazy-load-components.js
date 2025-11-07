@@ -226,11 +226,11 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 });
             };
             
-            // Add cache-busting for DailyNotes and Manufacturing to ensure fresh version loads
+            // Add cache-busting for DailyNotes, Manufacturing, and UserManagement to ensure fresh version loads
             // Use timestamp-based version for critical components that change frequently
-            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
-                scriptSrc = scriptSrc + separator + 'v=' + Date.now();
+                scriptSrc = scriptSrc + separator + 'v=permissions-v2-' + Date.now();
             }
             
             // Wait for React if needed (for ProjectDetail), then proceed with loading
