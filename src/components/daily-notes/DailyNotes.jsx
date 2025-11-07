@@ -2098,7 +2098,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
         return (
             <div className={`fixed inset-0 z-50 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex flex-col`}>
                 {/* Header */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`}>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b shadow-sm px-6 py-4 flex items-center justify-between`}>
                     <div className="flex items-center space-x-4">
                         {onClose && (
                             <button
@@ -2117,14 +2117,19 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                         if (onClose) onClose();
                                     }, 100);
                                 }}
-                                className={`${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2.5 rounded-lg transition-all duration-200 hover:scale-105`}
                             >
-                                <i className="fas fa-arrow-left"></i>
+                                <i className="fas fa-arrow-left text-lg"></i>
                             </button>
                         )}
-                        <h1 className={`text-xl font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            Daily Notes
-                        </h1>
+                        <div>
+                            <h1 className={`text-2xl font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                Daily Notes
+                            </h1>
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} mt-0.5`}>
+                                {filteredNotes.length} {filteredNotes.length === 1 ? 'note' : 'notes'}
+                            </p>
+                        </div>
                     </div>
                     <button
                         onClick={() => {
@@ -2136,59 +2141,67 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 setEditorContentSafely('');
                             }
                         }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 text-sm font-medium flex items-center space-x-2 shadow-md hover:shadow-lg hover:scale-105"
                     >
-                        <i className="fas fa-plus mr-2"></i>
-                        New Note
+                        <i className="fas fa-plus"></i>
+                        <span>New Note</span>
                     </button>
                 </div>
 
                 {/* Search Bar */}
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3`}>
-                    <div className="relative">
-                        <i className={`fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-6 py-4`}>
+                    <div className="relative max-w-md">
+                        <i className={`fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}></i>
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search notes..."
-                            className={`w-full pl-10 pr-4 py-2 rounded-lg border ${
+                            className={`w-full pl-12 pr-4 py-3 rounded-lg border transition-all duration-200 ${
                                 isDark 
-                                    ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400' 
-                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500'
-                            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
+                                    ? 'bg-gray-700 border-gray-600 text-gray-100 placeholder-gray-400 focus:border-blue-500' 
+                                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-500 focus:border-blue-500'
+                            } focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50`}
                         />
                     </div>
                 </div>
 
                 {/* Notes List */}
-                <div className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-y-auto p-6">
                     {filteredNotes.length === 0 ? (
-                        <div className={`text-center py-12 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            <i className="fas fa-sticky-note text-4xl mb-4 opacity-50"></i>
-                            <p className="text-lg mb-2">
-                                {searchQuery ? 'No notes found matching your search' : 'No notes yet'}
+                        <div className={`text-center py-20 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                            <div className="inline-block p-6 rounded-full bg-gray-100 dark:bg-gray-800 mb-6">
+                                <i className="fas fa-sticky-note text-5xl opacity-50"></i>
+                            </div>
+                            <p className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                {searchQuery ? 'No notes found' : 'No notes yet'}
                             </p>
                             <p className="text-sm">
                                 {searchQuery ? 'Try a different search term' : 'Click "New Note" to create your first note'}
                             </p>
                         </div>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="space-y-4 max-w-4xl mx-auto">
                             {filteredNotes.map(({ dateString, date, note, noteHtml }) => (
                                 <div
                                     key={dateString}
-                                    className={`${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-white border-gray-200 hover:bg-gray-50'} border rounded-lg p-4 transition-colors`}
+                                    onClick={() => openNote(dateString)}
+                                    className={`
+                                        ${isDark ? 'bg-gray-800 border-gray-700 hover:bg-gray-750' : 'bg-white border-gray-200 hover:bg-gray-50'} 
+                                        border rounded-xl p-5 
+                                        transition-all duration-200 
+                                        cursor-pointer
+                                        hover:shadow-lg
+                                        hover:scale-[1.02]
+                                        group
+                                    `}
                                 >
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div 
-                                            onClick={() => openNote(dateString)}
-                                            className="flex-1 cursor-pointer"
-                                        >
-                                            <h3 className={`font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex-1">
+                                            <h3 className={`text-lg font-bold mb-1 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                                 {formatDateDisplay(dateString)}
                                             </h3>
-                                            <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                            <span className={`text-xs font-medium ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                                                 {dateString}
                                             </span>
                                         </div>
@@ -2199,18 +2212,22 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                                     deleteNote(dateString);
                                                 }
                                             }}
-                                            className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} p-2 rounded-lg transition-colors ml-2`}
+                                            className={`
+                                                ${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/20' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} 
+                                                p-2.5 rounded-lg 
+                                                transition-all duration-200 
+                                                ml-2
+                                                opacity-0 group-hover:opacity-100
+                                                hover:scale-110
+                                            `}
                                             title="Delete note"
                                         >
                                             <i className="fas fa-trash"></i>
                                         </button>
                                     </div>
-                                    <div 
-                                        onClick={() => openNote(dateString)}
-                                        className="cursor-pointer"
-                                    >
-                                        <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'} line-clamp-3`}>
-                                            {note.length > 200 ? note.substring(0, 200) + '...' : note}
+                                    <div>
+                                        <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-300' : 'text-gray-700'} line-clamp-3`}>
+                                            {note.length > 200 ? note.substring(0, 200) + '...' : note || 'Empty note'}
                                         </p>
                                     </div>
                                 </div>
@@ -2226,47 +2243,49 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
     return (
         <div className={`fixed inset-0 z-50 ${isDark ? 'bg-gray-900' : 'bg-gray-50'} flex flex-col`}>
             {/* Header */}
-            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-3 flex items-center justify-between`}>
+            <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b shadow-sm px-6 py-4 flex items-center justify-between`}>
                 <div className="flex items-center space-x-4">
                     <button
                         onClick={() => setShowListView(true)}
-                        className={`${isDark ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'} p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors`}
+                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2.5 rounded-lg transition-all duration-200 hover:scale-105`}
                         title="Back to list"
                     >
-                        <i className="fas fa-arrow-left"></i>
+                        <i className="fas fa-arrow-left text-lg"></i>
                     </button>
                     
                     {/* Date Navigation */}
-                    <button
-                        onClick={goToPreviousDay}
-                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
-                        title="Previous day"
-                    >
-                        <i className="fas fa-chevron-left"></i>
-                    </button>
-                    
-                    <div className="text-center">
-                        <h1 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
-                            {formatDateDisplay(formatDateString(currentDate))}
-                        </h1>
-                        <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                            {formatDateString(currentDate)}
-                        </p>
+                    <div className="flex items-center space-x-3 bg-gray-100 dark:bg-gray-700 rounded-lg px-2 py-1">
+                        <button
+                            onClick={goToPreviousDay}
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'} p-1.5 rounded-md transition-all duration-200 hover:scale-110`}
+                            title="Previous day"
+                        >
+                            <i className="fas fa-chevron-left text-sm"></i>
+                        </button>
+                        
+                        <div className="text-center px-3">
+                            <h1 className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                                {formatDateDisplay(formatDateString(currentDate))}
+                            </h1>
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'} font-medium`}>
+                                {formatDateString(currentDate)}
+                            </p>
+                        </div>
+                        
+                        <button
+                            onClick={goToNextDay}
+                            className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-200'} p-1.5 rounded-md transition-all duration-200 hover:scale-110`}
+                            title="Next day"
+                        >
+                            <i className="fas fa-chevron-right text-sm"></i>
+                        </button>
                     </div>
-                    
-                    <button
-                        onClick={goToNextDay}
-                        className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-colors`}
-                        title="Next day"
-                    >
-                        <i className="fas fa-chevron-right"></i>
-                    </button>
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                     {isSaving && (
-                        <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                            <i className="fas fa-spinner fa-spin"></i>
-                            <span>Auto-saving...</span>
+                        <div className="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg">
+                            <i className="fas fa-spinner fa-spin text-blue-600 dark:text-blue-400"></i>
+                            <span className="font-medium">Auto-saving...</span>
                         </div>
                     )}
                     <button
@@ -2279,7 +2298,7 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                 alert('No note to delete for this date.');
                             }
                         }}
-                        className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-gray-700' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} px-3 py-2 rounded-lg transition-colors font-medium flex items-center space-x-2`}
+                        className={`${isDark ? 'text-red-400 hover:text-red-300 hover:bg-red-900/20' : 'text-red-600 hover:text-red-700 hover:bg-red-50'} px-4 py-2 rounded-lg transition-all duration-200 font-medium flex items-center space-x-2 hover:shadow-md`}
                         title="Delete note"
                     >
                         <i className="fas fa-trash"></i>
@@ -2288,110 +2307,112 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                 </div>
             </div>
 
-            {/* Toolbar */}
-            <div ref={toolbarRef} className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b px-4 py-2 flex items-center space-x-2 flex-wrap`}>
-                <button
-                    onClick={() => execCommand('bold')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Bold"
-                >
-                    <i className="fas fa-bold"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('italic')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Italic"
-                >
-                    <i className="fas fa-italic"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('underline')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Underline"
-                >
-                    <i className="fas fa-underline"></i>
-                </button>
-                <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                <button
-                    onClick={() => execCommand('justifyLeft')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Align Left"
-                >
-                    <i className="fas fa-align-left"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('justifyCenter')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Align Center"
-                >
-                    <i className="fas fa-align-center"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('justifyRight')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Align Right"
-                >
-                    <i className="fas fa-align-right"></i>
-                </button>
-                <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                <button
-                    onClick={() => execCommand('insertUnorderedList')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Bullet List"
-                >
-                    <i className="fas fa-list-ul"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('insertOrderedList')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Numbered List"
-                >
-                    <i className="fas fa-list-ol"></i>
-                </button>
-                <button
-                    onClick={() => execCommand('insertCheckboxList')}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title="Checkbox List"
-                >
-                    <i className="fas fa-check-square"></i>
-                </button>
-                <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                <button
-                    onClick={() => {
-                        const newHandwritingState = !showHandwriting;
-                        setShowHandwriting(newHandwritingState);
-                        // When enabling handwriting, disable contentEditable temporarily
-                        if (editorRef.current) {
-                            if (newHandwritingState) {
-                                editorRef.current.style.pointerEvents = 'none';
-                                editorRef.current.contentEditable = 'false';
-                            } else {
-                                editorRef.current.style.pointerEvents = 'auto';
-                                editorRef.current.contentEditable = 'true';
+            {/* Toolbar - Enhanced Design */}
+            <div ref={toolbarRef} className={`${isDark ? 'bg-gray-800/95 border-gray-700' : 'bg-white border-gray-200'} border-b shadow-sm px-6 py-3 flex items-center space-x-1 flex-wrap gap-2`}>
+                {/* Text Formatting Group */}
+                <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <button
+                        onClick={() => execCommand('bold')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Bold (Ctrl+B)"
+                    >
+                        <i className="fas fa-bold"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('italic')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Italic (Ctrl+I)"
+                    >
+                        <i className="fas fa-italic"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('underline')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Underline (Ctrl+U)"
+                    >
+                        <i className="fas fa-underline"></i>
+                    </button>
+                </div>
+                
+                {/* Alignment Group */}
+                <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <button
+                        onClick={() => execCommand('justifyLeft')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Align Left"
+                    >
+                        <i className="fas fa-align-left"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('justifyCenter')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Align Center"
+                    >
+                        <i className="fas fa-align-center"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('justifyRight')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Align Right"
+                    >
+                        <i className="fas fa-align-right"></i>
+                    </button>
+                </div>
+                
+                {/* Lists Group */}
+                <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <button
+                        onClick={() => execCommand('insertUnorderedList')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Bullet List"
+                    >
+                        <i className="fas fa-list-ul"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('insertOrderedList')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Numbered List"
+                    >
+                        <i className="fas fa-list-ol"></i>
+                    </button>
+                    <button
+                        onClick={() => execCommand('insertCheckboxList')}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-600' : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'}`}
+                        title="Checkbox List"
+                    >
+                        <i className="fas fa-check-square"></i>
+                    </button>
+                </div>
+                
+                {/* Handwriting Tool */}
+                <div className="flex items-center space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                    <button
+                        onClick={() => {
+                            const newHandwritingState = !showHandwriting;
+                            setShowHandwriting(newHandwritingState);
+                            // When enabling handwriting, disable contentEditable temporarily
+                            if (editorRef.current) {
+                                if (newHandwritingState) {
+                                    editorRef.current.style.pointerEvents = 'none';
+                                    editorRef.current.contentEditable = 'false';
+                                } else {
+                                    editorRef.current.style.pointerEvents = 'auto';
+                                    editorRef.current.contentEditable = 'true';
+                                }
                             }
-                        }
-                    }}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${showHandwriting ? 'bg-blue-100 text-blue-600' : isDark ? 'text-gray-300' : 'text-gray-700'}`}
-                    title={showHandwriting ? 'Disable Handwriting' : 'Enable Handwriting'}
-                >
-                    <i className="fas fa-pen"></i>
-                </button>
-                <div className={`w-px h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-300'}`}></div>
-                <button
-                    onClick={() => {
-                        const dateString = formatDateString(currentDate);
-                        const hasNote = notes[dateString] && notes[dateString].trim().length > 0;
-                        if (hasNote || currentNoteHtml || (editorRef.current && editorRef.current.innerHTML.trim().length > 0)) {
-                            deleteNote();
-                        } else {
-                            alert('No note to delete for this date.');
-                        }
-                    }}
-                    className={`p-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}
-                    title="Delete note"
-                >
-                    <i className="fas fa-trash"></i>
-                </button>
+                        }}
+                        className={`p-2.5 rounded-md transition-all duration-200 hover:scale-110 ${
+                            showHandwriting 
+                                ? 'bg-blue-500 text-white shadow-md' 
+                                : isDark 
+                                    ? 'text-gray-300 hover:text-white hover:bg-gray-600' 
+                                    : 'text-gray-700 hover:text-gray-900 hover:bg-gray-200'
+                        }`}
+                        title={showHandwriting ? 'Disable Handwriting' : 'Enable Handwriting'}
+                    >
+                        <i className="fas fa-pen"></i>
+                    </button>
+                </div>
             </div>
 
             {/* Editor Area with integrated handwriting */}
@@ -2421,32 +2442,61 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         margin-top: 0.25rem;
                         margin-bottom: 0.25rem;
                     }
+                    /* Enhanced editor styling */
+                    .daily-notes-editor {
+                        caret-color: ${isDark ? '#60a5fa' : '#2563eb'};
+                    }
+                    .daily-notes-editor:focus {
+                        outline: none;
+                    }
+                    .daily-notes-editor p {
+                        margin: 0.75rem 0;
+                    }
+                    .daily-notes-editor h1, .daily-notes-editor h2, .daily-notes-editor h3 {
+                        margin-top: 1.5rem;
+                        margin-bottom: 0.75rem;
+                        font-weight: 700;
+                    }
                     /* Checkbox list styling */
                     .daily-notes-editor ul.checkbox-list {
                         list-style-type: none;
                         padding-left: 0;
-                        margin: 0.5rem 0;
+                        margin: 1rem 0;
                     }
                     .daily-notes-editor ul.checkbox-list li {
                         display: flex;
                         align-items: flex-start;
-                        margin: 0.5rem 0;
+                        margin: 0.75rem 0;
                         padding-left: 0;
+                        min-height: 1.75rem;
                     }
                     .daily-notes-editor ul.checkbox-list li .list-checkbox {
-                        margin-right: 8px;
-                        margin-top: 2px;
+                        margin-right: 12px;
+                        margin-top: 4px;
                         cursor: pointer;
                         flex-shrink: 0;
+                        width: 18px;
+                        height: 18px;
+                        accent-color: ${isDark ? '#60a5fa' : '#2563eb'};
                     }
                     /* Ensure checkbox lists work properly with Enter key */
                     .daily-notes-editor ul.checkbox-list li:empty::before {
                         content: '';
                         display: inline-block;
                     }
+                    /* Better list styling */
+                    .daily-notes-editor ul,
+                    .daily-notes-editor ol {
+                        margin: 1rem 0;
+                        padding-left: 2.5rem;
+                    }
+                    .daily-notes-editor li {
+                        margin: 0.5rem 0;
+                        line-height: 1.75;
+                    }
                 `}</style>
                 {/* Rich Text Editor with handwriting overlay */}
-                <div className="flex-1 p-4 overflow-y-auto relative">
+                <div className="flex-1 overflow-y-auto relative">
                     <div
                         ref={(el) => {
                             // CRITICAL: Only set ref, NEVER update content here - ref callback runs on every render!
@@ -2456,6 +2506,23 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                         contentEditable
                         onInput={handleEditorInput}
                         onPaste={handlePaste}
+                        className={`
+                            daily-notes-editor
+                            ${isDark ? 'bg-gray-900' : 'bg-white'}
+                            min-h-full
+                            px-8 py-6
+                            ${isDark ? 'text-gray-100' : 'text-gray-900'}
+                            text-base
+                            leading-relaxed
+                            focus:outline-none
+                            prose prose-lg max-w-none
+                            ${isDark ? 'prose-invert' : ''}
+                        `}
+                        style={{
+                            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                            lineHeight: '1.75',
+                            minHeight: 'calc(100vh - 200px)'
+                        }}
                         onKeyDown={(e) => {
                             // Handle Enter key to ensure it creates a new line or list item
                             if (e.key === 'Enter' || e.keyCode === 13) {
@@ -2833,15 +2900,6 @@ const DailyNotes = ({ initialDate = null, onClose = null }) => {
                                     saveNote().catch(err => console.error('Auto-save error on blur:', err));
                                 }
                             }
-                        }}
-                        className={`daily-notes-editor w-full h-full min-h-[400px] p-4 rounded-lg border ${
-                            isDark 
-                                ? 'bg-gray-800 border-gray-700 text-gray-100' 
-                                : 'bg-white border-gray-300 text-gray-900'
-                        } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-                        style={{ 
-                            minHeight: 'calc(100vh - 200px)',
-                            // Ensure lists are properly styled
                         }}
                         suppressContentEditableWarning={true}
                     />

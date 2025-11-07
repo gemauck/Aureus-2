@@ -665,37 +665,39 @@ const Calendar = () => {
             
             {/* Calendar Widget - Always render unless DailyNotes is open */}
             {!showDailyNotes ? (
-                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3 max-w-sm`} style={{ display: 'block', visibility: 'visible' }}>
-                    <div className="flex items-center justify-between mb-2">
+                <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-xl border shadow-lg p-4 max-w-sm transition-all duration-200`} style={{ display: 'block', visibility: 'visible' }}>
+                    <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center space-x-2">
                             <button
                                 onClick={goToPreviousMonth}
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 hover:scale-110 text-sm`}
+                                title="Previous month"
                             >
-                                <i className="fas fa-chevron-left text-xs"></i>
+                                <i className="fas fa-chevron-left"></i>
                             </button>
-                            <h2 className={`text-sm font-semibold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
+                            <h2 className={`text-base font-bold ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>
                                 {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
                             </h2>
                             <button
                                 onClick={goToNextMonth}
-                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-1 rounded transition-colors text-xs`}
+                                className={`${isDark ? 'text-gray-300 hover:text-white hover:bg-gray-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'} p-2 rounded-lg transition-all duration-200 hover:scale-110 text-sm`}
+                                title="Next month"
                             >
-                                <i className="fas fa-chevron-right text-xs"></i>
+                                <i className="fas fa-chevron-right"></i>
                             </button>
                         </div>
                         <div className="flex items-center space-x-2">
                             <button
                                 onClick={handleOpenDailyNotes}
-                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium mr-2`}
+                                className={`text-xs ${isDark ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-medium px-3 py-1.5 rounded-lg transition-all duration-200 hover:shadow-md flex items-center space-x-1.5`}
                                 title="Open Daily Notes"
                             >
-                                <i className="fas fa-sticky-note mr-1"></i>
-                                Notes
+                                <i className="fas fa-sticky-note"></i>
+                                <span>Notes</span>
                             </button>
                             <button
                                 onClick={goToToday}
-                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300' : 'text-blue-600 hover:text-blue-700'} font-medium`}
+                                className={`text-xs ${isDark ? 'text-blue-400 hover:text-blue-300 hover:bg-gray-700' : 'text-blue-600 hover:text-blue-700 hover:bg-blue-50'} font-medium px-3 py-1.5 rounded-lg transition-all duration-200`}
                             >
                                 Today
                             </button>
@@ -703,19 +705,19 @@ const Calendar = () => {
                     </div>
                 
                 {/* Day names header */}
-                <div className="grid grid-cols-7 mb-1" style={{ gap: '2px' }}>
+                <div className="grid grid-cols-7 mb-2" style={{ gap: '4px' }}>
                     {dayNames.map(day => (
                         <div
                             key={day}
-                            className={`text-center text-[10px] font-semibold py-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}
+                            className={`text-center text-xs font-semibold py-2 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}
                         >
-                            {day.substring(0, 1)}
+                            {day.substring(0, 3)}
                         </div>
                     ))}
                 </div>
                 
-                {/* Calendar grid - compact with fixed gap to prevent line gathering */}
-                <div className="grid grid-cols-7" style={{ gap: '2px' }}>
+                {/* Calendar grid - improved spacing and design */}
+                <div className="grid grid-cols-7" style={{ gap: '4px' }}>
                     {days.map((day, index) => {
                         if (day === null) {
                             return <div key={`empty-${index}`} className="aspect-square"></div>;
@@ -730,28 +732,38 @@ const Calendar = () => {
                                 key={day}
                                 onClick={() => handleDayClick(day)}
                                 className={`
-                                    aspect-square rounded transition-all text-xs
+                                    aspect-square rounded-lg transition-all duration-200 text-sm font-medium
                                     ${dayIsToday 
                                         ? isDark 
-                                            ? 'bg-blue-600 text-white' 
-                                            : 'bg-blue-500 text-white'
+                                            ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg ring-2 ring-blue-400 ring-opacity-50' 
+                                            : 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg ring-2 ring-blue-300 ring-opacity-50'
                                         : isDark
-                                            ? 'text-gray-200 hover:bg-gray-700 bg-gray-800'
-                                            : 'text-gray-900 hover:bg-gray-100 bg-white'
+                                            ? 'text-gray-200 hover:bg-gray-700 bg-gray-800/50 hover:shadow-md hover:scale-105'
+                                            : 'text-gray-900 hover:bg-blue-50 bg-white hover:shadow-md hover:scale-105'
                                     }
                                     ${dayHasNotes ? 'font-bold' : 'font-normal'}
                                     flex flex-col items-center justify-center relative
-                                    ${isDark ? 'border border-gray-700' : 'border border-gray-200'}
-                                    box-border
+                                    border
+                                    ${dayIsToday 
+                                        ? 'border-blue-400' 
+                                        : isDark ? 'border-gray-700' : 'border-gray-200'
+                                    }
+                                    box-border group
                                 `}
                                 style={{ 
-                                    borderWidth: '1px',
+                                    borderWidth: dayIsToday ? '2px' : '1px',
                                     margin: 0
                                 }}
                             >
-                                <span className="text-xs">{day}</span>
+                                <span className={`${dayIsToday ? 'text-white' : ''} relative z-10`}>{day}</span>
                                 {dayHasNotes && (
-                                    <div className={`absolute bottom-0.5 w-1 h-1 rounded-full ${dayIsToday ? 'bg-white' : isDark ? 'bg-blue-400' : 'bg-blue-600'}`}></div>
+                                    <div className={`absolute bottom-1.5 left-1/2 transform -translate-x-1/2 w-1.5 h-1.5 rounded-full transition-all duration-200 ${
+                                        dayIsToday 
+                                            ? 'bg-white shadow-sm' 
+                                            : isDark 
+                                                ? 'bg-blue-400 group-hover:bg-blue-300' 
+                                                : 'bg-blue-600 group-hover:bg-blue-500'
+                                    }`}></div>
                                 )}
                             </button>
                         );
