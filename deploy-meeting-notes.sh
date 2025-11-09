@@ -81,16 +81,16 @@ echo "🚀 Step 3: Applying database migration..."
 if [ "$DEPLOY_MODE" == "production" ]; then
     # Production: Use migrate deploy (safe, applies pending migrations)
     echo "Using 'prisma migrate deploy' (production mode)..."
-    npx prisma migrate deploy || {
+    ./scripts/safe-db-migration.sh npx prisma migrate deploy || {
         echo -e "${YELLOW}⚠️  migrate deploy failed, trying db push...${NC}"
-        npx prisma db push --skip-generate
+        ./scripts/safe-db-migration.sh npx prisma db push --skip-generate
     }
 else
     # Development: Try migrate dev first, fallback to db push
     echo "Using 'prisma migrate dev' (development mode)..."
-    npx prisma migrate dev --name add_meeting_notes || {
+    ./scripts/safe-db-migration.sh npx prisma migrate dev --name add_meeting_notes || {
         echo -e "${YELLOW}⚠️  migrate dev failed (migration history conflict?), using db push...${NC}"
-        npx prisma db push --skip-generate
+        ./scripts/safe-db-migration.sh npx prisma db push --skip-generate
     }
 fi
 

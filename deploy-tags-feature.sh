@@ -39,14 +39,14 @@ echo ""
 
 # Apply database migration
 echo "🗄️  Applying database migration..."
-if npx prisma migrate deploy; then
+if ./scripts/safe-db-migration.sh npx prisma migrate deploy; then
     echo "✅ Migration applied successfully"
-elif npx prisma db push; then
+elif ./scripts/safe-db-migration.sh npx prisma db push; then
     echo "✅ Schema pushed successfully (using db push)"
 else
     echo "⚠️  Migration failed - trying manual SQL..."
     if [ -f "prisma/migrations/MANUAL_TAG_MIGRATION.sql" ]; then
-        psql $DATABASE_URL < prisma/migrations/MANUAL_TAG_MIGRATION.sql && echo "✅ Manual migration applied" || echo "❌ Manual migration also failed"
+        ./scripts/safe-db-migration.sh psql $DATABASE_URL < prisma/migrations/MANUAL_TAG_MIGRATION.sql && echo "✅ Manual migration applied" || echo "❌ Manual migration also failed"
     else
         echo "❌ Manual migration file not found"
         echo "⚠️  You may need to run migration manually"

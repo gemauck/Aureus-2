@@ -108,3 +108,4 @@ The fix is deployed and working. However, there was a 500 error when attempting 
 
 ✅ **The fix is deployed and working correctly!** Permissions are now being sent as an array instead of a double-stringified string. The API should now be able to process and persist permissions correctly.
 
+

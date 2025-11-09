@@ -63,7 +63,7 @@ cd /var/www/abcotronics-erp
 git pull origin main
 npm install --production
 npx prisma generate
-npx prisma migrate deploy || npx prisma db push
+./scripts/safe-db-migration.sh npx prisma migrate deploy || ./scripts/safe-db-migration.sh npx prisma db push
 pm2 restart abcotronics-erp
 ENDSSH
 else
@@ -76,7 +76,7 @@ else
     echo "git pull origin main"
     echo "npm install --production"
     echo "npx prisma generate"
-    echo "npx prisma migrate deploy"
+    echo "./scripts/safe-db-migration.sh npx prisma migrate deploy"
     echo "pm2 restart abcotronics-erp"
     echo ""
 fi

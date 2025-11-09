@@ -19,6 +19,7 @@
         'utils/liveDataSync.js',
         'utils/auditLogger.js',
         'utils/permissions.js',
+        'utils/leaveUtils.js',
         'utils/whatsapp.js',
         
         // Hooks
@@ -167,6 +168,12 @@
         let scriptSrc = finalPath;
         if (path.includes('UserManagement')) {
             scriptSrc += '?v=permissions-v2-' + Date.now();
+        }
+        
+        // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
+        if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
+            const versionTag = 'meeting-notes-v20251109';
+            scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
         }
         
         if (isProduction) {

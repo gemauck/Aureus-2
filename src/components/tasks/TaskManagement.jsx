@@ -19,6 +19,11 @@ const TaskManagement = () => {
     const [selectedTask, setSelectedTask] = useState(null);
     const [categories, setCategories] = useState([]);
     const [stats, setStats] = useState({ total: 0, todo: 0, inProgress: 0, completed: 0 });
+    const [quickTaskTitle, setQuickTaskTitle] = useState('');
+    const [quickTaskCategory, setQuickTaskCategory] = useState('');
+    const [isQuickAdding, setIsQuickAdding] = useState(false);
+    const [quickAddError, setQuickAddError] = useState('');
+    const [quickAddSuccess, setQuickAddSuccess] = useState('');
 
     // Load data
     useEffect(() => {
@@ -208,6 +213,63 @@ const TaskManagement = () => {
         loadTags(); // Reload tags in case new ones were created
     };
 
+    const handleQuickAddTask = async (e) => {
+        e.preventDefault();
+        if (isQuickAdding) return;
+
+        const title = quickTaskTitle.trim();
+        const categoryValue = quickTaskCategory.trim();
+
+        if (!title) {
+            setQuickAddError('Please enter a task title.');
+            return;
+        }
+
+        try {
+            const token = storage?.getToken?.();
+            if (!token) {
+                setQuickAddError('You must be logged in to add tasks.');
+                return;
+            }
+
+            setIsQuickAdding(true);
+            setQuickAddError('');
+            setQuickAddSuccess('');
+
+            const response = await fetch('/api/user-tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    title,
+                    category: categoryValue,
+                    status: 'todo',
+                    priority: 'medium'
+                })
+            });
+
+            if (response.ok) {
+                setQuickTaskTitle('');
+                setQuickAddSuccess('Task added.');
+                if (!categories.includes(categoryValue) && categoryValue) {
+                    setCategories(prev => [...prev, categoryValue]);
+                }
+                loadTasks();
+                setTimeout(() => setQuickAddSuccess(''), 3000);
+            } else {
+                const error = await response.json();
+                setQuickAddError(error.error?.message || 'Failed to add task.');
+            }
+        } catch (error) {
+            console.error('Error adding quick task:', error);
+            setQuickAddError('Error adding task: ' + error.message);
+        } finally {
+            setIsQuickAdding(false);
+        }
+    };
+
     const handleQuickStatusToggle = async (task, newStatus) => {
         try {
             const token = storage?.getToken?.();
@@ -296,6 +358,57 @@ const TaskManagement = () => {
                         New Task
                     </button>
                 </div>
+                <form onSubmit={handleQuickAddTask} className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="sm:col-span-2 flex flex-col">
+                        <input
+                            type="text"
+                            value={quickTaskTitle}
+                            onChange={(e) => {
+                                setQuickTaskTitle(e.target.value);
+                                if (quickAddError) setQuickAddError('');
+                                if (quickAddSuccess) setQuickAddSuccess('');
+                            }}
+                            placeholder="Quick add a task"
+                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        />
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <input
+                            type="text"
+                            value={quickTaskCategory}
+                            onChange={(e) => {
+                                setQuickTaskCategory(e.target.value);
+                                if (quickAddError) setQuickAddError('');
+                                if (quickAddSuccess) setQuickAddSuccess('');
+                            }}
+                            placeholder="Category (optional)"
+                            list="taskCategories"
+                            className={`flex-1 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                        />
+                        <datalist id="taskCategories">
+                            {categories.map(cat => (
+                                <option key={cat} value={cat} />
+                            ))}
+                        </datalist>
+                        <button
+                            type="submit"
+                            disabled={isQuickAdding}
+                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-60"
+                        >
+                            {isQuickAdding ? 'Adding...' : 'Quick Add'}
+                        </button>
+                    </div>
+                    {(quickAddError || quickAddSuccess) && (
+                        <div className="sm:col-span-3 text-sm">
+                            {quickAddError && (
+                                <p className="text-red-500">{quickAddError}</p>
+                            )}
+                            {quickAddSuccess && !quickAddError && (
+                                <p className="text-green-500">{quickAddSuccess}</p>
+                            )}
+                        </div>
+                    )}
+                </form>
             </div>
 
             {/* Filters and View Toggle */}

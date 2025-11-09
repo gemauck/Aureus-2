@@ -91,7 +91,7 @@ echo ""
 
 # Run migrations
 echo "🚀 Running database migrations..."
-npx prisma migrate dev --name init || npx prisma db push
+./scripts/safe-db-migration.sh npx prisma migrate dev --name init || ./scripts/safe-db-migration.sh npx prisma db push
 echo ""
 
 echo "✅ Local development environment is ready!"

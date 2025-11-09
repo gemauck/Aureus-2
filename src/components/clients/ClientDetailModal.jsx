@@ -1859,17 +1859,33 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
     };
 
     // Get projects that belong to this client (match by clientId or clientName)
-    const clientProjects = allProjects?.filter(p => {
-        // Primary: match by clientId (foreign key relationship)
-        if (formData.id && p.clientId === formData.id) {
-            return true;
+    const clientProjects = React.useMemo(() => {
+        if (!allProjects || !Array.isArray(allProjects) || allProjects.length === 0) {
+            return [];
         }
-        // Fallback: match by client name (for projects without clientId set)
-        if (p.client === formData.name || p.clientName === formData.name) {
-            return true;
+        if (!formData || !formData.id && !formData.name) {
+            return [];
         }
-        return false;
-    }) || [];
+        
+        return allProjects.filter(p => {
+            if (!p) return false;
+            
+            // Primary: match by clientId (foreign key relationship)
+            if (formData.id && p.clientId && p.clientId === formData.id) {
+                return true;
+            }
+            // Fallback: match by client name (for projects without clientId set)
+            // Use case-insensitive comparison and trim whitespace
+            const clientName = (formData.name || '').trim().toLowerCase();
+            const projectClient = (p.client || '').trim().toLowerCase();
+            const projectClientName = (p.clientName || '').trim().toLowerCase();
+            
+            if (clientName && (projectClient === clientName || projectClientName === clientName)) {
+                return true;
+            }
+            return false;
+        });
+    }, [allProjects, formData?.id, formData?.name]);
     const upcomingFollowUps = (formData.followUps || [])
         .filter(f => !f.completed)
         .sort((a, b) => new Date(a.date) - new Date(b.date));

@@ -1,12 +1,12 @@
 // Permission system for role-based access control
-// Main permission categories - all users have access to everything except Users and HR (admin-only)
+// Main permission categories - all users have access to everything except Users (admin-only)
 export const PERMISSIONS = {
     // Main module permissions
     ACCESS_CRM: 'access_crm',
     ACCESS_PROJECTS: 'access_projects',
     ACCESS_TEAM: 'access_team',
     ACCESS_USERS: 'access_users', // Admin only
-    ACCESS_HR: 'access_hr', // Admin only
+    ACCESS_HR: 'access_hr',
     ACCESS_MANUFACTURING: 'access_manufacturing',
     ACCESS_SERVICE_MAINTENANCE: 'access_service_maintenance',
     ACCESS_TOOL: 'access_tool',
@@ -74,8 +74,8 @@ export const PERMISSION_CATEGORIES = {
         id: 'hr',
         label: 'HR',
         permission: PERMISSIONS.ACCESS_HR,
-        description: 'Human Resources',
-        adminOnly: true
+        description: 'Human Resources self-service',
+        adminOnly: false
     },
     MANUFACTURING: {
         id: 'manufacturing',
@@ -117,19 +117,19 @@ export const ROLE_PERMISSIONS = {
     manager: {
         name: 'Manager',
         description: 'Manage projects, teams, and assigned resources',
-        permissions: ['all'], // All non-admin users get access to everything except Users and HR
+        permissions: ['all'], // All non-admin users get access to everything except Users
         color: 'blue'
     },
     user: {
         name: 'User',
-        description: 'Standard user with access to all modules except Users and HR',
-        permissions: ['all'], // All non-admin users get access to everything except Users and HR
+        description: 'Standard user with access to all modules except Users',
+        permissions: ['all'], // All non-admin users get access to everything except Users
         color: 'orange'
     },
     guest: {
         name: 'Guest',
-        description: 'Limited access - Can access all modules except Users and HR',
-        permissions: ['all'], // All non-admin users get access to everything except Users and HR
+        description: 'Limited access - Can access all modules except Users',
+        permissions: ['all'], // All non-admin users get access to everything except Users
         color: 'gray'
     }
 };
@@ -161,10 +161,9 @@ export class PermissionChecker {
     hasPermission(permission) {
         const isAdmin = this.userRole?.toLowerCase() === 'admin';
         
-        // Admin-only permissions: Users and HR
+        // Admin-only permissions: Users
         const adminOnlyPermissions = [
             PERMISSIONS.ACCESS_USERS,
-            PERMISSIONS.ACCESS_HR,
             PERMISSIONS.MANAGE_USERS,
             PERMISSIONS.MANAGE_ROLES,
             PERMISSIONS.SYSTEM_SETTINGS
@@ -190,6 +189,7 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
             PERMISSIONS.ACCESS_TOOL,
             PERMISSIONS.ACCESS_REPORTS,
+            PERMISSIONS.ACCESS_HR,
             // Legacy permissions for backward compatibility
             PERMISSIONS.VIEW_CLIENTS,
             PERMISSIONS.EDIT_CLIENTS,

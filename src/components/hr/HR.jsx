@@ -1,149 +1,39 @@
 // Get React hooks from window
-const { useState } = React;
+const { useMemo } = React;
 
 const HR = () => {
-    const { user: currentUser } = window.useAuth ? window.useAuth() : { user: null };
-    
-    // Check if current user is admin (case-insensitive) - strict check
-    const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
-    
-    // Show access denied message if user is not admin
-    if (!isAdmin) {
+    const LeavePlatform = useMemo(() => window.LeavePlatform, []);
+
+    if (!LeavePlatform || typeof LeavePlatform !== 'function') {
         return (
-            <div className="flex items-center justify-center min-h-[400px]">
-                <div className="text-center">
-                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
-                    <p className="text-gray-600 dark:text-gray-400 mb-4">You need administrator privileges to access the HR page.</p>
-                    <button
-                        onClick={() => {
-                            // Navigate to dashboard
-                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'dashboard' } }));
-                        }}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
-                    >
-                        Go to Dashboard
-                    </button>
+            <div className="flex items-center justify-center min-h-[320px]">
+                <div className="text-center text-gray-500">
+                    <i className="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                    <p>Loading HR portal…</p>
                 </div>
             </div>
         );
     }
-    
-    const [currentTab, setCurrentTab] = useState('employees');
-
-    // Get HR components from window
-    const EmployeeManagement = window.EmployeeManagement;
-    const LeaveManagement = window.LeaveManagement;
-    const LeaveBalance = window.LeaveBalance;
-    const Attendance = window.Attendance;
-    const Payroll = window.Payroll;
-
-    // Log component availability
-    React.useEffect(() => {
-        console.log('🔄 HR: Checking component availability', {
-            EmployeeManagement: !!EmployeeManagement,
-            LeaveManagement: !!LeaveManagement,
-            LeaveBalance: !!LeaveBalance,
-            Attendance: !!Attendance,
-            Payroll: !!Payroll
-        });
-    }, []);
-
-    const tabs = [
-        { id: 'employees', label: 'Employees', icon: 'fa-users', component: EmployeeManagement },
-        { id: 'leave', label: 'Leave Management', icon: 'fa-calendar-check', component: LeaveManagement },
-        { id: 'balance', label: 'Leave Balances', icon: 'fa-chart-pie', component: LeaveBalance },
-        { id: 'attendance', label: 'Attendance', icon: 'fa-clock', component: Attendance },
-        { id: 'payroll', label: 'Payroll', icon: 'fa-money-bill-wave', component: Payroll }
-    ];
-
-    const renderContent = () => {
-        const activeTab = tabs.find(t => t.id === currentTab);
-        if (!activeTab || !activeTab.component) {
-            console.error('❌ HR: Component not available for tab:', currentTab);
-            return (
-                <div className="text-center py-12 text-gray-500">
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-yellow-800 mb-2">Component Not Available</h3>
-                        <p className="text-sm text-yellow-600 mb-3">
-                            The {activeTab?.label || currentTab} component is not loaded.
-                        </p>
-                        <p className="text-xs text-yellow-500">
-                            Check the browser console for more details.
-                        </p>
-                    </div>
-                </div>
-            );
-        }
-        
-        try {
-            const Component = activeTab.component;
-            return <Component />;
-        } catch (error) {
-            console.error('❌ HR: Error rendering component:', error);
-            return (
-                <div className="text-center py-12 text-gray-500">
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                        <h3 className="text-lg font-semibold text-red-800 mb-2">Error Loading Component</h3>
-                        <p className="text-sm text-red-600 mb-3">
-                            There was an error loading the {activeTab.label} component.
-                        </p>
-                        <p className="text-xs text-red-500 mb-3">Error: {error.message}</p>
-                        <button 
-                            onClick={() => window.location.reload()}
-                            className="bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 text-sm font-medium"
-                        >
-                            Reload Page
-                        </button>
-                    </div>
-                </div>
-            );
-        }
-    };
 
     return (
-        <div className="space-y-3 p-2 sm:p-0">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-2">
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-gray-100">Human Resources</h1>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-0.5">Employee leave management and HR administration</p>
+                    <h1 className="text-xl font-bold text-gray-900 dark:text-gray-100">Human Resources Portal</h1>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Self-service leave management, approvals, and BCEA compliance
+                    </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg px-3 py-1.5">
-                        <p className="text-[10px] sm:text-xs text-green-700 dark:text-green-300 font-medium">South African BCEA Compliant</p>
-                    </div>
+                <div className="px-3 py-1.5 rounded-lg bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <p className="text-xs text-green-700 dark:text-green-300 font-medium">
+                        South African BCEA compliant
+                    </p>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-                <div className="flex border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setCurrentTab(tab.id)}
-                            className={`flex-1 min-w-[120px] px-3 sm:px-4 py-2.5 text-xs font-medium transition-colors whitespace-nowrap ${
-                                currentTab === tab.id
-                                    ? 'text-primary-600 dark:text-primary-400 border-b-2 border-primary-600 dark:border-primary-400 bg-primary-50 dark:bg-primary-900/20'
-                                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
-                            }`}
-                        >
-                            <i className={`fas ${tab.icon} mr-1.5`}></i>
-                            <span className="hidden sm:inline">{tab.label}</span>
-                            <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
-                        </button>
-                    ))}
-                </div>
-
-                {/* Tab Content */}
-                <div className="p-4">
-                    {renderContent()}
-                </div>
-            </div>
+            <LeavePlatform initialTab="overview" />
         </div>
     );
 };
 
-// Make available globally
 window.HR = HR;

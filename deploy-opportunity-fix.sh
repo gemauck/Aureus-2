@@ -24,7 +24,7 @@ echo "🏗️  Generating Prisma client..."
 npx prisma generate
 
 echo "🗄️  Pushing database schema changes..."
-npx prisma db push || echo "⚠️  Database push warning (may already be up to date"
+./scripts/safe-db-migration.sh npx prisma db push || echo "⚠️  Database push warning (may already be up to date"
 
 echo "🔄 Running opportunity stages migration..."
 node fix-opportunity-stages.js || echo "⚠️  Migration script warning (may not be necessary)"

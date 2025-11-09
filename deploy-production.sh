@@ -96,22 +96,17 @@ echo "✅ Code updated"
 # Ensure Digital Ocean database is configured
 echo "🔧 Ensuring Digital Ocean database configuration..."
 if [ ! -f .env ]; then
-    echo "📝 Creating .env file with Digital Ocean database..."
-    # Get DATABASE_URL from existing .env or use environment variable
-    if [ -f .env.backup.* ] 2>/dev/null; then
-        # Try to extract from backup
-        EXISTING_DB_URL=$(grep "^DATABASE_URL=" .env.backup.* 2>/dev/null | head -1 | cut -d'=' -f2- | tr -d '"' | sed 's/YOUR_PASSWORD_HERE/CHANGE_PASSWORD/g' || echo "")
+    echo "📝 Creating .env file..."
+    if [ -z "$DATABASE_URL" ]; then
+        echo "❌ DATABASE_URL environment variable not set. Cannot create .env for deployment."
+        echo "   Please export DATABASE_URL with the production connection string before running this script."
+        exit 1
     fi
-    
-    if [ -z "$EXISTING_DB_URL" ] || [[ ! "$EXISTING_DB_URL" =~ ondigitalocean.com ]]; then
-        echo "⚠️  DATABASE_URL not found or invalid. Please set it manually in .env"
-        echo "   Format: postgresql://doadmin:PASSWORD@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
-    fi
-    
+
     cat > .env << ENVEOF
 NODE_ENV=production
 PORT=3000
-DATABASE_URL="${EXISTING_DB_URL:-${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}}"
+DATABASE_URL="${DATABASE_URL}"
 JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
 APP_URL=https://abcoafrica.co.za
 ENVEOF
@@ -122,23 +117,23 @@ else
         echo "⚠️  Local database detected in .env - fixing..."
         # Backup existing .env
         cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-        # Update DATABASE_URL to Digital Ocean (preserve existing password if present)
-        EXISTING_PASSWORD=$(grep "^DATABASE_URL=" .env.backup.* 2>/dev/null | head -1 | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p' || echo "")
-        if [ -z "$EXISTING_PASSWORD" ]; then
-            echo "⚠️  Please update DATABASE_URL in .env with the correct password"
-            echo "   Format: postgresql://doadmin:PASSWORD@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
-        else
-            sed -i "s|DATABASE_URL=.*|DATABASE_URL=\"postgresql://doadmin:${EXISTING_PASSWORD}@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require\"|" .env
+        if [ -z "$DATABASE_URL" ]; then
+            echo "❌ DATABASE_URL not provided. Unable to update .env safely."
+            exit 1
         fi
-        echo "✅ .env file updated to use Digital Ocean database"
+        sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+        echo "✅ .env file updated to use provided DATABASE_URL"
     else
         # Ensure DATABASE_URL is set correctly
-        if ! grep -q "ondigitalocean.com" .env 2>/dev/null; then
-            echo "📝 Adding Digital Ocean database URL to .env..."
-            sed -i '/^DATABASE_URL=/d' .env || true
-            echo 'DATABASE_URL="${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}"' >> .env
-            echo "⚠️  Please update DATABASE_URL in .env with the correct password"
-            echo "✅ Digital Ocean database URL added"
+        if [ -z "$DATABASE_URL" ]; then
+            echo "⚠️  DATABASE_URL not set. Existing .env will be left unchanged."
+        else
+            if grep -q "^DATABASE_URL=" .env; then
+                sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+            else
+                echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
+            fi
+            echo "✅ DATABASE_URL ensured in .env"
         fi
     fi
 fi

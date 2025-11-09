@@ -97,9 +97,9 @@ echo ""
 echo "🚀 Step 6: Applying database migration..."
 echo "========================================="
 # Use db push for quick deployment (no migration history needed)
-npx prisma db push --skip-generate || {
+./scripts/safe-db-migration.sh npx prisma db push --skip-generate || {
     echo "⚠️  db push failed, trying migrate deploy..."
-    npx prisma migrate deploy || {
+    ./scripts/safe-db-migration.sh npx prisma migrate deploy || {
         echo "❌ Migration failed"
         exit 1
     }

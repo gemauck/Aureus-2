@@ -311,10 +311,91 @@ const MainLayout = () => {
         console.warn('⚠️ Manufacturing component not loaded yet.');
         return <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
     });
-    const ServiceAndMaintenance = window.ServiceAndMaintenance || (() => {
-        console.warn('⚠️ ServiceAndMaintenance component not loaded yet.');
-        return <div className="text-center py-12 text-gray-500">Service & Maintenance loading...</div>;
-    });
+    
+    const [serviceMaintenanceReady, setServiceMaintenanceReady] = React.useState(
+        !!(window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function')
+    );
+
+    React.useEffect(() => {
+        const checkServiceMaintenance = () => {
+            const component = window.ServiceAndMaintenance;
+            if (component && typeof component === 'function') {
+                if (!serviceMaintenanceReady) {
+                    console.log('✅ MainLayout: ServiceAndMaintenance component became available');
+                    setServiceMaintenanceReady(true);
+                }
+                return true;
+            }
+            return false;
+        };
+
+        const handleComponentReady = () => {
+            console.log('✅ MainLayout: Received serviceMaintenanceComponentReady event');
+            setServiceMaintenanceReady(true);
+        };
+
+        window.addEventListener('serviceMaintenanceComponentReady', handleComponentReady);
+
+        if (checkServiceMaintenance()) {
+            return () => {
+                window.removeEventListener('serviceMaintenanceComponentReady', handleComponentReady);
+            };
+        }
+
+        const interval = setInterval(() => {
+            if (checkServiceMaintenance()) {
+                clearInterval(interval);
+            }
+        }, 200);
+
+        const timeout = setTimeout(() => {
+            clearInterval(interval);
+            if (!serviceMaintenanceReady) {
+                console.warn('⚠️ MainLayout: ServiceAndMaintenance component not loaded after 10 seconds');
+            }
+        }, 10000);
+
+        return () => {
+            window.removeEventListener('serviceMaintenanceComponentReady', handleComponentReady);
+            clearInterval(interval);
+            clearTimeout(timeout);
+        };
+    }, [serviceMaintenanceReady]);
+
+    React.useEffect(() => {
+        if (serviceMaintenanceReady) {
+            return;
+        }
+
+        const scriptId = 'service-maintenance-component-loader';
+        if (!document.getElementById(scriptId)) {
+            console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting dynamic load...');
+            const script = document.createElement('script');
+            script.id = scriptId;
+            script.defer = true;
+            script.src = `/dist/src/components/service-maintenance/ServiceAndMaintenance.js?v=sm-${Date.now()}`;
+            script.onload = () => {
+                console.log('✅ ServiceAndMaintenance component loaded dynamically');
+            };
+            script.onerror = (error) => {
+                console.error('❌ Failed to dynamically load ServiceAndMaintenance component:', error);
+            };
+            document.body.appendChild(script);
+        }
+    }, [serviceMaintenanceReady]);
+
+    const ServiceAndMaintenanceFallback = React.useMemo(() => () => (
+        <div className="flex items-center justify-center min-h-[400px]">
+            <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500 mx-auto mb-4"></div>
+                <p className="text-gray-500">Loading Service & Maintenance...</p>
+            </div>
+        </div>
+    ), []);
+
+    const ServiceAndMaintenance = serviceMaintenanceReady && window.ServiceAndMaintenance && typeof window.ServiceAndMaintenance === 'function'
+        ? window.ServiceAndMaintenance
+        : ServiceAndMaintenanceFallback;
     const Tools = window.Tools || (() => <div className="text-center py-12 text-gray-500">Tools loading...</div>);
     const Reports = window.Reports || (() => <div className="text-center py-12 text-gray-500">Reports loading...</div>);
     const Settings = window.Settings || (() => <div className="text-center py-12 text-gray-500">Settings loading...</div>);
@@ -391,7 +472,7 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: 'ACCESS_HR' }, // Admin only
+        { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: null },
         { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null }, // All users can access
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
@@ -465,7 +546,7 @@ const MainLayout = () => {
             
             // Fallback: if PermissionChecker not available, use role-based check
             // This handles the case where permissions.js hasn't loaded yet
-            if (item.permission === 'ACCESS_USERS' || item.permission === 'ACCESS_HR') {
+            if (item.permission === 'ACCESS_USERS') {
                 return userRole === 'admin';
             }
             
@@ -494,16 +575,9 @@ const MainLayout = () => {
                     return;
                 }
             }
-            if (currentPage === 'hr') {
-                if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_HR)) {
-                    console.warn(`Access denied: HR page requires admin access`);
-                    navigateToPage('dashboard');
-                    return;
-                }
-            }
         } else {
             // Fallback: use role-based check if PermissionChecker not available
-            if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
+            if (currentPage === 'users' && !isAdmin) {
                 console.warn(`Access denied: ${currentPage} page requires admin role`);
                 navigateToPage('dashboard');
                 return;

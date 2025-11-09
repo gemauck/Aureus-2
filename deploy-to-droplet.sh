@@ -54,27 +54,30 @@ fi
 echo "✅ All deployment tests passed!"
 
 echo "🔧 Setting up environment..."
-# Create .env file with Digital Ocean database
+# Create .env file using provided DATABASE_URL
 if [ ! -f .env ]; then
-    cat > .env << 'EOF'
+    if [ -z "$DATABASE_URL" ]; then
+        echo "❌ DATABASE_URL environment variable not set. Cannot create .env for deployment."
+        exit 1
+    fi
+    cat > .env << EOF
 NODE_ENV=production
-DATABASE_URL="${DATABASE_URL:-postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require}"
+DATABASE_URL="${DATABASE_URL}"
 JWT_SECRET=0266f788ee2255e2aa973f0984903fb61f3fb1d9f528b315c9dbd0bf53fe5ea8
 PORT=3000
 APP_URL="https://abcoafrica.co.za"
 EOF
-    echo "⚠️  IMPORTANT: Update DATABASE_URL in .env with the correct password from Digital Ocean"
-    echo "✅ .env file created with Digital Ocean database"
+    echo "✅ .env file created"
 else
-    # Ensure .env uses Digital Ocean database, not local
-    if grep -q "localhost\|127.0.0.1\|file:./prisma" .env 2>/dev/null; then
-        echo "⚠️  Local database detected in .env - updating to Digital Ocean..."
-        cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
-        echo "⚠️  Please update DATABASE_URL in .env with the correct password"
-        echo "   Format: postgresql://doadmin:PASSWORD@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require"
-        # Update host but preserve password if it exists
-        sed -i 's|@[^/]*/|@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/|' .env || true
-        echo "✅ .env updated to use Digital Ocean database"
+    if [ -z "$DATABASE_URL" ]; then
+        echo "⚠️  DATABASE_URL not provided. Existing .env will be left unchanged."
+    else
+        if grep -q "^DATABASE_URL=" .env 2>/dev/null; then
+            sed -i "s|^DATABASE_URL=.*|DATABASE_URL=\"${DATABASE_URL}\"|" .env
+        else
+            echo "DATABASE_URL=\"${DATABASE_URL}\"" >> .env
+        fi
+        echo "✅ DATABASE_URL ensured in .env"
     fi
 fi
 
@@ -84,7 +87,7 @@ npx prisma generate
 
 # Push schema to database
 echo "🗄️  Pushing database schema..."
-npx prisma db push || echo "⚠️  Database push failed - you may need to configure DATABASE_URL in .env"
+./scripts/safe-db-migration.sh npx prisma db push || echo "⚠️  Database push failed - you may need to configure DATABASE_URL in .env"
 
 # Set up PM2 for process management
 echo "⚙️  Setting up PM2..."
@@ -101,7 +104,7 @@ export default {
     env: {
       NODE_ENV: 'production',
       PORT: 3000,
-      DATABASE_URL: process.env.DATABASE_URL || 'postgresql://doadmin:YOUR_PASSWORD_HERE@dbaas-db-6934625-nov-3-backup-nov-3-backup4-nov-6-backup-do-use.l.db.ondigitalocean.com:25060/defaultdb?sslmode=require',
+      DATABASE_URL: process.env.DATABASE_URL,
       APP_URL: 'https://abcoafrica.co.za'
     },
     error_file: './logs/pm2-error.log',

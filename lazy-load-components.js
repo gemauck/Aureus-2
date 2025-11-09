@@ -95,6 +95,7 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/manufacturing/StockTransactions.jsx',
         './src/components/manufacturing/JobCards.jsx',
         './src/components/manufacturing/Manufacturing.jsx',
+        './src/components/service-maintenance/ServiceAndMaintenance.jsx',
         
         // Invoicing
         './src/components/invoicing/InvoicingDatabaseFirst.jsx',
@@ -231,8 +232,14 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
                 });
             };
             
-            // Add cache-busting for DailyNotes, Manufacturing, UserManagement, and ProjectProgressTracker to ensure fresh version loads
-            // Use timestamp-based version for critical components that change frequently
+            // Cache-busting for critical components to ensure fresh version loads
+            const meetingNotesVersion = 'meeting-notes-v20251109';
+            if ((scriptSrc.includes('ManagementMeetingNotes') || scriptSrc.includes('teams/Teams')) && !scriptSrc.includes(meetingNotesVersion)) {
+                const separator = scriptSrc.includes('?') ? '&' : '?';
+                scriptSrc = scriptSrc + separator + 'v=' + meetingNotesVersion;
+            }
+
+            // Use timestamp-based version for components that require fresh load each time
             if (scriptSrc.includes('DailyNotes') || scriptSrc.includes('Manufacturing') || scriptSrc.includes('UserManagement') || scriptSrc.includes('ProjectProgressTracker') || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
                 const separator = scriptSrc.includes('?') ? '&' : '?';
                 scriptSrc = scriptSrc + separator + 'v=ui-overhaul-' + Date.now();

@@ -301,6 +301,27 @@ async function handler(req, res) {
                 console.log('ℹ️ No accessibleProjectIds field in request body (undefined or null)');
             }
 
+            // Final safety: ensure permissions & accessibleProjectIds are JSON strings before persisting
+            if (updateData.permissions !== undefined && updateData.permissions !== null) {
+                if (Array.isArray(updateData.permissions)) {
+                    console.warn('⚠️ updateData.permissions is array before DB update – stringifying now');
+                    updateData.permissions = JSON.stringify(updateData.permissions);
+                } else if (typeof updateData.permissions !== 'string') {
+                    console.warn('⚠️ updateData.permissions is not string (type:', typeof updateData.permissions, '), forcing empty array string');
+                    updateData.permissions = '[]';
+                }
+            }
+
+            if (updateData.accessibleProjectIds !== undefined && updateData.accessibleProjectIds !== null) {
+                if (Array.isArray(updateData.accessibleProjectIds)) {
+                    console.warn('⚠️ updateData.accessibleProjectIds is array before DB update – stringifying now');
+                    updateData.accessibleProjectIds = JSON.stringify(updateData.accessibleProjectIds);
+                } else if (typeof updateData.accessibleProjectIds !== 'string') {
+                    console.warn('⚠️ updateData.accessibleProjectIds is not string (type:', typeof updateData.accessibleProjectIds, '), forcing empty array string');
+                    updateData.accessibleProjectIds = '[]';
+                }
+            }
+
             console.log('💾 Updating user with data:', JSON.stringify(updateData, null, 2));
             console.log('🔍 Permissions in updateData:', updateData.permissions, 'Type:', typeof updateData.permissions);
             

@@ -47,7 +47,7 @@ echo "🔄 Running database migrations (if needed)..."
 echo "⚠️  Note: BOM table migration might be needed"
 
 # Run Prisma migrations
-npx prisma migrate deploy || {
+./scripts/safe-db-migration.sh npx prisma migrate deploy || {
     echo "⚠️ Migration failed or no new migrations"
     echo "💡 If BOM table error persists, check migration status"
 }
@@ -87,7 +87,7 @@ echo "🔍 Next steps:"
 echo "1. Test manufacturing operations at: https://abcoafrica.co.za"
 echo "2. Try updating a production order and verify no 500 errors"
 echo "3. If BOM table error appears, run on server:"
-echo "   ssh $SERVER 'cd /var/www/abcotronics-erp && npx prisma migrate deploy'"
+echo "   ssh $SERVER 'cd /var/www/abcotronics-erp && ./scripts/safe-db-migration.sh npx prisma migrate deploy'"
 echo ""
 echo "📝 Check logs: ssh $SERVER 'pm2 logs abcotronics-erp --lines 50'"
 echo ""

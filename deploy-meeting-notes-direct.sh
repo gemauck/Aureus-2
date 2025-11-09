@@ -65,9 +65,9 @@ fi
 
 echo ""
 echo "🚀 Applying database migration..."
-npx prisma db push --skip-generate || {
+./scripts/safe-db-migration.sh npx prisma db push --skip-generate || {
     echo "⚠️  db push failed, trying migrate deploy..."
-    npx prisma migrate deploy || {
+    ./scripts/safe-db-migration.sh npx prisma migrate deploy || {
         echo "❌ Migration failed"
         exit 1
     }

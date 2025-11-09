@@ -39,9 +39,9 @@ if [ -d "src" ]; then
 fi
 
 echo "🗄️  Applying database migration..."
-if npx prisma migrate deploy; then
+if ./scripts/safe-db-migration.sh npx prisma migrate deploy; then
     echo "✅ Migration applied successfully"
-elif npx prisma db push; then
+elif ./scripts/safe-db-migration.sh npx prisma db push; then
     echo "✅ Schema pushed successfully (using db push)"
 else
     echo "⚠️  Migration failed - you may need to run manually"

@@ -1,7 +1,82 @@
 // Get React hooks from window
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 
-const LeavePlatform = () => {
+const matchUserRecord = (record, user) => {
+    if (!record || !user) return false;
+    const userId = user.id != null ? String(user.id) : null;
+    const userEmail = user.email ? String(user.email).toLowerCase() : null;
+
+    const candidateIds = [
+        record.userId,
+        record.user_id,
+        record.employeeId,
+        record.employee_id,
+        record.appliedById,
+        record.applied_by_id
+    ]
+        .filter(Boolean)
+        .map(String);
+
+    if (userId && candidateIds.includes(userId)) {
+        return true;
+    }
+
+    const candidateEmails = [
+        record.userEmail,
+        record.user_email,
+        record.employeeEmail,
+        record.employee_email,
+        record.appliedByEmail,
+        record.applied_by_email
+    ]
+        .filter(Boolean)
+        .map(email => String(email).toLowerCase());
+
+    if (userEmail && candidateEmails.includes(userEmail)) {
+        return true;
+    }
+
+    if (record.employee && user.name) {
+        return String(record.employee).toLowerCase() === String(user.name).toLowerCase();
+    }
+
+    return false;
+};
+
+const formatDisplayDate = (value, options = {}) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', ...options });
+};
+
+const computeUpcomingBirthdays = (birthdays = [], limit = 6) => {
+    const today = new Date();
+    return birthdays
+        .map(birthday => {
+            if (!birthday?.date) return null;
+            const rawDate = new Date(birthday.date);
+            if (Number.isNaN(rawDate.getTime())) return null;
+            const nextOccurrence = new Date(today.getFullYear(), rawDate.getMonth(), rawDate.getDate());
+            if (nextOccurrence < today) {
+                nextOccurrence.setFullYear(nextOccurrence.getFullYear() + 1);
+            }
+            return { ...birthday, nextOccurrence };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.nextOccurrence - b.nextOccurrence)
+        .slice(0, limit);
+};
+
+const getApplicationDays = (application, calculateWorkingDays) => {
+    if (!application) return 0;
+    if (typeof application.days === 'number' && !Number.isNaN(application.days)) {
+        return application.days;
+    }
+    return calculateWorkingDays(application.startDate, application.endDate);
+};
+
+const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
     try {
         // Get auth hook safely
         const authHook = window.useAuth || (() => ({ user: null }));
@@ -14,7 +89,7 @@ const LeavePlatform = () => {
             user = null;
         }
         
-        const [currentTab, setCurrentTab] = useState('my-leave');
+        const [currentTab, setCurrentTab] = useState(initialTab);
         const [loading, setLoading] = useState(false);
         const [leaveApplications, setLeaveApplications] = useState([]);
         const [leaveBalances, setLeaveBalances] = useState([]);
@@ -25,9 +100,25 @@ const LeavePlatform = () => {
         const [calendarView, setCalendarView] = useState('month');
         
         console.log('✅ LeavePlatform component rendering, user:', user?.email || 'none');
+        useEffect(() => {
+            setCurrentTab(initialTab);
+        }, [initialTab]);
 
-    // South African leave types as per BCEA
-    const leaveTypes = [
+        useEffect(() => {
+            const handleTabEvent = (event) => {
+                if (event.detail?.tab) {
+                    setCurrentTab(event.detail.tab);
+                }
+            };
+            window.addEventListener('leavePlatform:setTab', handleTabEvent);
+            return () => window.removeEventListener('leavePlatform:setTab', handleTabEvent);
+        }, []);
+
+        const leaveUtils = window.leaveUtils || {};
+        const isAdmin = user?.role?.toLowerCase() === 'admin';
+
+        // South African BCEA leave types (centralised in leaveUtils)
+        const leaveTypes = leaveUtils.BCEA_LEAVE_TYPES || [
         { value: 'annual', label: 'Annual Leave', days: 21, color: 'blue' },
         { value: 'sick', label: 'Sick Leave', days: 30, color: 'red' },
         { value: 'family', label: 'Family Responsibility', days: 3, color: 'purple' },
@@ -38,6 +129,52 @@ const LeavePlatform = () => {
         { value: 'compassionate', label: 'Compassionate Leave', days: 3, color: 'indigo' },
         { value: 'religious', label: 'Religious Holiday', days: 0, color: 'amber' }
     ];
+
+        const leaveTypeBadgeClasses = {
+            blue: 'bg-blue-100 text-blue-800',
+            red: 'bg-red-100 text-red-800',
+            purple: 'bg-purple-100 text-purple-800',
+            pink: 'bg-pink-100 text-pink-800',
+            teal: 'bg-teal-100 text-teal-800',
+            orange: 'bg-orange-100 text-orange-800',
+            gray: 'bg-gray-100 text-gray-800',
+            indigo: 'bg-indigo-100 text-indigo-800',
+            amber: 'bg-amber-100 text-amber-800',
+            default: 'bg-gray-100 text-gray-800'
+        };
+
+        const statusColors = leaveUtils.STATUS_COLORS || {
+            pending: 'bg-yellow-100 text-yellow-800',
+            approved: 'bg-green-100 text-green-800',
+            rejected: 'bg-red-100 text-red-800',
+            cancelled: 'bg-gray-100 text-gray-800'
+        };
+
+        const getStatusLabel = leaveUtils.getStatusLabel || ((status = '') => status.charAt(0).toUpperCase() + status.slice(1));
+        const getLeaveTypeInfo = leaveUtils.getLeaveTypeInfo || ((type) => leaveTypes.find(t => t.value === type) || leaveTypes[0]);
+        const getLeaveTypeBadgeClass = (typeInfo) => leaveTypeBadgeClasses[typeInfo?.color] || leaveTypeBadgeClasses.default;
+
+        const calculateWorkingDays = useCallback((startDate, endDate) => {
+            if (leaveUtils.calculateWorkingDays) {
+                return leaveUtils.calculateWorkingDays(startDate, endDate, { excludePublicHolidays: true });
+            }
+            if (!startDate || !endDate) return 0;
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+                return 0;
+            }
+            let count = 0;
+            const cursor = new Date(start);
+            while (cursor <= end) {
+                const day = cursor.getDay();
+                if (day !== 0 && day !== 6) {
+                    count += 1;
+                }
+                cursor.setDate(cursor.getDate() + 1);
+            }
+            return count;
+        }, [leaveUtils]);
 
     // Load data on mount - only essential data initially
     useEffect(() => {
@@ -182,13 +319,14 @@ const LeavePlatform = () => {
     };
 
     // Full data reload (for refresh/update actions)
-    const loadData = async () => {
+        const loadData = useCallback(async ({ silent = false } = {}) => {
+            if (!silent) {
         setLoading(true);
+            }
         try {
             const headers = getAuthHeaders();
             const startTime = performance.now();
             
-            // Load all data in parallel
             const [appsResponse, balancesResponse, employeesResponse, deptsResponse, approversResponse, birthdaysResponse] = await Promise.allSettled([
                 fetch('/api/leave-platform/applications', { headers }),
                 fetch('/api/leave-platform/balances', { headers }),
@@ -198,107 +336,308 @@ const LeavePlatform = () => {
                 fetch('/api/leave-platform/birthdays', { headers })
             ]);
 
-            // Process responses
-            if (appsResponse.status === 'fulfilled' && appsResponse.value.ok) {
-                const apps = await appsResponse.value.json();
-                setLeaveApplications(apps.applications || apps.data?.applications || []);
-            }
+                const parseArray = async (result, keys = []) => {
+                    if (result.status === 'fulfilled' && result.value?.ok) {
+                        try {
+                            const json = await result.value.json();
+                            for (const keyPath of keys) {
+                                const value = keyPath.split('.').reduce((acc, key) => acc?.[key], json);
+                                if (Array.isArray(value)) {
+                                    return value;
+                                }
+                            }
+                            if (Array.isArray(json)) {
+                                return json;
+                            }
+                        } catch (err) {
+                            console.warn('LeavePlatform: Failed to parse response payload', err);
+                        }
+                    } else if (result.status === 'fulfilled') {
+                        console.warn('LeavePlatform: Request failed', result.value?.status);
+                    } else {
+                        console.warn('LeavePlatform: Request rejected', result.reason);
+                    }
+                    return [];
+                };
 
-            if (balancesResponse.status === 'fulfilled' && balancesResponse.value.ok) {
-                const balances = await balancesResponse.value.json();
-                setLeaveBalances(balances.balances || balances.data?.balances || []);
-            }
+                const applications = await parseArray(appsResponse, ['applications', 'data.applications']);
+                if (applications.length) {
+                    setLeaveApplications(applications);
+                }
 
-            if (employeesResponse.status === 'fulfilled' && employeesResponse.value.ok) {
-                const users = await employeesResponse.value.json();
-                setEmployees(users.users || users.data?.users || []);
-            }
+                const balances = await parseArray(balancesResponse, ['balances', 'data.balances']);
+                if (balances.length || balancesResponse.status === 'fulfilled') {
+                    setLeaveBalances(balances);
+                }
 
-            if (deptsResponse.status === 'fulfilled' && deptsResponse.value.ok) {
-                const depts = await deptsResponse.value.json();
-                setDepartments(depts.departments || depts.data?.departments || []);
-            }
+                const users = await parseArray(employeesResponse, ['users', 'data.users']);
+                if (users.length || employeesResponse.status === 'fulfilled') {
+                    setEmployees(users);
+                }
 
-            if (approversResponse.status === 'fulfilled' && approversResponse.value.ok) {
-                const approvers = await approversResponse.value.json();
-                setLeaveApprovers(approvers.approvers || approvers.data?.approvers || []);
-            }
+                const depts = await parseArray(deptsResponse, ['departments', 'data.departments']);
+                if (depts.length || deptsResponse.status === 'fulfilled') {
+                    setDepartments(depts);
+                }
 
-            if (birthdaysResponse.status === 'fulfilled' && birthdaysResponse.value.ok) {
-                const bdays = await birthdaysResponse.value.json();
-                setBirthdays(bdays.birthdays || bdays.data?.birthdays || []);
+                const approvers = await parseArray(approversResponse, ['approvers', 'data.approvers']);
+                if (approvers.length || approversResponse.status === 'fulfilled') {
+                    setLeaveApprovers(approvers);
+                }
+
+                const bdays = await parseArray(birthdaysResponse, ['birthdays', 'data.birthdays']);
+                if (bdays.length || birthdaysResponse.status === 'fulfilled') {
+                    setBirthdays(bdays);
             }
 
             const endTime = performance.now();
             const loadTime = ((endTime - startTime) / 1000).toFixed(2);
-            console.log(`⚡ Leave Platform: Data reloaded (${loadTime}s)`);
+                console.log(`⚡ Leave Platform: Data loaded (${loadTime}s)`);
         } catch (error) {
             console.error('Error loading data:', error);
         } finally {
+                if (!silent) {
             setLoading(false);
         }
-    };
+            }
+        }, []);
 
-    const tabs = [
+        const updateLocalApplication = useCallback((id, updates = {}) => {
+            setLeaveApplications(prev => prev.map(app => app.id === id ? { ...app, ...updates } : app));
+        }, []);
+
+        const mutateApplication = useCallback(async (id, action, payload = {}, { successMessage, failureMessage, fallbackStatus } = {}) => {
+            try {
+                const headers = getAuthHeaders();
+                if (!headers.Authorization) {
+                    alert('You must be logged in to manage leave requests.');
+                    return false;
+                }
+
+                const endpoint = `/api/leave-platform/applications/${id}/${action}`;
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    if (successMessage) {
+                        console.log(successMessage);
+                    }
+                    await loadData({ silent: true });
+                    return true;
+                }
+
+                const errorPayload = await response.json().catch(() => ({}));
+                console.warn(`LeavePlatform: ${action} request failed`, response.status, errorPayload);
+                if (failureMessage) {
+                    alert(failureMessage);
+                }
+            } catch (mutationError) {
+                console.error(`LeavePlatform: Error during ${action}`, mutationError);
+                if (failureMessage) {
+                    alert(failureMessage);
+                }
+            }
+
+            if (fallbackStatus) {
+                updateLocalApplication(id, fallbackStatus);
+            }
+            return false;
+        }, [loadData, updateLocalApplication]);
+
+        const handleApprove = useCallback((id) => mutateApplication(
+            id,
+            'approve',
+            { approvedBy: user?.id },
+            {
+                successMessage: 'Leave application approved',
+                failureMessage: 'Failed to approve leave request',
+                fallbackStatus: { status: 'approved' }
+            }
+        ), [mutateApplication, user?.id]);
+
+        const handleReject = useCallback((id, reason) => {
+            if (!reason) return false;
+            return mutateApplication(
+                id,
+                'reject',
+                { rejectedBy: user?.id, reason },
+                {
+                    successMessage: 'Leave application rejected',
+                    failureMessage: 'Failed to reject leave request',
+                    fallbackStatus: { status: 'rejected', rejectionReason: reason }
+                }
+            );
+        }, [mutateApplication, user?.id]);
+
+        const handleCancel = useCallback((id, opts = {}) => mutateApplication(
+            id,
+            'cancel',
+            { cancelledBy: user?.id, ...opts },
+            {
+                successMessage: 'Leave application cancelled',
+                failureMessage: 'Failed to cancel leave application',
+                fallbackStatus: { status: 'cancelled' }
+            }
+        ), [mutateApplication, user?.id]);
+
+        const tabs = useMemo(() => {
+            const sharedTabs = [
+                { id: 'overview', label: 'Overview', icon: 'fa-clipboard-list' },
         { id: 'my-leave', label: 'My Leave', icon: 'fa-calendar-check' },
         { id: 'apply', label: 'Apply for Leave', icon: 'fa-plus-circle' },
         { id: 'balances', label: 'Leave Balances', icon: 'fa-chart-pie' },
         { id: 'calendar', label: 'Leave Calendar', icon: 'fa-calendar' },
+                { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' }
+            ];
+
+            if (isAdmin) {
+                sharedTabs.splice(2, 0, { id: 'team', label: 'Team Leave', icon: 'fa-users' });
+                sharedTabs.push(
         { id: 'approvals', label: 'Approvals', icon: 'fa-check-circle' },
-        { id: 'approvers', label: 'Leave Approvers', icon: 'fa-user-shield' },
-        { id: 'birthdays', label: 'Birthdays', icon: 'fa-birthday-cake' },
+                    { id: 'approvers', label: 'Approvers', icon: 'fa-user-shield' },
         { id: 'import', label: 'Import Balances', icon: 'fa-upload' }
-    ];
+                );
+            }
+
+            return sharedTabs;
+        }, [isAdmin]);
 
     const renderContent = () => {
         switch (currentTab) {
+                case 'overview':
+                    return (
+                        <OverviewView
+                            user={user}
+                            applications={leaveApplications}
+                            balances={leaveBalances}
+                            birthdays={birthdays}
+                            leaveTypes={leaveTypes}
+                            calculateWorkingDays={calculateWorkingDays}
+                            isAdmin={isAdmin}
+                            getLeaveTypeInfo={getLeaveTypeInfo}
+                            getStatusLabel={getStatusLabel}
+                            onRefresh={() => loadData()}
+                        />
+                    );
+                case 'team':
+                    return isAdmin ? (
+                        <TeamLeaveView
+                            applications={leaveApplications}
+                            employees={employees}
+                            calculateWorkingDays={calculateWorkingDays}
+                            getLeaveTypeInfo={getLeaveTypeInfo}
+                            getLeaveTypeBadgeClass={getLeaveTypeBadgeClass}
+                            getStatusLabel={getStatusLabel}
+                            getStatusColor={(status) => statusColors[status] || statusColors.pending}
+                            onApprove={handleApprove}
+                            onReject={handleReject}
+                            onCancel={handleCancel}
+                            loading={loading}
+                        />
+                    ) : (
+                        <AccessNotice />
+                    );
             case 'my-leave':
-                return <MyLeaveView applications={leaveApplications} user={user} />;
+                    return (
+                        <MyLeaveView
+                            applications={leaveApplications}
+                            user={user}
+                            calculateWorkingDays={calculateWorkingDays}
+                            statusColors={statusColors}
+                            getStatusLabel={getStatusLabel}
+                            getLeaveTypeInfo={getLeaveTypeInfo}
+                            onCancel={handleCancel}
+                            onRequestApply={() => setCurrentTab('apply')}
+                            onRefresh={() => loadData()}
+                        />
+                    );
             case 'apply':
-                return <ApplyForLeaveView 
+                    return (
+                        <ApplyForLeaveView
                     leaveTypes={leaveTypes}
                     employees={employees}
-                    onSuccess={loadData}
-                />;
+                            onSuccess={() => loadData({ silent: true })}
+                            calculateWorkingDays={calculateWorkingDays}
+                            currentUser={user}
+                            isAdmin={isAdmin}
+                        />
+                    );
             case 'balances':
-                return <LeaveBalancesView 
+                    return (
+                        <LeaveBalancesView
                     balances={leaveBalances}
                     employees={employees}
-                    onImport={loadData}
-                />;
+                            leaveTypes={leaveTypes}
+                            user={user}
+                            isAdmin={isAdmin}
+                            onRefresh={() => loadData()}
+                        />
+                    );
             case 'calendar':
-                return <LeaveCalendarView 
+                    return (
+                        <LeaveCalendarView
                     applications={leaveApplications}
-                    employees={employees}
                     view={calendarView}
                     onViewChange={setCalendarView}
-                />;
+                            getLeaveTypeInfo={getLeaveTypeInfo}
+                        />
+                    );
             case 'approvals':
-                return <ApprovalsView 
+                    return isAdmin ? (
+                        <ApprovalsView
                     applications={leaveApplications}
                     user={user}
-                    onUpdate={loadData}
-                />;
+                            onApprove={handleApprove}
+                            onReject={handleReject}
+                            loading={loading}
+                        />
+                    ) : (
+                        <AccessNotice />
+                    );
             case 'approvers':
-                return <ApproversView 
+                    return isAdmin ? (
+                        <ApproversView
                     approvers={leaveApprovers}
                     departments={departments}
                     employees={employees}
-                    onUpdate={loadData}
-                />;
+                            onUpdate={() => loadData()}
+                        />
+                    ) : (
+                        <AccessNotice />
+                    );
             case 'birthdays':
-                return <BirthdaysView 
+                    return (
+                        <BirthdaysView
                     birthdays={birthdays}
-                    employees={employees}
-                    onUpdate={loadData}
-                />;
+                            onRefresh={() => loadData({ silent: true })}
+                        />
+                    );
             case 'import':
-                return <ImportBalancesView 
-                    employees={employees}
-                    onImport={loadData}
-                />;
+                    return isAdmin ? (
+                        <ImportBalancesView
+                            onImport={() => loadData()}
+                        />
+                    ) : (
+                        <AccessNotice />
+                    );
             default:
-                return <MyLeaveView applications={leaveApplications} user={user} />;
+                    return (
+                        <OverviewView
+                            user={user}
+                            applications={leaveApplications}
+                            balances={leaveBalances}
+                            birthdays={birthdays}
+                            leaveTypes={leaveTypes}
+                            calculateWorkingDays={calculateWorkingDays}
+                            isAdmin={isAdmin}
+                            getLeaveTypeInfo={getLeaveTypeInfo}
+                            getStatusLabel={getStatusLabel}
+                            onRefresh={() => loadData()}
+                        />
+                    );
         }
     };
 
@@ -370,26 +709,444 @@ const LeavePlatform = () => {
 };
 
 // My Leave View
-const MyLeaveView = ({ applications, user }) => {
-    const myApplications = applications.filter(app => app.userId === user?.id || app.userEmail === user?.email);
+const OverviewView = ({
+    user,
+    applications,
+    balances,
+    birthdays,
+    leaveTypes,
+    calculateWorkingDays,
+    isAdmin,
+    getLeaveTypeInfo,
+    getStatusLabel,
+    onRefresh
+}) => {
+    const myApplications = useMemo(() => applications.filter(app => matchUserRecord(app, user)), [applications, user]);
+    const myPending = useMemo(() => myApplications.filter(app => app.status === 'pending').length, [myApplications]);
+    const approvedDays = useMemo(() => myApplications
+        .filter(app => app.status === 'approved')
+        .reduce((sum, app) => sum + getApplicationDays(app, calculateWorkingDays), 0), [myApplications, calculateWorkingDays]);
+    const teamPending = useMemo(() => applications.filter(app => app.status === 'pending').length, [applications]);
+    const teamApproved = useMemo(() => applications.filter(app => app.status === 'approved').length, [applications]);
 
-    const statusColors = {
-        pending: 'bg-yellow-100 text-yellow-800',
-        approved: 'bg-green-100 text-green-800',
-        rejected: 'bg-red-100 text-red-800',
-        cancelled: 'bg-gray-100 text-gray-800'
-    };
+    const myAnnualBalance = useMemo(() => {
+        const entry = balances.find(balance =>
+            matchUserRecord(balance, user) &&
+            (balance.leaveType === 'annual' || balance.leaveType === 'Annual Leave')
+        );
+        return entry?.available ?? entry?.balance ?? 0;
+    }, [balances, user]);
+
+    const upcomingLeave = useMemo(() => {
+        const now = new Date();
+        return myApplications
+            .filter(app => app.status === 'approved' && new Date(app.startDate) >= now)
+            .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))
+            .slice(0, 3);
+    }, [myApplications]);
+
+    const recentApplications = useMemo(() => {
+        return [...myApplications].sort((a, b) => {
+            const aDate = new Date(a.appliedDate || a.createdAt || a.startDate || 0);
+            const bDate = new Date(b.appliedDate || b.createdAt || b.startDate || 0);
+            return bDate - aDate;
+        }).slice(0, 5);
+    }, [myApplications]);
+
+    const upcomingBirthdays = useMemo(() => computeUpcomingBirthdays(birthdays, isAdmin ? 8 : 5), [birthdays, isAdmin]);
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">My Leave Applications</h3>
-                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    <i className="fas fa-plus mr-2"></i>New Application
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">HR Overview</h3>
+                    <p className="text-sm text-gray-500">
+                        BCEA-compliant overview of leave, balances, and employee wellbeing.
+                    </p>
+                </div>
+                <button
+                    onClick={onRefresh}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                    <i className="fas fa-sync-alt mr-1.5"></i>
+                    Refresh
                 </button>
             </div>
 
-            {myApplications.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">My Pending Requests</p>
+                    <p className="text-2xl font-semibold text-gray-900">{myPending}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Approved Days (this cycle)</p>
+                    <p className="text-2xl font-semibold text-gray-900">{approvedDays}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Annual Leave Remaining</p>
+                    <p className="text-2xl font-semibold text-gray-900">{myAnnualBalance}</p>
+                </div>
+                {isAdmin && (
+                    <div className="bg-white border border-gray-200 rounded-lg p-4">
+                        <p className="text-xs text-gray-500 uppercase mb-1">Team Pending / Approved</p>
+                        <p className="text-2xl font-semibold text-gray-900">{teamPending}</p>
+                        <p className="text-xs text-gray-500">Approved: {teamApproved}</p>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Recent Applications</h4>
+                    </div>
+                    {recentApplications.length > 0 ? (
+                        <ul className="space-y-2">
+                            {recentApplications.map(app => (
+                                <li key={app.id} className="flex items-center justify-between text-sm">
+                                    <div>
+                                        <p className="font-medium text-gray-900">
+                                            {getLeaveTypeInfo(app.leaveType)?.label || app.leaveType}
+                                        </p>
+                                        <p className="text-xs text-gray-500">
+                                            {formatDisplayDate(app.startDate)} – {formatDisplayDate(app.endDate)}
+                                        </p>
+                                    </div>
+                                    <span className="text-xs text-gray-500">{getStatusLabel(app.status)}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="text-center text-gray-500 text-sm py-6">
+                            No recent activity
+                        </div>
+                    )}
+                </div>
+
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-gray-900">Upcoming Birthdays</h4>
+                    </div>
+                    {upcomingBirthdays.length > 0 ? (
+                        <ul className="space-y-2 text-sm text-gray-700">
+                            {upcomingBirthdays.map(birthday => (
+                                <li key={birthday.id} className="flex items-center justify-between">
+                                    <span>{birthday.employeeName}</span>
+                                    <span className="text-xs text-gray-500">
+                                        {formatDisplayDate(birthday.nextOccurrence, { month: 'long', day: 'numeric' })}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <div className="text-center text-gray-500 text-sm py-6">
+                            No birthdays recorded
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h4 className="text-sm font-semibold text-gray-900 mb-3">Upcoming Approved Leave</h4>
+                {upcomingLeave.length > 0 ? (
+                    <ul className="space-y-2 text-sm text-gray-700">
+                        {upcomingLeave.map(app => (
+                            <li key={app.id} className="flex items-center justify-between">
+                                <span>{getLeaveTypeInfo(app.leaveType)?.label || app.leaveType}</span>
+                                <span className="text-xs text-gray-500">
+                                    {formatDisplayDate(app.startDate)} – {formatDisplayDate(app.endDate)}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                ) : (
+                    <div className="text-center text-gray-500 text-sm py-6">
+                        No upcoming leave booked
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const TeamLeaveView = ({
+    applications,
+    employees,
+    calculateWorkingDays,
+    getLeaveTypeInfo,
+    getLeaveTypeBadgeClass,
+    getStatusLabel,
+    getStatusColor,
+    onApprove,
+    onReject,
+    onCancel,
+    loading
+}) => {
+    const [filterStatus, setFilterStatus] = useState('all');
+    const [filterEmployee, setFilterEmployee] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const employeeOptions = useMemo(() => {
+        const map = new Map();
+        (employees || []).forEach(emp => {
+            const id = emp.id || emp.userId || emp.user_id;
+            const name = emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim();
+            if (id && name) {
+                map.set(String(id), name);
+            }
+        });
+        (applications || []).forEach(app => {
+            const id = app.userId || app.user_id || app.employeeId;
+            const name = app.userName || app.employee || app.employeeName;
+            if (id && name && !map.has(String(id))) {
+                map.set(String(id), name);
+            }
+        });
+        return Array.from(map.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+    }, [employees, applications]);
+
+    const filteredApplications = useMemo(() => {
+        const lowerSearch = searchTerm.trim().toLowerCase();
+        return (applications || []).filter(app => {
+            const statusMatch = filterStatus === 'all' || app.status === filterStatus;
+            const employeeId = app.userId || app.user_id || app.employeeId;
+            const employeeMatch = filterEmployee === 'all' || String(employeeId) === filterEmployee;
+            const searchMatch = !lowerSearch || [
+                app.userName,
+                app.employee,
+                app.leaveType,
+                app.reason
+            ].some(field => field && String(field).toLowerCase().includes(lowerSearch));
+            return statusMatch && employeeMatch && searchMatch;
+        }).sort((a, b) => new Date(b.appliedDate || b.createdAt || b.startDate || 0) - new Date(a.appliedDate || a.createdAt || a.startDate || 0));
+    }, [applications, filterStatus, filterEmployee, searchTerm]);
+
+    const stats = useMemo(() => ({
+        pending: filteredApplications.filter(app => app.status === 'pending').length,
+        approved: filteredApplications.filter(app => app.status === 'approved').length,
+        rejected: filteredApplications.filter(app => app.status === 'rejected').length
+    }), [filteredApplications]);
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Team Leave Management</h3>
+                    <p className="text-sm text-gray-500">Approve or manage employee leave requests</p>
+                </div>
+                <div className="flex gap-2">
+                    <input
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search employees or reasons..."
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    />
+                    <select
+                        value={filterStatus}
+                        onChange={(e) => setFilterStatus(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    >
+                        <option value="all">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <select
+                        value={filterEmployee}
+                        onChange={(e) => setFilterEmployee(e.target.value)}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                    >
+                        <option value="all">All Employees</option>
+                        {employeeOptions.map(option => (
+                            <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Pending</p>
+                    <p className="text-xl font-semibold text-gray-900">{stats.pending}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Approved</p>
+                    <p className="text-xl font-semibold text-gray-900">{stats.approved}</p>
+                </div>
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                    <p className="text-xs text-gray-500 uppercase mb-1">Rejected</p>
+                    <p className="text-xl font-semibold text-gray-900">{stats.rejected}</p>
+                </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Leave Type</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Dates</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {filteredApplications.map(app => {
+                                const leaveTypeInfo = getLeaveTypeInfo(app.leaveType);
+                                const badgeClass = getLeaveTypeBadgeClass(leaveTypeInfo);
+                                return (
+                                    <tr key={app.id}>
+                                        <td className="px-4 py-4 text-sm text-gray-900">
+                                            <div className="font-medium">{app.userName || app.employee || 'Unknown'}</div>
+                                            <div className="text-xs text-gray-500">
+                                                Applied {formatDisplayDate(app.appliedDate || app.createdAt)}
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm">
+                                            <span className={`px-2 py-1 text-xs font-medium rounded ${badgeClass}`}>
+                                                {leaveTypeInfo?.label || app.leaveType}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm text-gray-600">
+                                            {formatDisplayDate(app.startDate)} – {formatDisplayDate(app.endDate)}
+                                        </td>
+                                        <td className="px-4 py-4 text-sm text-gray-600">
+                                            {getApplicationDays(app, calculateWorkingDays)}
+                                        </td>
+                                        <td className="px-4 py-4 text-sm">
+                                            <span className={`px-2 py-1 text-xs font-medium rounded ${getStatusColor(app.status)}`}>
+                                                {getStatusLabel(app.status)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm">
+                                            <div className="flex gap-2">
+                                                {app.status === 'pending' && (
+                                                    <>
+                                                        <button
+                                                            disabled={loading}
+                                                            onClick={() => onApprove && onApprove(app.id)}
+                                                            className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+                                                        >
+                                                            Approve
+                </button>
+                                                        <button
+                                                            disabled={loading}
+                                                            onClick={() => {
+                                                                if (!onReject) return;
+                                                                const reason = prompt('Reason for rejection:');
+                                                                if (reason) {
+                                                                    onReject(app.id, reason);
+                                                                }
+                                                            }}
+                                                            className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
+                                                        >
+                                                            Reject
+                                                        </button>
+                                                    </>
+                                                )}
+                                                {(app.status === 'approved' || app.status === 'pending') && (
+                                                    <button
+                                                        disabled={loading}
+                                                        onClick={() => onCancel && onCancel(app.id)}
+                                                        className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+            </div>
+
+                {filteredApplications.length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                        <i className="fas fa-clipboard-list text-4xl mb-3"></i>
+                        <p>No leave requests match your filters</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+const AccessNotice = () => (
+    <div className="text-center py-16 text-gray-500">
+        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
+        <p className="text-sm">Administrator access required for this section.</p>
+    </div>
+);
+
+const MyLeaveView = ({
+    applications,
+    user,
+    calculateWorkingDays,
+    statusColors,
+    getStatusLabel,
+    getLeaveTypeInfo,
+    onCancel,
+    onRequestApply,
+    onRefresh
+}) => {
+    const myApplications = useMemo(
+        () => applications.filter(app => matchUserRecord(app, user)),
+        [applications, user]
+    );
+
+    const sortedApplications = useMemo(() => {
+        return [...myApplications].sort((a, b) => {
+            const aDate = new Date(a.appliedDate || a.createdAt || a.startDate || 0);
+            const bDate = new Date(b.appliedDate || b.createdAt || b.startDate || 0);
+            return bDate - aDate;
+        });
+    }, [myApplications]);
+
+    const pendingCount = useMemo(
+        () => sortedApplications.filter(app => app.status === 'pending').length,
+        [sortedApplications]
+    );
+
+    const approvedDays = useMemo(
+        () => sortedApplications
+            .filter(app => app.status === 'approved')
+            .reduce((sum, app) => sum + getApplicationDays(app, calculateWorkingDays), 0),
+        [sortedApplications, calculateWorkingDays]
+    );
+
+    return (
+        <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">My Leave Applications</h3>
+                    <p className="text-sm text-gray-500">
+                        Pending: {pendingCount} • Approved days this cycle: {approvedDays}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={onRefresh}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        <i className="fas fa-sync-alt mr-1.5"></i>
+                        Refresh
+                    </button>
+                    <button
+                        onClick={() => onRequestApply && onRequestApply()}
+                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                    >
+                        <i className="fas fa-plus mr-1.5"></i>
+                        New Application
+                    </button>
+                </div>
+            </div>
+
+            {sortedApplications.length > 0 ? (
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -403,34 +1160,41 @@ const MyLeaveView = ({ applications, user }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {myApplications.map(app => (
+                            {sortedApplications.map(app => {
+                                const leaveTypeInfo = getLeaveTypeInfo(app.leaveType);
+                                return (
                                 <tr key={app.id}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {app.leaveType}
+                                            {leaveTypeInfo?.label || app.leaveType}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(app.startDate).toLocaleDateString()}
+                                            {formatDisplayDate(app.startDate)}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {new Date(app.endDate).toLocaleDateString()}
+                                            {formatDisplayDate(app.endDate)}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {app.days}
+                                            {getApplicationDays(app, calculateWorkingDays)}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap">
                                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${statusColors[app.status] || statusColors.pending}`}>
-                                            {app.status}
+                                                {getStatusLabel(app.status)}
                                         </span>
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm">
                                         {app.status === 'pending' && (
-                                            <button className="text-red-600 hover:text-red-700">
-                                                <i className="fas fa-times"></i> Cancel
+                                                <button
+                                                    onClick={() => onCancel && onCancel(app.id)}
+                                                    className="text-red-600 hover:text-red-700 font-medium"
+                                                >
+                                                    <i className="fas fa-times mr-1"></i>
+                                                    Cancel
                                             </button>
                                         )}
                                     </td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -445,33 +1209,68 @@ const MyLeaveView = ({ applications, user }) => {
 };
 
 // Apply for Leave View
-const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
-    const { user } = window.useAuth ? window.useAuth() : { user: null };
+const ApplyForLeaveView = ({
+    leaveTypes,
+    employees,
+    onSuccess,
+    calculateWorkingDays,
+    currentUser,
+    isAdmin
+}) => {
+    const defaultApplicant = useMemo(() => {
+        if (!currentUser) return null;
+        return {
+            id: currentUser.id,
+            name: currentUser.name,
+            email: currentUser.email
+        };
+    }, [currentUser]);
+
     const [formData, setFormData] = useState({
         leaveType: 'annual',
         startDate: '',
         endDate: '',
         reason: '',
-        emergency: false
+        emergency: false,
+        applicantId: defaultApplicant?.id || '',
+        applicantName: defaultApplicant?.name || '',
+        applicantEmail: defaultApplicant?.email || ''
     });
     const [submitting, setSubmitting] = useState(false);
 
-    const calculateWorkingDays = (startDate, endDate) => {
-        if (!startDate || !endDate) return 0;
-        let count = 0;
-        const start = new Date(startDate);
-        const end = new Date(endDate);
-        
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-            const dayOfWeek = d.getDay();
-            if (dayOfWeek !== 0 && dayOfWeek !== 6) {
-                count++;
-            }
+    const availableEmployees = useMemo(() => {
+        if (!Array.isArray(employees)) return [];
+        return employees
+            .map(emp => ({
+                id: emp.id || emp.userId || emp.user_id,
+                name: emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`.trim(),
+                email: emp.email
+            }))
+            .filter(emp => emp.id && emp.name);
+    }, [employees]);
+
+    useEffect(() => {
+        if (!isAdmin && defaultApplicant) {
+            setFormData(prev => ({
+                ...prev,
+                applicantId: defaultApplicant.id,
+                applicantName: defaultApplicant.name,
+                applicantEmail: defaultApplicant.email
+            }));
         }
-        return count;
-    };
+    }, [isAdmin, defaultApplicant]);
 
     const workingDays = calculateWorkingDays(formData.startDate, formData.endDate);
+
+    const handleApplicantChange = (employeeId) => {
+        const selected = availableEmployees.find(emp => String(emp.id) === String(employeeId)) || null;
+        setFormData(prev => ({
+            ...prev,
+            applicantId: selected?.id || '',
+            applicantName: selected?.name || '',
+            applicantEmail: selected?.email || ''
+        }));
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -482,11 +1281,15 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({
-                    ...formData,
+                    leaveType: formData.leaveType,
+                    startDate: formData.startDate,
+                    endDate: formData.endDate,
+                    reason: formData.reason,
+                    emergency: formData.emergency,
                     days: workingDays,
-                    userId: user?.id,
-                    userEmail: user?.email,
-                    userName: user?.name
+                    userId: formData.applicantId || defaultApplicant?.id,
+                    userEmail: formData.applicantEmail || defaultApplicant?.email,
+                    userName: formData.applicantName || defaultApplicant?.name
                 })
             });
 
@@ -497,7 +1300,10 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
                     startDate: '',
                     endDate: '',
                     reason: '',
-                    emergency: false
+                    emergency: false,
+                    applicantId: isAdmin ? '' : defaultApplicant?.id || '',
+                    applicantName: isAdmin ? '' : defaultApplicant?.name || '',
+                    applicantEmail: isAdmin ? '' : defaultApplicant?.email || ''
                 });
                 onSuccess();
             } else {
@@ -515,7 +1321,28 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
         <div className="max-w-2xl">
             <h3 className="text-lg font-semibold mb-4">Apply for Leave</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className={`grid ${isAdmin ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
+                    {isAdmin && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Employee *
+                            </label>
+                            <select
+                                value={formData.applicantId}
+                                onChange={(e) => handleApplicantChange(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+                                required
+                            >
+                                <option value="">Select employee</option>
+                                {availableEmployees.map(emp => (
+                                    <option key={emp.id} value={emp.id}>
+                                        {emp.name}{emp.email ? ` (${emp.email})` : ''}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Leave Type *
@@ -533,7 +1360,9 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
                             ))}
                         </select>
                     </div>
+                    </div>
 
+                <div className="grid grid-cols-2 gap-4">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Working Days
@@ -541,6 +1370,20 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
                         <div className="px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg">
                             <span className="text-2xl font-bold text-blue-600">{workingDays}</span>
                         </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Emergency
+                        </label>
+                        <label className="flex items-center bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                            <input
+                                type="checkbox"
+                                checked={formData.emergency}
+                                onChange={(e) => setFormData({...formData, emergency: e.target.checked})}
+                                className="mr-2"
+                            />
+                            <span className="text-sm text-gray-700">Emergency Leave</span>
+                        </label>
                     </div>
                 </div>
 
@@ -585,18 +1428,6 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
                     />
                 </div>
 
-                <div>
-                    <label className="flex items-center">
-                        <input
-                            type="checkbox"
-                            checked={formData.emergency}
-                            onChange={(e) => setFormData({...formData, emergency: e.target.checked})}
-                            className="mr-2"
-                        />
-                        <span className="text-sm text-gray-700">Emergency Leave</span>
-                    </label>
-                </div>
-
                 <div className="flex justify-end gap-2">
                     <button
                         type="submit"
@@ -612,51 +1443,112 @@ const ApplyForLeaveView = ({ leaveTypes, employees, onSuccess }) => {
 };
 
 // Leave Balances View
-const LeaveBalancesView = ({ balances, employees, onImport }) => {
+const LeaveBalancesView = ({ balances, leaveTypes, user, isAdmin, onRefresh }) => {
+    const normalizedBalances = useMemo(() => {
+        if (!Array.isArray(balances) || balances.length === 0) return [];
+        return balances.map(balance => ({
+            ...balance,
+            employeeId: balance.employeeId || balance.userId || balance.user_id,
+            employeeName: balance.employeeName || balance.userName || balance.employee,
+            leaveType: balance.leaveType || balance.type,
+            available: balance.available ?? balance.balance ?? 0,
+            used: balance.used ?? 0,
+            entitlement: balance.entitlement ?? balance.total ?? 0
+        }));
+    }, [balances]);
+
+    const filteredBalances = useMemo(() => {
+        if (isAdmin) return normalizedBalances;
+        return normalizedBalances.filter(balance => matchUserRecord(balance, user));
+    }, [normalizedBalances, isAdmin, user]);
+
+    const totals = useMemo(() => {
+        return filteredBalances.reduce((acc, balance) => {
+            const key = balance.leaveType || 'unknown';
+            if (!acc[key]) {
+                acc[key] = { available: 0, used: 0 };
+            }
+            acc[key].available += Number(balance.available || 0);
+            acc[key].used += Number(balance.used || 0);
+            return acc;
+        }, {});
+    }, [filteredBalances]);
+
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold">Leave Balances</h3>
-                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    <i className="fas fa-upload mr-2"></i>Import Balances
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Leave Balances</h3>
+                    <p className="text-sm text-gray-500">
+                        {isAdmin ? 'Company-wide view of remaining leave entitlements.' : 'Personal leave balance summary.'}
+                    </p>
+                </div>
+                <div className="flex items-center gap-2">
+                    {isAdmin && (
+                        <button
+                            onClick={onRefresh}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50 transition-colors"
+                        >
+                            <i className="fas fa-sync-alt mr-1.5"></i>
+                            Refresh
                 </button>
+                    )}
+                </div>
             </div>
 
-            {balances.length > 0 ? (
+            {filteredBalances.length > 0 ? (
+                <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                        {Object.entries(totals).map(([type, summary]) => {
+                            const leaveTypeInfo = leaveTypes.find(t => t.value === type) || { label: type };
+                            return (
+                                <div key={type} className="bg-white border border-gray-200 rounded-lg p-4">
+                                    <p className="text-xs text-gray-500 uppercase mb-1">{leaveTypeInfo.label}</p>
+                                    <p className="text-2xl font-semibold text-gray-900">{summary.available}</p>
+                                    <p className="text-xs text-gray-500">Available • Used {summary.used}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Employee</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Leave Type</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Entitled</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Used</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Balance</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Available</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {balances.map(balance => (
-                                <tr key={balance.id}>
+                                {filteredBalances.map(balance => {
+                                    const leaveTypeInfo = leaveTypes.find(t => t.value === balance.leaveType) || { label: balance.leaveType };
+                                    return (
+                                        <tr key={`${balance.employeeId || balance.employeeName}-${balance.leaveType}`}>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {balance.employeeName}
+                                                {balance.employeeName || 'Unknown employee'}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {balance.leaveType}
+                                                {leaveTypeInfo.label}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {balance.available}
+                                                {balance.entitlement}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                         {balance.used}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {balance.balance}
+                                                {balance.available}
                                     </td>
                                 </tr>
-                            ))}
+                                    );
+                                })}
                         </tbody>
                     </table>
                 </div>
+                </>
             ) : (
                 <div className="text-center py-12 text-gray-500">
                     <i className="fas fa-chart-pie text-4xl mb-4"></i>
@@ -668,7 +1560,7 @@ const LeaveBalancesView = ({ balances, employees, onImport }) => {
 };
 
 // Leave Calendar View
-const LeaveCalendarView = ({ applications, employees, view, onViewChange }) => {
+const LeaveCalendarView = ({ applications, view, onViewChange, getLeaveTypeInfo }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const approvedApplications = applications.filter(app => app.status === 'approved');
 
@@ -709,11 +1601,18 @@ const LeaveCalendarView = ({ applications, employees, view, onViewChange }) => {
                     return (
                         <div key={day} className="p-2 border border-gray-200 min-h-[60px]">
                             <div className="text-sm font-medium text-gray-900 mb-1">{day}</div>
-                            {dayApplications.map(app => (
-                                <div key={app.id} className="text-xs bg-blue-100 text-blue-800 rounded px-1 mb-1 truncate">
+                            {dayApplications.map(app => {
+                                const info = getLeaveTypeInfo ? getLeaveTypeInfo(app.leaveType) : null;
+                                return (
+                                    <div
+                                        key={app.id}
+                                        className="text-xs bg-blue-100 text-blue-800 rounded px-1 mb-1 truncate"
+                                        title={info?.label || app.leaveType}
+                                    >
                                     {app.userName}
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     );
                 })}
@@ -769,42 +1668,11 @@ const getAuthHeaders = () => {
 };
 
 // Approvals View
-const ApprovalsView = ({ applications, user, onUpdate }) => {
-    const pendingApplications = applications.filter(app => app.status === 'pending');
-
-    const handleApprove = async (id) => {
-        try {
-            const headers = getAuthHeaders();
-            const response = await fetch(`/api/leave-platform/applications/${id}/approve`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ approvedBy: user?.id })
-            });
-
-            if (response.ok) {
-                onUpdate();
-            }
-        } catch (error) {
-            console.error('Error approving:', error);
-        }
-    };
-
-    const handleReject = async (id, reason) => {
-        try {
-            const headers = getAuthHeaders();
-            const response = await fetch(`/api/leave-platform/applications/${id}/reject`, {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({ rejectedBy: user?.id, reason })
-            });
-
-            if (response.ok) {
-                onUpdate();
-            }
-        } catch (error) {
-            console.error('Error rejecting:', error);
-        }
-    };
+const ApprovalsView = ({ applications, onApprove, onReject, loading }) => {
+    const pendingApplications = useMemo(
+        () => applications.filter(app => app.status === 'pending'),
+        [applications]
+    );
 
     return (
         <div className="space-y-4">
@@ -824,17 +1692,20 @@ const ApprovalsView = ({ applications, user, onUpdate }) => {
                                 </div>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => handleApprove(app.id)}
-                                        className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                                            disabled={loading}
+                                            onClick={() => onApprove && onApprove(app.id)}
+                                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
                                     >
                                         Approve
                                     </button>
                                     <button
+                                            disabled={loading}
                                         onClick={() => {
+                                                if (!onReject) return;
                                             const reason = prompt('Reason for rejection:');
-                                            if (reason) handleReject(app.id, reason);
+                                                if (reason) onReject(app.id, reason);
                                         }}
-                                        className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50"
                                     >
                                         Reject
                                     </button>
@@ -904,21 +1775,19 @@ const ApproversView = ({ approvers, departments, employees, onUpdate }) => {
 };
 
 // Birthdays View
-const BirthdaysView = ({ birthdays, employees, onUpdate }) => {
-    const today = new Date();
-    const currentMonth = today.getMonth();
-
-    const upcomingBirthdays = birthdays.filter(bday => {
-        const bdayDate = new Date(bday.date);
-        return bdayDate.getMonth() >= currentMonth;
-    }).slice(0, 10);
+const BirthdaysView = ({ birthdays, onRefresh }) => {
+    const upcomingBirthdays = useMemo(() => computeUpcomingBirthdays(birthdays, 12), [birthdays]);
 
     return (
         <div className="space-y-4">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Birthdays</h3>
-                <button className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
-                    <i className="fas fa-plus mr-2"></i>Add Birthday
+                <button
+                    onClick={onRefresh}
+                    className="px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                    <i className="fas fa-sync-alt mr-1.5"></i>
+                    Refresh
                 </button>
             </div>
 
@@ -930,7 +1799,7 @@ const BirthdaysView = ({ birthdays, employees, onUpdate }) => {
                                 <div>
                                     <h4 className="font-medium">{bday.employeeName}</h4>
                                     <p className="text-sm text-gray-600">
-                                        {new Date(bday.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+                                        {formatDisplayDate(bday.nextOccurrence, { month: 'long', day: 'numeric' })}
                                     </p>
                                 </div>
                                 <i className="fas fa-birthday-cake text-2xl text-pink-500"></i>
@@ -949,7 +1818,7 @@ const BirthdaysView = ({ birthdays, employees, onUpdate }) => {
 };
 
 // Import Balances View
-const ImportBalancesView = ({ employees, onImport }) => {
+const ImportBalancesView = ({ onImport }) => {
     const [file, setFile] = useState(null);
     const [importing, setImporting] = useState(false);
 

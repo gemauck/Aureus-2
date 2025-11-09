@@ -167,3 +167,4 @@ If you encounter "Too many login attempts" errors:
 
 The fix is **complete and verified in code**. The permissions will now persist correctly once you can log in and test. The issue was the double-stringification which has been resolved by sending permissions as an array directly.
 
+

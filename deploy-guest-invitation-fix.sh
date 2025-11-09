@@ -58,13 +58,29 @@ npm install --production
 echo "🏗️  Generating Prisma client..."
 npx prisma generate || echo "⚠️  Prisma generate skipped"
 
-echo "🔄 Running database migration for accessibleProjectIds..."
-# Add accessibleProjectIds column to Invitation table if it doesn't exist
-npx prisma db push --accept-data-loss --skip-generate || {
-    echo "⚠️  Prisma db push failed, trying direct SQL..."
-    # Fallback: Direct SQL migration
-    psql $DATABASE_URL -c "ALTER TABLE \"Invitation\" ADD COLUMN IF NOT EXISTS \"accessibleProjectIds\" TEXT DEFAULT '[]';" || echo "⚠️  SQL migration skipped (may already exist)"
-}
+echo "🔄 Applying database migrations..."
+npx prisma migrate deploy || echo "⚠️  Prisma migrate deploy skipped (no pending migrations)"
+
+echo "🔍 Verifying accessibleProjectIds column..."
+./scripts/safe-db-migration.sh psql "$DATABASE_URL" <<'SQL'
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'Invitation'
+          AND column_name = 'accessibleProjectIds'
+    ) THEN
+        ALTER TABLE "Invitation"
+            ADD COLUMN "accessibleProjectIds" TEXT DEFAULT '[]';
+        RAISE NOTICE 'Column accessibleProjectIds created on Invitation table';
+    ELSE
+        RAISE NOTICE 'Column accessibleProjectIds already present';
+    END IF;
+END;
+$$;
+SQL
 
 echo "🔄 Restarting application..."
 pm2 restart abcotronics-erp --update-env || pm2 start server.js --name abcotronics-erp

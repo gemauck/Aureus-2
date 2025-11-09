@@ -3,7 +3,7 @@
 **Application:** Abcotronics ERP Modular  
 **Auditor:** Automated Security Scan
 
-## Executive Summary
+in dYO## Executive Summary
 
 This security audit identified **15 critical and high-severity vulnerabilities** across authentication, authorization, input validation, and data protection. Immediate action is required to address these issues before production deployment.
 
