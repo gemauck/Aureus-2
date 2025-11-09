@@ -128,8 +128,6 @@
         
         // HR
         'components/hr/EmployeeManagement.jsx',
-        'components/hr/LeaveManagement.jsx',
-        'components/hr/LeaveBalance.jsx',
         'components/hr/Attendance.jsx',
         'components/hr/QuickBooksPayrollSync.jsx',
         'components/hr/Payroll.jsx',

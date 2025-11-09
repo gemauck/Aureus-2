@@ -124,8 +124,6 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         
         // HR - MOVED from index.html to lazy loading for better performance
         './src/components/hr/EmployeeManagement.jsx',
-        './src/components/hr/LeaveManagement.jsx',
-        './src/components/hr/LeaveBalance.jsx',
         './src/components/hr/Attendance.jsx',
         
         // Leave Platform
