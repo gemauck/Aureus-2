@@ -473,11 +473,11 @@ const MainLayout = () => {
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
         { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: null },
-        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null }, // All users can access
+        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
-        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
+        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: 'ACCESS_DOCUMENTS' },
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
     ];
 
