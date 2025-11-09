@@ -199,7 +199,12 @@ async function handler(req, res) {
                 return unauthorized(res, 'Authentication required')
             }
 
-            const { userId, ...updateData } = req.body || {}
+            const {
+                userId,
+                permissions,
+                accessibleProjectIds,
+                ...updateData
+            } = req.body || {}
             
             if (!userId) {
                 return badRequest(res, 'User ID is required')
@@ -224,6 +229,63 @@ async function handler(req, res) {
                 }
             }
 
+            // Prepare mutable copy so we can transform specific fields safely
+            const processedUpdates = { ...updateData }
+
+            // Handle permissions updates (always persist as JSON string)
+            if (permissions !== undefined && permissions !== null) {
+                console.log('🔧 [api/users.js] Processing permissions update:', {
+                    type: typeof permissions,
+                    isArray: Array.isArray(permissions)
+                })
+
+                if (Array.isArray(permissions)) {
+                    processedUpdates.permissions = JSON.stringify(permissions)
+                    console.log('✅ [api/users.js] Permissions array stringified:', processedUpdates.permissions)
+                } else if (typeof permissions === 'string') {
+                    try {
+                        const parsed = JSON.parse(permissions)
+                        processedUpdates.permissions = Array.isArray(parsed)
+                            ? permissions
+                            : JSON.stringify([parsed])
+                        console.log('✅ [api/users.js] Permissions string processed:', processedUpdates.permissions)
+                    } catch (err) {
+                        console.warn('⚠️ [api/users.js] Invalid permissions string, defaulting to []', err)
+                        processedUpdates.permissions = '[]'
+                    }
+                } else {
+                    console.warn('⚠️ [api/users.js] Permissions not array/string, defaulting to []')
+                    processedUpdates.permissions = '[]'
+                }
+            }
+
+            // Handle accessibleProjectIds the same way (persist as JSON string)
+            if (accessibleProjectIds !== undefined && accessibleProjectIds !== null) {
+                console.log('🔧 [api/users.js] Processing accessibleProjectIds update:', {
+                    type: typeof accessibleProjectIds,
+                    isArray: Array.isArray(accessibleProjectIds)
+                })
+
+                if (Array.isArray(accessibleProjectIds)) {
+                    processedUpdates.accessibleProjectIds = JSON.stringify(accessibleProjectIds)
+                    console.log('✅ [api/users.js] accessibleProjectIds array stringified:', processedUpdates.accessibleProjectIds)
+                } else if (typeof accessibleProjectIds === 'string') {
+                    try {
+                        const parsed = JSON.parse(accessibleProjectIds)
+                        processedUpdates.accessibleProjectIds = Array.isArray(parsed)
+                            ? accessibleProjectIds
+                            : JSON.stringify([parsed])
+                        console.log('✅ [api/users.js] accessibleProjectIds string processed:', processedUpdates.accessibleProjectIds)
+                    } catch (err) {
+                        console.warn('⚠️ [api/users.js] Invalid accessibleProjectIds string, defaulting to []', err)
+                        processedUpdates.accessibleProjectIds = '[]'
+                    }
+                } else {
+                    console.warn('⚠️ [api/users.js] accessibleProjectIds not array/string, defaulting to []')
+                    processedUpdates.accessibleProjectIds = '[]'
+                }
+            }
+
             // Filter out fields that shouldn't be updated via this endpoint
             const {
                 passwordHash,
@@ -232,7 +294,9 @@ async function handler(req, res) {
                 createdAt,
                 updatedAt,
                 ...allowedUpdates
-            } = updateData
+            } = processedUpdates
+
+            console.log('📋 [api/users.js] Final allowedUpdates payload:', allowedUpdates)
 
             // Update user
             const user = await prisma.user.update({
