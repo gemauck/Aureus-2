@@ -8,9 +8,11 @@ export const PERMISSIONS = {
     ACCESS_USERS: 'access_users', // Admin only
     ACCESS_HR: 'access_hr',
     ACCESS_MANUFACTURING: 'access_manufacturing',
+    ACCESS_DOCUMENTS: 'access_documents',
     ACCESS_SERVICE_MAINTENANCE: 'access_service_maintenance',
     ACCESS_TOOL: 'access_tool',
     ACCESS_REPORTS: 'access_reports',
+    ACCESS_LEAVE_PLATFORM: 'access_leave_platform',
     
     // Legacy permissions (kept for backward compatibility, mapped to new structure)
     VIEW_ALL: 'view_all',
@@ -84,11 +86,25 @@ export const PERMISSION_CATEGORIES = {
         description: 'Manufacturing Operations',
         adminOnly: false
     },
+    DOCUMENTS: {
+        id: 'documents',
+        label: 'Documents',
+        permission: PERMISSIONS.ACCESS_DOCUMENTS,
+        description: 'Shared document library and uploads',
+        adminOnly: false
+    },
     SERVICE_MAINTENANCE: {
         id: 'service_maintenance',
         label: 'Service & Maintenance',
         permission: PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
         description: 'Service & Maintenance Operations',
+        adminOnly: false
+    },
+    LEAVE_PLATFORM: {
+        id: 'leave_platform',
+        label: 'Leave Platform',
+        permission: PERMISSIONS.ACCESS_LEAVE_PLATFORM,
+        description: 'Employee leave management workspace',
         adminOnly: false
     },
     TOOL: {
@@ -186,9 +202,11 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_PROJECTS,
             PERMISSIONS.ACCESS_TEAM,
             PERMISSIONS.ACCESS_MANUFACTURING,
+            PERMISSIONS.ACCESS_DOCUMENTS,
             PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,
             PERMISSIONS.ACCESS_TOOL,
             PERMISSIONS.ACCESS_REPORTS,
+            PERMISSIONS.ACCESS_LEAVE_PLATFORM,
             PERMISSIONS.ACCESS_HR,
             // Legacy permissions for backward compatibility
             PERMISSIONS.VIEW_CLIENTS,

@@ -1860,7 +1860,7 @@ const UserManagement = () => {
                         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
                             <p className="text-sm text-blue-800 dark:text-blue-200">
                                 <i className="fas fa-info-circle mr-2"></i>
-                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | All users have access to CRM, Projects, Team, Manufacturing, Tool, Reports, and HR. Only Admins can access Users.
+                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, Reports, and HR. Only Admins can access Users.
                             </p>
                         </div>
 
@@ -1918,11 +1918,25 @@ const UserManagement = () => {
                                                 description: 'Manufacturing Operations',
                                                 adminOnly: false
                                             },
+                                            DOCUMENTS: {
+                                                id: 'documents',
+                                                label: 'Documents',
+                                                permission: window.PERMISSIONS.ACCESS_DOCUMENTS,
+                                                description: 'Shared document library and uploads',
+                                                adminOnly: false
+                                            },
                                             TOOL: {
                                                 id: 'tool',
                                                 label: 'Tool',
                                                 permission: window.PERMISSIONS.ACCESS_TOOL,
                                                 description: 'Tool Management',
+                                                adminOnly: false
+                                            },
+                                            LEAVE_PLATFORM: {
+                                                id: 'leave_platform',
+                                                label: 'Leave Platform',
+                                                permission: window.PERMISSIONS.ACCESS_LEAVE_PLATFORM,
+                                                description: 'Employee leave management workspace',
                                                 adminOnly: false
                                             },
                                             REPORTS: {
