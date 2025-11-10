@@ -16,6 +16,13 @@ const DatabaseAPI = {
     // Short-term cache for recent responses (5 seconds TTL - increased to reduce redundant calls)
     _responseCache: new Map(),
     _cacheTTL: 5000, // 5 seconds - increased from 2s to reduce excessive API calls
+
+    // Request throttling / rate limiting safeguards
+    _maxConcurrentRequests: 4,
+    _currentRequests: 0,
+    _minRequestInterval: 250, // Minimum gap between requests (ms)
+    _lastRequestTimestamp: 0,
+    _rateLimitResumeAt: 0,
     
     // Clear old cache entries periodically
     _cleanCache() {
@@ -24,6 +31,69 @@ const DatabaseAPI = {
             if (now - timestamp > this._cacheTTL) {
                 this._responseCache.delete(key);
             }
+        }
+    },
+
+    _sleep(ms) {
+        if (ms <= 0 || !Number.isFinite(ms)) return Promise.resolve();
+        return new Promise(resolve => setTimeout(resolve, ms));
+    },
+
+    async _acquireRequestSlot() {
+        const tryAcquire = async (resolve) => {
+            const now = Date.now();
+            const nextAllowedTime = Math.max(
+                this._lastRequestTimestamp + this._minRequestInterval,
+                this._rateLimitResumeAt
+            );
+
+            if (this._currentRequests < this._maxConcurrentRequests && now >= nextAllowedTime) {
+                this._currentRequests += 1;
+                this._lastRequestTimestamp = now;
+                resolve();
+            } else {
+                const delay = Math.max(nextAllowedTime - now, 50);
+                setTimeout(() => tryAcquire(resolve), delay);
+            }
+        };
+
+        return new Promise(resolve => {
+            tryAcquire(resolve);
+        });
+    },
+
+    _releaseRequestSlot() {
+        if (this._currentRequests > 0) {
+            this._currentRequests -= 1;
+        }
+    },
+
+    _parseRetryAfter(retryAfter) {
+        if (!retryAfter) return null;
+        const numeric = Number(retryAfter);
+        if (!Number.isNaN(numeric) && numeric >= 0) {
+            return numeric * 1000;
+        }
+        const retryDate = Date.parse(retryAfter);
+        if (!Number.isNaN(retryDate)) {
+            return retryDate - Date.now();
+        }
+        return null;
+    },
+
+    async _readErrorMessage(response) {
+        try {
+            const text = await response.text();
+            if (!text) return '';
+            try {
+                const json = JSON.parse(text);
+                if (typeof json === 'string') return json;
+                return json?.message || json?.error || json?.data?.message || JSON.stringify(json).substring(0, 200);
+            } catch (_) {
+                return text.substring(0, 200);
+            }
+        } catch (_) {
+            return '';
         }
     },
     
@@ -110,122 +180,145 @@ const DatabaseAPI = {
     
     // Internal method to execute the actual request
     async _executeRequest(endpoint, options = {}) {
-        const maxRetries = 3;
+        const maxRetries = 5;
         const baseDelay = 1000; // Start with 1 second
-        
-        let token = window.storage?.getToken?.();
-        
-        if (token) {
-            console.log('🔑 Token found, length:', token.length);
-        } else {
-            console.log('⚠️ No token found, attempting refresh...');
-        }
 
-        // If no token, attempt a silent refresh using the refresh cookie
-        if (!token) {
-            try {
-                const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
-                const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
-                if (refreshRes.ok) {
-                    const text = await refreshRes.text();
-                    const refreshData = text ? JSON.parse(text) : {};
-                    const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
-                    if (newToken && window.storage?.setToken) {
-                        console.log('✅ Token obtained from refresh');
-                        window.storage.setToken(newToken);
-                        token = newToken;
+        await this._acquireRequestSlot();
+        
+        try {
+            let token = window.storage?.getToken?.();
+            
+            if (token) {
+                console.log('🔑 Token found, length:', token.length);
+            } else {
+                console.log('⚠️ No token found, attempting refresh...');
+            }
+
+            // If no token, attempt a silent refresh using the refresh cookie
+            if (!token) {
+                try {
+                    const refreshUrl = `${this.API_BASE}/api/auth/refresh`;
+                    const refreshRes = await fetch(refreshUrl, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+                    if (refreshRes.ok) {
+                        const text = await refreshRes.text();
+                        const refreshData = text ? JSON.parse(text) : {};
+                        const newToken = refreshData?.data?.accessToken || refreshData?.accessToken;
+                        if (newToken && window.storage?.setToken) {
+                            console.log('✅ Token obtained from refresh');
+                            window.storage.setToken(newToken);
+                            token = newToken;
+                        } else {
+                            console.error('❌ Refresh response OK but no token in response');
+                        }
                     } else {
-                        console.error('❌ Refresh response OK but no token in response');
+                        console.error('❌ Refresh failed with status:', refreshRes.status);
                     }
-                } else {
-                    console.error('❌ Refresh failed with status:', refreshRes.status);
-                }
-            } catch (refreshError) {
-                console.error('❌ Refresh error:', refreshError);
-                // ignore refresh errors here; downstream logic will handle redirect
-            }
-        }
-
-        if (!token) {
-            // Still no token → ensure clean state and redirect to login
-            if (window.storage?.removeToken) window.storage.removeToken();
-            if (window.storage?.removeUser) window.storage.removeUser();
-            if (window.LiveDataSync) {
-                window.LiveDataSync.stop();
-            }
-            if (!window.location.hash.includes('#/login')) {
-                window.location.hash = '#/login';
-            }
-            throw new Error('No authentication token found. Please log in.');
-        }
-
-        const url = `${this.API_BASE}/api${endpoint}`;
-        const buildConfigWithToken = (authToken) => {
-            // Extract headers from options to prevent them from overriding Authorization
-            const { headers: customHeaders, ...restOptions } = options;
-            
-            // Merge headers properly - ensure Authorization is always included and not overridden
-            const mergedHeaders = {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${authToken}`,
-                ...(customHeaders || {})
-            };
-            
-            // Explicitly set Authorization again to ensure it's never overridden
-            mergedHeaders['Authorization'] = `Bearer ${authToken}`;
-            
-            const config = {
-                method: restOptions.method || 'GET',
-                headers: mergedHeaders,
-                credentials: 'include',
-                ...restOptions
-            };
-            
-            // Final safeguard: ensure Authorization header is never overridden by restOptions
-            if (config.headers) {
-                config.headers['Authorization'] = `Bearer ${authToken}`;
-            }
-            
-            // Log POST requests for debugging
-            if (config.method === 'POST' || config.method === 'PATCH' || config.method === 'PUT') {
-                const authHeader = config.headers['Authorization'];
-                console.log(`📤 ${config.method} request to ${endpoint}:`, {
-                    url,
-                    hasBody: !!config.body,
-                    bodyLength: config.body?.length || 0,
-                    bodyPreview: config.body ? config.body.substring(0, 200) : 'no body',
-                    hasAuthHeader: !!authHeader,
-                    authHeaderPreview: authHeader ? 
-                        (authHeader.startsWith('Bearer ') ? authHeader.substring(0, 37) + '...' : 'Invalid format') : 'missing',
-                    tokenLength: authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.length - 7 : 0) : 0
-                });
-            }
-            
-            return config;
-        };
-
-        const execute = async (authToken) => {
-            const config = buildConfigWithToken(authToken);
-            
-            // Warn about large payloads that might cause timeouts
-            if (config.body) {
-                const payloadSize = new Blob([config.body]).size;
-                if (payloadSize > 100000) { // 100KB
-                    console.warn(`⚠️ Large payload detected (${(payloadSize / 1024).toFixed(2)}KB) for ${endpoint}. This may cause timeouts.`);
+                } catch (refreshError) {
+                    console.error('❌ Refresh error:', refreshError);
+                    // ignore refresh errors here; downstream logic will handle redirect
                 }
             }
-            
-            const response = await fetch(url, config);
-            return response;
-        };
 
-        // Retry loop for network errors
-        let lastError = null;
-        for (let attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                let response = await execute(token);
+            if (!token) {
+                // Still no token → ensure clean state and redirect to login
+                if (window.storage?.removeToken) window.storage.removeToken();
+                if (window.storage?.removeUser) window.storage.removeUser();
+                if (window.LiveDataSync) {
+                    window.LiveDataSync.stop();
+                }
+                if (!window.location.hash.includes('#/login')) {
+                    window.location.hash = '#/login';
+                }
+                throw new Error('No authentication token found. Please log in.');
+            }
 
-                if (!response.ok && response.status === 401) {
+            const url = `${this.API_BASE}/api${endpoint}`;
+            const buildConfigWithToken = (authToken) => {
+                // Extract headers from options to prevent them from overriding Authorization
+                const { headers: customHeaders, ...restOptions } = options;
+                
+                // Merge headers properly - ensure Authorization is always included and not overridden
+                const mergedHeaders = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`,
+                    ...(customHeaders || {})
+                };
+                
+                // Explicitly set Authorization again to ensure it's never overridden
+                mergedHeaders['Authorization'] = `Bearer ${authToken}`;
+                
+                const config = {
+                    method: restOptions.method || 'GET',
+                    headers: mergedHeaders,
+                    credentials: 'include',
+                    ...restOptions
+                };
+                
+                // Final safeguard: ensure Authorization header is never overridden by restOptions
+                if (config.headers) {
+                    config.headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
+                // Log POST requests for debugging
+                if (config.method === 'POST' || config.method === 'PATCH' || config.method === 'PUT') {
+                    const authHeader = config.headers['Authorization'];
+                    console.log(`📤 ${config.method} request to ${endpoint}:`, {
+                        url,
+                        hasBody: !!config.body,
+                        bodyLength: config.body?.length || 0,
+                        bodyPreview: config.body ? config.body.substring(0, 200) : 'no body',
+                        hasAuthHeader: !!authHeader,
+                        authHeaderPreview: authHeader ? 
+                            (authHeader.startsWith('Bearer ') ? authHeader.substring(0, 37) + '...' : 'Invalid format') : 'missing',
+                        tokenLength: authHeader ? (authHeader.startsWith('Bearer ') ? authHeader.length - 7 : 0) : 0
+                    });
+                }
+                
+                return config;
+            };
+
+            const execute = async (authToken) => {
+                const config = buildConfigWithToken(authToken);
+                
+                // Warn about large payloads that might cause timeouts
+                if (config.body) {
+                    const payloadSize = new Blob([config.body]).size;
+                    if (payloadSize > 100000) { // 100KB
+                        console.warn(`⚠️ Large payload detected (${(payloadSize / 1024).toFixed(2)}KB) for ${endpoint}. This may cause timeouts.`);
+                    }
+                }
+                
+                this._lastRequestTimestamp = Date.now();
+                const response = await fetch(url, config);
+                return response;
+            };
+
+            // Retry loop for network errors
+            let lastError = null;
+            for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                try {
+                    let response = await execute(token);
+
+                if (!response.ok && response.status === 429) {
+                    const retryAfterHeader = response.headers.get('Retry-After');
+                    let retryDelay = this._parseRetryAfter(retryAfterHeader);
+                    if (!retryDelay || retryDelay <= 0) {
+                        retryDelay = baseDelay * Math.pow(2, attempt);
+                    }
+                    // Cap retry delay to 15 seconds to avoid excessively long waits
+                    retryDelay = Math.min(retryDelay, 15000);
+                    this._rateLimitResumeAt = Date.now() + retryDelay;
+                    const errorMessage = await this._readErrorMessage(response);
+                    const finalMessage = errorMessage || 'Rate limit exceeded. Please try again shortly.';
+                    console.warn(`⏳ Rate limit encountered on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${retryDelay}ms...`, finalMessage);
+                    if (attempt < maxRetries) {
+                        await this._sleep(retryDelay);
+                        continue;
+                    }
+                    throw new Error(finalMessage);
+                }
+
+                    if (!response.ok && response.status === 401) {
                     // Attempt refresh once before giving up
                     console.log('🔄 Got 401, attempting token refresh...');
                     try {
@@ -259,15 +352,15 @@ const DatabaseAPI = {
                     }
                 }
 
-                if (!response.ok) {
+                    if (!response.ok) {
                     // Try to extract backend error message for better debugging
                     let serverError = null;
                     let serverErrorMessage = '';
                     try {
-                        const text = await response.text();
-                        if (text) {
+                        const errorText = await response.text();
+                        if (errorText) {
                             try {
-                                const json = JSON.parse(text);
+                                const json = JSON.parse(errorText);
                                 // Extract full error object if present
                                 if (json?.error && typeof json.error === 'object') {
                                     serverError = json.error;
@@ -279,7 +372,7 @@ const DatabaseAPI = {
                                         (typeof json?.error === 'string' ? json.error : '');
                                 }
                             } catch (_) {
-                                serverErrorMessage = text.substring(0, 200);
+                                serverErrorMessage = errorText.substring(0, 200);
                             }
                         }
                     } catch (_) {
@@ -369,65 +462,68 @@ const DatabaseAPI = {
                     });
                 }
                 return data;
-            } catch (error) {
-                lastError = error;
-                
-                // Check if error message indicates a 500/502/503/504 that we should retry
-                const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
-                
-                // Only retry on network errors or server errors (502/503/504), not on other HTTP errors or auth errors
-                const isNetwork = this.isNetworkError(error);
-                const shouldRetry = (isNetwork || isServerError) && attempt < maxRetries;
-                
-                if (shouldRetry) {
-                    // Calculate exponential backoff delay: 1s, 2s, 4s
-                    const delay = baseDelay * Math.pow(2, attempt);
-                    const errorType = isServerError ? 'Server error' : 'Network error';
-                    console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    continue; // Retry the request
-                } else {
-                    // Don't retry - log and throw
-                    if ((isNetwork || isServerError) && attempt === maxRetries) {
-                        // Check if it's a database connection error - suppress logs for these
-                        const errorMessage = error?.message || String(error);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable') ||
-                                              errorMessage.includes('ECONNREFUSED') ||
-                                              errorMessage.includes('ETIMEDOUT');
-                        
-                        // Only log non-database errors and non-server errors (server errors are expected when backend is down)
-                        // Suppress console.error for server errors (500, 502, 503, 504) to reduce noise
-                        if (!isDatabaseError && !isServerError) {
-                            console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
-                        }
-                        if (isServerError) {
-                            // Suppress error logs for server errors - they're expected when backend has issues
-                            throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
-                        } else {
-                            throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
-                        }
+                } catch (error) {
+                    lastError = error;
+                    
+                    // Check if error message indicates a 500/502/503/504 that we should retry
+                    const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
+                    
+                    // Only retry on network errors or server errors (502/503/504), not on other HTTP errors or auth errors
+                    const isNetwork = this.isNetworkError(error);
+                    const shouldRetry = (isNetwork || isServerError) && attempt < maxRetries;
+                    
+                    if (shouldRetry) {
+                        // Calculate exponential backoff delay: 1s, 2s, 4s
+                        const delay = baseDelay * Math.pow(2, attempt);
+                        const errorType = isServerError ? 'Server error' : 'Network error';
+                        console.warn(`⚠️ ${errorType} on ${endpoint} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delay}ms...`, error.message);
+                        await this._sleep(delay);
+                        continue; // Retry the request
                     } else {
-                        // Check if it's a database connection error - suppress logs for these
-                        const errorMessage = error?.message || String(error);
-                        const isDatabaseError = errorMessage.includes('Database connection failed') ||
-                                              errorMessage.includes('unreachable') ||
-                                              errorMessage.includes('ECONNREFUSED') ||
-                                              errorMessage.includes('ETIMEDOUT');
-                        
-                        // Suppress error logs for server errors and database errors
-                        const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
-                        if (!isDatabaseError && !isServerError) {
-                            console.error(`❌ Database API request failed (${endpoint}):`, error);
+                        // Don't retry - log and throw
+                        if ((isNetwork || isServerError) && attempt === maxRetries) {
+                            // Check if it's a database connection error - suppress logs for these
+                            const errorMessage = error?.message || String(error);
+                            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                                  errorMessage.includes('unreachable') ||
+                                                  errorMessage.includes('ECONNREFUSED') ||
+                                                  errorMessage.includes('ETIMEDOUT');
+                            
+                            // Only log non-database errors and non-server errors (server errors are expected when backend is down)
+                            // Suppress console.error for server errors (500, 502, 503, 504) to reduce noise
+                            if (!isDatabaseError && !isServerError) {
+                                console.error(`❌ Database API request failed after ${maxRetries + 1} attempts (${endpoint}):`, error);
+                            }
+                            if (isServerError) {
+                                // Suppress error logs for server errors - they're expected when backend has issues
+                                throw new Error(`Server error: The server is temporarily unavailable. Please try again in a moment.`);
+                            } else {
+                                throw new Error(`Network error: Unable to connect to server. Please check your internet connection and try again.`);
+                            }
+                        } else {
+                            // Check if it's a database connection error - suppress logs for these
+                            const errorMessage = error?.message || String(error);
+                            const isDatabaseError = errorMessage.includes('Database connection failed') ||
+                                                  errorMessage.includes('unreachable') ||
+                                                  errorMessage.includes('ECONNREFUSED') ||
+                                                  errorMessage.includes('ETIMEDOUT');
+                            
+                            // Suppress error logs for server errors and database errors
+                            const isServerError = error.message?.includes('500') || error.message?.includes('502') || error.message?.includes('503') || error.message?.includes('504');
+                            if (!isDatabaseError && !isServerError) {
+                                console.error(`❌ Database API request failed (${endpoint}):`, error);
+                            }
+                            throw error;
                         }
-                        throw error;
                     }
                 }
             }
+            
+            // Should never reach here, but just in case
+            throw lastError || new Error(`Unknown error occurred while making request to ${endpoint}`);
+        } finally {
+            this._releaseRequestSlot();
         }
-        
-        // Should never reach here, but just in case
-        throw lastError || new Error(`Unknown error occurred while making request to ${endpoint}`);
     },
 
     // CLIENT OPERATIONS
