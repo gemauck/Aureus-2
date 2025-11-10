@@ -408,10 +408,6 @@ const Teams = () => {
         loadData();
     }, []);
 
-    const accessibleTeams = useMemo(() => {
-        return TEAMS.filter(team => isTeamAccessible(team.id));
-    }, [isTeamAccessible]);
-
     const accessibleDocuments = useMemo(() => {
         return isAdminUser
             ? documents
@@ -447,7 +443,7 @@ const Teams = () => {
     // Get counts for selected team - memoized per team to avoid recalculation
     const teamCountsCache = useMemo(() => {
         const cache = {};
-        accessibleTeams.forEach(team => {
+        TEAMS.forEach(team => {
             cache[team.id] = {
                 documents: accessibleDocuments.filter(d => d.team === team.id).length,
                 workflows: accessibleWorkflows.filter(w => w.team === team.id).length,
@@ -456,7 +452,7 @@ const Teams = () => {
             };
         });
         return cache;
-    }, [accessibleTeams, accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
+    }, [accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
 
     const getTeamCounts = (teamId) => {
         return teamCountsCache[teamId] || { documents: 0, workflows: 0, checklists: 0, notices: 0 };
@@ -850,13 +846,18 @@ const Teams = () => {
 					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
 						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {accessibleTeams.map(team => {
+                            {TEAMS.map(team => {
+                                const isAccessible = isTeamAccessible(team.id);
                                 const counts = getTeamCounts(team.id);
                                 return (
                                     <button
                                         key={team.id}
                                         onClick={() => handleSelectTeam(team)}
-										className={`text-left border rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group ${isDark ? 'border-slate-700' : 'border-gray-200'}`}
+										className={`text-left border rounded-lg p-3 transition group ${
+                                            isDark ? 'border-slate-700' : 'border-gray-200'
+                                        } ${isAccessible ? 'hover:shadow-md hover:border-primary-300' : 'opacity-60 cursor-not-allowed'}`}
+                                        disabled={!isAccessible}
+                                        aria-disabled={!isAccessible}
                                     >
                                         <div className="flex items-center justify-between mb-2">
 											<div className={`w-10 h-10 bg-${team.color}-100 rounded-lg flex items-center justify-center group-hover:bg-${team.color}-200 transition ${isDark ? 'bg-slate-700 group-hover:bg-slate-600' : ''}`}>
@@ -866,6 +867,14 @@ const Teams = () => {
                                         </div>
 										<h3 className={`font-semibold text-sm mb-1 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{team.name}</h3>
 										<p className={`text-xs mb-2 line-clamp-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>{team.description}</p>
+                                        {!isAccessible && (
+                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded ${
+                                                isDark ? 'bg-slate-700 text-slate-300' : 'bg-gray-100 text-gray-600'
+                                            }`}>
+                                                <i className="fas fa-lock"></i>
+                                                Admin only
+                                            </span>
+                                        )}
 										<div className={`flex items-center gap-2 text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
                                             <span><i className="fas fa-file-alt mr-1"></i>{counts.documents}</span>
                                             <span><i className="fas fa-project-diagram mr-1"></i>{counts.workflows}</span>

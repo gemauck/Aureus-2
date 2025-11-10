@@ -16,7 +16,7 @@ const storage = window.storage;
  * - Quick actions and bulk operations
  */
 
-const Pipeline = () => {
+const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     // State Management
     const [clients, setClients] = useState([]);
     const [leads, setLeads] = useState([]);
@@ -1306,10 +1306,23 @@ const Pipeline = () => {
         }
 
         if (item.type === 'lead') {
+            if (typeof onOpenLead === 'function') {
+                onOpenLead({ leadId: item.id, leadData: item });
+                return;
+            }
             window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', {
                 detail: { leadId: item.id }
             }));
         } else {
+            if (typeof onOpenOpportunity === 'function') {
+                onOpenOpportunity({
+                    opportunityId: item.id,
+                    clientId: item.clientId || item.client?.id,
+                    clientName: item.clientName || item.client?.name || item.name,
+                    opportunity: item
+                });
+                return;
+            }
             window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
                 detail: {
                     opportunityId: item.id,

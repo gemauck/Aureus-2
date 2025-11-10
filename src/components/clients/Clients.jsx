@@ -355,19 +355,19 @@ const Clients = React.memo(() => {
     }
     
     // Simple sync control - just stop/start
-    const stopSync = () => {
+    const stopSync = useCallback(() => {
         if (window.LiveDataSync?.isRunning) {
             window.LiveDataSync.stop();
             console.log('⏸️ LiveDataSync paused for editing');
         }
-    };
+    }, []);
     
-    const startSync = () => {
+    const startSync = useCallback(() => {
         if (window.LiveDataSync && !window.LiveDataSync.isRunning) {
             window.LiveDataSync.start();
             console.log('▶️ LiveDataSync resumed');
         }
-    };
+    }, []);
 
     // Modal callbacks no longer needed - modals own their state
     
@@ -2770,7 +2770,7 @@ const Clients = React.memo(() => {
         setViewMode('client-detail');
     };
 
-    const handleOpenLead = (lead, options = {}) => {
+    const handleOpenLead = useCallback((lead, options = {}) => {
         const leadId = options.leadId || lead?.id;
         if (!leadId) return;
         stopSync();
@@ -2788,7 +2788,69 @@ const Clients = React.memo(() => {
         }
         setCurrentLeadTab('overview');
         setViewMode('lead-detail');
-    };
+    }, [stopSync]);
+
+    const openLeadFromPipeline = useCallback(async ({ leadId, leadData } = {}) => {
+        const resolvedLeadId = leadId || leadData?.id;
+        if (!resolvedLeadId) return;
+
+        let lead = leadData;
+
+        if (!lead && Array.isArray(leadsRef.current)) {
+            lead = leadsRef.current.find(l => l.id === resolvedLeadId) || null;
+        }
+
+        if (!lead && window.api?.getLead) {
+            try {
+                const response = await window.api.getLead(resolvedLeadId);
+                lead = response?.data?.lead || response?.lead || response || null;
+            } catch (error) {
+                console.warn('⚠️ Clients: Unable to fetch lead for pipeline detail view', error);
+            }
+        }
+
+        handleOpenLead(lead || null, { fromPipeline: true, leadId: resolvedLeadId });
+    }, [handleOpenLead]);
+
+    const openOpportunityFromPipeline = useCallback(async ({ opportunityId, clientId, clientName, opportunity } = {}) => {
+        const resolvedOpportunityId = opportunityId || opportunity?.id;
+        if (!resolvedOpportunityId) return;
+
+        try {
+            sessionStorage.setItem('returnToPipeline', 'true');
+        } catch (error) {
+            console.warn('⚠️ Clients: Unable to set returnToPipeline flag for opportunity', error);
+        }
+
+        stopSync();
+
+        const resolvedClientId = clientId || opportunity?.clientId || opportunity?.client?.id || null;
+        let client = null;
+
+        if (resolvedClientId && Array.isArray(clientsRef.current)) {
+            client = clientsRef.current.find(c => c.id === resolvedClientId) || null;
+        }
+
+        if (!client && resolvedClientId && window.DatabaseAPI?.getClient) {
+            try {
+                const response = await window.DatabaseAPI.getClient(resolvedClientId);
+                client = response?.data?.client || response?.client || response || null;
+            } catch (error) {
+                console.warn('⚠️ Clients: Unable to fetch client for opportunity detail view', error);
+            }
+        }
+
+        const fallbackClient = client || ((resolvedClientId || clientName || opportunity?.clientName)
+            ? {
+                id: resolvedClientId || resolvedOpportunityId,
+                name: clientName || opportunity?.clientName || opportunity?.client?.name || opportunity?.name || 'Opportunity'
+            }
+            : null);
+
+        setSelectedOpportunityId(resolvedOpportunityId);
+        setSelectedOpportunityClient(fallbackClient);
+        setViewMode('opportunity-detail');
+    }, [stopSync]);
 
     // Handle star toggle for clients/leads
     const handleToggleStar = async (e, clientOrLead, isLead = false) => {
@@ -2851,62 +2913,33 @@ const Clients = React.memo(() => {
     };
 
     useEffect(() => {
-        const handleLeadDetailFromPipeline = async (event) => {
-            const { leadId } = event.detail || {};
-            if (!leadId) return;
-
-            let lead = Array.isArray(leadsRef.current) ? leadsRef.current.find(l => l.id === leadId) : null;
-
-            if (!lead && window.api?.getLead) {
-                try {
-                    const response = await window.api.getLead(leadId);
-                    lead = response?.data?.lead || response?.lead || response;
-                } catch (error) {
-                    console.warn('⚠️ Clients: Unable to fetch lead for pipeline detail view', error);
-                }
-            }
-
-            handleOpenLead(lead || null, { fromPipeline: true, leadId });
+        const handleLeadEvent = (event) => {
+            openLeadFromPipeline(event?.detail || {});
         };
 
-        const handleOpportunityDetailFromPipeline = async (event) => {
-            const { opportunityId, clientId, clientName } = event.detail || {};
-            if (!opportunityId) return;
-
-            try {
-                sessionStorage.setItem('returnToPipeline', 'true');
-            } catch (error) {
-                console.warn('⚠️ Clients: Unable to set returnToPipeline flag for opportunity', error);
-            }
-
-            stopSync();
-
-            let client = null;
-            if (clientId) {
-                client = Array.isArray(clientsRef.current) ? clientsRef.current.find(c => c.id === clientId) : null;
-                if (!client && window.DatabaseAPI?.getClient) {
-                    try {
-                        const response = await window.DatabaseAPI.getClient(clientId);
-                        client = response?.data?.client || response?.client || response;
-                    } catch (error) {
-                        console.warn('⚠️ Clients: Unable to fetch client for opportunity detail view', error);
-                    }
-                }
-            }
-
-            setSelectedOpportunityId(opportunityId);
-            setSelectedOpportunityClient(client || (clientId || clientName ? { id: clientId || opportunityId, name: clientName || 'Opportunity' } : null));
-            setViewMode('opportunity-detail');
+        const handleOpportunityEvent = (event) => {
+            openOpportunityFromPipeline(event?.detail || {});
         };
 
-        window.addEventListener('openLeadDetailFromPipeline', handleLeadDetailFromPipeline);
-        window.addEventListener('openOpportunityDetailFromPipeline', handleOpportunityDetailFromPipeline);
+        window.addEventListener('openLeadDetailFromPipeline', handleLeadEvent);
+        window.addEventListener('openOpportunityDetailFromPipeline', handleOpportunityEvent);
+
+        // Expose direct callbacks for legacy modules that prefer calling functions instead of dispatching events
+        window.__openLeadDetailFromPipeline = openLeadFromPipeline;
+        window.__openOpportunityDetailFromPipeline = openOpportunityFromPipeline;
 
         return () => {
-            window.removeEventListener('openLeadDetailFromPipeline', handleLeadDetailFromPipeline);
-            window.removeEventListener('openOpportunityDetailFromPipeline', handleOpportunityDetailFromPipeline);
+            window.removeEventListener('openLeadDetailFromPipeline', handleLeadEvent);
+            window.removeEventListener('openOpportunityDetailFromPipeline', handleOpportunityEvent);
+
+            if (window.__openLeadDetailFromPipeline === openLeadFromPipeline) {
+                delete window.__openLeadDetailFromPipeline;
+            }
+            if (window.__openOpportunityDetailFromPipeline === openOpportunityFromPipeline) {
+                delete window.__openOpportunityDetailFromPipeline;
+            }
         };
-    }, []);
+    }, [openLeadFromPipeline, openOpportunityFromPipeline]);
 
     const handleNavigateToProject = (projectId) => {
         sessionStorage.setItem('openProjectId', projectId);
@@ -3527,7 +3560,11 @@ const Clients = React.memo(() => {
             try {
                 window.__PIPELINE_RENDER_MODE = 'new';
                 console.log('✅ renderPipelineView: Mounting new Pipeline component from window.Pipeline');
-                return React.createElement(window.Pipeline, { key: pipelineRenderKey });
+                return React.createElement(window.Pipeline, { 
+                    key: pipelineRenderKey,
+                    onOpenLead: openLeadFromPipeline,
+                    onOpenOpportunity: openOpportunityFromPipeline
+                });
             } catch (error) {
                 console.error('❌ renderPipelineView: Failed to render new Pipeline component, falling back to legacy view:', error);
                 window.__PIPELINE_RENDER_MODE = 'legacy-error';
