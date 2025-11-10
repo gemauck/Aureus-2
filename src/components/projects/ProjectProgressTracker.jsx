@@ -27,14 +27,26 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     
     // Working months calculation
     const getWorkingMonths = () => {
-        const two = currentMonth - 2 < 0 ? currentMonth - 2 + 12 : currentMonth - 2;
-        const one = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
-        return [Number(two), Number(one)];
+        const lastMonth = currentMonth - 1 < 0 ? currentMonth - 1 + 12 : currentMonth - 1;
+        return [Number(lastMonth), Number(currentMonth)];
     };
     
     const workingMonths = getWorkingMonths();
-    // Show only Jan-Sep (first 9 months) as per the original design
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'];
+    // Show whole year for comprehensive tracking
+    const months = [
+        'January',
+        'February',
+        'March',
+        'April',
+        'May',
+        'June',
+        'July',
+        'August',
+        'September',
+        'October',
+        'November',
+        'December'
+    ];
     
     // State - always initialize with empty array to prevent undefined/null issues
     const [projects, setProjects] = useState(() => []);
@@ -47,6 +59,44 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
     // Refs
     const tableRef = useRef(null);
     
+    // Auto focus on highlighted month columns when data loads
+    useEffect(() => {
+        try {
+            if (!tableRef?.current) return;
+            if (selectedYear !== currentYear) return;
+            
+            const focusIndexes = Array.isArray(workingMonths) ? workingMonths : [];
+            const fallbackIndex = typeof currentMonth === 'number' ? currentMonth : 0;
+            const targetIndex = focusIndexes.length > 0
+                ? Number(focusIndexes[focusIndexes.length - 1])
+                : fallbackIndex;
+            
+            if (isNaN(targetIndex) || targetIndex < 0 || targetIndex >= months.length) return;
+            
+            const targetMonth = months[targetIndex];
+            if (!targetMonth) return;
+            
+            window.requestAnimationFrame(() => {
+                try {
+                    const container = tableRef.current;
+                    const headerCell = container.querySelector(`[data-month-header="${targetMonth}"]`);
+                    if (headerCell && typeof headerCell.offsetLeft === 'number') {
+                        const stickyColumnWidth = 320;
+                        const desiredScroll = Math.max(headerCell.offsetLeft - stickyColumnWidth, 0);
+                        container.scrollTo({
+                            left: desiredScroll,
+                            behavior: 'smooth'
+                        });
+                    }
+                } catch (scrollErr) {
+                    console.warn('⚠️ ProjectProgressTracker: Failed to auto-scroll to focused month:', scrollErr);
+                }
+            });
+        } catch (err) {
+            console.warn('⚠️ ProjectProgressTracker: Auto focus effect error:', err);
+        }
+    }, [projects, selectedYear]);
+
     // Load projects
     useEffect(() => {
         const load = async () => {
@@ -649,9 +699,9 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                             className: 'text-xl md:text-2xl font-bold text-gray-900 mb-1',
                             style: { letterSpacing: '-0.02em' }
                         }, 'Project Progress Tracker'),
-                        React.createElement('p', { className: 'text-sm text-gray-500 flex items-center gap-2' },
+                            React.createElement('p', { className: 'text-sm text-gray-500 flex items-center gap-2' },
                             React.createElement('i', { className: 'fas fa-info-circle text-xs' }),
-                            'Track monthly progress in arrears - highlighted working months (2 months back)'
+                            'Track monthly progress across the year with emphasis on the current and previous month'
                         )
                     )
                 ),
@@ -722,7 +772,7 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                 React.createElement('i', { className: 'fas fa-lightbulb text-blue-500' }),
                 React.createElement('span', { 
                     className: 'text-sm text-gray-700'
-                }, 'Highlighted columns show current focus months (2 months in arrears)')
+                }, 'Highlighted columns mark the current month and the month before it')
             )
         ),
         // Modern Table Container with Enhanced Styling
@@ -795,7 +845,8 @@ const ProjectProgressTracker = function ProjectProgressTrackerComponent(props) {
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.05em',
                                     position: 'relative'
-                                }
+                                },
+                                'data-month-header': safeMonth
                             }, 
                                 isWorking ? React.createElement('div', { className: 'flex items-center justify-center gap-2' },
                                     React.createElement('i', { className: 'fas fa-star text-xs' }),
