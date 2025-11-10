@@ -1010,6 +1010,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         ...prev,
                         contacts: updatedContacts
                     };
+                    formDataRef.current = newFormData;
                     // Force React to see this as a new object reference
                     return newFormData;
                 });
@@ -1063,6 +1064,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         );
         const updatedFormData = {...formData, contacts: updatedContacts};
         setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
         
         // Log activity and get updated formData with activity log, then save everything
         const finalFormData = logActivity('Contact Updated', `Updated contact: ${newContact.name}`, null, false, updatedFormData);
@@ -1098,6 +1100,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 contacts: formData.contacts.filter(c => c.id !== contactId)
             };
             setFormData(updatedFormData);
+            formDataRef.current = updatedFormData;
             
             // Log activity and get updated formData with activity log, then save everything
             const finalFormData = logActivity('Contact Deleted', `Deleted contact: ${contact?.name || 'Unknown'}`, null, false, updatedFormData);
@@ -1814,13 +1817,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
         };
         
         // Use provided formData or current formData
-        const baseFormData = formDataToUpdate || formData;
+        const baseFormData = formDataToUpdate || formDataRef.current || formData;
         const updatedFormData = {
             ...baseFormData,
             activityLog: [...(baseFormData.activityLog || []), activity]
         };
         
         setFormData(updatedFormData);
+        formDataRef.current = updatedFormData;
         
         // Auto-save activity log to database if enabled (default: true)
         if (autoSave && client && onSave) {
