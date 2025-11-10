@@ -1,0 +1,114 @@
+/* ==========================================================================
+   Job Card Public Mobile Overrides
+   Ensures the public job card wizard renders correctly on mobile devices
+   despite global nuclear mobile overrides used elsewhere in the app.
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  html.job-card-public,
+  body.job-card-public {
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background-color: #f3f4f6 !important;
+  }
+
+  body.job-card-public #root {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  body.job-card-public #root > * {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper {
+    display: block !important;
+    min-height: 100vh !important;
+    overflow: visible !important;
+    padding-bottom: 96px !important;
+  }
+
+  /* Re-enable core layout utilities that were disabled by nuclear overrides */
+  body.job-card-public .job-card-public-wrapper :is(.flex) {
+    display: flex !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper :is(.inline-flex) {
+    display: inline-flex !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper :is(.grid) {
+    display: grid !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper :is(.inline-grid) {
+    display: inline-grid !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper :is(.hidden) {
+    display: none !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper :is(.sticky) {
+    position: sticky !important;
+  }
+
+  body.job-card-public footer {
+    position: sticky !important;
+    bottom: 0 !important;
+    width: 100% !important;
+    z-index: 20 !important;
+    background-color: #ffffff !important;
+  }
+
+  /* Ensure the form content remains comfortably readable */
+  body.job-card-public .job-card-public-wrapper .max-w-4xl {
+    max-width: min(100%, 48rem) !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper .rounded-3xl {
+    border-radius: 1.75rem !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper .p-5 {
+    padding: 1.25rem !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper .space-y-5 > * + * {
+    margin-top: 1.25rem !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper .space-y-6 > * + * {
+    margin-top: 1.5rem !important;
+  }
+
+  /* Touch-friendly inputs and buttons */
+  body.job-card-public .job-card-public-wrapper button {
+    min-height: 44px !important;
+    border-radius: 12px !important;
+  }
+
+  body.job-card-public .job-card-public-wrapper input,
+  body.job-card-public .job-card-public-wrapper select,
+  body.job-card-public .job-card-public-wrapper textarea {
+    font-size: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  body.job-card-public canvas {
+    max-width: 100% !important;
+  }
+}
+
