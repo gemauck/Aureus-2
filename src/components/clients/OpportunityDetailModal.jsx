@@ -271,6 +271,251 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
     }
     
     const clientName = client?.name || opportunity.client?.name || 'Unknown Client';
+
+    const releaseProposalCreationGuard = (delay = 0) => {
+        const release = () => {
+            isCreatingProposalRef.current = false;
+            setIsCreatingProposal(false);
+            console.log('🔓 Proposal creation guard released');
+        };
+
+        if (delay > 0) {
+            setTimeout(release, delay);
+        } else {
+            release();
+        }
+    };
+
+    const handleCreateProposal = async () => {
+        if (isCreatingProposalRef.current || isCreatingProposal) {
+            console.warn('⚠️ Proposal creation already in progress, ignoring click');
+            return;
+        }
+
+        isCreatingProposalRef.current = true;
+        setIsCreatingProposal(true);
+
+        try {
+            console.log('🆕 Creating new proposal...');
+
+            const currentFormData = formDataRef.current || formData || {};
+            const baseTitle = currentFormData.title || formData.title || clientName || 'this opportunity';
+            const contextTitle = (baseTitle || '').trim() || 'this opportunity';
+            const proposalTitle = `Proposal for ${contextTitle}`;
+            const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+            const newProposal = {
+                id: proposalId,
+                title: proposalTitle,
+                name: proposalTitle,
+                createdDate: new Date().toISOString().split('T')[0],
+                workflowStage: 'create-site-inspection',
+                workingDocumentLink: '',
+                stages: [
+                    { 
+                        name: 'Create Site Inspection Document', 
+                        department: 'Business Development',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Conduct site visit input data to Site Inspection Document', 
+                        department: 'Technical',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Comments on work loading requirements', 
+                        department: 'Data',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Comments on time allocations', 
+                        department: 'Support',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Relevant comments time allocations', 
+                        department: 'Compliance',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Creates proposal from template add client information', 
+                        department: 'Business Development',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Reviews proposal against Site Inspection comments', 
+                        department: 'Operations Manager',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Price proposal', 
+                        department: 'Commercial',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    },
+                    { 
+                        name: 'Final Approval', 
+                        department: 'CEO',
+                        assignee: '',
+                        assigneeId: '',
+                        assigneeEmail: '',
+                        status: 'pending',
+                        comments: [],
+                        rejectedBy: null,
+                        rejectedAt: null,
+                        rejectedReason: ''
+                    }
+                ],
+                proposalContent: '',
+                siteInspectionData: '',
+                pricing: {
+                    subtotal: 0,
+                    tax: 0,
+                    total: 0
+                }
+            };
+
+            const gatherExistingProposals = () => {
+                const refData = formDataRef.current;
+                const stateData = formData;
+                const lastSavedData = lastSavedDataRef.current;
+
+                const refProposals = refData?.proposals || [];
+                const stateProposals = stateData?.proposals || [];
+                const lastSavedProposals = lastSavedData?.proposals || [];
+
+                const allProposalsMap = new Map();
+
+                stateProposals.forEach(p => {
+                    if (p?.id) allProposalsMap.set(p.id, p);
+                });
+
+                lastSavedProposals.forEach(p => {
+                    if (p?.id) allProposalsMap.set(p.id, p);
+                });
+
+                refProposals.forEach(p => {
+                    if (p?.id) allProposalsMap.set(p.id, p);
+                });
+
+                return Array.from(allProposalsMap.values());
+            };
+
+            const existingProposals = gatherExistingProposals();
+
+            console.log('🔍 Checking for duplicates:', {
+                proposalId,
+                existingCount: existingProposals.length,
+                existingIds: existingProposals.map(p => p.id),
+                formDataProposalsCount: formData.proposals?.length || 0,
+                formDataRefProposalsCount: formDataRef.current?.proposals?.length || 0
+            });
+
+            const proposalExistsById = existingProposals.some(p => p.id === proposalId);
+            const now = Date.now();
+            const recentProposals = existingProposals.filter(p => {
+                if (!p?.id) return false;
+                const parts = p.id.split('-');
+                if (parts.length < 3) return false;
+                const timestamp = parseInt(parts[1], 10);
+                if (Number.isNaN(timestamp)) return false;
+                return Math.abs(now - timestamp) < 2000;
+            });
+
+            const proposalExistsByTitle = recentProposals.some(p => (p.title || p.name) === (newProposal.title || newProposal.name));
+
+            if (proposalExistsById) {
+                console.warn('⚠️ Proposal with same ID already exists, skipping creation', {
+                    proposalId,
+                    existingProposal: existingProposals.find(p => p.id === proposalId)
+                });
+                releaseProposalCreationGuard();
+                return;
+            }
+
+            if (proposalExistsByTitle && recentProposals.length > 0) {
+                console.warn('⚠️ Very recent proposal with same title exists, skipping creation', {
+                    recentProposals: recentProposals.map(p => ({ id: p.id, title: p.title }))
+                });
+                releaseProposalCreationGuard();
+                return;
+            }
+
+            console.log('✅ No duplicate found, proceeding with creation');
+            console.log('✅ Adding proposal to state:', proposalId);
+
+            const updatedProposals = [...existingProposals, newProposal];
+            console.log('📝 Updated proposals count:', updatedProposals.length, 'IDs:', updatedProposals.map(p => p.id));
+            await saveProposals(updatedProposals);
+
+            await notifyAllAssignedParties(
+                newProposal,
+                `New Proposal Created: ${newProposal.title || newProposal.name}`,
+                `A new proposal "${newProposal.title || newProposal.name}" has been created for ${contextTitle}.`,
+                opportunityId ? `#/clients?opportunity=${opportunityId}&tab=proposals` : ''
+            );
+
+            releaseProposalCreationGuard(2000);
+        } catch (error) {
+            console.error('❌ Error creating opportunity proposal:', error);
+            releaseProposalCreationGuard();
+        }
+    };
     
     // Full-page mode: render without modal overlay
     if (isFullPage) {
@@ -399,173 +644,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     <button
                                         type="button"
                                         disabled={isCreatingProposal || isCreatingProposalRef.current}
-                                        onClick={async () => {
-                                            if (isCreatingProposalRef.current || isCreatingProposal) {
-                                                console.warn('⚠️ Proposal creation already in progress, ignoring click');
-                                                return;
-                                            }
-                                            
-                                            isCreatingProposalRef.current = true;
-                                            setIsCreatingProposal(true);
-                                            
-                                            console.log('🆕 Creating new proposal...');
-                                            
-                                            const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                                            
-                                            const newProposal = {
-                                                id: proposalId,
-                                                title: `Proposal for ${formData.title || clientName}`,
-                                                name: `Proposal for ${formData.title || clientName}`,
-                                                createdDate: new Date().toISOString().split('T')[0],
-                                                workflowStage: 'create-site-inspection',
-                                                workingDocumentLink: '',
-                                                stages: [
-                                                    { 
-                                                        name: 'Create Site Inspection Document', 
-                                                        department: 'Business Development',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Conduct site visit input data to Site Inspection Document', 
-                                                        department: 'Technical',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Comments on work loading requirements', 
-                                                        department: 'Data',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Comments on time allocations', 
-                                                        department: 'Support',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Relevant comments time allocations', 
-                                                        department: 'Compliance',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Creates proposal from template add client information', 
-                                                        department: 'Business Development',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Reviews proposal against Site Inspection comments', 
-                                                        department: 'Operations Manager',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Price proposal', 
-                                                        department: 'Commercial',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    },
-                                                    { 
-                                                        name: 'Final Approval', 
-                                                        department: 'CEO',
-                                                        assignee: '',
-                                                        assigneeId: '',
-                                                        assigneeEmail: '',
-                                                        status: 'pending',
-                                                        comments: [],
-                                                        rejectedBy: null,
-                                                        rejectedAt: null,
-                                                        rejectedReason: ''
-                                                    }
-                                                ],
-                                                proposalContent: '',
-                                                siteInspectionData: '',
-                                                pricing: {
-                                                    subtotal: 0,
-                                                    tax: 0,
-                                                    total: 0
-                                                }
-                                            };
-                                            
-                                            const existingProposals = formData.proposals || [];
-                                            const proposalExistsById = existingProposals.some(p => p.id === proposalId);
-                                            
-                                            if (proposalExistsById) {
-                                                console.warn('⚠️ Proposal with same ID already exists, skipping creation');
-                                                isCreatingProposalRef.current = false;
-                                                setIsCreatingProposal(false);
-                                                return;
-                                            }
-                                            
-                                            console.log('✅ No duplicate found, proceeding with creation');
-                                            const updatedProposals = [...existingProposals, newProposal];
-                                            console.log('📝 Updated proposals count:', updatedProposals.length);
-                                            await saveProposals(updatedProposals);
-                                            
-                                            await notifyAllAssignedParties(
-                                                newProposal,
-                                                `New Proposal Created: ${newProposal.title || newProposal.name}`,
-                                                `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.title || clientName}.`,
-                                                `#/clients?opportunity=${opportunityId}&tab=proposals`
-                                            );
-                                            
-                                            setTimeout(() => {
-                                                isCreatingProposalRef.current = false;
-                                                setIsCreatingProposal(false);
-                                                console.log('🔓 Proposal creation guard released');
-                                            }, 2000);
-                                        }}
+                                        onClick={handleCreateProposal}
                                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                                             (isCreatingProposal || isCreatingProposalRef.current)
                                                 ? 'bg-gray-400 text-white cursor-not-allowed' 
@@ -1181,173 +1260,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 <button
                                     type="button"
                                     disabled={isCreatingProposal || isCreatingProposalRef.current}
-                                    onClick={async () => {
-                                        if (isCreatingProposalRef.current || isCreatingProposal) {
-                                            console.warn('⚠️ Proposal creation already in progress, ignoring click');
-                                            return;
-                                        }
-                                        
-                                        isCreatingProposalRef.current = true;
-                                        setIsCreatingProposal(true);
-                                        
-                                        console.log('🆕 Creating new proposal...');
-                                        
-                                        const proposalId = `proposal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-                                        
-                                        const newProposal = {
-                                            id: proposalId,
-                                            title: `Proposal for ${formData.title || clientName}`,
-                                            name: `Proposal for ${formData.title || clientName}`,
-                                            createdDate: new Date().toISOString().split('T')[0],
-                                            workflowStage: 'create-site-inspection',
-                                            workingDocumentLink: '',
-                                            stages: [
-                                                { 
-                                                    name: 'Create Site Inspection Document', 
-                                                    department: 'Business Development',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Conduct site visit input data to Site Inspection Document', 
-                                                    department: 'Technical',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Comments on work loading requirements', 
-                                                    department: 'Data',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Comments on time allocations', 
-                                                    department: 'Support',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Relevant comments time allocations', 
-                                                    department: 'Compliance',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Creates proposal from template add client information', 
-                                                    department: 'Business Development',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Reviews proposal against Site Inspection comments', 
-                                                    department: 'Operations Manager',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Price proposal', 
-                                                    department: 'Commercial',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                },
-                                                { 
-                                                    name: 'Final Approval', 
-                                                    department: 'CEO',
-                                                    assignee: '',
-                                                    assigneeId: '',
-                                                    assigneeEmail: '',
-                                                    status: 'pending',
-                                                    comments: [],
-                                                    rejectedBy: null,
-                                                    rejectedAt: null,
-                                                    rejectedReason: ''
-                                                }
-                                            ],
-                                            proposalContent: '',
-                                            siteInspectionData: '',
-                                            pricing: {
-                                                subtotal: 0,
-                                                tax: 0,
-                                                total: 0
-                                            }
-                                        };
-                                        
-                                        const existingProposals = formData.proposals || [];
-                                        const proposalExistsById = existingProposals.some(p => p.id === proposalId);
-                                        
-                                        if (proposalExistsById) {
-                                            console.warn('⚠️ Proposal with same ID already exists, skipping creation');
-                                            isCreatingProposalRef.current = false;
-                                            setIsCreatingProposal(false);
-                                            return;
-                                        }
-                                        
-                                        console.log('✅ No duplicate found, proceeding with creation');
-                                        const updatedProposals = [...existingProposals, newProposal];
-                                        console.log('📝 Updated proposals count:', updatedProposals.length);
-                                        await saveProposals(updatedProposals);
-                                        
-                                        await notifyAllAssignedParties(
-                                            newProposal,
-                                            `New Proposal Created: ${newProposal.title || newProposal.name}`,
-                                            `A new proposal "${newProposal.title || newProposal.name}" has been created for ${formData.title || clientName}.`,
-                                            `#/clients?opportunity=${opportunityId}&tab=proposals`
-                                        );
-                                        
-                                        setTimeout(() => {
-                                            isCreatingProposalRef.current = false;
-                                            setIsCreatingProposal(false);
-                                            console.log('🔓 Proposal creation guard released');
-                                        }, 2000);
-                                    }}
+                                    onClick={handleCreateProposal}
                                     className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                                         (isCreatingProposal || isCreatingProposalRef.current)
                                             ? 'bg-gray-400 text-white cursor-not-allowed' 

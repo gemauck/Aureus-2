@@ -1921,7 +1921,7 @@ const UserManagement = () => {
                                             DOCUMENTS: {
                                                 id: 'documents',
                                                 label: 'Documents',
-                                                permission: window.PERMISSIONS.ACCESS_DOCUMENTS,
+                                                permission: ensurePermissionValue('ACCESS_DOCUMENTS', 'access_documents'),
                                                 description: 'Shared document library and uploads',
                                                 adminOnly: false
                                             },
@@ -1935,7 +1935,7 @@ const UserManagement = () => {
                                             LEAVE_PLATFORM: {
                                                 id: 'leave_platform',
                                                 label: 'Leave Platform',
-                                                permission: window.PERMISSIONS.ACCESS_LEAVE_PLATFORM,
+                                                permission: ensurePermissionValue('ACCESS_LEAVE_PLATFORM', 'access_leave_platform'),
                                                 description: 'Employee leave management workspace',
                                                 adminOnly: false
                                             },
@@ -1959,6 +1959,34 @@ const UserManagement = () => {
                                         );
                                     }
                                 }
+                                
+                                const ensurePermissionValue = (permissionKey, fallback) => {
+                                    return window.PERMISSIONS?.[permissionKey] || fallback;
+                                };
+                                
+                                const ensureCategory = (categories, key, config) => {
+                                    if (!categories) return categories;
+                                    if (!categories[key]) {
+                                        return { ...categories, [key]: config };
+                                    }
+                                    return categories;
+                                };
+                                
+                                permissionCategories = ensureCategory(permissionCategories, 'DOCUMENTS', {
+                                    id: 'documents',
+                                    label: 'Documents',
+                                    permission: ensurePermissionValue('ACCESS_DOCUMENTS', 'access_documents'),
+                                    description: 'Shared document library and uploads',
+                                    adminOnly: false
+                                });
+                                
+                                permissionCategories = ensureCategory(permissionCategories, 'LEAVE_PLATFORM', {
+                                    id: 'leave_platform',
+                                    label: 'Leave Platform',
+                                    permission: ensurePermissionValue('ACCESS_LEAVE_PLATFORM', 'access_leave_platform'),
+                                    description: 'Employee leave management workspace',
+                                    adminOnly: false
+                                });
                                 
                                 const isAdmin = editingUserPermissions?.role?.toLowerCase() === 'admin';
                                 

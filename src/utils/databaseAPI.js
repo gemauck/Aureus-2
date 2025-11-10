@@ -1444,12 +1444,29 @@ const DatabaseAPI = {
 
     async createMonthlyNotes(monthKey, monthlyGoals = '') {
         console.log('📡 Creating monthly meeting notes in database...');
-        const response = await this.makeRequest('/meeting-notes', {
-            method: 'POST',
-            body: JSON.stringify({ monthKey, monthlyGoals })
-        });
-        console.log('✅ Monthly meeting notes created in database');
-        return response;
+        try {
+            const response = await this.makeRequest('/meeting-notes', {
+                method: 'POST',
+                body: JSON.stringify({ monthKey, monthlyGoals })
+            });
+            console.log('✅ Monthly meeting notes created in database');
+            return response;
+        } catch (error) {
+            const message = (error?.message || '').toLowerCase();
+            if (message.includes('already exist')) {
+                console.warn('⚠️ Monthly meeting notes already exist. Returning existing notes instead of throwing.');
+                try {
+                    const existing = await this.getMeetingNotes(monthKey);
+                    if (existing?.data) {
+                        existing.data.duplicate = true;
+                    }
+                    return existing;
+                } catch (fetchError) {
+                    console.error('❌ Failed to load existing monthly notes after duplicate detection:', fetchError);
+                }
+            }
+            throw error;
+        }
     },
 
     async updateMonthlyNotes(id, data) {
@@ -1464,12 +1481,41 @@ const DatabaseAPI = {
 
     async createWeeklyNotes(monthlyNotesId, weekKey, weekStart, weekEnd = null) {
         console.log('📡 Creating weekly meeting notes in database...');
-        const response = await this.makeRequest('/meeting-notes?action=weekly', {
-            method: 'POST',
-            body: JSON.stringify({ monthlyNotesId, weekKey, weekStart, weekEnd })
-        });
-        console.log('✅ Weekly meeting notes created in database');
-        return response;
+        try {
+            const response = await this.makeRequest('/meeting-notes?action=weekly', {
+                method: 'POST',
+                body: JSON.stringify({ monthlyNotesId, weekKey, weekStart, weekEnd })
+            });
+            console.log('✅ Weekly meeting notes created in database');
+            return response;
+        } catch (error) {
+            const message = (error?.message || '').toLowerCase();
+            if (message.includes('already exist')) {
+                console.warn('⚠️ Weekly meeting notes already exist. Returning existing notes instead of throwing.');
+                try {
+                    const allNotesResponse = await this.makeRequest('/meeting-notes');
+                    const monthlyNotes =
+                        allNotesResponse?.data?.monthlyNotes ||
+                        allNotesResponse?.monthlyNotes ||
+                        [];
+                    const parentNote = monthlyNotes.find(note => note?.id === monthlyNotesId || note?.weeklyNotes?.some(week => week?.weekKey === weekKey));
+                    const existingWeek = parentNote?.weeklyNotes?.find(week => week?.weekKey === weekKey);
+                    if (existingWeek) {
+                        const duplicateResponse = {
+                            data: {
+                                weeklyNotes: existingWeek,
+                                duplicate: true
+                            },
+                            duplicate: true
+                        };
+                        return duplicateResponse;
+                    }
+                } catch (fetchError) {
+                    console.error('❌ Failed to load existing weekly notes after duplicate detection:', fetchError);
+                }
+            }
+            throw error;
+        }
     },
 
     async updateDepartmentNotes(id, data) {
@@ -1542,12 +1588,29 @@ const DatabaseAPI = {
 
     async generateMonthlyPlan(monthKey, copyFromMonthKey = null) {
         console.log('📡 Generating monthly plan in database...');
-        const response = await this.makeRequest('/meeting-notes?action=generate-month', {
-            method: 'POST',
-            body: JSON.stringify({ monthKey, copyFromMonthKey })
-        });
-        console.log('✅ Monthly plan generated in database');
-        return response;
+        try {
+            const response = await this.makeRequest('/meeting-notes?action=generate-month', {
+                method: 'POST',
+                body: JSON.stringify({ monthKey, copyFromMonthKey })
+            });
+            console.log('✅ Monthly plan generated in database');
+            return response;
+        } catch (error) {
+            const message = (error?.message || '').toLowerCase();
+            if (message.includes('already exist')) {
+                console.warn('⚠️ Monthly plan already exists. Returning existing notes instead of throwing.');
+                try {
+                    const existing = await this.getMeetingNotes(monthKey);
+                    if (existing?.data) {
+                        existing.data.duplicate = true;
+                    }
+                    return existing;
+                } catch (fetchError) {
+                    console.error('❌ Failed to load existing monthly plan after duplicate detection:', fetchError);
+                }
+            }
+            throw error;
+        }
     }
 };
 

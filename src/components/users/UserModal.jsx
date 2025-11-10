@@ -17,8 +17,105 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
     const [availableProjects, setAvailableProjects] = useState([]);
     const [loadingProjects, setLoadingProjects] = useState(false);
 
-    // Get permission categories from permissions.js
-    const permissionCategories = window.PERMISSION_CATEGORIES || {};
+    const ensurePermissionValue = (permissionKey, fallback) => {
+        return window.PERMISSIONS?.[permissionKey] || fallback;
+    };
+    
+    const permissionCategories = (() => {
+        let categories = {};
+        if (window.PERMISSION_CATEGORIES && Object.keys(window.PERMISSION_CATEGORIES).length > 0) {
+            categories = { ...window.PERMISSION_CATEGORIES };
+        } else if (window.PERMISSIONS) {
+            categories = {
+                CRM: {
+                    id: 'crm',
+                    label: 'CRM',
+                    permission: ensurePermissionValue('ACCESS_CRM', 'access_crm'),
+                    description: 'Customer Relationship Management',
+                    adminOnly: false
+                },
+                PROJECTS: {
+                    id: 'projects',
+                    label: 'Projects',
+                    permission: ensurePermissionValue('ACCESS_PROJECTS', 'access_projects'),
+                    description: 'Project Management',
+                    adminOnly: false
+                },
+                TEAM: {
+                    id: 'team',
+                    label: 'Team',
+                    permission: ensurePermissionValue('ACCESS_TEAM', 'access_team'),
+                    description: 'Team Management',
+                    adminOnly: false
+                },
+                USERS: {
+                    id: 'users',
+                    label: 'Users',
+                    permission: ensurePermissionValue('ACCESS_USERS', 'access_users'),
+                    description: 'User Management',
+                    adminOnly: true
+                },
+                HR: {
+                    id: 'hr',
+                    label: 'HR',
+                    permission: ensurePermissionValue('ACCESS_HR', 'access_hr'),
+                    description: 'Human Resources self-service',
+                    adminOnly: false
+                },
+                MANUFACTURING: {
+                    id: 'manufacturing',
+                    label: 'Manufacturing',
+                    permission: ensurePermissionValue('ACCESS_MANUFACTURING', 'access_manufacturing'),
+                    description: 'Manufacturing Operations',
+                    adminOnly: false
+                },
+                SERVICE_MAINTENANCE: {
+                    id: 'service_maintenance',
+                    label: 'Service & Maintenance',
+                    permission: ensurePermissionValue('ACCESS_SERVICE_MAINTENANCE', 'access_service_maintenance'),
+                    description: 'Service & Maintenance Operations',
+                    adminOnly: false
+                },
+                TOOL: {
+                    id: 'tool',
+                    label: 'Tool',
+                    permission: ensurePermissionValue('ACCESS_TOOL', 'access_tool'),
+                    description: 'Tool Management',
+                    adminOnly: false
+                },
+                REPORTS: {
+                    id: 'reports',
+                    label: 'Reports',
+                    permission: ensurePermissionValue('ACCESS_REPORTS', 'access_reports'),
+                    description: 'Reports and Analytics',
+                    adminOnly: false
+                }
+            };
+        }
+        
+        if (Object.keys(categories).length > 0) {
+            if (!categories.DOCUMENTS) {
+                categories.DOCUMENTS = {
+                    id: 'documents',
+                    label: 'Documents',
+                    permission: ensurePermissionValue('ACCESS_DOCUMENTS', 'access_documents'),
+                    description: 'Shared document library and uploads',
+                    adminOnly: false
+                };
+            }
+            if (!categories.LEAVE_PLATFORM) {
+                categories.LEAVE_PLATFORM = {
+                    id: 'leave_platform',
+                    label: 'Leave Platform',
+                    permission: ensurePermissionValue('ACCESS_LEAVE_PLATFORM', 'access_leave_platform'),
+                    description: 'Employee leave management workspace',
+                    adminOnly: false
+                };
+            }
+        }
+        
+        return categories;
+    })();
 
     useEffect(() => {
         if (user) {
