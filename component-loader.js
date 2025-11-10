@@ -170,7 +170,7 @@
         
         // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
         if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
-            const versionTag = 'meeting-notes-v20251109';
+            const versionTag = 'teams-permissions-v20251110';
             scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
         }
         
