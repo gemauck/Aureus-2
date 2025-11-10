@@ -2,11 +2,6 @@
 
 /* CRITICAL SAFEGUARD: Prevent dark mode CSS from applying when user wants light mode */
 /* This ensures that even if .dark class somehow gets applied, light mode styles take precedence */
-html:not(.dark) *,
-html.light * {
-    /* Force light mode styles - these will override any dark mode CSS */
-}
-
 /* Only apply dark mode styles when .dark class is present AND user actually wants dark mode */
 /* The ThemeProvider ensures .dark class is only applied when user wants dark mode */
 
@@ -468,6 +463,31 @@ html.light * {
 [data-theme="light"] button:hover {
     background-color: #f9fafb !important;
     color: #111827 !important;
+}
+
+/* Preserve intentional light-on-dark button treatments */
+[data-theme="light"] button.text-white,
+[data-theme="light"] button[class*="text-white"],
+[data-theme="light"] button.text-white:hover,
+[data-theme="light"] button[class*="text-white"]:hover,
+[data-theme="light"] button.text-white:focus,
+[data-theme="light"] button[class*="text-white"]:focus,
+[data-theme="light"] button.text-white:active,
+[data-theme="light"] button[class*="text-white"]:active,
+[data-theme="light"] button.btn-primary,
+[data-theme="light"] button.btn-primary:hover,
+[data-theme="light"] button.btn-primary:focus,
+[data-theme="light"] button.btn-primary:active {
+    color: #ffffff !important;
+}
+
+[data-theme="light"] button.text-white .fas,
+[data-theme="light"] button.text-white .far,
+[data-theme="light"] button.text-white .fab,
+[data-theme="light"] button[class*="text-white"] .fas,
+[data-theme="light"] button[class*="text-white"] .far,
+[data-theme="light"] button[class*="text-white"] .fab {
+    color: inherit !important;
 }
 
 .dark .sidebar-item {

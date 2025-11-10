@@ -1,7 +1,7 @@
 // Management Meeting Notes API
 import { authRequired } from './_lib/authRequired.js'
 import { prisma } from './_lib/prisma.js'
-import { badRequest, ok, serverError, unauthorized } from './_lib/response.js'
+import { badRequest, ok, serverError, forbidden } from './_lib/response.js'
 import { withHttp } from './_lib/withHttp.js'
 import { withLogging } from './_lib/logger.js'
 
@@ -16,7 +16,84 @@ const DEPARTMENTS = [
   { id: 'business-development', name: 'Business Development' }
 ]
 
+function generateMonthlyGoalsTemplate() {
+  return DEPARTMENTS.map((dept) => `${dept.name} Goals:\n- [ ] `).join('\n\n')
+}
+
+function ensureMonthlyGoalsForAllTeams(monthlyGoals) {
+  const rawGoals = typeof monthlyGoals === 'string' ? monthlyGoals : ''
+  const trimmed = rawGoals.trim()
+
+  if (!trimmed) {
+    return generateMonthlyGoalsTemplate()
+  }
+
+  let updatedGoals = rawGoals.trimEnd()
+  const lowerCaseGoals = updatedGoals.toLowerCase()
+
+  const missingDepartments = DEPARTMENTS.filter(
+    (dept) => !lowerCaseGoals.includes(dept.name.toLowerCase())
+  )
+
+  if (missingDepartments.length > 0) {
+    const additionalSections = missingDepartments
+      .map((dept) => `${dept.name} Goals:\n- [ ] `)
+      .join('\n\n')
+    const separator = updatedGoals.endsWith('\n') ? '\n' : '\n\n'
+    updatedGoals = `${updatedGoals}${separator}${additionalSections}`
+  }
+
+  return updatedGoals
+}
+
+const ADMIN_ROLES = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
+const ADMIN_PERMISSION_KEYS = new Set(['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'])
+const FORBIDDEN_MESSAGE = 'Only administrators can access Management meeting notes.'
+
+function normalizePermissions(permissions) {
+  if (!permissions) return []
+  if (Array.isArray(permissions)) return permissions
+  if (typeof permissions === 'string') {
+    try {
+      const parsed = JSON.parse(permissions)
+      if (Array.isArray(parsed)) {
+        return parsed
+      }
+    } catch (error) {
+      return permissions
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    }
+  }
+  return []
+}
+
+function isAdminUser(user) {
+  if (!user) return false
+
+  const role = (user.role || '').toString().trim().toLowerCase()
+  if (ADMIN_ROLES.has(role)) {
+    return true
+  }
+
+  const normalizedPermissions = normalizePermissions(user.permissions).map((permission) =>
+    (permission || '').toString().trim().toLowerCase()
+  )
+
+  return normalizedPermissions.some((permission) => ADMIN_PERMISSION_KEYS.has(permission))
+}
+
 async function handler(req, res) {
+  if (!isAdminUser(req.user)) {
+    console.warn('Management meeting notes access denied for non-admin user', {
+      userId: req.user?.id || req.user?.sub,
+      email: req.user?.email,
+      role: req.user?.role
+    })
+    return forbidden(res, FORBIDDEN_MESSAGE)
+  }
+
   // Get all monthly meeting notes
   if (req.method === 'GET' && !req.query.monthKey && !req.query.id) {
     try {
@@ -225,7 +302,7 @@ async function handler(req, res) {
       const monthlyNotes = await prisma.monthlyMeetingNotes.create({
         data: {
           monthKey,
-          monthlyGoals: monthlyGoals || '',
+          monthlyGoals: ensureMonthlyGoalsForAllTeams(monthlyGoals),
           ownerId: req.user?.sub || req.user?.id || null
         },
         include: {
@@ -642,7 +719,7 @@ async function handler(req, res) {
       const monthlyNotes = await prisma.monthlyMeetingNotes.create({
         data: {
           monthKey,
-          monthlyGoals: previousMonthlyNotes?.monthlyGoals || '',
+          monthlyGoals: ensureMonthlyGoalsForAllTeams(previousMonthlyNotes?.monthlyGoals),
           ownerId: req.user?.sub || req.user?.id || null
         }
       })

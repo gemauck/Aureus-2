@@ -1,6 +1,43 @@
 // Get dependencies from window
 const { useState, useEffect, useMemo } = React;
 
+const ADMIN_ROLES = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+const ADMIN_PERMISSION_KEYS = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+
+const normalizePermissions = (permissions) => {
+    if (!permissions) return [];
+    if (Array.isArray(permissions)) return permissions;
+    if (typeof permissions === 'string') {
+        try {
+            const parsed = JSON.parse(permissions);
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+        } catch (error) {
+            return permissions
+                .split(',')
+                .map((value) => value.trim())
+                .filter(Boolean);
+        }
+    }
+    return [];
+};
+
+const isAdminFromUser = (user) => {
+    if (!user) return false;
+
+    const role = (user.role || '').toString().trim().toLowerCase();
+    if (ADMIN_ROLES.includes(role)) {
+        return true;
+    }
+
+    const normalizedPermissions = normalizePermissions(user.permissions).map((perm) =>
+        (perm || '').toString().trim().toLowerCase()
+    );
+
+    return normalizedPermissions.some((perm) => ADMIN_PERMISSION_KEYS.includes(perm));
+};
+
 // Department definitions - matching API
 const DEPARTMENTS = [
     { id: 'compliance', name: 'Compliance', icon: 'fa-shield-alt', color: 'red' },
@@ -29,6 +66,20 @@ const ManagementMeetingNotes = () => {
     }
     const isDark = themeResult?.isDark || false;
 
+    const authHook = window.useAuth || (() => ({ user: null }));
+    const { user: currentUser } = authHook();
+    const isAdminUser = useMemo(() => isAdminFromUser(currentUser), [currentUser]);
+
+    useEffect(() => {
+        if (!isAdminUser) {
+            console.warn('ManagementMeetingNotes: blocked access for non-admin user', {
+                userId: currentUser?.id,
+                email: currentUser?.email,
+                role: currentUser?.role
+            });
+        }
+    }, [isAdminUser, currentUser]);
+
     const [monthlyNotesList, setMonthlyNotesList] = useState([]);
     const [currentMonthlyNotes, setCurrentMonthlyNotes] = useState(null);
     const [selectedMonth, setSelectedMonth] = useState(null);
@@ -54,6 +105,10 @@ const ManagementMeetingNotes = () => {
 
     // Load users
     useEffect(() => {
+        if (!isAdminUser) {
+            return;
+        }
+
         const loadUsers = async () => {
             try {
                 if (window.DatabaseAPI) {
@@ -66,10 +121,16 @@ const ManagementMeetingNotes = () => {
             }
         };
         loadUsers();
-    }, []);
+    }, [isAdminUser]);
 
     // Load meeting notes
     useEffect(() => {
+        if (!isAdminUser) {
+            setIsReady(true);
+            setLoading(false);
+            return;
+        }
+
         const loadMeetingNotes = async () => {
             try {
                 setLoading(true);
@@ -102,10 +163,14 @@ const ManagementMeetingNotes = () => {
             }
         };
         loadMeetingNotes();
-    }, []);
+    }, [isAdminUser]);
 
     // Load current month's notes when selected month changes
     useEffect(() => {
+        if (!isAdminUser) {
+            return;
+        }
+
         const loadCurrentMonth = async () => {
             if (!selectedMonth || !window.DatabaseAPI) return;
             
@@ -122,7 +187,7 @@ const ManagementMeetingNotes = () => {
             }
         };
         loadCurrentMonth();
-    }, [selectedMonth]);
+    }, [selectedMonth, isAdminUser]);
 
     // Get available months
     const availableMonths = useMemo(() => {
@@ -614,6 +679,24 @@ const ManagementMeetingNotes = () => {
         const dept = DEPARTMENTS.find(d => d.id === departmentId);
         return dept?.name || departmentId;
     };
+
+    if (!isAdminUser) {
+        return (
+            <div className="p-4">
+                <div
+                    className={`rounded-lg border p-6 text-center ${
+                        isDark ? 'bg-slate-800 border-slate-700 text-slate-100' : 'bg-white border-gray-200 text-gray-900'
+                    }`}
+                >
+                    <i className={`fas fa-lock text-4xl mb-3 ${isDark ? 'text-slate-400' : 'text-gray-400'}`}></i>
+                    <h2 className="text-sm font-semibold mb-2">Access Restricted</h2>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                        Only administrators can view the Management meeting notes.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     if (!isReady || loading) {
         return (

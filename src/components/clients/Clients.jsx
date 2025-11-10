@@ -222,6 +222,7 @@ const Clients = React.memo(() => {
     const [pipelineStatus, setPipelineStatus] = useState(() => (typeof window !== 'undefined' && window.Pipeline ? 'ready' : 'loading'));
     const [pipelineRenderKey, setPipelineRenderKey] = useState(0);
     const [clients, setClients] = useState([]);
+    const [leads, setLeads] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const leadsRef = useRef(leads);
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
@@ -310,7 +311,6 @@ const Clients = React.memo(() => {
         if (diffDays < 365) return `${Math.ceil(diffDays / 30)} months ago`;
         return `${Math.ceil(diffDays / 365)} years ago`;
     };
-    const [leads, setLeads] = useState([]);
     const [leadsCount, setLeadsCount] = useState(0);
     const [projects, setProjects] = useState([]);
     // Just store IDs - modals fetch their own data

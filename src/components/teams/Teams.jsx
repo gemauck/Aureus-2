@@ -181,22 +181,54 @@ const Teams = () => {
         };
     };
 
-    const [currentUser] = useState(() => getCurrentUser());
+    const authHook = window.useAuth || (() => ({ user: null }));
+    const { user: authUser } = authHook();
+
+    const sanitizeUser = (user) => {
+        if (!user) return null;
+        return {
+            ...user,
+            permissions: normalizePermissions(user.permissions)
+        };
+    };
+
+    const [currentUser, setCurrentUser] = useState(() => sanitizeUser(authUser) || getCurrentUser());
+
+    useEffect(() => {
+        const sanitizedAuthUser = sanitizeUser(authUser);
+        if (!sanitizedAuthUser) {
+            return;
+        }
+
+        setCurrentUser((prevUser) => {
+            if (!prevUser) {
+                return sanitizedAuthUser;
+            }
+
+            const prevPermissions = (prevUser.permissions || []).slice().sort().join('|');
+            const nextPermissions = (sanitizedAuthUser.permissions || []).slice().sort().join('|');
+
+            const isSameUser =
+                prevUser.id === sanitizedAuthUser.id &&
+                prevUser.role === sanitizedAuthUser.role &&
+                prevPermissions === nextPermissions;
+
+            return isSameUser ? prevUser : sanitizedAuthUser;
+        });
+    }, [authUser]);
 
     const isAdminUser = useMemo(() => {
         const role = (currentUser?.role || '').toString().trim().toLowerCase();
-        if (role === 'admin' || role === 'administrator') {
+        const adminRoles = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
+        if (adminRoles.includes(role)) {
             return true;
         }
 
         const permissions = normalizePermissions(currentUser?.permissions);
         const normalizedPermissions = permissions.map((perm) => (perm || '').toString().trim().toLowerCase());
+        const adminPermissionKeys = ['admin', 'administrator', 'superadmin', 'super-admin', 'super_admin', 'system_admin'];
 
-        if (normalizedPermissions.includes('all')) return true;
-        if (normalizedPermissions.includes('access_users')) return true;
-        if (normalizedPermissions.includes('manage_users')) return true;
-
-        return false;
+        return normalizedPermissions.some((perm) => adminPermissionKeys.includes(perm));
     }, [currentUser]);
 
     const isTeamAccessible = useCallback(
@@ -381,23 +413,35 @@ const Teams = () => {
     }, [isTeamAccessible]);
 
     const accessibleDocuments = useMemo(() => {
-        return isAdminUser ? documents : documents.filter(d => d.team !== 'management');
+        return isAdminUser
+            ? documents
+            : documents.filter((d) => (d.team || '').toString().trim().toLowerCase() !== 'management');
     }, [documents, isAdminUser]);
 
     const accessibleWorkflows = useMemo(() => {
-        return isAdminUser ? workflows : workflows.filter(w => w.team !== 'management');
+        return isAdminUser
+            ? workflows
+            : workflows.filter((w) => (w.team || '').toString().trim().toLowerCase() !== 'management');
     }, [workflows, isAdminUser]);
 
     const accessibleChecklists = useMemo(() => {
-        return isAdminUser ? checklists : checklists.filter(c => c.team !== 'management');
+        return isAdminUser
+            ? checklists
+            : checklists.filter((c) => (c.team || '').toString().trim().toLowerCase() !== 'management');
     }, [checklists, isAdminUser]);
 
     const accessibleNotices = useMemo(() => {
-        return isAdminUser ? notices : notices.filter(n => n.team !== 'management');
+        return isAdminUser
+            ? notices
+            : notices.filter((n) => (n.team || '').toString().trim().toLowerCase() !== 'management');
     }, [notices, isAdminUser]);
 
     const accessibleWorkflowExecutions = useMemo(() => {
-        return isAdminUser ? workflowExecutions : workflowExecutions.filter(execution => execution.team !== 'management');
+        return isAdminUser
+            ? workflowExecutions
+            : workflowExecutions.filter(
+                  (execution) => (execution.team || '').toString().trim().toLowerCase() !== 'management'
+              );
     }, [workflowExecutions, isAdminUser]);
 
     // Get counts for selected team - memoized per team to avoid recalculation

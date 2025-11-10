@@ -134,6 +134,27 @@ const JobCardFormPublic = () => {
   const signatureWrapperRef = useRef(null);
   const isDrawingRef = useRef(false);
 
+  useEffect(() => {
+    const body = typeof document !== 'undefined' ? document.body : null;
+    const html = typeof document !== 'undefined' ? document.documentElement : null;
+
+    if (body) {
+      body.classList.add('job-card-public');
+    }
+    if (html) {
+      html.classList.add('job-card-public');
+    }
+
+    return () => {
+      if (body) {
+        body.classList.remove('job-card-public');
+      }
+      if (html) {
+        html.classList.remove('job-card-public');
+      }
+    };
+  }, []);
+
   const availableTechnicians = useMemo(
     () => users.filter(u => u.status !== 'inactive' && u.status !== 'suspended'),
     [users]
@@ -1642,7 +1663,7 @@ const JobCardFormPublic = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-50 py-5 px-3 sm:py-8 sm:px-4 lg:px-6">
+    <div className="job-card-public-wrapper min-h-screen bg-gradient-to-b from-gray-100 to-gray-50 py-5 px-3 sm:py-8 sm:px-4 lg:px-6">
       <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
         <header className="relative overflow-hidden rounded-3xl border border-blue-200/50 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl shadow-blue-500/35">
           <div className="pointer-events-none absolute inset-0">
