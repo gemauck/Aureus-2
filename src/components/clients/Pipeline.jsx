@@ -1,6 +1,6 @@
 // Get dependencies from window
 const React = window.React;
-const { useState, useEffect } = React;
+const { useState, useEffect, useCallback } = React;
 const storage = window.storage;
 
 /**
@@ -38,6 +38,7 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
     const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
+    const [fallbackDeal, setFallbackDeal] = useState(null); // { type: 'lead' | 'opportunity', id, data, client }
 
     useEffect(() => {
         try {
@@ -1296,6 +1297,18 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
         return `R ${numericValue.toLocaleString('en-ZA')}`;
     };
+
+    const closeFallbackDetail = useCallback((refresh = false) => {
+        setFallbackDeal(null);
+        try {
+            sessionStorage.removeItem('returnToPipeline');
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag on fallback close', error);
+        }
+        if (refresh) {
+            setTimeout(() => setRefreshKey(k => k + 1), 0);
+        }
+    }, [setRefreshKey]);
 
     const openDealDetail = (item) => {
         if (!item || !item.id) return;

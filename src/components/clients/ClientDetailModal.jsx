@@ -992,6 +992,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 
                 // Optimistically update UI immediately - use functional update to get latest state
+                let updatedFormDataAfterContact = null;
                 setFormData(prev => {
                     const currentContacts = prev.contacts || [];
                     // Check if contact already exists to avoid duplicates
@@ -1010,6 +1011,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         ...prev,
                         contacts: updatedContacts
                     };
+                    updatedFormDataAfterContact = newFormData;
                     formDataRef.current = newFormData;
                     // Force React to see this as a new object reference
                     return newFormData;
@@ -1018,7 +1020,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // State update above will automatically trigger re-render
                 console.log('🔄 State updated - React will re-render automatically');
                 
-                logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`);
+                const formDataForActivity = updatedFormDataAfterContact || formDataRef.current || formData;
+                logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`, null, true, formDataForActivity);
                 
                 // Switch to contacts tab immediately
                 handleTabChange('contacts');
@@ -1447,6 +1450,7 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 });
                 
                 // Optimistically update UI immediately - use functional update to get latest state
+                let updatedFormDataAfterSite = null;
                 setFormData(prev => {
                     const currentSites = prev.sites || [];
                     // Check if site already exists to avoid duplicates
@@ -1465,6 +1469,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                         ...prev,
                         sites: updatedSites
                     };
+                    updatedFormDataAfterSite = newFormData;
+                    formDataRef.current = newFormData;
                     // Force React to see this as a new object reference
                     return newFormData;
                 });
@@ -1472,7 +1478,8 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 // State update above will automatically trigger re-render
                 console.log('🔄 State updated - React will re-render automatically');
                 
-                logActivity('Site Added', `Added site: ${newSite.name}`);
+                const formDataForSiteActivity = updatedFormDataAfterSite || formDataRef.current || formData;
+                logActivity('Site Added', `Added site: ${newSite.name}`, null, true, formDataForSiteActivity);
                 
                 // Switch to sites tab immediately
                 handleTabChange('sites');
