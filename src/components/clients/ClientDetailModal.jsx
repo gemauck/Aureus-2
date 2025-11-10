@@ -874,17 +874,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log('✅ Loaded contacts from database:', contacts.length);
             console.log('📋 Contact data:', contacts);
             
-            // Update formData with contacts from database - force new object reference
-            // Since we skip this when form is edited, we can safely use DB data here
+            // Merge database contacts with any optimistic contacts still pending
             setFormData(prevFormData => {
+                const mergedContacts = mergeUniqueById(contacts, optimisticContacts);
                 const updated = {
                     ...prevFormData,
-                    contacts: [...contacts] // Create new array reference
+                    contacts: mergedContacts
                 };
                 formDataRef.current = updated;
                 return updated;
             });
             console.log('🔄 Updated formData with contacts:', contacts.length);
+
+            // Remove optimistic contacts that now exist in database
+            setOptimisticContacts(prev => prev.filter(opt => !contacts.some(db => db.id === opt.id)));
         } catch (error) {
             console.error('❌ Error loading contacts from database:', error);
         }
@@ -912,17 +915,20 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             console.log('✅ Loaded sites from database:', sites.length);
             console.log('📋 Site data:', sites);
             
-            // Update formData with sites from database - force new object reference
-            // Since we skip this when form is edited, we can safely use DB data here
+            // Merge database sites with any optimistic sites still pending
             setFormData(prevFormData => {
+                const mergedSites = mergeUniqueById(sites, optimisticSites);
                 const updated = {
                     ...prevFormData,
-                    sites: [...sites] // Create new array reference
+                    sites: mergedSites
                 };
                 formDataRef.current = updated;
                 return updated;
             });
             console.log('🔄 Updated formData with sites:', sites.length);
+
+            // Remove optimistic sites that now exist in database
+            setOptimisticSites(prev => prev.filter(opt => !sites.some(db => db.id === opt.id)));
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
         }
