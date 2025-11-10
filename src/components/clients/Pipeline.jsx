@@ -683,6 +683,48 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         }
     };
 
+    const updateLeadStageOptimistically = (leadId, newStage) => {
+        let snapshot = leads;
+        setLeads((prevLeads) => {
+            const updated = prevLeads.map((lead) =>
+                lead.id === leadId ? { ...lead, stage: newStage } : lead
+            );
+            snapshot = updated;
+            return updated;
+        });
+
+        if (typeof storage?.setLeads === 'function') {
+            storage.setLeads(snapshot);
+        }
+
+        return snapshot;
+    };
+
+    const updateOpportunityStageOptimistically = (clientId, opportunityId, newStage) => {
+        let snapshot = clients;
+        setClients((prevClients) => {
+            const updated = prevClients.map((client) => {
+                if (client.id !== clientId) {
+                    return client;
+                }
+
+                const updatedOpportunities = (client.opportunities || []).map((opp) =>
+                    opp.id === opportunityId ? { ...opp, stage: newStage } : opp
+                );
+
+                return { ...client, opportunities: updatedOpportunities };
+            });
+            snapshot = updated;
+            return updated;
+        });
+
+        if (typeof storage?.setClients === 'function') {
+            storage.setClients(snapshot);
+        }
+
+        return snapshot;
+    };
+
     const handleToggleStar = async (event, item) => {
         event.preventDefault();
         event.stopPropagation();
@@ -742,7 +784,9 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             if (rawPayload) {
                 try {
                     const parsed = JSON.parse(rawPayload);
-                    const fallbackItem = getPipelineItems().find(item => item.id === parsed.id && (!parsed.type || item.type === parsed.type));
+                    const fallbackItem = getPipelineItems().find(
+                        (item) => item.id === parsed.id && (!parsed.type || item.type === parsed.type)
+                    );
                     if (fallbackItem) {
                         currentDraggedItem = fallbackItem;
                         currentDraggedType = fallbackItem.type;
@@ -760,237 +804,96 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             return;
         }
 
-        const token = storage.getToken();
-        let updateSuccess = false;
+        const token = typeof storage?.getToken === 'function' ? storage.getToken() : null;
+        const originalStage = currentDraggedItem.stage;
 
-        // Update stage - call API first, then update local state on success
-        if (currentDraggedType === 'lead') {
-            // Update lead in API if authenticated
-            if (token && window.DatabaseAPI) {
-                try {
+        try {
+            if (currentDraggedType === 'lead') {
+                updateLeadStageOptimistically(currentDraggedItem.id, targetStage);
+
+                let leadPersisted = false;
+
+                if (token && window.DatabaseAPI?.updateLead) {
                     await window.DatabaseAPI.updateLead(currentDraggedItem.id, { stage: targetStage });
-                    console.log('✅ Pipeline: Lead stage updated in API');
-                    updateSuccess = true;
-                    
-                    // Update local state after successful API call
-                    const updatedLeads = leads.map(lead => 
-                        lead.id === currentDraggedItem.id ? { ...lead, stage: targetStage } : lead
-                    );
-                    setLeads(updatedLeads);
-                    storage.setLeads(updatedLeads);
-                    
-                    // Refresh data from API to ensure consistency
-                    setTimeout(() => {
-                        setRefreshKey(k => k + 1);
-                    }, 500);
-                } catch (error) {
-                    console.error('❌ Pipeline: Failed to update lead stage in API:', error);
-                    alert('Failed to save lead stage change. Please try again.');
+                    setTimeout(() => setRefreshKey((k) => k + 1), 500);
+                    leadPersisted = true;
+                } else if (token && window.api?.updateLead) {
+                    await window.api.updateLead(currentDraggedItem.id, { stage: targetStage });
+                    setTimeout(() => setRefreshKey((k) => k + 1), 500);
+                    leadPersisted = true;
                 }
-            } else {
-                // No auth - just update local state
-                const updatedLeads = leads.map(lead => 
-                    lead.id === currentDraggedItem.id ? { ...lead, stage: targetStage } : lead
-                );
-                setLeads(updatedLeads);
-            }
-        } else if (currentDraggedType === 'opportunity') {
-            console.log('🔄 Pipeline: Updating opportunity stage...', {
-                opportunityId: currentDraggedItem.id,
-                clientId: currentDraggedItem.clientId,
-                oldStage: currentDraggedItem.stage,
-                newStage: targetStage,
-                hasToken: !!token,
-                hasApi: !!window.api,
-                hasUpdateOpportunity: !!(window.api?.updateOpportunity),
-                hasDatabaseAPI: !!window.DatabaseAPI,
-                hasDatabaseUpdateOpportunity: !!(window.DatabaseAPI?.updateOpportunity)
-            });
-            
-            // Update opportunity directly in API if authenticated
-            if (token && window.api?.updateOpportunity) {
-                try {
-                    console.log('📡 Pipeline: Calling window.api.updateOpportunity...', {
-                        id: currentDraggedItem.id,
-                        stage: targetStage
-                    });
-                    // Update the opportunity's stage in the database
-                    const response = await window.api.updateOpportunity(currentDraggedItem.id, { 
-                        stage: targetStage 
-                    });
-                    console.log('✅ Pipeline: API response received:', JSON.stringify(response, null, 2));
-                    
-                    // If we get here without an error being thrown, the API call succeeded
-                    // The request() function throws on error, so no error = success
-                    console.log('✅ Pipeline: Opportunity stage updated in API (no error thrown):', targetStage);
-                    console.log('✅ Pipeline: Full API response:', JSON.stringify(response, null, 2));
-                    
-                    // Verify the response contains the updated opportunity
-                    const updatedOpp = response?.data?.data?.opportunity || response?.data?.opportunity;
-                    if (updatedOpp) {
-                        console.log('✅ Pipeline: Confirmed updated opportunity:', {
-                            id: updatedOpp.id,
-                            stage: updatedOpp.stage,
-                            title: updatedOpp.title
-                        });
-                        
-                        if (updatedOpp.stage !== targetStage) {
-                            console.error('❌ Pipeline: CRITICAL - API returned different stage!', {
-                                expected: targetStage,
-                                actual: updatedOpp.stage
-                            });
-                            alert(`Warning: Stage mismatch. Expected ${targetStage}, got ${updatedOpp.stage}. Please refresh and try again.`);
-                        }
-                    } else {
-                        console.warn('⚠️ Pipeline: API response did not contain updated opportunity data');
-                    }
-                    
-                    // Update local state optimistically
-                    const updatedClients = clients.map(client => {
-                        if (client.id === currentDraggedItem.clientId) {
-                            const updatedOpportunities = client.opportunities.map(opp =>
-                                opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
-                            );
-                            return { ...client, opportunities: updatedOpportunities };
-                        }
-                        return client;
-                    });
-                    setClients(updatedClients);
-                    
-                    // Wait a bit for database to commit, then refresh from API
-                    console.log('🔄 Pipeline: Waiting 1.5s for DB commit, then refreshing from API...');
-                    setTimeout(() => {
-                        console.log('🔄 Pipeline: Forcing API refresh to verify update persisted...');
-                        // Clear cache first to force fresh load
-                        storage.setClients([]);
-                        setRefreshKey(k => k + 1);
-                    }, 1500);
-                } catch (error) {
-                    console.error('❌ Pipeline: Failed to update opportunity stage in API:', error);
-                    console.error('❌ Pipeline: Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        response: error.response,
-                        fullError: error
-                    });
-                    alert(`Failed to save opportunity stage change: ${error.message || 'Unknown error'}. Please try again.`);
-                    // Don't update local state on error - revert to original
-                }
-            } else if (token && window.DatabaseAPI?.updateOpportunity) {
-                try {
-                    console.log('📡 Pipeline: Calling window.DatabaseAPI.updateOpportunity...', {
-                        id: currentDraggedItem.id,
-                        stage: targetStage
-                    });
-                    const response = await window.DatabaseAPI.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
-                    console.log('✅ Pipeline: DatabaseAPI response received:', JSON.stringify(response, null, 2));
-                    
-                    // If we get here without an error being thrown, the API call succeeded
-                    // DatabaseAPI throws on error, so no error = success
-                    console.log('✅ Pipeline: Opportunity stage updated via DatabaseAPI (no error thrown):', targetStage);
-                    console.log('✅ Pipeline: Full DatabaseAPI response:', JSON.stringify(response, null, 2));
-                    
-                    // Verify the response contains the updated opportunity
-                    const updatedOpp = response?.data?.opportunity;
-                    if (updatedOpp) {
-                        console.log('✅ Pipeline: Confirmed updated opportunity:', {
-                            id: updatedOpp.id,
-                            stage: updatedOpp.stage,
-                            title: updatedOpp.title
-                        });
-                        
-                        if (updatedOpp.stage !== targetStage) {
-                            console.error('❌ Pipeline: CRITICAL - API returned different stage!', {
-                                expected: targetStage,
-                                actual: updatedOpp.stage
-                            });
-                            alert(`Warning: Stage mismatch. Expected ${targetStage}, got ${updatedOpp.stage}. Please refresh and try again.`);
-                        }
-                    } else {
-                        console.warn('⚠️ Pipeline: DatabaseAPI response did not contain updated opportunity data');
-                    }
-                    
-                    // Update local state optimistically
-                    const updatedClients = clients.map(client => {
-                        if (client.id === currentDraggedItem.clientId) {
-                            const updatedOpportunities = client.opportunities.map(opp =>
-                                opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
-                            );
-                            return { ...client, opportunities: updatedOpportunities };
-                        }
-                        return client;
-                    });
-                    setClients(updatedClients);
-                    
-                    // Wait a bit for database to commit, then refresh from API
-                    console.log('🔄 Pipeline: Waiting 1.5s for DB commit, then refreshing from API...');
-                    setTimeout(() => {
-                        console.log('🔄 Pipeline: Forcing API refresh to verify update persisted...');
-                        // Clear cache first to force fresh load
-                        storage.setClients([]);
-                        setRefreshKey(k => k + 1);
-                    }, 1500);
-                } catch (error) {
-                    console.error('❌ Pipeline: Failed to update opportunity via DatabaseAPI:', error);
-                    console.error('❌ Pipeline: Error details:', {
-                        message: error.message,
-                        stack: error.stack,
-                        response: error.response,
-                        fullError: error
-                    });
-                    alert(`Failed to save opportunity stage change: ${error.message || 'Unknown error'}. Please try again.`);
-                }
-            } else if (token && window.DatabaseAPI) {
-                // Fallback to old method if new API not available
-                try {
-                    const updatedClients = clients.map(client => {
-                        if (client.id === draggedItem.clientId) {
-                            const updatedOpportunities = client.opportunities.map(opp =>
-                                opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
-                            );
-                            return { ...client, opportunities: updatedOpportunities };
-                        }
-                        return client;
-                    });
-                    
-                    const clientToUpdate = updatedClients.find(c => c.id === draggedItem.clientId);
-                    if (clientToUpdate) {
-                        await window.DatabaseAPI.updateClient(draggedItem.clientId, { 
-                            opportunities: clientToUpdate.opportunities 
-                        });
-                        console.log('✅ Pipeline: Client opportunities updated via fallback');
-                        updateSuccess = true;
-                        
-                        setClients(updatedClients);
-                        storage.setClients(updatedClients);
-                        
-                        // Refresh data from API to ensure consistency
-                        setTimeout(() => {
-                            setRefreshKey(k => k + 1);
-                        }, 500);
-                    }
-                } catch (error) {
-                    console.error('❌ Pipeline: Failed to update client opportunities in API:', error);
-                    alert('Failed to save opportunity stage change. Please try again.');
-                }
-            } else {
-                // No auth - just update local state
-                const updatedClients = clients.map(client => {
-                    if (client.id === currentDraggedItem.clientId) {
-                        const updatedOpportunities = client.opportunities.map(opp =>
-                            opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
-                        );
-                        return { ...client, opportunities: updatedOpportunities };
-                    }
-                    return client;
-                });
-                setClients(updatedClients);
-            }
-        }
 
+                if (!leadPersisted) {
+                    console.log('ℹ️ Pipeline: Lead stage updated locally (no API available)');
+                }
+            }
+
+            if (currentDraggedType === 'opportunity') {
+                const updatedClients = updateOpportunityStageOptimistically(
+                    currentDraggedItem.clientId,
+                    currentDraggedItem.id,
+                    targetStage
+                );
+
+                let refreshDelay = 0;
+                let opportunityPersisted = false;
+
+                if (token && window.api?.updateOpportunity) {
+                    await window.api.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
+                    refreshDelay = 1500;
+                    opportunityPersisted = true;
+                }
+
+                if (!opportunityPersisted && token && window.DatabaseAPI?.updateOpportunity) {
+                    await window.DatabaseAPI.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
+                    refreshDelay = 1500;
+                    opportunityPersisted = true;
+                }
+
+                if (!opportunityPersisted && token && window.DatabaseAPI) {
+                    const clientToUpdate = updatedClients.find((client) => client.id === currentDraggedItem.clientId);
+                    if (clientToUpdate) {
+                        await window.DatabaseAPI.updateClient(currentDraggedItem.clientId, {
+                            opportunities: clientToUpdate.opportunities || []
+                        });
+                        refreshDelay = 500;
+                        opportunityPersisted = true;
+                    }
+                }
+
+                if (!opportunityPersisted) {
+                    console.log('ℹ️ Pipeline: Opportunity stage updated locally (no API available)');
+                }
+
+                if (refreshDelay > 0) {
+                    setTimeout(() => {
+                        if (typeof storage?.setClients === 'function') {
+                        storage.setClients([]);
+                        }
+                        setRefreshKey((k) => k + 1);
+                    }, refreshDelay);
+                }
+                    }
+                } catch (error) {
+            console.error('❌ Pipeline: Failed to persist stage change:', error);
+            if (currentDraggedType === 'lead') {
+                updateLeadStageOptimistically(currentDraggedItem.id, originalStage);
+            } else if (currentDraggedType === 'opportunity') {
+                updateOpportunityStageOptimistically(
+                    currentDraggedItem.clientId,
+                    currentDraggedItem.id,
+                    originalStage
+                );
+            }
+            alert('Failed to save stage change. Please try again.');
+        } finally {
         setDraggedItem(null);
         setDraggedType(null);
         setIsDragging(false);
+            setTouchDragState(null);
+            setJustDragged(true);
+            setTimeout(() => setJustDragged(false), 300);
+        }
     };
 
     const handleDragEnd = () => {
@@ -1319,41 +1222,42 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
         }
 
         if (item.type === 'lead') {
+            const payload = { leadId: item.id, leadData: item };
+            let handled = false;
+
             if (typeof onOpenLead === 'function') {
-                onOpenLead({ leadId: item.id, leadData: item });
-                return;
-            }
-            if (typeof window.__openLeadDetailFromPipeline === 'function') {
-                window.__openLeadDetailFromPipeline({ leadId: item.id, leadData: item });
-                return;
-            }
+                onOpenLead({ ...payload, origin: 'prop' });
+                handled = true;
+            } else if (typeof window.__openLeadDetailFromPipeline === 'function') {
+                window.__openLeadDetailFromPipeline({ ...payload, origin: 'prop' });
+                handled = true;
+            } else {
             setFallbackDeal({
                 type: 'lead',
                 id: item.id,
                 data: item
             });
+            }
+
             window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', {
-                detail: { leadId: item.id }
+                detail: { ...payload, origin: handled ? 'prop' : 'event' }
             }));
         } else {
+            const opportunityPayload = {
+                    opportunityId: item.id,
+                    clientId: item.clientId || item.client?.id,
+                    clientName: item.clientName || item.client?.name || item.name,
+                    opportunity: item
+            };
+            let handled = false;
+
             if (typeof onOpenOpportunity === 'function') {
-                onOpenOpportunity({
-                    opportunityId: item.id,
-                    clientId: item.clientId || item.client?.id,
-                    clientName: item.clientName || item.client?.name || item.name,
-                    opportunity: item
-                });
-                return;
-            }
-            if (typeof window.__openOpportunityDetailFromPipeline === 'function') {
-                window.__openOpportunityDetailFromPipeline({
-                    opportunityId: item.id,
-                    clientId: item.clientId || item.client?.id,
-                    clientName: item.clientName || item.client?.name || item.name,
-                    opportunity: item
-                });
-                return;
-            }
+                onOpenOpportunity({ ...opportunityPayload, origin: 'prop' });
+                handled = true;
+            } else if (typeof window.__openOpportunityDetailFromPipeline === 'function') {
+                window.__openOpportunityDetailFromPipeline({ ...opportunityPayload, origin: 'prop' });
+                handled = true;
+            } else {
             setFallbackDeal({
                 type: 'opportunity',
                 id: item.id,
@@ -1365,12 +1269,10 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                     }
                     : null)
             });
-            window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
-                detail: {
-                    opportunityId: item.id,
-                    clientId: item.clientId,
-                    clientName: item.clientName || item.client?.name || item.name
                 }
+
+            window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
+                detail: { ...opportunityPayload, origin: handled ? 'prop' : 'event' }
             }));
         }
     };
@@ -1738,16 +1640,6 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                     >
                         <i className="fas fa-sync-alt mr-2"></i>
                         Refresh
-                    </button>
-                    <button
-                        onClick={() => {
-                            // Navigate to CRM to add new lead
-                            window.dispatchEvent(new CustomEvent('navigateToPage', { detail: { page: 'crm' } }));
-                        }}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition text-sm font-medium"
-                    >
-                        <i className="fas fa-plus mr-2"></i>
-                        New Deal
                     </button>
                 </div>
             </div>

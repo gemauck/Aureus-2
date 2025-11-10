@@ -112,6 +112,80 @@ function processClientData(rawClients, cacheKey) {
     return processed;
 }
 
+function resolveEntityId(entity) {
+    if (!entity || typeof entity !== 'object') {
+        return null;
+    }
+
+    const candidateKeys = [
+        'id',
+        'leadId',
+        'clientId',
+        'uuid',
+        '_id',
+        'publicId',
+        'externalId',
+        'recordId',
+        'tempId',
+        'localId',
+        'legacyId'
+    ];
+
+    for (const key of candidateKeys) {
+        const value = entity[key];
+        if (value !== undefined && value !== null && value !== '') {
+            return value;
+        }
+    }
+
+    if (entity.metadata && entity.metadata.id) {
+        return entity.metadata.id;
+    }
+
+    if (Array.isArray(entity.identifiers)) {
+        const identifier = entity.identifiers.find((val) => val !== undefined && val !== null && val !== '');
+        if (identifier) {
+            return identifier;
+        }
+    }
+
+    return null;
+}
+
+function generateFallbackId(entity, prefix = 'record') {
+    const safePrefix = prefix || 'record';
+    const rawName = typeof entity?.name === 'string' && entity.name.trim() ? entity.name.trim().toLowerCase() : safePrefix;
+    const sanitizedName = rawName.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '') || safePrefix;
+
+    const timestampSource =
+        entity?.createdAt ||
+        entity?.updatedAt ||
+        entity?.firstContactDate ||
+        entity?.lastContact ||
+        Date.now();
+
+    let timestamp = Date.now();
+    if (typeof timestampSource === 'number' && Number.isFinite(timestampSource)) {
+        timestamp = timestampSource;
+    } else if (typeof timestampSource === 'string') {
+        const parsed = Date.parse(timestampSource);
+        if (!Number.isNaN(parsed)) {
+            timestamp = parsed;
+        }
+    }
+
+    return `${safePrefix}-${sanitizedName}-${timestamp}`;
+}
+
+function normalizeEntityId(entity, prefix = 'record') {
+    const existing = resolveEntityId(entity);
+    if (existing !== undefined && existing !== null && existing !== '') {
+        return { id: existing, generated: false };
+    }
+
+    return { id: generateFallbackId(entity, prefix), generated: true };
+}
+
 // Services Dropdown Component with checkboxes
 const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDark }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -2914,11 +2988,19 @@ const Clients = React.memo(() => {
 
     useEffect(() => {
         const handleLeadEvent = (event) => {
-            openLeadFromPipeline(event?.detail || {});
+            const detail = event?.detail || {};
+            if (detail.origin === 'prop') {
+                return;
+            }
+            openLeadFromPipeline(detail);
         };
 
         const handleOpportunityEvent = (event) => {
-            openOpportunityFromPipeline(event?.detail || {});
+            const detail = event?.detail || {};
+            if (detail.origin === 'prop') {
+                return;
+            }
+            openOpportunityFromPipeline(detail);
         };
 
         window.addEventListener('openLeadDetailFromPipeline', handleLeadEvent);
