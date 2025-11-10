@@ -31,10 +31,9 @@ const Pipeline = () => {
         source: 'All'
     });
     const [sortBy, setSortBy] = useState('value-desc');
-    const [viewMode, setViewMode] = useState('list'); // list, kanban, forecast
+    const [viewMode, setViewMode] = useState('list'); // list, kanban
     const [selectedDeal, setSelectedDeal] = useState(null);
     const [showDealModal, setShowDealModal] = useState(false);
-    const [timeRange, setTimeRange] = useState('current'); // current, monthly, quarterly
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
@@ -77,6 +76,20 @@ const Pipeline = () => {
             avgDuration: '7 days'
         }
     ];
+
+    const normalizeLifecycleStage = (value) => {
+        switch ((value || '').toLowerCase()) {
+            case 'active':
+                return 'Active';
+            case 'proposal':
+                return 'Proposal';
+            case 'disinterested':
+                return 'Disinterested';
+            case 'potential':
+            default:
+                return 'Potential';
+        }
+    };
 
     // Load data from API and localStorage
     useEffect(() => {
@@ -459,6 +472,8 @@ const Pipeline = () => {
                 type: 'lead',
                 itemType: 'New Lead',
                 stage: mappedStage,
+                status: normalizeLifecycleStage(lead.status),
+                isStarred: Boolean(lead.isStarred),
                 value: lead.value || 0,
                 createdDate: lead.createdDate || new Date().toISOString(),
                 expectedCloseDate: lead.expectedCloseDate || null
@@ -502,6 +517,8 @@ const Pipeline = () => {
                         clientId: client.id,
                         clientName: client.name || 'Unknown Client',
                         stage: mappedStage,
+                        status: normalizeLifecycleStage(opp.status),
+                        isStarred: Boolean(opp.isStarred),
                         value: Number(opp.value) || 0,
                         createdDate: opp.createdAt || opp.createdDate || new Date().toISOString(), // render Opportunity.createdAt as createdDate
                         expectedCloseDate: opp.expectedCloseDate || null,
@@ -583,6 +600,11 @@ const Pipeline = () => {
 
         // Sorting
         items.sort((a, b) => {
+            const aStar = a.isStarred ? 1 : 0;
+            const bStar = b.isStarred ? 1 : 0;
+            if (aStar !== bStar) {
+                return bStar - aStar;
+            }
             switch (sortBy) {
                 case 'value-desc': return b.value - a.value;
                 case 'value-asc': return a.value - b.value;
@@ -632,7 +654,16 @@ const Pipeline = () => {
     };
 
     // Drag and drop handlers
-    const handleDragStart = (item, type) => {
+    const handleDragStart = (event, item, type) => {
+        if (event?.dataTransfer) {
+            try {
+                event.dataTransfer.setData('application/json', JSON.stringify({ id: item.id, type }));
+                event.dataTransfer.effectAllowed = 'move';
+            } catch (error) {
+                console.warn('⚠️ Pipeline: Unable to serialise drag payload', error);
+            }
+        }
+        
         setDraggedItem(item);
         setDraggedType(type);
         setIsDragging(true);
@@ -640,12 +671,82 @@ const Pipeline = () => {
 
     const handleDragOver = (e) => {
         e.preventDefault();
+        if (e?.dataTransfer) {
+            e.dataTransfer.dropEffect = draggedItem ? 'move' : 'none';
+        }
+    };
+
+    const handleToggleStar = async (event, item) => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        try {
+            if (item.type === 'lead') {
+                const toggleFn = window.api?.toggleStarClient || window.DatabaseAPI?.toggleStarClient;
+                if (toggleFn && item.id) {
+                    await toggleFn(item.id);
+                }
+
+                const updatedLeads = leads.map(lead =>
+                    lead.id === item.id ? { ...lead, isStarred: !lead.isStarred } : lead
+                );
+                setLeads(updatedLeads);
+                storage.setLeads(updatedLeads);
+            } else if (item.type === 'opportunity') {
+                const toggleOpportunityFn = window.api?.toggleStarOpportunity || window.DatabaseAPI?.toggleStarOpportunity;
+                if (toggleOpportunityFn && item.id) {
+                    await toggleOpportunityFn(item.id);
+                }
+
+                const updatedClients = clients.map(client => {
+                    if (client.id !== item.clientId) return client;
+                    const updatedOpportunities = (client.opportunities || []).map(opp =>
+                        opp.id === item.id ? { ...opp, isStarred: !opp.isStarred } : opp
+                    );
+                    return { ...client, opportunities: updatedOpportunities };
+                });
+
+                setClients(updatedClients);
+                storage.setClients(updatedClients);
+            }
+
+            // Re-sort locally and refresh from API to stay in sync
+            setTimeout(() => {
+                setRefreshKey(k => k + 1);
+            }, 400);
+        } catch (error) {
+            console.error('❌ Pipeline: Failed to toggle star', error);
+            alert('Failed to update favorite. Please try again.');
+        }
     };
 
     const handleDrop = async (e, targetStage) => {
         e.preventDefault();
         
-        if (!draggedItem || !draggedType || draggedItem.stage === targetStage) {
+        if (e?.dataTransfer) {
+            e.dataTransfer.dropEffect = 'move';
+        }
+        
+        let currentDraggedItem = draggedItem;
+        let currentDraggedType = draggedType;
+
+        if ((!currentDraggedItem || !currentDraggedType) && e?.dataTransfer) {
+            const rawPayload = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
+            if (rawPayload) {
+                try {
+                    const parsed = JSON.parse(rawPayload);
+                    const fallbackItem = getPipelineItems().find(item => item.id === parsed.id && (!parsed.type || item.type === parsed.type));
+                    if (fallbackItem) {
+                        currentDraggedItem = fallbackItem;
+                        currentDraggedType = fallbackItem.type;
+                    }
+                } catch (error) {
+                    console.warn('⚠️ Pipeline: Failed to parse drag payload', error);
+                }
+            }
+        }
+
+        if (!currentDraggedItem || !currentDraggedType || currentDraggedItem.stage === targetStage) {
             setDraggedItem(null);
             setDraggedType(null);
             setIsDragging(false);
@@ -656,17 +757,17 @@ const Pipeline = () => {
         let updateSuccess = false;
 
         // Update stage - call API first, then update local state on success
-        if (draggedType === 'lead') {
+        if (currentDraggedType === 'lead') {
             // Update lead in API if authenticated
             if (token && window.DatabaseAPI) {
                 try {
-                    await window.DatabaseAPI.updateLead(draggedItem.id, { stage: targetStage });
+                    await window.DatabaseAPI.updateLead(currentDraggedItem.id, { stage: targetStage });
                     console.log('✅ Pipeline: Lead stage updated in API');
                     updateSuccess = true;
                     
                     // Update local state after successful API call
                     const updatedLeads = leads.map(lead => 
-                        lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
+                        lead.id === currentDraggedItem.id ? { ...lead, stage: targetStage } : lead
                     );
                     setLeads(updatedLeads);
                     storage.setLeads(updatedLeads);
@@ -682,15 +783,15 @@ const Pipeline = () => {
             } else {
                 // No auth - just update local state
                 const updatedLeads = leads.map(lead => 
-                    lead.id === draggedItem.id ? { ...lead, stage: targetStage } : lead
+                    lead.id === currentDraggedItem.id ? { ...lead, stage: targetStage } : lead
                 );
                 setLeads(updatedLeads);
             }
-        } else if (draggedType === 'opportunity') {
+        } else if (currentDraggedType === 'opportunity') {
             console.log('🔄 Pipeline: Updating opportunity stage...', {
-                opportunityId: draggedItem.id,
-                clientId: draggedItem.clientId,
-                oldStage: draggedItem.stage,
+                opportunityId: currentDraggedItem.id,
+                clientId: currentDraggedItem.clientId,
+                oldStage: currentDraggedItem.stage,
                 newStage: targetStage,
                 hasToken: !!token,
                 hasApi: !!window.api,
@@ -703,11 +804,11 @@ const Pipeline = () => {
             if (token && window.api?.updateOpportunity) {
                 try {
                     console.log('📡 Pipeline: Calling window.api.updateOpportunity...', {
-                        id: draggedItem.id,
+                        id: currentDraggedItem.id,
                         stage: targetStage
                     });
                     // Update the opportunity's stage in the database
-                    const response = await window.api.updateOpportunity(draggedItem.id, { 
+                    const response = await window.api.updateOpportunity(currentDraggedItem.id, { 
                         stage: targetStage 
                     });
                     console.log('✅ Pipeline: API response received:', JSON.stringify(response, null, 2));
@@ -739,9 +840,9 @@ const Pipeline = () => {
                     
                     // Update local state optimistically
                     const updatedClients = clients.map(client => {
-                        if (client.id === draggedItem.clientId) {
+                        if (client.id === currentDraggedItem.clientId) {
                             const updatedOpportunities = client.opportunities.map(opp =>
-                                opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
+                                opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
                             );
                             return { ...client, opportunities: updatedOpportunities };
                         }
@@ -771,10 +872,10 @@ const Pipeline = () => {
             } else if (token && window.DatabaseAPI?.updateOpportunity) {
                 try {
                     console.log('📡 Pipeline: Calling window.DatabaseAPI.updateOpportunity...', {
-                        id: draggedItem.id,
+                        id: currentDraggedItem.id,
                         stage: targetStage
                     });
-                    const response = await window.DatabaseAPI.updateOpportunity(draggedItem.id, { stage: targetStage });
+                    const response = await window.DatabaseAPI.updateOpportunity(currentDraggedItem.id, { stage: targetStage });
                     console.log('✅ Pipeline: DatabaseAPI response received:', JSON.stringify(response, null, 2));
                     
                     // If we get here without an error being thrown, the API call succeeded
@@ -804,9 +905,9 @@ const Pipeline = () => {
                     
                     // Update local state optimistically
                     const updatedClients = clients.map(client => {
-                        if (client.id === draggedItem.clientId) {
+                        if (client.id === currentDraggedItem.clientId) {
                             const updatedOpportunities = client.opportunities.map(opp =>
-                                opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
+                                opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
                             );
                             return { ...client, opportunities: updatedOpportunities };
                         }
@@ -868,9 +969,9 @@ const Pipeline = () => {
             } else {
                 // No auth - just update local state
                 const updatedClients = clients.map(client => {
-                    if (client.id === draggedItem.clientId) {
+                    if (client.id === currentDraggedItem.clientId) {
                         const updatedOpportunities = client.opportunities.map(opp =>
-                            opp.id === draggedItem.id ? { ...opp, stage: targetStage } : opp
+                            opp.id === currentDraggedItem.id ? { ...opp, stage: targetStage } : opp
                         );
                         return { ...client, opportunities: updatedOpportunities };
                     }
@@ -1167,6 +1268,21 @@ const Pipeline = () => {
         return 'bg-red-100 text-red-800';
     };
 
+    const getLifecycleBadgeColor = (status = '') => {
+        const normalized = (status || '').toLowerCase();
+        switch (normalized) {
+            case 'active':
+                return 'bg-green-100 text-green-700';
+            case 'proposal':
+                return 'bg-purple-100 text-purple-700';
+            case 'disinterested':
+                return 'bg-gray-200 text-gray-600';
+            case 'potential':
+            default:
+                return 'bg-blue-100 text-blue-700';
+        }
+    };
+
     const formatCurrency = (value) => {
         const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
         return `R ${numericValue.toLocaleString('en-ZA')}`;
@@ -1182,7 +1298,7 @@ const Pipeline = () => {
         return (
             <div 
                 draggable
-                onDragStart={() => handleDragStart(item, item.type)}
+                onDragStart={(e) => handleDragStart(e, item, item.type)}
                 onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleTouchStart(e, item, item.type)}
                 onClick={(e) => {
@@ -1211,8 +1327,26 @@ const Pipeline = () => {
             >
                 {/* Header with Badge - Fixed height */}
                 <div className="flex items-center justify-between gap-0.5 mb-0.5" style={{ height: '16px', minHeight: '16px', maxHeight: '16px' }}>
-                    <div className="font-medium text-[10px] text-gray-900 line-clamp-1 flex-1 leading-tight truncate">
-                        {item.name}
+                    <div className="flex items-center gap-1 flex-1 min-w-0">
+                        <button
+                            type="button"
+                            aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
+                            className="shrink-0 p-0.5 rounded hover:bg-yellow-50 transition"
+                            onClick={(e) => handleToggleStar(e, item)}
+                            onMouseDown={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                            }}
+                            onTouchStart={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                            }}
+                        >
+                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-[10px]`}></i>
+                        </button>
+                        <div className="font-medium text-[10px] text-gray-900 line-clamp-1 leading-tight truncate">
+                            {item.name}
+                        </div>
                     </div>
                     <span className={`px-1 py-0.5 text-[8px] rounded font-medium shrink-0 leading-none whitespace-nowrap ${
                         item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
@@ -1233,13 +1367,22 @@ const Pipeline = () => {
                     <span className={`px-0.5 py-0.5 rounded font-medium leading-none ${getAgeBadgeColor(age)}`}>
                         {age}d
                     </span>
-                    <span className="text-gray-500 text-[7px] truncate leading-none flex-1 text-right ml-1">
-                        {item.industry || '\u00A0'}
-                    </span>
+                    {item.status ? (
+                        <span className={`px-1 py-0.5 text-[8px] rounded font-medium leading-none ml-auto ${getLifecycleBadgeColor(item.status)}`}>
+                            {item.status}
+                        </span>
+                    ) : (
+                        <span className="text-gray-400 text-[7px] leading-none ml-auto"> </span>
+                    )}
+                </div>
+
+                {/* Industry */}
+                <div className="text-gray-500 text-[7px] truncate leading-none mb-0.5">
+                    {item.industry || '\u00A0'}
                 </div>
 
                 {/* Expected Close Date or Spacer - Fixed height to fill remaining space */}
-                <div className="flex items-end" style={{ height: '25px', minHeight: '25px', maxHeight: '25px', marginTop: 'auto' }}>
+                <div className="flex items-end" style={{ height: '23px', minHeight: '23px', maxHeight: '23px', marginTop: 'auto' }}>
                     {item.expectedCloseDate ? (
                         <div className="text-[8px] text-gray-600 leading-none">
                             <i className="fas fa-calendar-alt mr-0.5 text-[7px]"></i>
@@ -1255,7 +1398,24 @@ const Pipeline = () => {
     const KanbanView = () => (
         <div className="flex gap-3 overflow-x-auto pb-4">
             {pipelineStages.map(stage => {
-                const stageItems = filteredItems.filter(item => item.stage === stage.name);
+                const stageItems = filteredItems
+                    .filter(item => item.stage === stage.name)
+                    .sort((a, b) => {
+                        const aStar = a.isStarred ? 1 : 0;
+                        const bStar = b.isStarred ? 1 : 0;
+                        if (aStar !== bStar) {
+                            return bStar - aStar;
+                        }
+                        switch (sortBy) {
+                            case 'value-desc': return b.value - a.value;
+                            case 'value-asc': return a.value - b.value;
+                            case 'date-desc': return new Date(b.createdDate) - new Date(a.createdDate);
+                            case 'date-asc': return new Date(a.createdDate) - new Date(b.createdDate);
+                            case 'name-asc': return a.name.localeCompare(b.name);
+                            case 'name-desc': return b.name.localeCompare(a.name);
+                            default: return 0;
+                        }
+                    });
                 const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
                 const isDraggedOver = draggedItem && draggedItem.stage !== stage.name;
                 
@@ -1344,7 +1504,7 @@ const Pipeline = () => {
                     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
                         <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Latest Updates</div>
                         <div className="text-sm text-gray-800 font-medium">
-                            {items[0] ? (items[0].stage || 'Unknown Stage') : 'No activity'}
+                            {items[0] ? `${items[0].status || 'Potential'} • ${items[0].stage || 'Unknown Stage'}` : 'No activity'}
                         </div>
                         <div className="text-xs text-gray-500 mt-1">
                             Sorted by {sortBy.includes('date') ? 'created date' : 'current sort'}
@@ -1361,6 +1521,7 @@ const Pipeline = () => {
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">AIDA Stage</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
@@ -1369,7 +1530,7 @@ const Pipeline = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {items.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="px-4 py-12 text-center text-sm text-gray-500">
+                                        <td colSpan="8" className="px-4 py-12 text-center text-sm text-gray-500">
                                             <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
                                             <p>No leads or opportunities match your filters.</p>
                                             <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
@@ -1390,16 +1551,36 @@ const Pipeline = () => {
                                                 }}
                                             >
                                                 <td className="px-4 py-3">
-                                                    <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
-                                                        {item.name}
-                                                        {isLead ? (
-                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Lead</span>
-                                                        ) : (
-                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">Opportunity</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-gray-500 mt-1">
-                                                        Created {new Date(item.createdDate).toLocaleDateString('en-ZA')}
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            aria-label={item.isStarred ? 'Unstar deal' : 'Star deal'}
+                                                            className="shrink-0 p-1 rounded-full hover:bg-yellow-50 transition"
+                                                            onClick={(e) => handleToggleStar(e, item)}
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                            }}
+                                                            onTouchStart={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                            }}
+                                                        >
+                                                            <i className={`${item.isStarred ? 'fas text-yellow-500' : 'far text-gray-300'} fa-star text-sm`}></i>
+                                                        </button>
+                                                        <div className="min-w-0">
+                                                            <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                                <span className="truncate">{item.name}</span>
+                                                                {isLead ? (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Lead</span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">Opportunity</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-xs text-gray-500 mt-1">
+                                                                Created {new Date(item.createdDate).toLocaleDateString('en-ZA')}
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -1419,7 +1600,12 @@ const Pipeline = () => {
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3">
-                                                    <span className="text-sm font-medium text-gray-900">{item.stage}</span>
+                                                <span className={`inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded ${getLifecycleBadgeColor(item.status || 'Potential')}`}>
+                                                    {item.status || 'Potential'}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className="text-sm font-medium text-gray-900">{item.stage}</span>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.value)}</span>
@@ -1444,92 +1630,6 @@ const Pipeline = () => {
                         </table>
                     </div>
                 </div>
-            </div>
-        );
-    };
-
-    // Forecast View
-    const ForecastView = () => {
-        const monthlyForecasts = [];
-        const today = new Date();
-        
-        for (let i = 0; i < 3; i++) {
-            const forecastMonth = new Date(today.getFullYear(), today.getMonth() + i, 1);
-            const monthName = forecastMonth.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
-            
-            // Filter deals expected to close in this month
-            const monthDeals = filteredItems.filter(item => {
-                if (!item.expectedCloseDate) return false;
-                const closeDate = new Date(item.expectedCloseDate);
-                return closeDate.getMonth() === forecastMonth.getMonth() && 
-                       closeDate.getFullYear() === forecastMonth.getFullYear();
-            });
-            
-            const monthValue = monthDeals.reduce((sum, item) => sum + item.value, 0);
-            
-            monthlyForecasts.push({
-                month: monthName,
-                deals: monthDeals.length,
-                value: monthValue,
-                items: monthDeals
-            });
-        }
-
-        return (
-            <div className="space-y-6">
-                {/* Forecast Summary */}
-                <div className="grid grid-cols-3 gap-4">
-                    {monthlyForecasts.map((forecast, index) => (
-                        <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                            <div className="text-sm font-medium text-gray-600 mb-2">{forecast.month}</div>
-                            <div className="text-2xl font-bold text-gray-900 mb-1">
-                                R {forecast.value.toLocaleString('en-ZA')}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                                {forecast.deals} deals
-                            </div>
-                        </div>
-                    ))}
-                </div>
-
-                {/* Monthly Breakdown */}
-                {monthlyForecasts.map((forecast, index) => (
-                    <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200">
-                        <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
-                            <h3 className="text-sm font-semibold text-gray-900">{forecast.month}</h3>
-                        </div>
-                        <div className="p-4">
-                            {forecast.items.length === 0 ? (
-                                <p className="text-sm text-gray-500 text-center py-4">No deals forecasted for this month</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {forecast.items.map(item => (
-                                        <div 
-                                            key={`${item.type}-${item.id}`}
-                                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer transition"
-                                            onClick={() => {
-                                                setSelectedDeal(item);
-                                                setShowDealModal(true);
-                                            }}
-                                        >
-                                            <div className="flex-1">
-                                                <div className="font-medium text-sm text-gray-900">{item.name}</div>
-                                                <div className="text-xs text-gray-500">
-                                                    {item.stage} • {item.type === 'lead' ? 'Lead' : 'Opportunity'}
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-sm font-medium text-gray-900">
-                                                    R {item.value.toLocaleString('en-ZA')}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                ))}
             </div>
         );
     };
@@ -1597,7 +1697,7 @@ const Pipeline = () => {
                             }`}
                         >
                             <i className="fas fa-layer-group mr-2"></i>
-                            All Deals
+                            List
                         </button>
                         <button
                             onClick={() => setViewMode('kanban')}
@@ -1607,15 +1707,6 @@ const Pipeline = () => {
                         >
                             <i className="fas fa-th mr-2"></i>
                             Kanban
-                        </button>
-                        <button
-                            onClick={() => setViewMode('forecast')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                                viewMode === 'forecast' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                        >
-                            <i className="fas fa-chart-line mr-2"></i>
-                            Forecast
                         </button>
                     </div>
 
@@ -1714,9 +1805,7 @@ const Pipeline = () => {
 
             {/* Main Content */}
             {viewMode === 'kanban' && <KanbanView />}
-            {viewMode === 'all-deals' && <AllDealsListView />}
             {viewMode === 'list' && <ListView />}
-            {viewMode === 'forecast' && <ForecastView />}
             
             {/* Opportunity Detail Modal */}
             {showDealModal && selectedDeal && selectedDeal.type === 'opportunity' && window.OpportunityDetailModal && (

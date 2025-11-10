@@ -1381,6 +1381,43 @@ const DatabaseAPI = {
         return response;
     },
 
+    // STAR OPPORTUNITY
+    async starOpportunity(opportunityId) {
+        console.log(`⭐ Starring opportunity ${opportunityId}...`);
+        const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Opportunity starred');
+        this._responseCache.delete('GET:/opportunities');
+        return response;
+    },
+
+    async unstarOpportunity(opportunityId) {
+        console.log(`⭐ Unstarring opportunity ${opportunityId}...`);
+        const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Opportunity unstarred');
+        this._responseCache.delete('GET:/opportunities');
+        return response;
+    },
+
+    async toggleStarOpportunity(opportunityId) {
+        console.log(`⭐ Toggling star for opportunity ${opportunityId}...`);
+        const response = await this.makeRequest(`/starred-opportunities/${opportunityId}`, {
+            method: 'PUT'
+        });
+        console.log('✅ Opportunity star toggled');
+        this._responseCache.delete('GET:/opportunities');
+        return response;
+    },
+
+    async getStarredOpportunities() {
+        console.log('⭐ Fetching starred opportunities...');
+        const response = await this.makeRequest('/starred-opportunities');
+        return response;
+    },
+
     // VEHICLES
     async getVehicles() {
         console.log('📡 Fetching vehicles from database...');
@@ -1667,6 +1704,12 @@ if (window.api) {
     window.api.unstarClient = DatabaseAPI.unstarClient.bind(DatabaseAPI);
     window.api.toggleStarClient = DatabaseAPI.toggleStarClient.bind(DatabaseAPI);
     window.api.getStarredClients = DatabaseAPI.getStarredClients.bind(DatabaseAPI);
+    
+    // Starred opportunities API methods
+    window.api.starOpportunity = DatabaseAPI.starOpportunity.bind(DatabaseAPI);
+    window.api.unstarOpportunity = DatabaseAPI.unstarOpportunity.bind(DatabaseAPI);
+    window.api.toggleStarOpportunity = DatabaseAPI.toggleStarOpportunity.bind(DatabaseAPI);
+    window.api.getStarredOpportunities = DatabaseAPI.getStarredOpportunities.bind(DatabaseAPI);
     
     // Opportunities API methods
     window.api.getOpportunities = DatabaseAPI.getOpportunities.bind(DatabaseAPI);

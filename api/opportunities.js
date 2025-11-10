@@ -33,6 +33,21 @@ async function handler(req, res) {
       method: req.method
     })
 
+    const userId = req.user?.sub || null
+    let validUserId = null
+    if (userId) {
+      try {
+        const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+        if (userExists) {
+          validUserId = userId
+        } else {
+          console.warn('⚠️ Opportunities API: user not found in database, skipping starred relation include', userId)
+        }
+      } catch (userCheckError) {
+        console.warn('⚠️ Opportunities API: failed to verify user existence for starred relation', userCheckError.message)
+      }
+    }
+
     // List Opportunities (GET /api/opportunities)
     if (req.method === 'GET' && pathSegments.length === 1 && pathSegments[0] === 'opportunities') {
       try {
@@ -44,12 +59,25 @@ async function handler(req, res) {
                 name: true,
                 type: true
               }
-            }
+            },
+            ...(validUserId ? {
+              starredBy: {
+                where: { userId: validUserId },
+                select: { id: true }
+              }
+            } : {})
           },
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Opportunities retrieved successfully:', opportunities.length)
-        return ok(res, { opportunities })
+        const normalized = opportunities.map(opportunity => {
+          const { starredBy, ...rest } = opportunity
+          return {
+            ...rest,
+            isStarred: validUserId ? Array.isArray(starredBy) && starredBy.length > 0 : false
+          }
+        })
+        return ok(res, { opportunities: normalized })
       } catch (dbError) {
         console.error('❌ Database error listing opportunities:', dbError)
         return serverError(res, 'Failed to list opportunities', dbError.message)
@@ -67,6 +95,14 @@ async function handler(req, res) {
         
         const opportunities = await prisma.opportunity.findMany({ 
           where: { clientId },
+          include: {
+            ...(validUserId ? {
+              starredBy: {
+                where: { userId: validUserId },
+                select: { id: true }
+              }
+            } : {})
+          },
           orderBy: { createdAt: 'desc' } 
         })
         console.log('✅ Client opportunities retrieved successfully:', opportunities.length, 'for client:', clientId)
@@ -84,7 +120,14 @@ async function handler(req, res) {
             console.log('🔍 Matches found:', matching.length, matching)
           }
         }
-        return ok(res, { opportunities })
+        const normalized = opportunities.map(opportunity => {
+          const { starredBy, ...rest } = opportunity
+          return {
+            ...rest,
+            isStarred: validUserId ? Array.isArray(starredBy) && starredBy.length > 0 : false
+          }
+        })
+        return ok(res, { opportunities: normalized })
       } catch (dbError) {
         console.error('❌ Database error getting client opportunities:', {
           error: dbError.message,
@@ -121,6 +164,7 @@ async function handler(req, res) {
         title: body.title,
         clientId: body.clientId,
         stage: body.stage || 'Awareness', // Use AIDA pipeline stage instead of 'prospect'
+        status: body.status || 'Potential',
         value: parseFloat(body.value) || 0,
         ownerId: req.user?.sub || null
       }
@@ -133,7 +177,7 @@ async function handler(req, res) {
         })
         
         console.log('✅ Opportunity created successfully:', opportunity.id)
-        return created(res, { opportunity })
+        return created(res, { opportunity: { ...opportunity, isStarred: false } })
       } catch (dbError) {
         console.error('❌ Database error creating opportunity:', {
           error: dbError.message,
@@ -171,12 +215,24 @@ async function handler(req, res) {
                   name: true,
                   type: true
                 }
-              }
+              },
+              ...(validUserId ? {
+                starredBy: {
+                  where: { userId: validUserId },
+                  select: { id: true }
+                }
+              } : {})
             }
           })
           if (!opportunity) return notFound(res)
           console.log('✅ Opportunity retrieved successfully:', opportunity.id)
-          return ok(res, { opportunity })
+          const { starredBy, ...rest } = opportunity
+          return ok(res, { 
+            opportunity: {
+              ...rest,
+              isStarred: validUserId ? Array.isArray(starredBy) && starredBy.length > 0 : false
+            }
+          })
         } catch (dbError) {
           console.error('❌ Database error getting opportunity:', dbError)
           return serverError(res, 'Failed to get opportunity', dbError.message)
@@ -188,6 +244,7 @@ async function handler(req, res) {
         const updateData = {
           title: body.title,
           stage: body.stage,
+          status: body.status,
           value: body.value ? parseFloat(body.value) : undefined,
           ownerId: body.ownerId
         }
@@ -206,7 +263,26 @@ async function handler(req, res) {
             data: updateData 
           })
           console.log('✅ Opportunity updated successfully:', opportunity.id)
-          return ok(res, { opportunity })
+
+          let isStarred = false
+          if (validUserId) {
+            const star = await prisma.starredOpportunity.findUnique({
+              where: {
+                userId_opportunityId: {
+                  userId: validUserId,
+                  opportunityId: opportunity.id
+                }
+              }
+            })
+            isStarred = Boolean(star)
+          }
+
+          return ok(res, { 
+            opportunity: {
+              ...opportunity,
+              isStarred
+            }
+          })
         } catch (dbError) {
           console.error('❌ Database error updating opportunity:', dbError)
           return serverError(res, 'Failed to update opportunity', dbError.message)

@@ -58,6 +58,7 @@ model User {
   notifications             Notification[]          @relation("NotificationRecipient")
   notificationSettings      NotificationSetting?
   starredClients            StarredClient[]
+  starredOpportunities      StarredOpportunity[]
   leaveApplications         LeaveApplication[]      @relation("LeaveApplications")
   approvedLeaveApplications LeaveApplication[]      @relation("ApprovedLeaveApplications")
   rejectedLeaveApplications LeaveApplication[]      @relation("RejectedLeaveApplications")
@@ -213,10 +214,12 @@ model Opportunity {
   clientId  String
   title     String
   stage     String   @default("Awareness") // AIDA pipeline stage
+  status    String   @default("Potential") // Lifecycle stage: Active, Potential, Proposal, Disinterested
   value     Float    @default(0)
   proposals String   @default("[]") // JSON array of proposals
   ownerId   String?
   client    Client   @relation(fields: [clientId], references: [id])
+  starredBy StarredOpportunity[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -895,6 +898,19 @@ model StarredClient {
   @@unique([userId, clientId])
   @@index([userId])
   @@index([clientId])
+}
+
+model StarredOpportunity {
+  id            String       @id @default(cuid())
+  userId        String
+  opportunityId String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  opportunity   Opportunity  @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdAt     DateTime     @default(now())
+
+  @@unique([userId, opportunityId])
+  @@index([userId])
+  @@index([opportunityId])
 }
 
 // System Settings - Global application configuration

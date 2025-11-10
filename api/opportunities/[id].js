@@ -23,6 +23,19 @@ async function handler(req, res) {
     
     console.log('🔍 Processing opportunity ID:', id)
     
+    const userId = req.user?.sub || null
+    let validUserId = null
+    if (userId) {
+      try {
+        const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } })
+        if (userExists) {
+          validUserId = userId
+        }
+      } catch (userCheckError) {
+        console.warn('⚠️ [ID] Opportunities API: failed to verify user existence for starred relation', userCheckError.message)
+      }
+    }
+
     if (req.method === 'GET') {
       try {
         const opportunity = await prisma.opportunity.findUnique({ 
@@ -34,13 +47,23 @@ async function handler(req, res) {
                 name: true,
                 type: true
               }
-            }
+            },
+            ...(validUserId ? {
+              starredBy: {
+                where: { userId: validUserId },
+                select: { id: true }
+              }
+            } : {})
           }
         })
         if (!opportunity) return notFound(res)
         
         // Parse JSON fields (proposals)
-        const parsedOpportunity = { ...opportunity }
+        const { starredBy, ...restOpportunity } = opportunity
+        const parsedOpportunity = { 
+          ...restOpportunity,
+          isStarred: validUserId ? Array.isArray(starredBy) && starredBy.length > 0 : false
+        }
         if (typeof parsedOpportunity.proposals === 'string' && parsedOpportunity.proposals) {
           try {
             parsedOpportunity.proposals = JSON.parse(parsedOpportunity.proposals)
@@ -74,6 +97,7 @@ async function handler(req, res) {
       const updateData = {
         title: body.title,
         stage: body.stage,
+        status: body.status,
         value: body.value ? parseFloat(body.value) : undefined,
         proposals: body.proposals !== undefined ? (typeof body.proposals === 'string' ? body.proposals : JSON.stringify(Array.isArray(body.proposals) ? body.proposals : [])) : undefined,
         ownerId: body.ownerId
@@ -114,7 +138,21 @@ async function handler(req, res) {
         })
         
         // Parse proposals before returning
-        const parsedOpportunity = { ...opportunity }
+        let isStarred = false
+        if (validUserId) {
+          const star = await prisma.starredOpportunity.findUnique({
+            where: {
+              userId_opportunityId: {
+                userId: validUserId,
+                opportunityId: opportunity.id
+              }
+            },
+            select: { id: true }
+          })
+          isStarred = Boolean(star)
+        }
+
+        const parsedOpportunity = { ...opportunity, isStarred }
         if (typeof parsedOpportunity.proposals === 'string' && parsedOpportunity.proposals) {
           try {
             parsedOpportunity.proposals = JSON.parse(parsedOpportunity.proposals)

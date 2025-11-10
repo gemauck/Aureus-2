@@ -53,10 +53,25 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         fetchOpportunity();
     }, [opportunityId]);
     
+    const normalizeLifecycleStage = (value) => {
+        switch ((value || '').toLowerCase()) {
+            case 'active':
+                return 'Active';
+            case 'proposal':
+                return 'Proposal';
+            case 'disinterested':
+                return 'Disinterested';
+            case 'potential':
+            default:
+                return 'Potential';
+        }
+    };
+
     // Create default object first to ensure it's always defined
     const defaultFormData = {
         title: '',
         stage: 'Awareness',
+        status: 'Potential',
         value: 0,
         proposals: [],
         id: null
@@ -67,6 +82,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
         const parsedOpportunity = opportunity ? {
             ...opportunity,
             stage: opportunity.stage || 'Awareness',
+            status: normalizeLifecycleStage(opportunity.status),
             proposals: typeof opportunity.proposals === 'string' ? JSON.parse(opportunity.proposals || '[]') : (opportunity.proposals || []),
         } : defaultFormData;
         
@@ -79,6 +95,7 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
             const parsedOpportunity = {
                 ...opportunity,
                 stage: opportunity.stage || 'Awareness',
+                status: normalizeLifecycleStage(opportunity.status),
                 proposals: typeof opportunity.proposals === 'string' ? JSON.parse(opportunity.proposals || '[]') : (opportunity.proposals || []),
             };
             setFormData(parsedOpportunity);
@@ -590,6 +607,26 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                     
                                     <div>
                                         <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Stage</label>
+                                        <select
+                                            value={formData.status || 'Potential'}
+                                            onChange={async (e) => {
+                                                const newStatus = e.target.value;
+                                                setFormData({ ...formData, status: newStatus });
+                                                if (opportunityId) {
+                                                    await window.api.updateOpportunity(opportunityId, { ...formData, status: newStatus });
+                                                }
+                                            }}
+                                            className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                                        >
+                                            <option value="Active">Active</option>
+                                            <option value="Potential">Potential</option>
+                                            <option value="Proposal">Proposal</option>
+                                            <option value="Disinterested">Disinterested</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA STAGE</label>
                                         <select
                                             value={formData.stage || 'Awareness'}
                                             onChange={async (e) => {
@@ -1206,6 +1243,26 @@ const OpportunityDetailModal = ({ opportunityId, onClose, client, isFullPage = f
                                 
                                 <div>
                                     <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>Stage</label>
+                                    <select
+                                        value={formData.status || 'Potential'}
+                                        onChange={async (e) => {
+                                            const newStatus = e.target.value;
+                                            setFormData({ ...formData, status: newStatus });
+                                            if (opportunityId) {
+                                                await window.api.updateOpportunity(opportunityId, { ...formData, status: newStatus });
+                                            }
+                                        }}
+                                        className={`w-full px-3 py-2 border ${isDark ? 'bg-gray-700 border-gray-600 text-gray-100' : 'bg-white border-gray-300'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500`}
+                                    >
+                                        <option value="Active">Active</option>
+                                        <option value="Potential">Potential</option>
+                                        <option value="Proposal">Proposal</option>
+                                        <option value="Disinterested">Disinterested</option>
+                                    </select>
+                                </div>
+                                
+                                <div>
+                                    <label className={`block text-sm font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'} mb-2`}>AIDA STAGE</label>
                                     <select
                                         value={formData.stage || 'Awareness'}
                                         onChange={async (e) => {

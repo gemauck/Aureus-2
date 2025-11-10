@@ -40,11 +40,25 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
         fetchLead();
     }, [leadId]);
     
+    const normalizeLifecycleStage = (value) => {
+        switch ((value || '').toLowerCase()) {
+            case 'active':
+                return 'Active';
+            case 'proposal':
+                return 'Proposal';
+            case 'disinterested':
+                return 'Disinterested';
+            case 'potential':
+            default:
+                return 'Potential';
+        }
+    };
+
     // Create default object first to ensure it's always defined
     const defaultFormData = {
         name: '',
         industry: '',
-        status: 'active',
+        status: 'Potential',
         source: 'Website',
         stage: 'Awareness',
         value: 0,
@@ -66,7 +80,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             ...lead,
             // Ensure stage and status are ALWAYS present with defaults
             stage: lead.stage || 'Awareness',
-            status: 'active', // Status is hardcoded as 'active'
+            status: normalizeLifecycleStage(lead.status),
             contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
             followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
             projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -290,7 +304,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
             const parsedLead = {
                 ...lead,
                 stage: lead.stage || 'Awareness',
-                status: 'active',
+                status: normalizeLifecycleStage(lead.status),
                 contacts: typeof lead.contacts === 'string' ? JSON.parse(lead.contacts || '[]') : (lead.contacts || []),
                 followUps: typeof lead.followUps === 'string' ? JSON.parse(lead.followUps || '[]') : (lead.followUps || []),
                 projectIds: typeof lead.projectIds === 'string' ? JSON.parse(lead.projectIds || '[]') : (lead.projectIds || []),
@@ -2023,10 +2037,45 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-                                        <div className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50 text-gray-700">
-                                            Active
-                                        </div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Stage</label>
+                <select
+                    value={formData.status || 'Potential'}
+                    onFocus={() => {
+                        isEditingRef.current = true;
+                        userHasStartedTypingRef.current = true;
+                        notifyEditingChange(true);
+                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                    }}
+                    onChange={(e) => {
+                        const newStatus = e.target.value;
+                        isEditingRef.current = true;
+                        userHasStartedTypingRef.current = true;
+                        userEditedFieldsRef.current.add('status');
+                        notifyEditingChange(true);
+                        if (editingTimeoutRef.current) clearTimeout(editingTimeoutRef.current);
+                        editingTimeoutRef.current = setTimeout(() => {
+                            isEditingRef.current = false;
+                            notifyEditingChange(false);
+                        }, 5000);
+                        setFormData(prev => {
+                            const updated = { ...prev, status: newStatus };
+                            formDataRef.current = updated;
+                            return updated;
+                        });
+                    }}
+                    onBlur={() => {
+                        setTimeout(() => {
+                            isEditingRef.current = false;
+                            notifyEditingChange(false);
+                        }, 500);
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                >
+                    <option value="Active">Active</option>
+                    <option value="Potential">Potential</option>
+                    <option value="Proposal">Proposal</option>
+                    <option value="Disinterested">Disinterested</option>
+                </select>
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Source</label>
@@ -2073,9 +2122,9 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                         </select>
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                                            AIDIA Stage
-                                        </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    AIDA STAGE
+                </label>
                                         <select 
                                             value={formData.stage}
                                             onChange={async (e) => {
@@ -4556,7 +4605,7 @@ const LeadDetailModal = ({ leadId, onClose, onDelete, onConvertToClient, allProj
                                         })
                                     ),
                                     React.createElement('div', null,
-                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDIA Stage'),
+                                        React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-2' }, 'AIDA STAGE'),
                                         React.createElement('select', {
                                             value: formData.stage,
                                             onChange: async (e) => {

@@ -21,6 +21,12 @@ const TaskManagement = () => {
     const [stats, setStats] = useState({ total: 0, todo: 0, inProgress: 0, completed: 0 });
     const [quickTaskTitle, setQuickTaskTitle] = useState('');
     const [quickTaskCategory, setQuickTaskCategory] = useState('');
+    const [quickTaskDescription, setQuickTaskDescription] = useState('');
+    const [quickTaskDueDate, setQuickTaskDueDate] = useState('');
+    const [quickTaskPriority, setQuickTaskPriority] = useState('medium');
+    const [quickTaskClientId, setQuickTaskClientId] = useState('');
+    const [quickTaskProjectId, setQuickTaskProjectId] = useState('');
+    const [showQuickAddPanel, setShowQuickAddPanel] = useState(true);
     const [isQuickAdding, setIsQuickAdding] = useState(false);
     const [quickAddError, setQuickAddError] = useState('');
     const [quickAddSuccess, setQuickAddSuccess] = useState('');
@@ -219,6 +225,16 @@ const TaskManagement = () => {
         loadTags(); // Reload tags in case new ones were created
     };
 
+    const resetQuickAddForm = () => {
+        setQuickTaskTitle('');
+        setQuickTaskCategory('');
+        setQuickTaskDescription('');
+        setQuickTaskDueDate('');
+        setQuickTaskPriority('medium');
+        setQuickTaskClientId('');
+        setQuickTaskProjectId('');
+    };
+
     useEffect(() => {
         if (showFloatingQuickAdd) {
             const previousOverflow = document.body.style.overflow;
@@ -237,6 +253,7 @@ const TaskManagement = () => {
         setShowFloatingQuickAdd(false);
         setQuickAddError('');
         setQuickAddSuccess('');
+        resetQuickAddForm();
     };
 
     const handleQuickAddTask = async (e, options = {}) => {
@@ -245,6 +262,11 @@ const TaskManagement = () => {
 
         const title = quickTaskTitle.trim();
         const categoryValue = quickTaskCategory.trim();
+        const descriptionValue = quickTaskDescription.trim();
+        const dueDateValue = quickTaskDueDate ? new Date(quickTaskDueDate).toISOString() : '';
+        const priorityValue = quickTaskPriority || 'medium';
+        const clientIdValue = quickTaskClientId ? Number(quickTaskClientId) : null;
+        const projectIdValue = quickTaskProjectId ? Number(quickTaskProjectId) : null;
 
         if (!title) {
             setQuickAddError('Please enter a task title.');
@@ -262,23 +284,40 @@ const TaskManagement = () => {
             setQuickAddError('');
             setQuickAddSuccess('');
 
+            const payload = {
+                title,
+                category: categoryValue,
+                status: 'todo',
+                priority: priorityValue
+            };
+
+            if (descriptionValue) {
+                payload.description = descriptionValue;
+            }
+
+            if (dueDateValue) {
+                payload.dueDate = dueDateValue;
+            }
+
+            if (clientIdValue) {
+                payload.clientId = clientIdValue;
+            }
+
+            if (projectIdValue) {
+                payload.projectId = projectIdValue;
+            }
+
             const response = await fetch('/api/user-tasks', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({
-                    title,
-                    category: categoryValue,
-                    status: 'todo',
-                    priority: 'medium'
-                })
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {
-                setQuickTaskTitle('');
-                setQuickTaskCategory('');
+                resetQuickAddForm();
                 setQuickAddSuccess('Task added.');
                 if (!categories.includes(categoryValue) && categoryValue) {
                     setCategories(prev => [...prev, categoryValue]);
@@ -448,57 +487,204 @@ const TaskManagement = () => {
                         New Task
                     </button>
                 </div>
-                <form onSubmit={handleQuickAddTask} className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <div className="sm:col-span-2 flex flex-col">
-                        <input
-                            type="text"
-                            value={quickTaskTitle}
-                            onChange={(e) => {
-                                setQuickTaskTitle(e.target.value);
-                                if (quickAddError) setQuickAddError('');
-                                if (quickAddSuccess) setQuickAddSuccess('');
-                            }}
-                            placeholder="Quick add a task"
-                            className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                        />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <input
-                            type="text"
-                            value={quickTaskCategory}
-                            onChange={(e) => {
-                                setQuickTaskCategory(e.target.value);
-                                if (quickAddError) setQuickAddError('');
-                                if (quickAddSuccess) setQuickAddSuccess('');
-                            }}
-                            placeholder="Category (optional)"
-                            list="taskCategories"
-                            className={`flex-1 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
-                        />
-                        <datalist id="taskCategories">
-                            {categories.map(cat => (
-                                <option key={cat} value={cat} />
-                            ))}
-                        </datalist>
+                <div className="mt-4 border-t border-dashed pt-4 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                        <div className="flex items-start md:items-center gap-3">
+                            <span className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white">
+                                <i className="fas fa-bolt"></i>
+                            </span>
+                            <div>
+                                <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                    Quick Add Task
+                                </h3>
+                                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                                    Capture a new to-do without opening the full task form.
+                                </p>
+                            </div>
+                        </div>
                         <button
-                            type="submit"
-                            disabled={isQuickAdding}
-                            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-60"
+                            type="button"
+                            onClick={() => {
+                                setShowQuickAddPanel(prev => !prev);
+                                if (quickAddError) setQuickAddError('');
+                                if (quickAddSuccess) setQuickAddSuccess('');
+                            }}
+                            className={`${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} px-3 py-2 rounded-lg flex items-center gap-2 transition-colors`}
                         >
-                            {isQuickAdding ? 'Adding...' : 'Quick Add'}
+                            <i className={`fas ${showQuickAddPanel ? 'fa-chevron-up' : 'fa-chevron-down'}`}></i>
+                            {showQuickAddPanel ? 'Hide quick add' : 'Show quick add'}
                         </button>
                     </div>
-                    {(quickAddError || quickAddSuccess) && (
-                        <div className="sm:col-span-3 text-sm">
-                            {quickAddError && (
-                                <p className="text-red-500">{quickAddError}</p>
+
+                    {showQuickAddPanel && (
+                        <form onSubmit={handleQuickAddTask} className="space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <input
+                                    type="text"
+                                    value={quickTaskTitle}
+                                    onChange={(e) => {
+                                        setQuickTaskTitle(e.target.value);
+                                        if (quickAddError) setQuickAddError('');
+                                        if (quickAddSuccess) setQuickAddSuccess('');
+                                    }}
+                                    placeholder="Task title *"
+                                    className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    required
+                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={quickTaskCategory}
+                                        onChange={(e) => {
+                                            setQuickTaskCategory(e.target.value);
+                                            if (quickAddError) setQuickAddError('');
+                                            if (quickAddSuccess) setQuickAddSuccess('');
+                                        }}
+                                        placeholder="Category (optional)"
+                                        list="taskCategories"
+                                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    />
+                                    <datalist id="taskCategories">
+                                        {categories.map(cat => (
+                                            <option key={cat} value={cat} />
+                                        ))}
+                                    </datalist>
+                                </div>
+                            </div>
+
+                            <textarea
+                                value={quickTaskDescription}
+                                onChange={(e) => {
+                                    setQuickTaskDescription(e.target.value);
+                                    if (quickAddError) setQuickAddError('');
+                                    if (quickAddSuccess) setQuickAddSuccess('');
+                                }}
+                                placeholder="Description (optional)"
+                                rows={3}
+                                className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                            ></textarea>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Priority
+                                    </label>
+                                    <select
+                                        value={quickTaskPriority}
+                                        onChange={(e) => {
+                                            setQuickTaskPriority(e.target.value);
+                                            if (quickAddError) setQuickAddError('');
+                                            if (quickAddSuccess) setQuickAddSuccess('');
+                                        }}
+                                        className={`w-full px-3 py-2 rounded-lg border capitalize ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="urgent">Urgent</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Due date
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={quickTaskDueDate}
+                                        onChange={(e) => {
+                                            setQuickTaskDueDate(e.target.value);
+                                            if (quickAddError) setQuickAddError('');
+                                            if (quickAddSuccess) setQuickAddSuccess('');
+                                        }}
+                                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <div>
+                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Client (optional)
+                                    </label>
+                                    <select
+                                        value={quickTaskClientId}
+                                        onChange={(e) => {
+                                            setQuickTaskClientId(e.target.value);
+                                            if (quickAddError) setQuickAddError('');
+                                            if (quickAddSuccess) setQuickAddSuccess('');
+                                        }}
+                                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    >
+                                        <option value="">No client</option>
+                                        {clients.map(client => (
+                                            <option key={client.id} value={client.id}>
+                                                {client.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        Project (optional)
+                                    </label>
+                                    <select
+                                        value={quickTaskProjectId}
+                                        onChange={(e) => {
+                                            setQuickTaskProjectId(e.target.value);
+                                            if (quickAddError) setQuickAddError('');
+                                            if (quickAddSuccess) setQuickAddSuccess('');
+                                        }}
+                                        className={`w-full px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'} focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                    >
+                                        <option value="">No project</option>
+                                        {projects.map(project => (
+                                            <option key={project.id} value={project.id}>
+                                                {project.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {(quickAddError || quickAddSuccess) && (
+                                <div className="text-sm">
+                                    {quickAddError && (
+                                        <p className="text-red-500">{quickAddError}</p>
+                                    )}
+                                    {quickAddSuccess && !quickAddError && (
+                                        <p className="text-green-500">{quickAddSuccess}</p>
+                                    )}
+                                </div>
                             )}
-                            {quickAddSuccess && !quickAddError && (
-                                <p className="text-green-500">{quickAddSuccess}</p>
-                            )}
-                        </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                                    Tasks created here start as <span className="font-semibold">To Do</span>. You can edit them later for more details.
+                                </p>
+                                <div className="flex items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            resetQuickAddForm();
+                                            setQuickAddError('');
+                                            setQuickAddSuccess('');
+                                        }}
+                                        className={`${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} px-4 py-2 rounded-lg transition-colors`}
+                                    >
+                                        Clear
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isQuickAdding}
+                                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-60"
+                                    >
+                                        {isQuickAdding ? 'Adding...' : 'Quick Add'}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
                     )}
-                </form>
+                </div>
             </div>
 
             {/* Filters and View Toggle */}
