@@ -32,14 +32,20 @@ const Pipeline = () => {
     });
     const [sortBy, setSortBy] = useState('value-desc');
     const [viewMode, setViewMode] = useState('list'); // list, kanban
-    const [selectedDeal, setSelectedDeal] = useState(null);
-    const [showDealModal, setShowDealModal] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [touchDragState, setTouchDragState] = useState(null); // { item, type, startY, currentY, targetStage }
     const [justDragged, setJustDragged] = useState(false); // Track if we just completed a drag to prevent accidental clicks
     const [dataLoaded, setDataLoaded] = useState(false); // Track when data is fully loaded from API
+
+    useEffect(() => {
+        try {
+            sessionStorage.removeItem('returnToPipeline');
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Unable to clear returnToPipeline flag at mount', error);
+        }
+    }, []);
 
     // AIDA Pipeline Stages
     const pipelineStages = [
@@ -1216,6 +1222,9 @@ const Pipeline = () => {
                 endEvent.preventDefault();
                 // Reset justDragged after a short delay
                 setTimeout(() => setJustDragged(false), 300);
+            } else if (!targetStage || targetStage === initialStage) {
+                // Treat as tap/click when no stage change occurred
+                openDealDetail(item);
             }
         };
         
@@ -1288,6 +1297,29 @@ const Pipeline = () => {
         return `R ${numericValue.toLocaleString('en-ZA')}`;
     };
 
+    const openDealDetail = (item) => {
+        if (!item || !item.id) return;
+        try {
+            sessionStorage.setItem('returnToPipeline', 'true');
+        } catch (error) {
+            console.warn('⚠️ Pipeline: Unable to set returnToPipeline flag', error);
+        }
+
+        if (item.type === 'lead') {
+            window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', {
+                detail: { leadId: item.id }
+            }));
+        } else {
+            window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
+                detail: {
+                    opportunityId: item.id,
+                    clientId: item.clientId,
+                    clientName: item.clientName || item.client?.name || item.name
+                }
+            }));
+        }
+    };
+
     const metrics = calculateMetrics();
     const filteredItems = getFilteredItems();
 
@@ -1308,8 +1340,7 @@ const Pipeline = () => {
                         e.stopPropagation();
                         return;
                     }
-                    setSelectedDeal(item);
-                    setShowDealModal(true);
+                    openDealDetail(item);
                 }}
                 className={`bg-white rounded-md border border-gray-200 shadow-sm cursor-move flex flex-col overflow-hidden touch-none ${!isDragging ? 'hover:shadow-md transition' : ''} ${
                     draggedItem?.id === item.id ? 'opacity-50' : ''
@@ -1545,10 +1576,7 @@ const Pipeline = () => {
                                             <tr
                                                 key={`${item.type}-${item.id}`}
                                                 className="hover:bg-gray-50 cursor-pointer transition"
-                                                onClick={() => {
-                                                    setSelectedDeal(item);
-                                                    setShowDealModal(true);
-                                                }}
+                                                onClick={() => openDealDetail(item)}
                                             >
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
@@ -1806,45 +1834,6 @@ const Pipeline = () => {
             {/* Main Content */}
             {viewMode === 'kanban' && <KanbanView />}
             {viewMode === 'list' && <ListView />}
-            
-            {/* Opportunity Detail Modal */}
-            {showDealModal && selectedDeal && selectedDeal.type === 'opportunity' && window.OpportunityDetailModal && (
-                React.createElement(window.OpportunityDetailModal, {
-                    opportunityId: selectedDeal.id,
-                    client: clients.find(c => c.id === selectedDeal.clientId),
-                    onClose: () => {
-                        setShowDealModal(false);
-                        setSelectedDeal(null);
-                    }
-                })
-            )}
-            
-            {/* Lead Detail Modal */}
-            {showDealModal && selectedDeal && selectedDeal.type === 'lead' && window.LeadDetailModal && (
-                React.createElement(window.LeadDetailModal, {
-                    leadId: selectedDeal.id,
-                    onClose: () => {
-                        setShowDealModal(false);
-                        setSelectedDeal(null);
-                    },
-                    onSave: async () => {
-                        // Refresh leads after save
-                        setRefreshKey(k => k + 1);
-                    },
-                    onDelete: async () => {
-                        // Refresh leads after delete
-                        setRefreshKey(k => k + 1);
-                        setShowDealModal(false);
-                        setSelectedDeal(null);
-                    },
-                    onConvertToClient: async () => {
-                        // Refresh data after conversion
-                        setRefreshKey(k => k + 1);
-                        setShowDealModal(false);
-                        setSelectedDeal(null);
-                    }
-                })
-            )}
         </div>
     );
 };

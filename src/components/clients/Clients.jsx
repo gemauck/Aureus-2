@@ -223,6 +223,7 @@ const Clients = React.memo(() => {
     const [pipelineRenderKey, setPipelineRenderKey] = useState(0);
     const [clients, setClients] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
+    const leadsRef = useRef(leads);
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
     const isUserEditingRef = useRef(false); // Ref to track if user is editing
     const isAutoSavingRef = useRef(false); // Ref to track if auto-saving is in progress
@@ -234,6 +235,10 @@ const Clients = React.memo(() => {
     useEffect(() => {
         clientsRef.current = clients;
     }, [clients]);
+
+    useEffect(() => {
+        leadsRef.current = leads;
+    }, [leads]);
     
     useEffect(() => {
         viewModeRef.current = viewMode;
@@ -1582,7 +1587,22 @@ const Clients = React.memo(() => {
     };
 
     const handleLeadModalClose = async () => {
-        setViewMode('leads');
+        let returnToPipeline = false;
+        try {
+            returnToPipeline = sessionStorage.getItem('returnToPipeline') === 'true';
+        } catch (error) {
+            console.warn('⚠️ Clients: Unable to read returnToPipeline flag on lead modal close', error);
+        }
+        if (returnToPipeline) {
+            try {
+                sessionStorage.removeItem('returnToPipeline');
+            } catch (error) {
+                console.warn('⚠️ Clients: Unable to clear returnToPipeline flag on lead modal close', error);
+            }
+            setViewMode('pipeline');
+        } else {
+            setViewMode('leads');
+        }
         setEditingLeadId(null);
         selectedLeadRef.current = null;
         isFormOpenRef.current = false;
@@ -2750,13 +2770,23 @@ const Clients = React.memo(() => {
         setViewMode('client-detail');
     };
 
-    const handleOpenLead = (lead) => {
+    const handleOpenLead = (lead, options = {}) => {
+        const leadId = options.leadId || lead?.id;
+        if (!leadId) return;
         stopSync();
-        setEditingLeadId(lead.id);
+        setEditingLeadId(leadId);
         setEditingClientId(null);
-        selectedLeadRef.current = lead;
+        selectedLeadRef.current = lead || null;
         selectedClientRef.current = null;
         isFormOpenRef.current = true;
+        if (options.fromPipeline) {
+            try {
+                sessionStorage.setItem('returnToPipeline', 'true');
+            } catch (error) {
+                console.warn('⚠️ Clients: Unable to set returnToPipeline flag for lead', error);
+            }
+        }
+        setCurrentLeadTab('overview');
         setViewMode('lead-detail');
     };
 
@@ -2819,6 +2849,64 @@ const Clients = React.memo(() => {
             alert('Failed to update star. Please try again.');
         }
     };
+
+    useEffect(() => {
+        const handleLeadDetailFromPipeline = async (event) => {
+            const { leadId } = event.detail || {};
+            if (!leadId) return;
+
+            let lead = Array.isArray(leadsRef.current) ? leadsRef.current.find(l => l.id === leadId) : null;
+
+            if (!lead && window.api?.getLead) {
+                try {
+                    const response = await window.api.getLead(leadId);
+                    lead = response?.data?.lead || response?.lead || response;
+                } catch (error) {
+                    console.warn('⚠️ Clients: Unable to fetch lead for pipeline detail view', error);
+                }
+            }
+
+            handleOpenLead(lead || null, { fromPipeline: true, leadId });
+        };
+
+        const handleOpportunityDetailFromPipeline = async (event) => {
+            const { opportunityId, clientId, clientName } = event.detail || {};
+            if (!opportunityId) return;
+
+            try {
+                sessionStorage.setItem('returnToPipeline', 'true');
+            } catch (error) {
+                console.warn('⚠️ Clients: Unable to set returnToPipeline flag for opportunity', error);
+            }
+
+            stopSync();
+
+            let client = null;
+            if (clientId) {
+                client = Array.isArray(clientsRef.current) ? clientsRef.current.find(c => c.id === clientId) : null;
+                if (!client && window.DatabaseAPI?.getClient) {
+                    try {
+                        const response = await window.DatabaseAPI.getClient(clientId);
+                        client = response?.data?.client || response?.client || response;
+                    } catch (error) {
+                        console.warn('⚠️ Clients: Unable to fetch client for opportunity detail view', error);
+                    }
+                }
+            }
+
+            setSelectedOpportunityId(opportunityId);
+            setSelectedOpportunityClient(client || (clientId || clientName ? { id: clientId || opportunityId, name: clientName || 'Opportunity' } : null));
+            setViewMode('opportunity-detail');
+        };
+
+        window.addEventListener('openLeadDetailFromPipeline', handleLeadDetailFromPipeline);
+        window.addEventListener('openOpportunityDetailFromPipeline', handleOpportunityDetailFromPipeline);
+
+        return () => {
+            window.removeEventListener('openLeadDetailFromPipeline', handleLeadDetailFromPipeline);
+            window.removeEventListener('openOpportunityDetailFromPipeline', handleOpportunityDetailFromPipeline);
+        };
+    }, []);
 
     const handleNavigateToProject = (projectId) => {
         sessionStorage.setItem('openProjectId', projectId);
@@ -3717,7 +3805,25 @@ const Clients = React.memo(() => {
                                 // Refresh leads from database to ensure we have latest persisted data
                                 console.log('🔄 Refreshing leads after closing lead detail...');
                                 await loadLeads(true); // Force refresh to get latest data
-                                setViewMode('leads');
+                                const returnToPipeline = (() => {
+                                    try {
+                                        return sessionStorage.getItem('returnToPipeline') === 'true';
+                                    } catch (error) {
+                                        console.warn('⚠️ Clients: Unable to read returnToPipeline flag on lead close', error);
+                                        return false;
+                                    }
+                                })();
+
+                                if (returnToPipeline) {
+                                    try {
+                                        sessionStorage.removeItem('returnToPipeline');
+                                    } catch (error) {
+                                        console.warn('⚠️ Clients: Unable to clear returnToPipeline flag on lead close', error);
+                                    }
+                                    setViewMode('pipeline');
+                                } else {
+                                    setViewMode('leads');
+                                }
                                 selectedLeadRef.current = null;
                             }}
                             className={`${isDark ? 'text-gray-400 hover:text-gray-200 hover:bg-gray-700' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'} flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200`}
@@ -4183,7 +4289,22 @@ const Clients = React.memo(() => {
                     onClose={() => {
                         setSelectedOpportunityId(null);
                         setSelectedOpportunityClient(null);
-                        setViewMode('clients');
+                        let returnToPipeline = false;
+                        try {
+                            returnToPipeline = sessionStorage.getItem('returnToPipeline') === 'true';
+                        } catch (error) {
+                            console.warn('⚠️ Clients: Unable to read returnToPipeline flag on opportunity close', error);
+                        }
+                        if (returnToPipeline) {
+                            try {
+                                sessionStorage.removeItem('returnToPipeline');
+                            } catch (error) {
+                                console.warn('⚠️ Clients: Unable to clear returnToPipeline flag on opportunity close', error);
+                            }
+                            setViewMode('pipeline');
+                        } else {
+                            setViewMode('clients');
+                        }
                     }}
                 />
             )}

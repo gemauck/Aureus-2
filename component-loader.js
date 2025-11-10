@@ -173,6 +173,9 @@
         
         function appendScriptTag() {
             const script = document.createElement('script');
+            let cacheBustTag = null;
+            
+            const existingScript = document.querySelector(`script[data-component-path="${path}"]`);
             
             // Add cache-busting for UserManagement to force reload of new permissions
             let scriptSrc = finalPath;
@@ -182,28 +185,36 @@
             
             // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
             if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
-                const versionTag = 'teams-permissions-v20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+                cacheBustTag = 'teams-permissions-v20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
             }
             
             if (path.includes('MainLayout')) {
-                const layoutVersion = 'main-layout-v20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + layoutVersion;
+                cacheBustTag = 'main-layout-v20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
             }
             
             if (path.includes('components/clients/Pipeline.jsx')) {
-                const versionTag = 'pipeline-list-view-20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+                cacheBustTag = 'pipeline-dnd-fix-20251110b';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
             }
 
             if (path.includes('components/clients/Clients.jsx')) {
-                const versionTag = 'clients-pipeline-fallback-logs-20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+                cacheBustTag = 'clients-pipeline-fallback-logs-20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
             }
 
             if (path.includes('components/clients/PipelineIntegration.js')) {
-                const versionTag = 'pipeline-integration-retry-20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+                cacheBustTag = 'pipeline-integration-retry-20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
+            }
+
+            if (existingScript) {
+                const existingVersion = existingScript.getAttribute('data-component-version') || '';
+                if (cacheBustTag && existingVersion === cacheBustTag) {
+                    return;
+                }
+                existingScript.remove();
             }
 
             if (isProduction) {
@@ -219,6 +230,11 @@
             script.onerror = () => {
                 console.error(`❌ Failed to load: ${finalPath}`);
             };
+
+            script.dataset.componentPath = path;
+            if (cacheBustTag) {
+                script.dataset.componentVersion = cacheBustTag;
+            }
             
             document.body.appendChild(script);
         }

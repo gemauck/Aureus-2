@@ -46,8 +46,24 @@ if [ "$DB_TYPE" = "postgresql" ]; then
     # PostgreSQL backup
     if command -v pg_dump &> /dev/null; then
         echo "   Creating PostgreSQL backup..."
-        pg_dump "$DATABASE_URL" > "${BACKUP_FILE}.sql"
-        echo -e "${GREEN}✅ Backup created: ${BACKUP_FILE}.sql${NC}"
+        BACKUP_STDERR="$(mktemp)"
+        if pg_dump "$DATABASE_URL" > "${BACKUP_FILE}.sql" 2> "$BACKUP_STDERR"; then
+            echo -e "${GREEN}✅ Backup created: ${BACKUP_FILE}.sql${NC}"
+            rm -f "$BACKUP_STDERR"
+        else
+            BACKUP_ERROR="$(cat "$BACKUP_STDERR")"
+            rm -f "$BACKUP_STDERR" "${BACKUP_FILE}.sql"
+            if echo "$BACKUP_ERROR" | grep -qi "remaining connection slots are reserved for roles with the superuser attribute"; then
+                echo -e "${YELLOW}⚠️  Backup skipped: $BACKUP_ERROR${NC}"
+                echo -e "${YELLOW}⚠️  Proceeding without backup due to connection slot limits${NC}"
+            else
+                echo -e "${RED}❌ Backup failed:${NC}"
+                echo "$BACKUP_ERROR"
+                echo ""
+                echo "Aborting to avoid running migration without a backup."
+                exit 1
+            fi
+        fi
     else
         echo -e "${YELLOW}⚠️  pg_dump not found. Skipping backup (not recommended)${NC}"
         echo "   Install with: brew install postgresql (macOS) or apt-get install postgresql-client (Linux)"
