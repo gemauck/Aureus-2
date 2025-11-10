@@ -9,6 +9,16 @@ const GoogleCalendarSync = window.GoogleCalendarSync;
 const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allProjects, onNavigateToProject, isFullPage = false, isEditing = false, hideSearchFilters = false, initialTab = 'overview', onTabChange, onPauseSync, onEditingChange, onOpenOpportunity }) => {
     // CRITICAL: Initialize formData FIRST, before any other hooks or refs that might reference it
     // This prevents "Cannot access 'formData' before initialization" errors
+    const mergeUniqueById = (items = [], extras = []) => {
+        const map = new Map();
+        [...(items || []), ...(extras || [])].forEach(item => {
+            if (item && item.id) {
+                map.set(item.id, item);
+            }
+        });
+        return Array.from(map.values());
+    };
+    
     const [formData, setFormData] = useState(() => {
         // Parse JSON strings to arrays/objects if needed
         const parsedClient = client ? {
@@ -866,10 +876,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Update formData with contacts from database - force new object reference
             // Since we skip this when form is edited, we can safely use DB data here
-            setFormData(prevFormData => ({
-                ...prevFormData,
-                contacts: [...contacts] // Create new array reference
-            }));
+            setFormData(prevFormData => {
+                const updated = {
+                    ...prevFormData,
+                    contacts: [...contacts] // Create new array reference
+                };
+                formDataRef.current = updated;
+                return updated;
+            });
             console.log('🔄 Updated formData with contacts:', contacts.length);
         } catch (error) {
             console.error('❌ Error loading contacts from database:', error);
@@ -900,10 +914,14 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
             
             // Update formData with sites from database - force new object reference
             // Since we skip this when form is edited, we can safely use DB data here
-            setFormData(prevFormData => ({
-                ...prevFormData,
-                sites: [...sites] // Create new array reference
-            }));
+            setFormData(prevFormData => {
+                const updated = {
+                    ...prevFormData,
+                    sites: [...sites] // Create new array reference
+                };
+                formDataRef.current = updated;
+                return updated;
+            });
             console.log('🔄 Updated formData with sites:', sites.length);
         } catch (error) {
             console.error('❌ Error loading sites from database:', error);
@@ -1021,7 +1039,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 console.log('🔄 State updated - React will re-render automatically');
                 
                 const formDataForActivity = updatedFormDataAfterContact || formDataRef.current || formData;
-                logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`, null, true, formDataForActivity);
+                const mergedContactsForActivity = mergeUniqueById(formDataForActivity?.contacts, [savedContact, ...optimisticContacts]);
+                const finalFormDataForActivity = {
+                    ...formDataForActivity,
+                    contacts: mergedContactsForActivity
+                };
+                formDataRef.current = finalFormDataForActivity;
+                logActivity('Contact Added', `Added contact: ${newContact.name} (${newContact.email})`, null, true, finalFormDataForActivity);
                 
                 // Switch to contacts tab immediately
                 handleTabChange('contacts');
@@ -1479,7 +1503,13 @@ const ClientDetailModal = ({ client, onSave, onUpdate, onClose, onDelete, allPro
                 console.log('🔄 State updated - React will re-render automatically');
                 
                 const formDataForSiteActivity = updatedFormDataAfterSite || formDataRef.current || formData;
-                logActivity('Site Added', `Added site: ${newSite.name}`, null, true, formDataForSiteActivity);
+                const mergedSitesForActivity = mergeUniqueById(formDataForSiteActivity?.sites, [savedSite, ...optimisticSites]);
+                const finalFormDataForSiteActivity = {
+                    ...formDataForSiteActivity,
+                    sites: mergedSitesForActivity
+                };
+                formDataRef.current = finalFormDataForSiteActivity;
+                logActivity('Site Added', `Added site: ${newSite.name}`, null, true, finalFormDataForSiteActivity);
                 
                 // Switch to sites tab immediately
                 handleTabChange('sites');
