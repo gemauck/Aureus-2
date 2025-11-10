@@ -1908,7 +1908,8 @@ const UserManagement = () => {
                                                         id: 'team_management',
                                                         label: 'Management',
                                                         permission: window.PERMISSIONS?.TEAM_MANAGEMENT || 'team_management_management',
-                                                        description: 'Executive leadership and strategic planning'
+                                                        description: 'Executive leadership and strategic planning',
+                                                        adminOnly: true
                                                     },
                                                     {
                                                         id: 'team_technical',
@@ -2111,13 +2112,18 @@ const UserManagement = () => {
                                                     <div className="space-y-2">
                                                         {subcategories.map((sub) => {
                                                             const subChecked = selectedPermissions.includes(sub.permission);
-                                                            const subCanEdit = canEdit && isChecked;
+                                                            const subIsAdminOnly = sub.adminOnly === true 
+                                                                || sub.id === 'team_management' 
+                                                                || sub.permission === (window.PERMISSIONS?.TEAM_MANAGEMENT || 'team_management_management');
+                                                            const subCanEdit = canEdit && isChecked && (!subIsAdminOnly || isAdmin);
                                                             
                                                             return (
                                                                 <label
                                                                     key={sub.id}
                                                                     className={`flex items-start gap-2 p-2 rounded ${
-                                                                        subCanEdit ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : 'cursor-not-allowed'
+                                                                        subCanEdit
+                                                                            ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
+                                                                            : 'cursor-not-allowed opacity-60'
                                                                     }`}
                                                                 >
                                                                     <input
@@ -2147,8 +2153,13 @@ const UserManagement = () => {
                                                                         }}
                                                                     />
                                                                     <div className="flex-1">
-                                                                        <p className={`text-sm font-medium ${subCanEdit ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                                        <p className={`flex items-center gap-2 text-sm font-medium ${subCanEdit ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
                                                                             {sub.label}
+                                                                            {subIsAdminOnly && (
+                                                                                <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded">
+                                                                                    Admin Only
+                                                                                </span>
+                                                                            )}
                                                                         </p>
                                                                         {sub.description && (
                                                                             <p className="text-xs text-gray-500 dark:text-gray-400">

@@ -77,12 +77,15 @@ async function handler(req, res) {
         
         // Create new contact
         const newContact = {
-          id: `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          id: body.id || `contact-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           name: body.name,
           email: body.email || '',
           phone: body.phone || '',
           role: body.role || '',
-          isPrimary: body.isPrimary || false,
+          department: body.department || '',
+          town: body.town || '',
+          siteId: body.siteId || null,
+          isPrimary: !!body.isPrimary,
           notes: body.notes || ''
         }
         
@@ -129,7 +132,8 @@ async function handler(req, res) {
         contacts[contactIndex] = {
           ...contacts[contactIndex],
           ...body,
-          id: contactId // Don't allow changing the ID
+          id: contactId, // Don't allow changing the ID
+          isPrimary: body.isPrimary !== undefined ? !!body.isPrimary : contacts[contactIndex].isPrimary
         }
         
         // Save back to database

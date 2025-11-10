@@ -14,119 +14,128 @@
 // Step 2: Update App.jsx Navigation
 // Add Pipeline as a navigation option
 
-const PIPELINE_INTEGRATION = {
-    // Navigation entry for sidebar
-    navigation: {
-        id: 'pipeline',
-        name: 'Pipeline',
-        icon: 'fa-stream',
-        module: 'crm',
-        order: 6,
-        requiresAuth: true,
-        roles: ['Admin', 'Sales Manager', 'Sales Rep']
-    },
-
-    // Component registration
-    component: 'Pipeline',
-
-    // Menu placement
-    placement: {
-        section: 'Sales & CRM',
-        position: 'after-clients',
-        parent: null // Standalone view
-    }
-};
-
-// Step 3: Update MainLayout.jsx to include Pipeline route
-/*
-In MainLayout.jsx, add to the renderContent function:
-
-if (currentPage === 'pipeline') return <Pipeline />;
-*/
-
-// Step 4: Add to sidebar navigation in MainLayout.jsx
-/*
-In the navigation menu, add:
-
-<button
-    onClick={() => setCurrentPage('pipeline')}
-    className={`w-full text-left px-4 py-3 rounded-lg transition flex items-center gap-3 ${
-        currentPage === 'pipeline' 
-            ? 'bg-primary-100 text-primary-700 font-medium' 
-            : 'text-gray-700 hover:bg-gray-100'
-    }`}
->
-    <i className="fas fa-stream w-5"></i>
-    <span>Pipeline</span>
-</button>
-*/
-
-// Step 5: Verify dependencies are loaded
-const verifyPipelineDependencies = () => {
-    const required = [
-        'React',
-        'storage',
-        'Pipeline'
-    ];
-
-    const missing = required.filter(dep => !window[dep]);
-    
-    if (missing.length > 0) {
-        console.error('Pipeline missing dependencies:', missing);
-        return false;
-    }
-    
-    return true;
-};
-
-// Step 6: Initialize Pipeline
-const initializePipeline = () => {
-    if (!verifyPipelineDependencies()) {
-        console.error('Cannot initialize Pipeline - missing dependencies');
-        return false;
+(() => {
+    if (window.__PIPELINE_INTEGRATION_INITIALIZED__) {
+        console.debug('Pipeline Integration already initialized, skipping duplicate load');
+        return;
     }
 
-    console.log('✅ Pipeline Platform initialized successfully');
-    return true;
-};
+    window.__PIPELINE_INTEGRATION_INITIALIZED__ = true;
 
-// Step 7: Navigation helper
-const navigateToPipeline = () => {
-    window.dispatchEvent(new CustomEvent('navigateToPage', { 
-        detail: { page: 'pipeline' } 
-    }));
-};
+    const PIPELINE_INTEGRATION = {
+        // Navigation entry for sidebar
+        navigation: {
+            id: 'pipeline',
+            name: 'Pipeline',
+            icon: 'fa-stream',
+            module: 'crm',
+            order: 6,
+            requiresAuth: true,
+            roles: ['Admin', 'Sales Manager', 'Sales Rep']
+        },
 
-// Export for use in other components
-window.PIPELINE_INTEGRATION = PIPELINE_INTEGRATION;
-window.initializePipeline = initializePipeline;
-window.navigateToPipeline = navigateToPipeline;
+        // Component registration
+        component: 'Pipeline',
 
-// Auto-initialize on load with dependency wait
-function waitForDependencies(fn, tries = 40) {
-    if (tries <= 0) {
-        console.warn('⚠️ Pipeline integration dependencies still missing after wait - skipping');
-        return false;
-    }
+        // Menu placement
+        placement: {
+            section: 'Sales & CRM',
+            position: 'after-clients',
+            parent: null // Standalone view
+        }
+    };
 
-    if (!window.storage || !window.React) {
-        setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+    // Step 3: Update MainLayout.jsx to include Pipeline route
+    /*
+    In MainLayout.jsx, add to the renderContent function:
+
+    if (currentPage === 'pipeline') return <Pipeline />;
+    */
+
+    // Step 4: Add to sidebar navigation in MainLayout.jsx
+    /*
+    In the navigation menu, add:
+
+    <button
+        onClick={() => setCurrentPage('pipeline')}
+        className={`w-full text-left px-4 py-3 rounded-lg transition flex items-center gap-3 ${
+            currentPage === 'pipeline' 
+                ? 'bg-primary-100 text-primary-700 font-medium' 
+                : 'text-gray-700 hover:bg-gray-100'
+        }`}
+    >
+        <i className="fas fa-stream w-5"></i>
+        <span>Pipeline</span>
+    </button>
+    */
+
+    // Step 5: Verify dependencies are loaded
+    const verifyPipelineDependencies = () => {
+        const required = [
+            'React',
+            'storage',
+            'Pipeline'
+        ];
+
+        const missing = required.filter(dep => !window[dep]);
+        
+        if (missing.length > 0) {
+            console.error('Pipeline missing dependencies:', missing);
+            return false;
+        }
+        
         return true;
-    }
+    };
 
-    if (!window.Pipeline) {
-        console.warn(`⚠️ Pipeline component not loaded yet (remaining retries: ${tries - 1})`);
-        setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+    // Step 6: Initialize Pipeline
+    const initializePipeline = () => {
+        if (!verifyPipelineDependencies()) {
+            console.error('Cannot initialize Pipeline - missing dependencies');
+            return false;
+        }
+
+        console.log('✅ Pipeline Platform initialized successfully');
         return true;
+    };
+
+    // Step 7: Navigation helper
+    const navigateToPipeline = () => {
+        window.dispatchEvent(new CustomEvent('navigateToPage', { 
+            detail: { page: 'pipeline' } 
+        }));
+    };
+
+    // Export for use in other components
+    window.PIPELINE_INTEGRATION = PIPELINE_INTEGRATION;
+    window.initializePipeline = initializePipeline;
+    window.navigateToPipeline = navigateToPipeline;
+
+    // Auto-initialize on load with dependency wait
+    function waitForDependencies(fn, tries = 40) {
+        if (tries <= 0) {
+            console.warn('⚠️ Pipeline integration dependencies still missing after wait - skipping');
+            return false;
+        }
+
+        if (!window.storage || !window.React) {
+            setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+            return true;
+        }
+
+        if (!window.Pipeline) {
+            console.warn(`⚠️ Pipeline component not loaded yet (remaining retries: ${tries - 1})`);
+            setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+            return true;
+        }
+
+        return fn();
     }
 
-    return fn();
-}
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => waitForDependencies(initializePipeline));
+    } else {
+        waitForDependencies(initializePipeline);
+    }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => waitForDependencies(initializePipeline));
-} else {
-    waitForDependencies(initializePipeline);
-}
-
-console.log('Pipeline Integration loaded');
+    console.log('Pipeline Integration loaded');
+})();

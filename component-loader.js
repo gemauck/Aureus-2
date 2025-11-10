@@ -64,8 +64,7 @@
         'components/clients/ClientsMobile.jsx',
         'components/clients/ClientsMobileOptimized.jsx',
         'components/clients/BulkOperations.jsx',
-        'components/clients/Pipeline.jsx', // Load Pipeline BEFORE PipelineIntegration
-        'components/clients/PipelineIntegration.js',
+        'components/clients/Pipeline.jsx',
         
         // Projects
         'components/projects/ProjectsSimple.jsx',
@@ -201,11 +200,6 @@
 
             if (path.includes('components/clients/Clients.jsx')) {
                 cacheBustTag = 'clients-pipeline-fallback-logs-20251110';
-                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
-            }
-
-            if (path.includes('components/clients/PipelineIntegration.js')) {
-                cacheBustTag = 'pipeline-integration-retry-20251110';
                 scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + cacheBustTag;
             }
 

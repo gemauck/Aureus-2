@@ -38,7 +38,6 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/clients/ClientsMobileOptimized.jsx',
         './src/components/clients/BulkOperations.jsx',
         './src/components/clients/Pipeline.jsx',
-        './src/components/clients/PipelineIntegration.js',
         './src/components/clients/ClientNewsFeed.jsx',
     ].filter(path => {
         // DOUBLE-CHECK: Filter out blocked components even if they're in the array
