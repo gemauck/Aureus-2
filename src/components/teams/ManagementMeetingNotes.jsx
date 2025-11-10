@@ -228,7 +228,50 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.error('Error generating monthly plan:', error);
-            alert('Failed to generate monthly plan');
+            const errorMessage = (error?.message || '').toLowerCase();
+            
+            if (errorMessage.includes('already exist')) {
+                console.info('Monthly plan already exists, loading current month instead.');
+                try {
+                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(currentMonthKey);
+                    const existingNotes = monthResponse?.data?.monthlyNotes;
+                    
+                    if (existingNotes) {
+                        setCurrentMonthlyNotes(existingNotes);
+                        setMonthlyNotesList(prev => {
+                            const list = Array.isArray(prev) ? [...prev] : [];
+                            const existingIndex = list.findIndex(note => {
+                                if (!note) return false;
+                                return (note.id && existingNotes.id && note.id === existingNotes.id) ||
+                                       (note.monthKey && existingNotes.monthKey && note.monthKey === existingNotes.monthKey);
+                            });
+                            
+                            if (existingIndex >= 0) {
+                                list[existingIndex] = existingNotes;
+                                return list;
+                            }
+                            
+                            list.push(existingNotes);
+                            return list;
+                        });
+                        setSelectedMonth(currentMonthKey);
+                        if (typeof alert === 'function') {
+                            alert('Monthly notes already exist for this month. Loaded the existing plan instead.');
+                        }
+                    } else if (typeof alert === 'function') {
+                        alert('Monthly notes already exist for this month.');
+                    }
+                } catch (loadError) {
+                    console.error('Failed to load existing monthly notes after duplicate warning:', loadError);
+                    if (typeof alert === 'function') {
+                        alert('Monthly notes already exist for this month, but we could not load them automatically. Please refresh and try again.');
+                    }
+                }
+            } else {
+                if (typeof alert === 'function') {
+                    alert('Failed to generate monthly plan');
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -283,7 +326,32 @@ const ManagementMeetingNotes = () => {
             }
         } catch (error) {
             console.error('Error creating weekly notes:', error);
-            alert('Failed to create weekly notes');
+            const errorMessage = (error?.message || '').toLowerCase();
+            
+            if (errorMessage.includes('already exist')) {
+                console.info('Weekly notes already exist for the selected week, reloading current month data.');
+                try {
+                    const monthResponse = await window.DatabaseAPI.getMeetingNotes(selectedMonth);
+                    const monthNotes = monthResponse?.data?.monthlyNotes;
+                    if (monthNotes) {
+                        setCurrentMonthlyNotes(monthNotes);
+                        if (typeof alert === 'function') {
+                            alert('Weekly notes already exist for this week. Loaded the existing notes instead.');
+                        }
+                    } else if (typeof alert === 'function') {
+                        alert('Weekly notes already exist for this week.');
+                    }
+                } catch (loadError) {
+                    console.error('Failed to reload monthly notes after duplicate weekly warning:', loadError);
+                    if (typeof alert === 'function') {
+                        alert('Weekly notes already exist for this week, but we could not load them automatically. Please refresh and try again.');
+                    }
+                }
+            } else {
+                if (typeof alert === 'function') {
+                    alert('Failed to create weekly notes');
+                }
+            }
         } finally {
             setLoading(false);
         }
