@@ -104,20 +104,23 @@ window.navigateToPipeline = navigateToPipeline;
 
 // Auto-initialize on load with dependency wait
 function waitForDependencies(fn, tries = 40) {
-    // Check if Pipeline component exists - if not, just skip initialization
-    if (window.storage && window.React) {
-        if (!window.Pipeline) {
-            console.warn('⚠️ Pipeline component not loaded, skipping integration');
-            return false;
-        }
-        return fn();
-    }
     if (tries <= 0) {
         console.warn('⚠️ Pipeline integration dependencies still missing after wait - skipping');
         return false;
     }
-    setTimeout(() => waitForDependencies(fn, tries - 1), 250);
-    return true;
+
+    if (!window.storage || !window.React) {
+        setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+        return true;
+    }
+
+    if (!window.Pipeline) {
+        console.warn(`⚠️ Pipeline component not loaded yet (remaining retries: ${tries - 1})`);
+        setTimeout(() => waitForDependencies(fn, tries - 1), 250);
+        return true;
+    }
+
+    return fn();
 }
 
 if (document.readyState === 'loading') {

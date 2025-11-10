@@ -122,15 +122,8 @@ console.log('🚀 lazy-load-components.js v1020-projectdetail-bulletproof loaded
         './src/components/reports/Reports.jsx',
         './src/components/reports/SystemReports.jsx',
         
-        // HR - MOVED from index.html to lazy loading for better performance
-        './src/components/hr/EmployeeManagement.jsx',
-        './src/components/hr/Attendance.jsx',
-        
         // Leave Platform
         './src/components/leave-platform/LeavePlatform.jsx',
-        './src/components/hr/QuickBooksPayrollSync.jsx',
-        './src/components/hr/Payroll.jsx',
-        './src/components/hr/HR.jsx',
         
         // Account & Settings
         './src/components/account/Account.jsx',

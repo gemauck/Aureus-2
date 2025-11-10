@@ -24,6 +24,12 @@ const TaskManagement = () => {
     const [isQuickAdding, setIsQuickAdding] = useState(false);
     const [quickAddError, setQuickAddError] = useState('');
     const [quickAddSuccess, setQuickAddSuccess] = useState('');
+    const [showFloatingQuickAdd, setShowFloatingQuickAdd] = useState(false);
+    const [showInlineQuickAdd, setShowInlineQuickAdd] = useState(false);
+    const [inlineQuickTitle, setInlineQuickTitle] = useState('');
+    const [inlineQuickDescription, setInlineQuickDescription] = useState('');
+    const [isInlineAdding, setIsInlineAdding] = useState(false);
+    const [inlineQuickError, setInlineQuickError] = useState('');
 
     // Load data
     useEffect(() => {
@@ -213,7 +219,27 @@ const TaskManagement = () => {
         loadTags(); // Reload tags in case new ones were created
     };
 
-    const handleQuickAddTask = async (e) => {
+    useEffect(() => {
+        if (showFloatingQuickAdd) {
+            const previousOverflow = document.body.style.overflow;
+            document.body.dataset.quickAddOverflow = previousOverflow;
+            document.body.style.overflow = 'hidden';
+            return () => {
+                document.body.style.overflow = document.body.dataset.quickAddOverflow || '';
+                delete document.body.dataset.quickAddOverflow;
+            };
+        }
+        document.body.style.overflow = document.body.dataset.quickAddOverflow || '';
+        delete document.body.dataset.quickAddOverflow;
+    }, [showFloatingQuickAdd]);
+
+    const handleFloatingQuickAddClose = () => {
+        setShowFloatingQuickAdd(false);
+        setQuickAddError('');
+        setQuickAddSuccess('');
+    };
+
+    const handleQuickAddTask = async (e, options = {}) => {
         e.preventDefault();
         if (isQuickAdding) return;
 
@@ -252,12 +278,16 @@ const TaskManagement = () => {
 
             if (response.ok) {
                 setQuickTaskTitle('');
+                setQuickTaskCategory('');
                 setQuickAddSuccess('Task added.');
                 if (!categories.includes(categoryValue) && categoryValue) {
                     setCategories(prev => [...prev, categoryValue]);
                 }
                 loadTasks();
                 setTimeout(() => setQuickAddSuccess(''), 3000);
+                if (options.closeAfterSuccess) {
+                    handleFloatingQuickAddClose();
+                }
             } else {
                 const error = await response.json();
                 setQuickAddError(error.error?.message || 'Failed to add task.');
@@ -267,6 +297,66 @@ const TaskManagement = () => {
             setQuickAddError('Error adding task: ' + error.message);
         } finally {
             setIsQuickAdding(false);
+        }
+    };
+
+    const resetInlineQuickAdd = () => {
+        setInlineQuickTitle('');
+        setInlineQuickDescription('');
+        setInlineQuickError('');
+        setIsInlineAdding(false);
+        setShowInlineQuickAdd(false);
+    };
+
+    const handleInlineQuickAddSubmit = async (e) => {
+        e.preventDefault();
+        if (isInlineAdding) return;
+
+        const rawTitle = inlineQuickTitle.trim();
+        const description = inlineQuickDescription.trim();
+        const normalizedTitle = rawTitle || (description ? (description.length > 80 ? `${description.slice(0, 77)}...` : description) : '');
+
+        if (!normalizedTitle) {
+            setInlineQuickError('Please enter at least a title or description.');
+            return;
+        }
+
+        try {
+            const token = storage?.getToken?.();
+            if (!token) {
+                setInlineQuickError('You must be logged in to add tasks.');
+                return;
+            }
+
+            setIsInlineAdding(true);
+            setInlineQuickError('');
+
+            const response = await fetch('/api/user-tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    title: normalizedTitle,
+                    description,
+                    status: 'todo',
+                    priority: 'medium'
+                })
+            });
+
+            if (response.ok) {
+                resetInlineQuickAdd();
+                loadTasks();
+            } else {
+                const error = await response.json();
+                setInlineQuickError(error.error?.message || 'Failed to add task.');
+            }
+        } catch (error) {
+            console.error('Error adding inline quick task:', error);
+            setInlineQuickError('Error adding task: ' + error.message);
+        } finally {
+            setIsInlineAdding(false);
         }
     };
 
@@ -502,6 +592,73 @@ const TaskManagement = () => {
             {/* Task Views */}
             {view === 'list' && (
                 <div className="space-y-2">
+                    <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-3`}>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowInlineQuickAdd(prev => {
+                                    const next = !prev;
+                                    if (!next) {
+                                        setInlineQuickTitle('');
+                                        setInlineQuickDescription('');
+                                        setInlineQuickError('');
+                                    }
+                                    return next;
+                                });
+                            }}
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-800'}`}
+                        >
+                            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-600 text-white">
+                                <i className="fas fa-plus text-xs"></i>
+                            </span>
+                            Quick To-Do
+                        </button>
+
+                        {showInlineQuickAdd && (
+                            <form onSubmit={handleInlineQuickAddSubmit} className="mt-3 flex flex-col lg:flex-row lg:items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={inlineQuickTitle}
+                                    onChange={(e) => {
+                                        setInlineQuickTitle(e.target.value);
+                                        if (inlineQuickError) setInlineQuickError('');
+                                    }}
+                                    placeholder="Title (optional if description provided)"
+                                    className={`w-full lg:w-1/3 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                                />
+                                <input
+                                    type="text"
+                                    value={inlineQuickDescription}
+                                    onChange={(e) => {
+                                        setInlineQuickDescription(e.target.value);
+                                        if (inlineQuickError) setInlineQuickError('');
+                                    }}
+                                    placeholder="Description"
+                                    className={`w-full flex-1 px-3 py-2 rounded-lg border ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300'}`}
+                                />
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="submit"
+                                        disabled={isInlineAdding}
+                                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-60"
+                                    >
+                                        {isInlineAdding ? 'Saving...' : 'Add'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={resetInlineQuickAdd}
+                                        className={`${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-200' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'} px-4 py-2 rounded-lg transition-colors`}
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {inlineQuickError && (
+                            <p className="mt-2 text-sm text-red-500">{inlineQuickError}</p>
+                        )}
+                    </div>
                     {filteredTasks.length === 0 ? (
                         <div className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} rounded-lg border p-8 text-center`}>
                             <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>No tasks found</p>

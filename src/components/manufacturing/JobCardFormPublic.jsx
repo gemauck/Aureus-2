@@ -4,19 +4,78 @@ const { useState, useEffect, useCallback, useMemo, useRef } = React;
 
 const STEP_IDS = ['assignment', 'visit', 'work', 'stock', 'signoff'];
 
-const StepBadge = ({ index, label, active, complete, onClick }) => (
-  <button
-    type="button"
-    onClick={onClick}
-    className={[
-      'flex-1 min-w-[64px] sm:min-w-[120px] flex flex-col items-center justify-center px-2 py-2 rounded-lg transition',
-      active ? 'bg-blue-600 text-white shadow-sm' : complete ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-white text-gray-500 border border-gray-200 hover:border-blue-200'
-    ].join(' ')}
-  >
-    <span className="text-xs font-medium uppercase tracking-wide">{`Step ${index + 1}`}</span>
-    <span className="text-xs sm:text-sm font-semibold mt-1 leading-snug">{label}</span>
-  </button>
-);
+const STEP_META = {
+  assignment: {
+    title: 'Team & Client',
+    subtitle: 'Assign crew & site',
+    icon: 'fa-user-check'
+  },
+  visit: {
+    title: 'Site Visit',
+    subtitle: 'Trip & timing',
+    icon: 'fa-route'
+  },
+  work: {
+    title: 'Work Notes',
+    subtitle: 'Diagnosis & actions',
+    icon: 'fa-clipboard-list'
+  },
+  stock: {
+    title: 'Stock & Costs',
+    subtitle: 'Usage & purchases',
+    icon: 'fa-boxes-stacked'
+  },
+  signoff: {
+    title: 'Customer Sign-off',
+    subtitle: 'Feedback & approval',
+    icon: 'fa-signature'
+  }
+};
+
+const StepBadge = ({ index, stepId, active, complete, onClick }) => {
+  const meta = STEP_META[stepId] || {};
+  const baseClasses = 'group flex items-center sm:flex-col sm:items-center justify-between sm:justify-center gap-3 sm:gap-2 rounded-xl px-3 py-3 sm:px-4 sm:py-4 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white/70 focus-visible:ring-offset-blue-600';
+  const stateClass = active
+    ? 'bg-white/95 text-blue-700 shadow-lg shadow-blue-500/25'
+    : complete
+      ? 'bg-white/30 text-white'
+      : 'bg-white/10 text-white/80 hover:bg-white/20';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${baseClasses} ${stateClass}`}
+      aria-current={active ? 'step' : undefined}
+    >
+      <div
+        className={[
+          'flex h-11 w-11 items-center justify-center rounded-full border-2 transition',
+          active
+            ? 'bg-white text-blue-600 border-white shadow'
+            : complete
+              ? 'bg-white/90 text-blue-600 border-transparent'
+              : 'bg-white/20 text-white border-white/30 group-hover:border-white/50'
+        ].join(' ')}
+      >
+        <i className={`fa-solid ${meta.icon || 'fa-circle-dot'} text-base`}></i>
+      </div>
+      <div className="flex-1 sm:flex sm:w-full sm:flex-col sm:items-center">
+        <span className={`text-[11px] uppercase tracking-wide font-semibold ${active ? 'text-blue-500' : 'text-white/70'} sm:text-center`}>
+          Step {index + 1}
+        </span>
+        <span className={`text-sm font-semibold ${active ? 'text-blue-700' : 'text-white'} sm:text-center`}>
+          {meta.title || stepId}
+        </span>
+        {meta.subtitle && (
+          <span className={`text-[11px] sm:text-xs mt-0.5 ${active ? 'text-blue-500/80' : 'text-white/70'} sm:text-center`}>
+            {meta.subtitle}
+          </span>
+        )}
+      </div>
+    </button>
+  );
+};
 
 const SummaryRow = ({ label, value }) => (
   <div className="flex justify-between gap-4 text-sm">
@@ -69,6 +128,7 @@ const JobCardFormPublic = () => {
   const [currentStep, setCurrentStep] = useState(0);
   const [stepError, setStepError] = useState('');
   const [hasSignature, setHasSignature] = useState(false);
+  const [shareStatus, setShareStatus] = useState('Copy share link');
 
   const signatureCanvasRef = useRef(null);
   const signatureWrapperRef = useRef(null);
@@ -87,6 +147,13 @@ const JobCardFormPublic = () => {
     () => (formData.materialsBought || []).reduce((sum, item) => sum + (item.cost || 0), 0),
     [formData.materialsBought]
   );
+
+  const shareUrl = useMemo(() => {
+    if (typeof window === 'undefined') {
+      return '/job-card';
+    }
+    return `${window.location.origin}/job-card`;
+  }, []);
 
   const resizeSignatureCanvas = useCallback(() => {
     const canvas = signatureCanvasRef.current;
@@ -170,6 +237,52 @@ const JobCardFormPublic = () => {
     }
     return signatureCanvasRef.current.toDataURL('image/png');
   }, [hasSignature]);
+
+  const handleShareLink = useCallback(async () => {
+    const targetUrl = shareUrl || (typeof window !== 'undefined' ? `${window.location.origin}/job-card` : '/job-card');
+    try {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        await navigator.share({
+          title: 'Job Card Capture',
+          text: 'Use the mobile-friendly job card wizard to capture site visits.',
+          url: targetUrl
+        });
+        setShareStatus('Link shared');
+      } else if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(targetUrl);
+        setShareStatus('Link copied');
+      } else {
+        throw new Error('Share API unavailable');
+      }
+    } catch (error) {
+      console.warn('Job card share failed, attempting clipboard fallback:', error);
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(targetUrl);
+          setShareStatus('Link copied');
+        } catch (clipboardError) {
+          console.error('Clipboard fallback failed:', clipboardError);
+          setShareStatus('Copy unavailable');
+          return;
+        }
+      } else {
+        setShareStatus('Copy unavailable');
+        return;
+      }
+    } finally {
+      setTimeout(() => setShareStatus('Copy share link'), 2500);
+    }
+  }, [shareUrl]);
+
+  const handleOpenClassicView = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    const classicUrl = `${window.location.origin}/service-maintenance`;
+    window.open(classicUrl, '_blank', 'noopener,noreferrer');
+  }, []);
+
+  const progressPercent = Math.min(100, Math.round(((currentStep + 1) / STEP_IDS.length) * 100));
 
   useEffect(() => {
     const handleOnline = () => {
@@ -1531,37 +1644,82 @@ const JobCardFormPublic = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-100 to-gray-50 py-5 px-3 sm:py-8 sm:px-4 lg:px-6">
       <div className="max-w-4xl mx-auto space-y-5 sm:space-y-6">
-        <header className="bg-white rounded-2xl shadow-md border border-gray-200 p-5 sm:p-7">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Job Card Capture</h1>
-              <p className="text-sm text-gray-500 mt-2 max-w-2xl">
-                Guided mobile-friendly job card designed for quick capture, offline resilience and clean handovers.
-              </p>
-            </div>
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${isOnline ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-              {isOnline ? 'Online' : 'Offline • Sync pending'}
-            </span>
+        <header className="relative overflow-hidden rounded-3xl border border-blue-200/50 bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-500 text-white shadow-xl shadow-blue-500/35">
+          <div className="pointer-events-none absolute inset-0">
+            <div className="absolute -top-24 -left-20 h-44 w-44 rounded-full bg-white/15 blur-3xl"></div>
+            <div className="absolute -bottom-24 right-0 h-56 w-56 rounded-full bg-white/10 blur-3xl"></div>
           </div>
-          <div className="mt-5 grid grid-cols-1 sm:grid-cols-5 gap-2">
-            {STEP_IDS.map((stepId, idx) => (
-              <StepBadge
-                key={stepId}
-                index={idx}
-                label={
-                  {
-                    assignment: 'Assignment',
-                    visit: 'Visit',
-                    work: 'Work Notes',
-                    stock: 'Stock & Materials',
-                    signoff: 'Sign-off'
-                  }[stepId]
-                }
-                active={idx === currentStep}
-                complete={idx < currentStep}
-                onClick={() => goToStep(idx)}
-              />
-            ))}
+          <div className="relative p-5 sm:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-[11px] uppercase tracking-[0.35em] text-white/70 font-semibold">
+                  Mobile Job Card
+                </p>
+                <h1 className="text-2xl sm:text-3xl font-bold leading-snug">
+                  Field Job Card Wizard
+                </h1>
+                <p className="text-sm sm:text-base text-white/80 mt-3">
+                  Capture job cards in minutes with a guided, offline-friendly flow. Photos, smart defaults,
+                  checklists, and customer sign-off included.
+                </p>
+              </div>
+              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                <span
+                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold ${
+                    isOnline ? 'bg-white/15 text-white' : 'bg-amber-200/90 text-amber-900'
+                  }`}
+                >
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${
+                      isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-amber-500 animate-pulse'
+                    }`}
+                  ></span>
+                  {isOnline ? 'Online • Auto-sync enabled' : 'Offline mode • Saving locally'}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleShareLink}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-semibold tracking-wide hover:bg-white/25 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus-visible:ring-offset-transparent transition"
+                  >
+                    <i className="fa-regular fa-share-from-square text-sm"></i>
+                    {shareStatus}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenClassicView}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-blue-700 shadow hover:bg-white/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600 transition"
+                  >
+                    <i className="fa-solid fa-desktop text-sm"></i>
+                    Open classic view
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="mt-6 grid grid-cols-1 sm:grid-cols-5 gap-2 sm:gap-3">
+              {STEP_IDS.map((stepId, idx) => (
+                <StepBadge
+                  key={stepId}
+                  index={idx}
+                  stepId={stepId}
+                  active={idx === currentStep}
+                  complete={idx < currentStep}
+                  onClick={() => goToStep(idx)}
+                />
+              ))}
+            </div>
+            <div className="mt-6 space-y-2">
+              <div className="flex items-center justify-between text-xs font-medium text-white/70">
+                <span>Progress</span>
+                <span>{progressPercent}% complete</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-white/20 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-white transition-all duration-500 ease-out"
+                  style={{ width: `${progressPercent}%` }}
+                ></div>
+              </div>
+            </div>
           </div>
         </header>
 

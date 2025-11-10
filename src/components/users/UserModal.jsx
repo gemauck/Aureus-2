@@ -55,13 +55,6 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                     description: 'User Management',
                     adminOnly: true
                 },
-                HR: {
-                    id: 'hr',
-                    label: 'HR',
-                    permission: ensurePermissionValue('ACCESS_HR', 'access_hr'),
-                    description: 'Human Resources self-service',
-                    adminOnly: false
-                },
                 MANUFACTURING: {
                     id: 'manufacturing',
                     label: 'Manufacturing',
@@ -425,7 +418,7 @@ const UserModal = ({ user, onClose, onSave, roleDefinitions, departments }) => {
                             <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                                 <div className="space-y-3">
                                     <p className="text-xs text-gray-600">
-                                        All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, Reports, and HR. Only Admins can access Users.
+                                        All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, and Reports. Only Admins can access Users.
                                     </p>
                                     {Object.values(permissionCategories).map((category) => {
                                         const hasAccess = hasCategoryAccess(category);

@@ -1,5 +1,5 @@
 // Get dependencies from window
-const { useState, useEffect, useMemo } = React;
+const { useState, useEffect, useMemo, useCallback } = React;
 const storage = window.storage;
 const DocumentModal = window.DocumentModal;
 const WorkflowModal = window.WorkflowModal;
@@ -117,6 +117,98 @@ const TEAMS = [
 ];
 
 const Teams = () => {
+    const normalizePermissions = (permissions) => {
+        if (!permissions) return [];
+        if (Array.isArray(permissions)) return permissions;
+        if (typeof permissions === 'string') {
+            try {
+                const parsed = JSON.parse(permissions);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                console.warn('Teams: Failed to parse permissions string:', error);
+                return [];
+            }
+        }
+        return [];
+    };
+
+    const getCurrentUser = () => {
+        try {
+            if (window.storage?.getUser) {
+                const user = window.storage.getUser();
+                if (user && (user.id || user.email)) {
+                    return {
+                        ...user,
+                        permissions: normalizePermissions(user.permissions)
+                    };
+                }
+            }
+
+            const storedUser = localStorage.getItem('abcotronics_user');
+            if (storedUser && storedUser !== 'null' && storedUser !== 'undefined') {
+                const parsed = JSON.parse(storedUser);
+                const user = parsed.user || parsed.data?.user || parsed;
+                if (user && (user.id || user.email)) {
+                    return {
+                        ...user,
+                        permissions: normalizePermissions(user.permissions)
+                    };
+                }
+            }
+
+            const legacyUser = localStorage.getItem('currentUser');
+            if (legacyUser && legacyUser !== 'null' && legacyUser !== 'undefined') {
+                const parsed = JSON.parse(legacyUser);
+                if (parsed && (parsed.id || parsed.email || parsed.username)) {
+                    return {
+                        id: parsed.id || parsed.email || parsed.username,
+                        name: parsed.name || parsed.username || 'User',
+                        email: parsed.email || parsed.username || '',
+                        role: parsed.role || '',
+                        permissions: normalizePermissions(parsed.permissions)
+                    };
+                }
+            }
+        } catch (error) {
+            console.warn('Teams: Error retrieving current user', error);
+        }
+
+        return {
+            id: 'anonymous',
+            name: 'User',
+            role: '',
+            permissions: []
+        };
+    };
+
+    const [currentUser] = useState(() => getCurrentUser());
+
+    const isAdminUser = useMemo(() => {
+        const role = (currentUser?.role || '').toString().trim().toLowerCase();
+        if (role === 'admin' || role === 'administrator') {
+            return true;
+        }
+
+        const permissions = normalizePermissions(currentUser?.permissions);
+        const normalizedPermissions = permissions.map((perm) => (perm || '').toString().trim().toLowerCase());
+
+        if (normalizedPermissions.includes('all')) return true;
+        if (normalizedPermissions.includes('access_users')) return true;
+        if (normalizedPermissions.includes('manage_users')) return true;
+
+        return false;
+    }, [currentUser]);
+
+    const isTeamAccessible = useCallback(
+        (teamId) => {
+            if (teamId === 'management') {
+                return isAdminUser;
+            }
+            return true;
+        },
+        [isAdminUser]
+    );
+
     // Get theme state - CRITICAL: Use React state, not document root class
     let themeResult = { isDark: false };
     try {
@@ -284,19 +376,43 @@ const Teams = () => {
         loadData();
     }, []);
 
+    const accessibleTeams = useMemo(() => {
+        return TEAMS.filter(team => isTeamAccessible(team.id));
+    }, [isTeamAccessible]);
+
+    const accessibleDocuments = useMemo(() => {
+        return isAdminUser ? documents : documents.filter(d => d.team !== 'management');
+    }, [documents, isAdminUser]);
+
+    const accessibleWorkflows = useMemo(() => {
+        return isAdminUser ? workflows : workflows.filter(w => w.team !== 'management');
+    }, [workflows, isAdminUser]);
+
+    const accessibleChecklists = useMemo(() => {
+        return isAdminUser ? checklists : checklists.filter(c => c.team !== 'management');
+    }, [checklists, isAdminUser]);
+
+    const accessibleNotices = useMemo(() => {
+        return isAdminUser ? notices : notices.filter(n => n.team !== 'management');
+    }, [notices, isAdminUser]);
+
+    const accessibleWorkflowExecutions = useMemo(() => {
+        return isAdminUser ? workflowExecutions : workflowExecutions.filter(execution => execution.team !== 'management');
+    }, [workflowExecutions, isAdminUser]);
+
     // Get counts for selected team - memoized per team to avoid recalculation
     const teamCountsCache = useMemo(() => {
         const cache = {};
-        TEAMS.forEach(team => {
+        accessibleTeams.forEach(team => {
             cache[team.id] = {
-                documents: documents.filter(d => d.team === team.id).length,
-                workflows: workflows.filter(w => w.team === team.id).length,
-                checklists: checklists.filter(c => c.team === team.id).length,
-                notices: notices.filter(n => n.team === team.id).length
+                documents: accessibleDocuments.filter(d => d.team === team.id).length,
+                workflows: accessibleWorkflows.filter(w => w.team === team.id).length,
+                checklists: accessibleChecklists.filter(c => c.team === team.id).length,
+                notices: accessibleNotices.filter(n => n.team === team.id).length
             };
         });
         return cache;
-    }, [documents, workflows, checklists, notices]);
+    }, [accessibleTeams, accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
 
     const getTeamCounts = (teamId) => {
         return teamCountsCache[teamId] || { documents: 0, workflows: 0, checklists: 0, notices: 0 };
@@ -305,27 +421,27 @@ const Teams = () => {
     // Filter data by selected team - memoized to avoid recalculation
     const filteredDocuments = useMemo(() => {
         return selectedTeam 
-            ? documents.filter(d => d.team === selectedTeam.id)
-            : documents;
-    }, [selectedTeam, documents]);
+            ? accessibleDocuments.filter(d => d.team === selectedTeam.id)
+            : accessibleDocuments;
+    }, [selectedTeam, accessibleDocuments]);
     
     const filteredWorkflows = useMemo(() => {
         return selectedTeam 
-            ? workflows.filter(w => w.team === selectedTeam.id)
-            : workflows;
-    }, [selectedTeam, workflows]);
+            ? accessibleWorkflows.filter(w => w.team === selectedTeam.id)
+            : accessibleWorkflows;
+    }, [selectedTeam, accessibleWorkflows]);
     
     const filteredChecklists = useMemo(() => {
         return selectedTeam 
-            ? checklists.filter(c => c.team === selectedTeam.id)
-            : checklists;
-    }, [selectedTeam, checklists]);
+            ? accessibleChecklists.filter(c => c.team === selectedTeam.id)
+            : accessibleChecklists;
+    }, [selectedTeam, accessibleChecklists]);
     
     const filteredNotices = useMemo(() => {
         return selectedTeam 
-            ? notices.filter(n => n.team === selectedTeam.id)
-            : notices;
-    }, [selectedTeam, notices]);
+            ? accessibleNotices.filter(n => n.team === selectedTeam.id)
+            : accessibleNotices;
+    }, [selectedTeam, accessibleNotices]);
 
     // Search functionality - inline to avoid circular dependencies
     const displayDocuments = useMemo(() => {
@@ -367,14 +483,32 @@ const Teams = () => {
     // Recent activity across all teams - memoized to avoid recalculation on every render
     const recentActivity = useMemo(() => {
         return [
-            ...documents.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
-            ...workflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
-            ...checklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
-            ...notices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
+            ...accessibleDocuments.map(d => ({ ...d, type: 'document', icon: 'file-alt' })),
+            ...accessibleWorkflows.map(w => ({ ...w, type: 'workflow', icon: 'project-diagram' })),
+            ...accessibleChecklists.map(c => ({ ...c, type: 'checklist', icon: 'tasks' })),
+            ...accessibleNotices.map(n => ({ ...n, type: 'notice', icon: 'bullhorn' }))
         ]
             .sort((a, b) => new Date(b.createdAt || b.updatedAt || b.date) - new Date(a.createdAt || a.updatedAt || a.date))
             .slice(0, 10);
-    }, [documents, workflows, checklists, notices]);
+    }, [accessibleDocuments, accessibleWorkflows, accessibleChecklists, accessibleNotices]);
+
+    useEffect(() => {
+        if (selectedTeam && !isTeamAccessible(selectedTeam.id)) {
+            setSelectedTeam(null);
+            setActiveTab('overview');
+        }
+    }, [selectedTeam, isTeamAccessible]);
+
+    const handleSelectTeam = useCallback((team) => {
+        if (!isTeamAccessible(team.id)) {
+            if (typeof window.alert === 'function') {
+                window.alert('Only administrators can access the Management team.');
+            }
+            return;
+        }
+        setSelectedTeam(team);
+        setActiveTab('documents');
+    }, [isTeamAccessible]);
 
     // Save handlers
     const handleSaveDocument = async (documentData) => {
@@ -626,7 +760,7 @@ const Teams = () => {
                             <div className="flex items-center justify-between">
                                 <div>
 									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Total Documents</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{documents.length}</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleDocuments.length}</p>
                                 </div>
 								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
 									<i className={`fas fa-file-alt ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
@@ -637,7 +771,7 @@ const Teams = () => {
                             <div className="flex items-center justify-between">
                                 <div>
 									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Active Workflows</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflows.filter(w => w.status === 'Active').length}</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleWorkflows.filter(w => w.status === 'Active').length}</p>
                                 </div>
 								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
 									<i className={`fas fa-project-diagram ${isDark ? 'text-purple-300' : 'text-purple-600'}`}></i>
@@ -648,7 +782,7 @@ const Teams = () => {
                             <div className="flex items-center justify-between">
                                 <div>
 									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Checklists</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{checklists.length}</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleChecklists.length}</p>
                                 </div>
 								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-green-900' : 'bg-green-100'}`}>
 									<i className={`fas fa-tasks ${isDark ? 'text-green-300' : 'text-green-600'}`}></i>
@@ -659,7 +793,7 @@ const Teams = () => {
                             <div className="flex items-center justify-between">
                                 <div>
 									<p className={`text-xs mb-0.5 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>Executions</p>
-									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{workflowExecutions.length}</p>
+									<p className={`text-xl font-bold ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>{accessibleWorkflowExecutions.length}</p>
                                 </div>
 								<div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-900' : 'bg-orange-100'}`}>
 									<i className={`fas fa-play-circle ${isDark ? 'text-orange-300' : 'text-orange-600'}`}></i>
@@ -672,12 +806,12 @@ const Teams = () => {
 					<div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
 						<h2 className={`text-sm font-semibold mb-3 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>Department Teams</h2>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                            {TEAMS.map(team => {
+                            {accessibleTeams.map(team => {
                                 const counts = getTeamCounts(team.id);
                                 return (
                                     <button
                                         key={team.id}
-                                        onClick={() => setSelectedTeam(team)}
+                                        onClick={() => handleSelectTeam(team)}
 										className={`text-left border rounded-lg p-3 hover:shadow-md hover:border-primary-300 transition group ${isDark ? 'border-slate-700' : 'border-gray-200'}`}
                                     >
                                         <div className="flex items-center justify-between mb-2">
@@ -982,7 +1116,7 @@ const Teams = () => {
                                                     <span><i className="fas fa-layer-group mr-1"></i>{workflow.steps?.length || 0} steps</span>
                                                     <span><i className="fas fa-clock mr-1"></i>Updated {new Date(workflow.updatedAt).toLocaleDateString('en-ZA')}</span>
                                                     <span><i className="fas fa-play-circle mr-1"></i>
-                                                        {workflowExecutions.filter(e => e.workflowId === workflow.id).length} executions
+                                                        {accessibleWorkflowExecutions.filter(e => e.workflowId === workflow.id).length} executions
                                                     </span>
                                                 </div>
                                             </div>

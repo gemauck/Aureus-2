@@ -1867,7 +1867,7 @@ const UserManagement = () => {
                         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
                             <p className="text-sm text-blue-800 dark:text-blue-200">
                                 <i className="fas fa-info-circle mr-2"></i>
-                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, Reports, and HR. Only Admins can access Users.
+                                <strong>Role:</strong> {editingUserPermissions.role || 'user'} | All users have access to CRM, Projects, Team, Manufacturing, Documents, Leave Platform, Tool, and Reports. Only Admins can access Users.
                             </p>
                         </div>
 
@@ -1959,13 +1959,6 @@ const UserManagement = () => {
                                                 label: 'Users',
                                                 permission: window.PERMISSIONS.ACCESS_USERS,
                                                 description: 'User Management',
-                                                adminOnly: true
-                                            },
-                                            HR: {
-                                                id: 'hr',
-                                                label: 'HR',
-                                                permission: window.PERMISSIONS.ACCESS_HR,
-                                                description: 'Human Resources',
                                                 adminOnly: true
                                             },
                                             MANUFACTURING: {

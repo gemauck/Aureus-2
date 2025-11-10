@@ -219,6 +219,8 @@ const ServicesDropdown = ({ services, selectedServices, onSelectionChange, isDar
 
 const Clients = React.memo(() => {
     const [viewMode, setViewMode] = useState('clients');
+    const [pipelineStatus, setPipelineStatus] = useState(() => (typeof window !== 'undefined' && window.Pipeline ? 'ready' : 'loading'));
+    const [pipelineRenderKey, setPipelineRenderKey] = useState(0);
     const [clients, setClients] = useState([]);
     const clientsRef = useRef(clients); // Ref to track current clients for LiveDataSync
     const viewModeRef = useRef(viewMode); // Ref to track current viewMode for LiveDataSync
@@ -236,6 +238,56 @@ const Clients = React.memo(() => {
     useEffect(() => {
         viewModeRef.current = viewMode;
     }, [viewMode]);
+
+    useEffect(() => {
+        if (viewMode !== 'pipeline') {
+            return;
+        }
+
+        if (pipelineStatus === 'ready' && window.Pipeline) {
+            return;
+        }
+
+        if (window.Pipeline) {
+            console.log('🟦 renderPipelineView: window.Pipeline already available - marking ready');
+            setPipelineStatus('ready');
+            return;
+        }
+
+        let cancelled = false;
+        let attempts = 0;
+        const maxAttempts = 24;
+
+        if (pipelineStatus !== 'failed') {
+            setPipelineStatus('loading');
+        }
+
+        const interval = setInterval(() => {
+            if (cancelled) {
+                return;
+            }
+
+            if (window.Pipeline) {
+                console.log(`🟦 renderPipelineView: window.Pipeline became available after ${attempts + 1} checks`);
+                setPipelineStatus('ready');
+                setPipelineRenderKey((prev) => prev + 1);
+                clearInterval(interval);
+                return;
+            }
+
+            attempts += 1;
+            if (attempts >= maxAttempts) {
+                console.warn('⚠️ renderPipelineView: window.Pipeline not available after polling - falling back to legacy view');
+                setPipelineStatus('failed');
+                clearInterval(interval);
+            }
+        }, 250);
+
+        return () => {
+            cancelled = true;
+            clearInterval(interval);
+        };
+    }, [viewMode, pipelineStatus]);
 
     // Utility function to calculate time since first contact
     const getTimeSinceFirstContact = (firstContactDate) => {
@@ -914,7 +966,44 @@ const Clients = React.memo(() => {
         const mapDbClient = (c) => {
             const isLead = c.type === 'lead';
             let status = c.status;
-            
+
+            const parseArrayField = (value, fieldName) => {
+                if (Array.isArray(value)) {
+                    return value;
+                }
+
+                if (typeof value === 'string' && value.trim() !== '') {
+                    try {
+                        const parsed = JSON.parse(value);
+                        return Array.isArray(parsed) ? parsed : [];
+                    } catch (error) {
+                        console.warn(`⚠️ Failed to parse ${fieldName} JSON:`, error?.message || error);
+                        return [];
+                    }
+                }
+
+                return [];
+            };
+
+            const parseObjectField = (value, fieldName, fallback) => {
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    return value;
+                }
+
+                if (typeof value === 'string' && value.trim() !== '') {
+                    try {
+                        const parsed = JSON.parse(value);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            return parsed;
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Failed to parse ${fieldName} JSON:`, error?.message || error);
+                    }
+                }
+
+                return fallback;
+            };
+
             // Convert status based on type
             if (isLead) {
                 // For leads: preserve status as-is (Potential, Active, Disinterested)
@@ -925,11 +1014,11 @@ const Clients = React.memo(() => {
                 else if (c.status === 'inactive') status = 'Inactive';
                 else status = c.status || 'Inactive';
             }
-            
+
             return {
                 id: c.id,
                 name: c.name,
-                status: status,
+                status,
                 industry: c.industry || 'Other',
                 type: c.type, // Preserve as-is - null types will be filtered out
                 revenue: c.revenue || 0,
@@ -937,22 +1026,22 @@ const Clients = React.memo(() => {
                 address: c.address || '',
                 website: c.website || '',
                 notes: c.notes || '',
-                contacts: Array.isArray(c.contacts) ? c.contacts : [],
-                followUps: Array.isArray(c.followUps) ? c.followUps : [],
-                projectIds: Array.isArray(c.projectIds) ? c.projectIds : [],
-                comments: Array.isArray(c.comments) ? c.comments : [],
-                sites: Array.isArray(c.sites) ? c.sites : [],
-                opportunities: Array.isArray(c.opportunities) ? c.opportunities : [],
-                contracts: Array.isArray(c.contracts) ? c.contracts : [],
-                activityLog: Array.isArray(c.activityLog) ? c.activityLog : [],
-                billingTerms: typeof c.billingTerms === 'object' ? c.billingTerms : {
+                contacts: parseArrayField(c.contacts, 'contacts'),
+                followUps: parseArrayField(c.followUps, 'followUps'),
+                projectIds: parseArrayField(c.projectIds, 'projectIds'),
+                comments: parseArrayField(c.comments, 'comments'),
+                sites: parseArrayField(c.sites, 'sites'),
+                opportunities: parseArrayField(c.opportunities, 'opportunities'),
+                contracts: parseArrayField(c.contracts, 'contracts'),
+                activityLog: parseArrayField(c.activityLog, 'activityLog'),
+                billingTerms: parseObjectField(c.billingTerms, 'billingTerms', {
                     paymentTerms: 'Net 30',
                     billingFrequency: 'Monthly',
                     currency: 'ZAR',
                     retainerAmount: 0,
                     taxExempt: false,
                     notes: ''
-                },
+                }),
                 createdAt: c.createdAt,
                 updatedAt: c.updatedAt
             };
@@ -1322,6 +1411,7 @@ const Clients = React.memo(() => {
                         source: lead.source || 'Website',
                         value: lead.value || lead.revenue || 0,
                         probability: lead.probability || 0,
+                    isStarred: lead.isStarred === true,
                         firstContactDate: lead.firstContactDate || lead.createdAt ? new Date(lead.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                         lastContact: lead.lastContact || lead.updatedAt ? new Date(lead.updatedAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
                         address: lead.address || '',
@@ -2783,8 +2873,8 @@ const Clients = React.memo(() => {
         alert('Lead converted to client!');
     };
 
-    // Pipeline View Component
-    const PipelineView = () => {
+    // Legacy Pipeline View Component (fallback if new Pipeline module fails to load)
+    const LegacyPipelineView = () => {
         const [draggedItem, setDraggedItem] = useState(null);
         const [draggedType, setDraggedType] = useState(null);
         const [didDrag, setDidDrag] = useState(false);
@@ -3344,6 +3434,46 @@ const Clients = React.memo(() => {
         </div>
     );
 
+    const renderPipelineView = () => {
+        if (pipelineStatus === 'ready' && window.Pipeline) {
+            try {
+                window.__PIPELINE_RENDER_MODE = 'new';
+                console.log('✅ renderPipelineView: Mounting new Pipeline component from window.Pipeline');
+                return React.createElement(window.Pipeline, { key: pipelineRenderKey });
+            } catch (error) {
+                console.error('❌ renderPipelineView: Failed to render new Pipeline component, falling back to legacy view:', error);
+                window.__PIPELINE_RENDER_MODE = 'legacy-error';
+                setTimeout(() => setPipelineStatus('failed'), 0);
+            }
+        }
+
+        if (pipelineStatus === 'loading') {
+            window.__PIPELINE_RENDER_MODE = 'loading';
+            return (
+                <div className={`min-h-[480px] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-3 ${isDark ? 'border-gray-700 bg-gray-900/40 text-gray-300' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+                    <i className={`fas fa-circle-notch fa-spin text-2xl ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
+                    <div className="text-base font-medium">Loading the enhanced Pipeline experience…</div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-blue-500'}`}>This should only take a moment.</div>
+                </div>
+            );
+        }
+
+        if (pipelineStatus !== 'failed' && !window.Pipeline) {
+            window.__PIPELINE_RENDER_MODE = 'loading';
+            return (
+                <div className={`min-h-[480px] rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-3 ${isDark ? 'border-gray-700 bg-gray-900/40 text-gray-300' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+                    <i className={`fas fa-hourglass-half text-2xl ${isDark ? 'text-blue-300' : 'text-blue-600'}`}></i>
+                    <div className="text-base font-medium">Preparing the new Pipeline module…</div>
+                    <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-blue-500'}`}>If this message persists, the legacy board will be shown automatically.</div>
+                </div>
+            );
+        }
+
+        console.warn('⚠️ renderPipelineView: Falling back to LegacyPipelineView');
+        window.__PIPELINE_RENDER_MODE = 'legacy-fallback';
+        return <LegacyPipelineView />;
+    };
+
     // Leads List View
     // Note: Lead status is now hardcoded as 'active' - removed handleLeadStatusChange function
 
@@ -3811,6 +3941,14 @@ const Clients = React.memo(() => {
                 <button
                     onClick={async () => {
                         setViewMode('pipeline');
+                        setPipelineStatus(window.Pipeline ? 'ready' : 'loading');
+
+                        // New standalone Pipeline module handles its own data loading
+                        if (window.Pipeline) {
+                            console.log('ℹ️ Pipeline tab: using standalone Pipeline component; skipping legacy preload');
+                            setPipelineRenderKey((prev) => prev + 1);
+                            return;
+                        }
                         
                         // Load opportunities when Pipeline tab is clicked (bulk loading for performance)
                         if (!window.DatabaseAPI?.getOpportunities || clients.length === 0) {
@@ -4034,7 +4172,7 @@ const Clients = React.memo(() => {
             {/* Content based on view mode */}
             {viewMode === 'clients' && <ClientsListView />}
             {viewMode === 'leads' && <LeadsListView />}
-            {viewMode === 'pipeline' && <PipelineView />}
+            {viewMode === 'pipeline' && renderPipelineView()}
             {viewMode === 'news-feed' && (window.ClientNewsFeed ? <window.ClientNewsFeed /> : <div className="text-center py-12 text-gray-500">Loading News Feed...</div>)}
             {viewMode === 'client-detail' && <ClientDetailView />}
             {viewMode === 'lead-detail' && <LeadDetailView />}

@@ -31,7 +31,7 @@ const Pipeline = () => {
         source: 'All'
     });
     const [sortBy, setSortBy] = useState('value-desc');
-    const [viewMode, setViewMode] = useState('kanban'); // kanban, list, forecast
+    const [viewMode, setViewMode] = useState('list'); // list, kanban, forecast
     const [selectedDeal, setSelectedDeal] = useState(null);
     const [showDealModal, setShowDealModal] = useState(false);
     const [timeRange, setTimeRange] = useState('current'); // current, monthly, quarterly
@@ -1167,6 +1167,11 @@ const Pipeline = () => {
         return 'bg-red-100 text-red-800';
     };
 
+    const formatCurrency = (value) => {
+        const numericValue = Number.isFinite(Number(value)) ? Number(value) : 0;
+        return `R ${numericValue.toLocaleString('en-ZA')}`;
+    };
+
     const metrics = calculateMetrics();
     const filteredItems = getFilteredItems();
 
@@ -1314,87 +1319,134 @@ const Pipeline = () => {
         </div>
     );
 
-    // List View
-    const ListView = () => (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Deal</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                        {filteredItems.length === 0 ? (
-                            <tr>
-                                <td colSpan="6" className="px-4 py-8 text-center text-sm text-gray-500">
-                                    <i className="fas fa-inbox text-3xl text-gray-300 mb-2"></i>
-                                    <p>No deals found</p>
-                                </td>
-                            </tr>
-                        ) : (
-                            filteredItems.map(item => {
-                                const age = getDealAge(item.createdDate);
-                                
-                                return (
-                                    <tr 
-                                        key={`${item.type}-${item.id}`}
-                                        onClick={() => {
-                                            setSelectedDeal(item);
-                                            setShowDealModal(true);
-                                        }}
-                                        className="hover:bg-gray-50 cursor-pointer transition"
-                                    >
-                                        <td className="px-4 py-3">
-                                            <div className="text-sm font-medium text-gray-900">{item.name}</div>
-                                            {item.type !== 'lead' && (
-                                                <div className="text-xs text-gray-500">
-                                                    {item.clientName}
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                                                item.type === 'lead' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
-                                            }`}>
-                                                {item.itemType}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-sm text-gray-900">{item.stage}</span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-sm font-medium text-gray-900">
-                                                R {item.value.toLocaleString('en-ZA')}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className={`px-2 py-1 text-xs rounded font-medium ${getAgeBadgeColor(age)}`}>
-                                                {age}d
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            <span className="text-xs text-gray-600">
-                                                {item.expectedCloseDate 
-                                                    ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
-                                                    : '-'
-                                                }
-                                            </span>
+    // Combined Deals List View
+    const ListView = () => {
+        const items = getFilteredItems();
+        const leadCount = items.filter(item => item.type === 'lead').length;
+        const opportunityCount = items.filter(item => item.type !== 'lead').length;
+        const totalValue = items.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+
+        return (
+            <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-3">
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Total Items</div>
+                        <div className="text-2xl font-semibold text-gray-900">{items.length}</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            {leadCount} leads • {opportunityCount} opportunities
+                        </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Pipeline Value</div>
+                        <div className="text-2xl font-semibold text-gray-900">{formatCurrency(totalValue)}</div>
+                        <div className="text-xs text-gray-500 mt-1">All leads & opportunities</div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Latest Updates</div>
+                        <div className="text-sm text-gray-800 font-medium">
+                            {items[0] ? (items[0].stage || 'Unknown Stage') : 'No activity'}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                            Sorted by {sortBy.includes('date') ? 'created date' : 'current sort'}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Stage</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Value</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Age</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expected Close</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {items.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="7" className="px-4 py-12 text-center text-sm text-gray-500">
+                                            <i className="fas fa-list-ul text-3xl text-gray-300 mb-3"></i>
+                                            <p>No leads or opportunities match your filters.</p>
+                                            <p className="text-xs text-gray-400 mt-1">Adjust filters to see more results.</p>
                                         </td>
                                     </tr>
-                                );
-                            })
-                        )}
-                    </tbody>
-                </table>
+                                ) : (
+                                    items.map(item => {
+                                        const age = getDealAge(item.createdDate);
+                                        const isLead = item.type === 'lead';
+
+                                        return (
+                                            <tr
+                                                key={`${item.type}-${item.id}`}
+                                                className="hover:bg-gray-50 cursor-pointer transition"
+                                                onClick={() => {
+                                                    setSelectedDeal(item);
+                                                    setShowDealModal(true);
+                                                }}
+                                            >
+                                                <td className="px-4 py-3">
+                                                    <div className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                                                        {item.name}
+                                                        {isLead ? (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-700">Lead</span>
+                                                        ) : (
+                                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-100 text-green-700">Opportunity</span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        Created {new Date(item.createdDate).toLocaleDateString('en-ZA')}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-sm text-gray-900">
+                                                        {isLead ? (item.company || 'Lead') : (item.clientName || 'Unknown Client')}
+                                                    </div>
+                                                    {item.industry && (
+                                                        <div className="text-xs text-gray-500 mt-0.5">{item.industry}</div>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-xs text-gray-600 uppercase font-medium tracking-wide">
+                                                        {isLead ? 'New Lead' : 'Expansion'}
+                                                    </div>
+                                                    {item.source && (
+                                                        <div className="text-[10px] text-gray-400 mt-0.5">Source: {item.source}</div>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="text-sm font-medium text-gray-900">{item.stage}</span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="text-sm font-semibold text-gray-900">{formatCurrency(item.value)}</span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`px-2 py-1 text-xs rounded font-medium ${getAgeBadgeColor(age)}`}>
+                                                        {age}d
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <span className="text-xs text-gray-600">
+                                                        {item.expectedCloseDate
+                                                            ? new Date(item.expectedCloseDate).toLocaleDateString('en-ZA')
+                                                            : 'Not set'}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // Forecast View
     const ForecastView = () => {
@@ -1539,6 +1591,15 @@ const Pipeline = () => {
                 <div className="flex items-center justify-between">
                     <div className="inline-flex bg-gray-100 rounded-lg p-1">
                         <button
+                            onClick={() => setViewMode('list')}
+                            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                                viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
+                            }`}
+                        >
+                            <i className="fas fa-layer-group mr-2"></i>
+                            All Deals
+                        </button>
+                        <button
                             onClick={() => setViewMode('kanban')}
                             className={`px-4 py-2 rounded-md text-sm font-medium transition ${
                                 viewMode === 'kanban' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
@@ -1546,15 +1607,6 @@ const Pipeline = () => {
                         >
                             <i className="fas fa-th mr-2"></i>
                             Kanban
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`px-4 py-2 rounded-md text-sm font-medium transition ${
-                                viewMode === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600'
-                            }`}
-                        >
-                            <i className="fas fa-list mr-2"></i>
-                            List
                         </button>
                         <button
                             onClick={() => setViewMode('forecast')}
@@ -1662,6 +1714,7 @@ const Pipeline = () => {
 
             {/* Main Content */}
             {viewMode === 'kanban' && <KanbanView />}
+            {viewMode === 'all-deals' && <AllDealsListView />}
             {viewMode === 'list' && <ListView />}
             {viewMode === 'forecast' && <ForecastView />}
             

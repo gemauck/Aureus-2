@@ -13,7 +13,7 @@ const MainLayout = () => {
         }
         // Extract page from URL (e.g., /leave-platform -> leave-platform)
         const page = pathname.replace(/^\//, '').split('/')[0];
-        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'hr', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking'];
+        const validPages = ['dashboard', 'clients', 'projects', 'teams', 'users', 'leave-platform', 'manufacturing', 'service-maintenance', 'tools', 'documents', 'reports', 'settings', 'account', 'time-tracking'];
         if (validPages.includes(page)) {
             return page;
         }
@@ -306,7 +306,6 @@ const MainLayout = () => {
     
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
-    const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
     const Manufacturing = window.Manufacturing || (() => {
         console.warn('⚠️ Manufacturing component not loaded yet.');
         return <div className="text-center py-12 text-gray-500">Manufacturing loading...</div>;
@@ -367,11 +366,29 @@ const MainLayout = () => {
             return;
         }
 
-        const scriptId = 'service-maintenance-component-loader';
-        if (!document.getElementById(scriptId)) {
-            console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting dynamic load...');
+        const loaderId = 'service-maintenance-component-loader';
+        if (window.loadScriptWithOfflineFallback) {
+            const scriptElement = document.querySelector(`[data-offline-cache-key="offline::components/service-maintenance/ServiceAndMaintenance.jsx"]`);
+            if (!scriptElement) {
+                console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting offline-capable load...');
+                window.loadScriptWithOfflineFallback('/dist/src/components/service-maintenance/ServiceAndMaintenance.js', {
+                    cacheKey: 'offline::components/service-maintenance/ServiceAndMaintenance.jsx'
+                }).catch((error) => {
+                    console.error('❌ Offline ServiceAndMaintenance loader failed, falling back to dynamic script tag', error);
+                    createFallbackScript();
+                });
+            }
+        } else if (!document.getElementById(loaderId)) {
+            createFallbackScript();
+        }
+
+        function createFallbackScript() {
+            if (document.getElementById(loaderId)) {
+                return;
+            }
+            console.warn('⚠️ ServiceAndMaintenance component not loaded yet. Attempting dynamic script load...');
             const script = document.createElement('script');
-            script.id = scriptId;
+            script.id = loaderId;
             script.defer = true;
             script.src = `/dist/src/components/service-maintenance/ServiceAndMaintenance.js?v=sm-${Date.now()}`;
             script.onload = () => {
@@ -472,12 +489,11 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram', permission: 'ACCESS_PROJECTS' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends', permission: 'ACCESS_TEAM' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', permission: 'ACCESS_USERS' }, // Admin only
-        { id: 'hr', label: 'HR', icon: 'fa-id-card', permission: null },
-        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: 'ACCESS_LEAVE_PLATFORM' },
+        { id: 'leave-platform', label: 'Leave Platform', icon: 'fa-calendar-alt', permission: null },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry', permission: 'ACCESS_MANUFACTURING' },
         { id: 'service-maintenance', label: 'Service & Maintenance', icon: 'fa-wrench', permission: 'ACCESS_SERVICE_MAINTENANCE' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox', permission: 'ACCESS_TOOL' },
-        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: 'ACCESS_DOCUMENTS' },
+        { id: 'documents', label: 'Documents', icon: 'fa-folder-open', permission: null }, // Always accessible
         { id: 'reports', label: 'Reports', icon: 'fa-chart-bar', permission: 'ACCESS_REPORTS' },
     ];
 
@@ -631,31 +647,6 @@ const MainLayout = () => {
                     return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
                 case 'time': 
                     return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
-                case 'hr': 
-                    if (permissionChecker && window.PERMISSIONS) {
-                        if (!permissionChecker.hasPermission(window.PERMISSIONS.ACCESS_HR)) {
-                            return (
-                                <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                    <div className="text-center">
-                                        <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                        <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                        <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access the HR page.</p>
-                                    </div>
-                                </div>
-                            );
-                        }
-                    } else if (!isAdmin) {
-                        return (
-                            <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                <div className="text-center">
-                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className={`text-xl font-semibold mb-2 ${isDark ? 'text-gray-100' : 'text-gray-900'}`}>Access Denied</h2>
-                                    <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>You need administrator privileges to access the HR page.</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
                 case 'leave-platform': 
                     console.log('🔄 MainLayout: Rendering leave-platform, component type:', typeof LeavePlatform);
                     console.log('🔄 MainLayout: window.LeavePlatform exists:', typeof window.LeavePlatform);
@@ -701,7 +692,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, LeavePlatform, Manufacturing, ServiceAndMaintenance, Tools, Reports, Settings, ErrorBoundary, isAdmin]);
 
     React.useEffect(() => {
         window.currentPage = currentPage;

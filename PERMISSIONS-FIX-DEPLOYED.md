@@ -20,7 +20,7 @@ The fix has been successfully deployed to production and verified to be working.
 
 ### Post-Deployment Test (After Fix)
 - **Permissions sent as**: `array` ✅
-- **Format**: `["access_team", "access_users", "access_hr", "access_manufacturing", "access_tool", "access_reports"]`
+- **Format**: `["access_team", "access_users", "access_manufacturing", "access_tool", "access_reports"]`
 - **Type**: `object` (arrays are objects in JavaScript)
 - **isArray**: `true` ✅
 - **Result**: ✅ Fix working correctly!
@@ -35,7 +35,6 @@ From browser console logs:
   "permissions": [
     "access_team",
     "access_users",
-    "access_hr",
     "access_manufacturing",
     "access_tool",
     "access_reports"

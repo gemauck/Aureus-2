@@ -142,8 +142,8 @@ const AuditLogger = {
                     userId: 'system',
                     userRole: 'System',
                     action: 'create',
-                    module: 'hr',
-                    details: { action: 'System initialized', message: 'Employee records loaded' },
+                    module: 'leave-platform',
+                    details: { action: 'System initialized', message: 'Leave management data loaded' },
                     sessionId: getSessionId(),
                     success: true
                 },

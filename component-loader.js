@@ -15,6 +15,7 @@
         'utils/dataService.js',
         'utils/authStorage.js',
         'utils/databaseAPI-new.js',
+        'utils/offlineScriptLoader.js',
         'utils/cache-manager.js',
         'utils/liveDataSync.js',
         'utils/auditLogger.js',
@@ -108,7 +109,7 @@
         'components/users/Users.jsx',
         'components/users/UserManagement.jsx',
         
-        // Leave Platform - Load before HR and Manufacturing for better availability
+        // Leave Platform - Load before Manufacturing for better availability
         'components/leave-platform/LeavePlatform.jsx',
         
         // Manufacturing
@@ -125,13 +126,6 @@
         'components/tools/HandwritingToWord.jsx',
         'components/tools/UnitConverter.jsx',
         'components/tools/Tools.jsx',
-        
-        // HR
-        'components/hr/EmployeeManagement.jsx',
-        'components/hr/Attendance.jsx',
-        'components/hr/QuickBooksPayrollSync.jsx',
-        'components/hr/Payroll.jsx',
-        'components/hr/HR.jsx',
         
         // Reports
         'components/reports/AuditTrail.jsx',
@@ -152,6 +146,10 @@
         'App.jsx'
     ];
     
+    const offlineCapableComponents = [
+        'components/service-maintenance/ServiceAndMaintenance.jsx'
+    ];
+    
     function loadComponent(path) {
         const isProduction = window.USE_PRODUCTION_BUILD === true;
         const baseDir = isProduction ? './dist/src/' : './src/';
@@ -159,36 +157,72 @@
         
         // Convert .jsx to .js in production
         const finalPath = isProduction ? fullPath.replace('.jsx', '.js') : fullPath;
+        const resolvedPath = finalPath.replace(/^\.\//, '/');
         
-        const script = document.createElement('script');
-        
-        // Add cache-busting for UserManagement to force reload of new permissions
-        let scriptSrc = finalPath;
-        if (path.includes('UserManagement')) {
-            scriptSrc += '?v=permissions-v2-' + Date.now();
+        if (isProduction && window.loadScriptWithOfflineFallback && offlineCapableComponents.includes(path)) {
+            const cacheKey = `offline::${path}`;
+            window.loadScriptWithOfflineFallback(resolvedPath, { cacheKey })
+                .catch((error) => {
+                    console.warn(`⚠️ Offline loader fallback for ${path}`, error);
+                    appendScriptTag();
+                });
+            return;
         }
         
-        // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
-        if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
-            const versionTag = 'teams-permissions-v20251110';
-            scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+        appendScriptTag();
+        
+        function appendScriptTag() {
+            const script = document.createElement('script');
+            
+            // Add cache-busting for UserManagement to force reload of new permissions
+            let scriptSrc = finalPath;
+            if (path.includes('UserManagement')) {
+                scriptSrc += '?v=permissions-v2-' + Date.now();
+            }
+            
+            // Force cache-bust for Management Meeting Notes bundle to ensure latest UI is loaded
+            if (path.includes('ManagementMeetingNotes') || path.includes('Teams')) {
+                const versionTag = 'teams-permissions-v20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+            }
+            
+            if (path.includes('MainLayout')) {
+                const layoutVersion = 'main-layout-v20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + layoutVersion;
+            }
+            
+            if (path.includes('components/clients/Pipeline.jsx')) {
+                const versionTag = 'pipeline-list-view-20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+            }
+
+            if (path.includes('components/clients/Clients.jsx')) {
+                const versionTag = 'clients-pipeline-fallback-logs-20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+            }
+
+            if (path.includes('components/clients/PipelineIntegration.js')) {
+                const versionTag = 'pipeline-integration-retry-20251110';
+                scriptSrc += (scriptSrc.includes('?') ? '&' : '?') + 'v=' + versionTag;
+            }
+
+            if (isProduction) {
+                // Production: Load pre-compiled JavaScript
+                script.src = scriptSrc;
+                script.defer = true;
+            } else {
+                // Development: Load JSX with Babel
+                script.type = 'text/babel';
+                script.src = scriptSrc;
+            }
+            
+            script.onerror = () => {
+                console.error(`❌ Failed to load: ${finalPath}`);
+            };
+            
+            document.body.appendChild(script);
         }
         
-        if (isProduction) {
-            // Production: Load pre-compiled JavaScript
-            script.src = scriptSrc;
-            script.defer = true;
-        } else {
-            // Development: Load JSX with Babel
-            script.type = 'text/babel';
-            script.src = scriptSrc;
-        }
-        
-        script.onerror = () => {
-            console.error(`❌ Failed to load: ${finalPath}`);
-        };
-        
-        document.body.appendChild(script);
     }
     
     // Wait for dependencies to be ready

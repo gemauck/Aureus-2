@@ -17,7 +17,6 @@ All authenticated users automatically have access to:
 ### Admin-Only Modules
 Only administrators can access:
 - **Users** - User Management
-- **HR** - Human Resources
 
 ## Implementation Details
 
@@ -25,22 +24,22 @@ Only administrators can access:
 
 **New Permission Constants:**
 - `ACCESS_CRM`, `ACCESS_PROJECTS`, `ACCESS_TEAM`, `ACCESS_MANUFACTURING`, `ACCESS_TOOL`, `ACCESS_REPORTS` (public)
-- `ACCESS_USERS`, `ACCESS_HR` (admin-only)
+- `ACCESS_USERS` (admin-only)
 
 **Permission Categories Object:**
 - `PERMISSION_CATEGORIES` - Contains metadata for each permission category including labels, descriptions, and admin-only flags
 
 **PermissionChecker Class:**
 - Automatically grants public permissions to all users
-- Restricts admin-only permissions (Users, HR) to admins only
+- Restricts admin-only permissions (Users) to admins only
 - Supports custom permissions that override defaults
 - Backward compatible with legacy permission constants
 
 ### 2. User Management UI (`src/components/users/UserManagement.jsx`)
 
 **Permissions Modal:**
-- Displays all 8 permission categories
-- Shows admin-only badges for Users and HR
+- Displays all key permission categories
+- Shows admin-only badges for Users
 - Automatically initializes permissions based on user role
 - Disables admin-only checkboxes for non-admin users
 - Clear visual indicators for access status
@@ -62,7 +61,7 @@ Only administrators can access:
 
 **Page Access Control:**
 - Checks permissions before rendering pages
-- Redirects non-admins from Users/HR pages
+- Redirects non-admins from admin-only pages
 - Shows access denied messages when needed
 
 ### 5. Server-Side Permission Helper (`api/_lib/requirePermission.js`)
@@ -72,7 +71,6 @@ Only administrators can access:
 - `requireAnyPermission(permissions)` - Require any of the permissions
 - `requireAllPermissions(permissions)` - Require all permissions
 - `canAccessUsers(user)` - Check if user can access Users module
-- `canAccessHR(user)` - Check if user can access HR module
 
 **Usage:**
 ```javascript
@@ -85,7 +83,7 @@ export default authRequired(requirePermission(PERMISSIONS.ACCESS_USERS)(handler)
 ## Key Features
 
 1. **Automatic Access**: All users get access to public modules without manual configuration
-2. **Admin Protection**: Users and HR modules are automatically restricted to admins
+2. **Admin Protection**: Admin-only modules are automatically restricted to admins
 3. **Backward Compatible**: Legacy permission constants still work
 4. **Extensible**: Structure supports adding sub-categories in the future
 5. **Consistent**: Same permission logic on frontend and backend
@@ -127,8 +125,8 @@ CRM: {
 ## Testing Checklist
 
 - [ ] Non-admin users can access CRM, Projects, Team, Manufacturing, Tool, Reports
-- [ ] Non-admin users cannot access Users or HR pages
-- [ ] Admin users can access all modules including Users and HR
+- [ ] Non-admin users cannot access Users pages
+- [ ] Admin users can access all modules including Users
 - [ ] Permissions modal shows correct access status
 - [ ] Menu items are filtered correctly based on permissions
 - [ ] Page access control redirects unauthorized users

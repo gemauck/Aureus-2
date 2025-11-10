@@ -115,6 +115,7 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
         }, []);
 
         const leaveUtils = window.leaveUtils || {};
+        const EmployeeManagementComponent = useMemo(() => window.EmployeeManagement, []);
         const isAdmin = user?.role?.toLowerCase() === 'admin';
 
         // South African BCEA leave types (centralised in leaveUtils)
@@ -494,7 +495,8 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
             ];
 
             if (isAdmin) {
-                sharedTabs.splice(2, 0, { id: 'team', label: 'Team Leave', icon: 'fa-users' });
+                sharedTabs.splice(1, 0, { id: 'employees', label: 'Employees', icon: 'fa-users' });
+                sharedTabs.splice(3, 0, { id: 'team', label: 'Team Leave', icon: 'fa-people-arrows' });
                 sharedTabs.push(
         { id: 'approvals', label: 'Approvals', icon: 'fa-check-circle' },
                     { id: 'approvers', label: 'Approvers', icon: 'fa-user-shield' },
@@ -521,6 +523,24 @@ const LeavePlatform = ({ initialTab = 'overview' } = {}) => {
                             getStatusLabel={getStatusLabel}
                             onRefresh={() => loadData()}
                         />
+                    );
+                case 'employees':
+                    if (!isAdmin) {
+                        return <AccessNotice />;
+                    }
+                    if (EmployeeManagementComponent && typeof EmployeeManagementComponent === 'function') {
+                        try {
+                            const Component = EmployeeManagementComponent;
+                            return <Component />;
+                        } catch (err) {
+                            console.error('LeavePlatform: error rendering EmployeeManagement component', err);
+                        }
+                    }
+                    return (
+                        <div className="text-center py-12 text-gray-500">
+                            <i className="fas fa-users mb-2 text-3xl"></i>
+                            <p>Employee directory is not available right now.</p>
+                        </div>
                     );
                 case 'team':
                     return isAdmin ? (
@@ -759,7 +779,7 @@ const OverviewView = ({
         <div className="space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h3 className="text-lg font-semibold text-gray-900">HR Overview</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Leave Overview</h3>
                     <p className="text-sm text-gray-500">
                         BCEA-compliant overview of leave, balances, and employee wellbeing.
                     </p>

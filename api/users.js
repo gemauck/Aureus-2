@@ -18,7 +18,7 @@ async function handler(req, res) {
             const isAdmin = userRole === 'admin';
 
             // All authenticated users get basic user info for mentions
-            // Only admins get full HR data
+            // Only admins get full employee profile data
             console.log(`✅ Users endpoint: Fetching users for ${isAdmin ? 'admin' : 'regular user'}...`)
 
             let users = []
@@ -54,7 +54,7 @@ async function handler(req, res) {
                             department: true,
                             jobTitle: true,
                             phone: true,
-                            // HR/Employee fields
+                            // Employee profile fields
                             employeeNumber: true,
                             position: true,
                             employmentDate: true,

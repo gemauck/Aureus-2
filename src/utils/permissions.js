@@ -14,7 +14,6 @@ export const PERMISSIONS = {
     TEAM_COMMERCIAL: 'team_management_commercial',
     TEAM_COMPLIANCE: 'team_management_compliance',
     ACCESS_USERS: 'access_users', // Admin only
-    ACCESS_HR: 'access_hr',
     ACCESS_MANUFACTURING: 'access_manufacturing',
     ACCESS_DOCUMENTS: 'access_documents',
     ACCESS_SERVICE_MAINTENANCE: 'access_service_maintenance',
@@ -129,13 +128,6 @@ export const PERMISSION_CATEGORIES = {
         permission: PERMISSIONS.ACCESS_USERS,
         description: 'User Management',
         adminOnly: true
-    },
-    HR: {
-        id: 'hr',
-        label: 'HR',
-        permission: PERMISSIONS.ACCESS_HR,
-        description: 'Human Resources self-service',
-        adminOnly: false
     },
     MANUFACTURING: {
         id: 'manufacturing',
@@ -273,7 +265,6 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_TOOL,
             PERMISSIONS.ACCESS_REPORTS,
             PERMISSIONS.ACCESS_LEAVE_PLATFORM,
-            PERMISSIONS.ACCESS_HR,
             // Legacy permissions for backward compatibility
             PERMISSIONS.VIEW_CLIENTS,
             PERMISSIONS.EDIT_CLIENTS,
@@ -342,10 +333,6 @@ export class PermissionChecker {
 
     canManageUsers() {
         return this.hasPermission(PERMISSIONS.ACCESS_USERS) || this.hasPermission(PERMISSIONS.MANAGE_USERS);
-    }
-
-    canAccessHR() {
-        return this.hasPermission(PERMISSIONS.ACCESS_HR);
     }
 
     canAccessCRM() {
@@ -484,7 +471,6 @@ export function usePermissions(user) {
         hasAnyPermission: (permissions) => checker.hasAnyPermission(permissions),
         hasAllPermissions: (permissions) => checker.hasAllPermissions(permissions),
         canManageUsers: () => checker.canManageUsers(),
-        canAccessHR: () => checker.canAccessHR(),
         canAccessCRM: () => checker.canAccessCRM(),
         canAccessProjects: () => checker.canAccessProjects(),
         canAccessTeam: () => checker.canAccessTeam(),

@@ -651,13 +651,13 @@
     <!-- Public Job Card Form - Accessible without login (keep this for public access) -->
     <script defer src="./dist/src/components/manufacturing/JobCardFormPublic.js"></script>
     
-    <!-- HR - MOVED to lazy loading (heavy components) -->
-    
     <!-- Clients - Load early since it's a main menu item and critical (not lazy) -->
     <script defer src="./dist/src/components/clients/ClientDetailModal.js?v=permanent-block-1762361500"></script>
     <script defer src="./dist/src/components/clients/LeadDetailModal.js?v=lead-fix-1736162400"></script>
     <script defer src="./dist/src/components/clients/OpportunityDetailModal.js"></script>
     <script defer src="./dist/src/components/clients/Clients.js"></script>
+    <script defer src="./dist/src/components/clients/Pipeline.js?v=pipeline-list-view-20251110"></script>
+    <script defer src="./dist/src/components/clients/PipelineIntegration.js?v=pipeline-integration-retry-20251110"></script>
     
     <!-- Heavier components moved to lazy loader for faster first paint -->
     
@@ -673,8 +673,6 @@
     
     <!-- Tools - MOVED to lazy loading (heavy components) -->
     
-    <!-- HR moved to lazy -->
-    
     <!-- Reports moved to lazy -->
     
     <script defer src="./dist/src/components/settings/NotificationSettings.js"></script>
@@ -683,7 +681,7 @@
     <script defer src="./dist/src/components/leave-platform/LeavePlatform.js"></script>
     
     <!-- Keep only what we need to render Auth + Dashboard + Layout initially -->
-    <script defer src="./dist/src/components/layout/MainLayout.js"></script>
+    <script defer src="./dist/src/components/layout/MainLayout.js?v=main-layout-v20251110"></script>
     
     <!-- Projects - MOVED to lazy loading (heavy components) -->
     
@@ -752,7 +750,6 @@
         // Use main Teams component, fallback to TeamsSimple only if main fails
         window.Teams = window.Teams || window.TeamsSimple;
         window.TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst;
-        window.HR = window.HR;
         window.Invoicing = window.InvoicingDatabaseFirst || window.QuickInvoicing;
         // Ensure Manufacturing is available - check after lazy loading
         setTimeout(() => {

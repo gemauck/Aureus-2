@@ -343,7 +343,6 @@ const MainLayout = () => {
     }, []);
     const PasswordChangeModal = window.PasswordChangeModal;
     const TimeTracking = window.TimeTracking || window.TimeTrackingDatabaseFirst || (() => <div className="text-center py-12 text-gray-500">Time Tracking loading...</div>);
-    const HR = window.HR || (() => <div className="text-center py-12 text-gray-500">HR loading...</div>);
     const Manufacturing = window.Manufacturing || (() => {
         console.warn('⚠️ Manufacturing component not loaded yet. window.Manufacturing:', typeof window.Manufacturing);
         return <div className="text-center py-12 text-gray-500">Manufacturing loading... (Check console for errors)</div>;
@@ -360,7 +359,6 @@ const MainLayout = () => {
         { id: 'projects', label: 'Projects', icon: 'fa-project-diagram' },
         { id: 'teams', label: 'Teams', icon: 'fa-user-friends' },
         { id: 'users', label: 'Users', icon: 'fa-user-cog', adminOnly: true },
-        { id: 'hr', label: 'HR', icon: 'fa-id-card', adminOnly: true },
         { id: 'manufacturing', label: 'Manufacturing', icon: 'fa-industry' },
         { id: 'tools', label: 'Tools', icon: 'fa-toolbox' },
         { id: 'documents', label: 'Documents', icon: 'fa-folder-open' },
@@ -428,7 +426,7 @@ const MainLayout = () => {
         const userRole = user?.role?.toLowerCase();
         
         // Redirect non-admin users away from admin-only pages
-        if ((currentPage === 'users' || currentPage === 'hr') && !isAdmin) {
+        if (currentPage === 'users' && !isAdmin) {
             console.warn(`Access denied: ${currentPage} page requires admin role`);
             navigateToPage('dashboard');
         }
@@ -471,20 +469,6 @@ const MainLayout = () => {
                     return <ErrorBoundary key="account"><Account /></ErrorBoundary>;
                 case 'time': 
                     return <ErrorBoundary key="time"><TimeTracking /></ErrorBoundary>;
-                case 'hr': 
-                    // Additional check before rendering (in case redirect didn't fire yet)
-                    if (!isAdmin) {
-                        return (
-                            <div key="hr-access-denied" className="flex items-center justify-center min-h-[400px]">
-                                <div className="text-center">
-                                    <i className="fas fa-lock text-4xl text-gray-400 mb-4"></i>
-                                    <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">Access Denied</h2>
-                                    <p className="text-gray-600 dark:text-gray-400">You need administrator privileges to access the HR page.</p>
-                                </div>
-                            </div>
-                        );
-                    }
-                    return <ErrorBoundary key="hr"><HR /></ErrorBoundary>;
                 case 'manufacturing': 
                     return <ErrorBoundary key="manufacturing"><Manufacturing /></ErrorBoundary>;
                 case 'tools': 
@@ -514,7 +498,7 @@ const MainLayout = () => {
                 </div>
             );
         }
-    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, HR, Manufacturing, Tools, Reports, Settings, ErrorBoundary]);
+    }, [currentPage, Dashboard, Clients, Projects, Teams, Users, Account, TimeTracking, Manufacturing, Tools, Reports, Settings, ErrorBoundary]);
 
     // Expose currentPage globally for feedback widgets
     React.useEffect(() => {

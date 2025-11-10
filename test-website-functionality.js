@@ -224,7 +224,7 @@ async function testComponents() {
         { name: 'Clients', path: 'clients/Clients.jsx' },
         { name: 'Projects', path: 'projects/Projects.jsx' },
         { name: 'Manufacturing', path: 'manufacturing/Manufacturing.jsx' },
-        { name: 'HR', path: 'hr/HR.jsx' },
+        { name: 'LeavePlatform', path: 'leave-platform/LeavePlatform.jsx' },
         { name: 'Calendar', path: 'calendar' }, // Check for calendar components
         { name: 'TimeTracking', path: 'time' }, // Check for time tracking components
         { name: 'Invoicing', path: 'invoicing' } // Check for invoicing components

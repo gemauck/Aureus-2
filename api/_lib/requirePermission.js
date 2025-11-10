@@ -8,7 +8,6 @@ const PERMISSIONS = {
     ACCESS_PROJECTS: 'access_projects',
     ACCESS_TEAM: 'access_team',
     ACCESS_USERS: 'access_users', // Admin only
-    ACCESS_HR: 'access_hr', // Admin only
     ACCESS_MANUFACTURING: 'access_manufacturing',
     ACCESS_TOOL: 'access_tool',
     ACCESS_REPORTS: 'access_reports',
@@ -20,10 +19,9 @@ function hasPermission(user, permission) {
     
     const isAdmin = user.role?.toLowerCase() === 'admin'
     
-    // Admin-only permissions: Users and HR
+    // Admin-only permissions: Users
     const adminOnlyPermissions = [
         PERMISSIONS.ACCESS_USERS,
-        PERMISSIONS.ACCESS_HR,
     ]
     
     // If permission is admin-only and user is not admin, deny access
@@ -113,11 +111,6 @@ export function requireAllPermissions(permissions) {
 // Helper function to check if user can access Users module
 export function canAccessUsers(user) {
     return hasPermission(user, PERMISSIONS.ACCESS_USERS)
-}
-
-// Helper function to check if user can access HR module
-export function canAccessHR(user) {
-    return hasPermission(user, PERMISSIONS.ACCESS_HR)
 }
 
 // Export permission constants for use in API endpoints
