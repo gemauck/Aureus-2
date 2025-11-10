@@ -16,7 +16,12 @@ const TEAMS = [
             icon: 'fa-user-tie', 
             color: 'blue',
             description: 'Executive leadership and strategic planning',
-            members: 0
+            members: 0,
+            permissions: [
+                'Approve capital expenditure, budgets, and strategic initiatives',
+                'Assign cross-team priorities and override departmental escalations',
+                'Access organization-wide executive dashboards and audit summaries'
+            ]
         },
         { 
             id: 'technical', 
@@ -24,7 +29,12 @@ const TEAMS = [
             icon: 'fa-tools', 
             color: 'purple',
             description: 'Technical operations and system maintenance',
-            members: 0
+            members: 0,
+            permissions: [
+                'Deploy production releases and manage infrastructure integrations',
+                'Configure APIs, webhooks, and security credentials for services',
+                'View system diagnostics, error logs, and performance telemetry'
+            ]
         },
         { 
             id: 'support', 
@@ -32,7 +42,12 @@ const TEAMS = [
             icon: 'fa-headset', 
             color: 'green',
             description: 'Customer support and service delivery',
-            members: 0
+            members: 0,
+            permissions: [
+                'Manage customer tickets, escalations, and service level agreements',
+                'Access unified communication channels and contact history',
+                'Publish and update customer-facing knowledge base documentation'
+            ]
         },
         { 
             id: 'data-analytics', 
@@ -40,7 +55,12 @@ const TEAMS = [
             icon: 'fa-chart-line', 
             color: 'indigo',
             description: 'Data analysis and business intelligence',
-            members: 0
+            members: 0,
+            permissions: [
+                'Query governed datasets and schedule BI dashboard refreshes',
+                'Export aggregated analytics for leadership and finance reviews',
+                'Define metric definitions, KPIs, and reporting taxonomies'
+            ]
         },
         { 
             id: 'finance', 
@@ -48,7 +68,12 @@ const TEAMS = [
             icon: 'fa-coins', 
             color: 'yellow',
             description: 'Financial management and accounting',
-            members: 0
+            members: 0,
+            permissions: [
+                'Approve invoices, purchase orders, and payment runs',
+                'Access ledgers, balance sheets, and sensitive financial statements',
+                'Manage payroll configurations and tax compliance filings'
+            ]
         },
         { 
             id: 'business-development', 
@@ -56,7 +81,12 @@ const TEAMS = [
             icon: 'fa-rocket', 
             color: 'pink',
             description: 'Growth strategies and new opportunities',
-            members: 0
+            members: 0,
+            permissions: [
+                'Create and negotiate partnership and channel opportunity records',
+                'Access competitive intelligence and pipeline analytics',
+                'Approve pricing proposals and bespoke commercial terms'
+            ]
         },
         { 
             id: 'commercial', 
@@ -64,7 +94,12 @@ const TEAMS = [
             icon: 'fa-handshake', 
             color: 'orange',
             description: 'Sales and commercial operations',
-            members: 0
+            members: 0,
+            permissions: [
+                'Manage quotes, contracts, and sales order fulfilment tasks',
+                'Update product catalogues, pricing tiers, and discount rules',
+                'View customer credit status and contract renewal schedules'
+            ]
         },
         { 
             id: 'compliance', 
@@ -72,7 +107,12 @@ const TEAMS = [
             icon: 'fa-shield-alt', 
             color: 'red',
             description: 'Regulatory compliance and risk management',
-            members: 0
+            members: 0,
+            permissions: [
+                'Review audit trails, exception reports, and attestation evidence',
+                'Manage regulatory documentation, policies, and control mappings',
+                'Enforce policy acknowledgment and training completion workflows'
+            ]
         }
 ];
 
@@ -727,6 +767,25 @@ const Teams = () => {
                             </div>
                         </div>
                     </div>
+
+                    {selectedTeam.permissions?.length > 0 && (
+                        <div className={`rounded-lg border p-3 ${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'}`}>
+                            <h3 className={`text-sm font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-gray-900'}`}>
+                                Key Permissions & Access
+                            </h3>
+                            <ul className="space-y-2">
+                                {selectedTeam.permissions.map((permission) => (
+                                    <li
+                                        key={permission}
+                                        className={`flex items-start gap-2 text-xs ${isDark ? 'text-slate-300' : 'text-gray-600'}`}
+                                    >
+                                        <i className={`fas fa-check-circle mt-0.5 text-${selectedTeam.color}-500`}></i>
+                                        <span className="leading-relaxed">{permission}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-2">
