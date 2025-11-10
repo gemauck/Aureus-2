@@ -1323,6 +1323,15 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                 onOpenLead({ leadId: item.id, leadData: item });
                 return;
             }
+            if (typeof window.__openLeadDetailFromPipeline === 'function') {
+                window.__openLeadDetailFromPipeline({ leadId: item.id, leadData: item });
+                return;
+            }
+            setFallbackDeal({
+                type: 'lead',
+                id: item.id,
+                data: item
+            });
             window.dispatchEvent(new CustomEvent('openLeadDetailFromPipeline', {
                 detail: { leadId: item.id }
             }));
@@ -1336,6 +1345,26 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
                 });
                 return;
             }
+            if (typeof window.__openOpportunityDetailFromPipeline === 'function') {
+                window.__openOpportunityDetailFromPipeline({
+                    opportunityId: item.id,
+                    clientId: item.clientId || item.client?.id,
+                    clientName: item.clientName || item.client?.name || item.name,
+                    opportunity: item
+                });
+                return;
+            }
+            setFallbackDeal({
+                type: 'opportunity',
+                id: item.id,
+                data: item,
+                client: item.client || (item.clientId || item.clientName || item.name
+                    ? {
+                        id: item.clientId || item.id,
+                        name: item.clientName || item.client?.name || item.name
+                    }
+                    : null)
+            });
             window.dispatchEvent(new CustomEvent('openOpportunityDetailFromPipeline', {
                 detail: {
                     opportunityId: item.id,
@@ -1348,6 +1377,9 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
 
     const metrics = calculateMetrics();
     const filteredItems = getFilteredItems();
+    const LeadDetailModalComponent = window.LeadDetailModal;
+    const OpportunityDetailModalComponent = window.OpportunityDetailModal;
+    const availableProjects = storage?.getProjects?.() || [];
 
     // Render pipeline card
     const PipelineCard = ({ item }) => {
@@ -1860,6 +1892,69 @@ const Pipeline = ({ onOpenLead, onOpenOpportunity }) => {
             {/* Main Content */}
             {viewMode === 'kanban' && <KanbanView />}
             {viewMode === 'list' && <ListView />}
+
+            {/* Fallback detail modals when integration callbacks are unavailable */}
+            {!onOpenLead && fallbackDeal?.type === 'lead' && LeadDetailModalComponent && (
+                <LeadDetailModalComponent
+                    key={`fallback-lead-${fallbackDeal.id}`}
+                    leadId={fallbackDeal.id}
+                    onClose={() => closeFallbackDetail(true)}
+                    allProjects={availableProjects}
+                    isFullPage={false}
+                />
+            )}
+
+            {!onOpenOpportunity && fallbackDeal?.type === 'opportunity' && OpportunityDetailModalComponent && (
+                <OpportunityDetailModalComponent
+                    key={`fallback-opp-${fallbackDeal.id}`}
+                    opportunityId={fallbackDeal.id}
+                    client={fallbackDeal.client}
+                    onClose={() => closeFallbackDetail(true)}
+                    isFullPage={false}
+                />
+            )}
+
+            {(fallbackDeal?.type === 'lead' && !LeadDetailModalComponent && !onOpenLead) && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
+                    <div className="bg-white rounded-xl p-6 shadow-2xl max-w-md text-center space-y-4">
+                        <div className="text-primary-600 text-3xl">
+                            <i className="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">Lead detail unavailable</h3>
+                        <p className="text-sm text-gray-600">
+                            The lead detail component has not finished loading. Please refresh the page and try again.
+                        </p>
+                        <button
+                            type="button"
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                            onClick={() => closeFallbackDetail(false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {(fallbackDeal?.type === 'opportunity' && !OpportunityDetailModalComponent && !onOpenOpportunity) && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
+                    <div className="bg-white rounded-xl p-6 shadow-2xl max-w-md text-center space-y-4">
+                        <div className="text-primary-600 text-3xl">
+                            <i className="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">Opportunity detail unavailable</h3>
+                        <p className="text-sm text-gray-600">
+                            The opportunity detail component has not finished loading. Please refresh the page and try again.
+                        </p>
+                        <button
+                            type="button"
+                            className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+                            onClick={() => closeFallbackDetail(false)}
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
