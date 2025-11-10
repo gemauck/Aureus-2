@@ -5,6 +5,14 @@ export const PERMISSIONS = {
     ACCESS_CRM: 'access_crm',
     ACCESS_PROJECTS: 'access_projects',
     ACCESS_TEAM: 'access_team',
+    TEAM_MANAGEMENT: 'team_management_management',
+    TEAM_TECHNICAL: 'team_management_technical',
+    TEAM_SUPPORT: 'team_management_support',
+    TEAM_DATA_ANALYTICS: 'team_management_data_analytics',
+    TEAM_FINANCE: 'team_management_finance',
+    TEAM_BUSINESS_DEVELOPMENT: 'team_management_business_development',
+    TEAM_COMMERCIAL: 'team_management_commercial',
+    TEAM_COMPLIANCE: 'team_management_compliance',
     ACCESS_USERS: 'access_users', // Admin only
     ACCESS_HR: 'access_hr',
     ACCESS_MANUFACTURING: 'access_manufacturing',
@@ -63,7 +71,57 @@ export const PERMISSION_CATEGORIES = {
         label: 'Team',
         permission: PERMISSIONS.ACCESS_TEAM,
         description: 'Team Management',
-        adminOnly: false
+        adminOnly: false,
+        subcategories: [
+            {
+                id: 'team_management',
+                label: 'Management',
+                permission: PERMISSIONS.TEAM_MANAGEMENT,
+                description: 'Executive leadership and strategic planning'
+            },
+            {
+                id: 'team_technical',
+                label: 'Technical',
+                permission: PERMISSIONS.TEAM_TECHNICAL,
+                description: 'Technical operations and system maintenance'
+            },
+            {
+                id: 'team_support',
+                label: 'Support',
+                permission: PERMISSIONS.TEAM_SUPPORT,
+                description: 'Customer support and service delivery'
+            },
+            {
+                id: 'team_data_analytics',
+                label: 'Data Analytics',
+                permission: PERMISSIONS.TEAM_DATA_ANALYTICS,
+                description: 'Data analysis and business intelligence'
+            },
+            {
+                id: 'team_finance',
+                label: 'Finance',
+                permission: PERMISSIONS.TEAM_FINANCE,
+                description: 'Financial management and accounting'
+            },
+            {
+                id: 'team_business_development',
+                label: 'Business Development',
+                permission: PERMISSIONS.TEAM_BUSINESS_DEVELOPMENT,
+                description: 'Growth strategies and new opportunities'
+            },
+            {
+                id: 'team_commercial',
+                label: 'Commercial',
+                permission: PERMISSIONS.TEAM_COMMERCIAL,
+                description: 'Sales and commercial operations'
+            },
+            {
+                id: 'team_compliance',
+                label: 'Compliance',
+                permission: PERMISSIONS.TEAM_COMPLIANCE,
+                description: 'Regulatory compliance and risk management'
+            }
+        ]
     },
     USERS: {
         id: 'users',
@@ -201,6 +259,14 @@ export class PermissionChecker {
             PERMISSIONS.ACCESS_CRM,
             PERMISSIONS.ACCESS_PROJECTS,
             PERMISSIONS.ACCESS_TEAM,
+            PERMISSIONS.TEAM_MANAGEMENT,
+            PERMISSIONS.TEAM_TECHNICAL,
+            PERMISSIONS.TEAM_SUPPORT,
+            PERMISSIONS.TEAM_DATA_ANALYTICS,
+            PERMISSIONS.TEAM_FINANCE,
+            PERMISSIONS.TEAM_BUSINESS_DEVELOPMENT,
+            PERMISSIONS.TEAM_COMMERCIAL,
+            PERMISSIONS.TEAM_COMPLIANCE,
             PERMISSIONS.ACCESS_MANUFACTURING,
             PERMISSIONS.ACCESS_DOCUMENTS,
             PERMISSIONS.ACCESS_SERVICE_MAINTENANCE,

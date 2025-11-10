@@ -1026,6 +1026,13 @@ const UserManagement = () => {
                                                             if (category.adminOnly && isAdmin) {
                                                                 finalPermissions.push(category.permission);
                                                             }
+                                                            if (Array.isArray(category.subcategories) && category.subcategories.length > 0) {
+                                                                category.subcategories.forEach(subcategory => {
+                                                                    if (!category.adminOnly || isAdmin) {
+                                                                        finalPermissions.push(subcategory.permission);
+                                                                    }
+                                                                });
+                                                            }
                                                         });
                                                         console.log('📋 Using default permissions for user:', user.email, finalPermissions);
                                                     }
@@ -1895,7 +1902,57 @@ const UserManagement = () => {
                                                 label: 'Team',
                                                 permission: window.PERMISSIONS.ACCESS_TEAM,
                                                 description: 'Team Management',
-                                                adminOnly: false
+                                                adminOnly: false,
+                                                subcategories: [
+                                                    {
+                                                        id: 'team_management',
+                                                        label: 'Management',
+                                                        permission: window.PERMISSIONS?.TEAM_MANAGEMENT || 'team_management_management',
+                                                        description: 'Executive leadership and strategic planning'
+                                                    },
+                                                    {
+                                                        id: 'team_technical',
+                                                        label: 'Technical',
+                                                        permission: window.PERMISSIONS?.TEAM_TECHNICAL || 'team_management_technical',
+                                                        description: 'Technical operations and system maintenance'
+                                                    },
+                                                    {
+                                                        id: 'team_support',
+                                                        label: 'Support',
+                                                        permission: window.PERMISSIONS?.TEAM_SUPPORT || 'team_management_support',
+                                                        description: 'Customer support and service delivery'
+                                                    },
+                                                    {
+                                                        id: 'team_data_analytics',
+                                                        label: 'Data Analytics',
+                                                        permission: window.PERMISSIONS?.TEAM_DATA_ANALYTICS || 'team_management_data_analytics',
+                                                        description: 'Data analysis and business intelligence'
+                                                    },
+                                                    {
+                                                        id: 'team_finance',
+                                                        label: 'Finance',
+                                                        permission: window.PERMISSIONS?.TEAM_FINANCE || 'team_management_finance',
+                                                        description: 'Financial management and accounting'
+                                                    },
+                                                    {
+                                                        id: 'team_business_development',
+                                                        label: 'Business Development',
+                                                        permission: window.PERMISSIONS?.TEAM_BUSINESS_DEVELOPMENT || 'team_management_business_development',
+                                                        description: 'Growth strategies and new opportunities'
+                                                    },
+                                                    {
+                                                        id: 'team_commercial',
+                                                        label: 'Commercial',
+                                                        permission: window.PERMISSIONS?.TEAM_COMMERCIAL || 'team_management_commercial',
+                                                        description: 'Sales and commercial operations'
+                                                    },
+                                                    {
+                                                        id: 'team_compliance',
+                                                        label: 'Compliance',
+                                                        permission: window.PERMISSIONS?.TEAM_COMPLIANCE || 'team_management_compliance',
+                                                        description: 'Regulatory compliance and risk management'
+                                                    }
+                                                ]
                                             },
                                             USERS: {
                                                 id: 'users',
@@ -1993,6 +2050,7 @@ const UserManagement = () => {
                                 return Object.values(permissionCategories).map((category) => {
                                     const isAdminOnly = category.adminOnly;
                                     const isChecked = selectedPermissions.includes(category.permission);
+                                    const subcategories = Array.isArray(category.subcategories) ? category.subcategories : [];
                                     const canEdit = !isAdminOnly || isAdmin; // Can edit if not admin-only OR user is admin
                                     
                                     return (
@@ -2023,13 +2081,23 @@ const UserManagement = () => {
                                                         onChange={(e) => {
                                                             if (!canEdit) return;
                                                             
-                                                            if (e.target.checked) {
-                                                                if (!selectedPermissions.includes(category.permission)) {
-                                                                    setSelectedPermissions([...selectedPermissions, category.permission]);
+                                                            const shouldEnable = e.target.checked;
+                                                            const subPermissionIds = subcategories.map(sub => sub.permission);
+                                                            
+                                                            setSelectedPermissions(prev => {
+                                                                const current = Array.isArray(prev) ? [...prev] : [];
+                                                                
+                                                                if (shouldEnable) {
+                                                                    if (!current.includes(category.permission)) {
+                                                                        current.push(category.permission);
+                                                                    }
+                                                                    return current;
                                                                 }
-                                                            } else {
-                                                                setSelectedPermissions(selectedPermissions.filter(p => p !== category.permission));
-                                                            }
+                                                                
+                                                                return current.filter(permissionValue => 
+                                                                    permissionValue !== category.permission && !subPermissionIds.includes(permissionValue)
+                                                                );
+                                                            });
                                                         }}
                                                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                     />
@@ -2041,6 +2109,69 @@ const UserManagement = () => {
                                             <p className="text-xs text-gray-500 dark:text-gray-400">
                                                 {category.description}
                                             </p>
+                                            {subcategories.length > 0 && (
+                                                <div className={`mt-3 pl-4 border-l ${
+                                                    isChecked 
+                                                        ? 'border-blue-100 dark:border-blue-800' 
+                                                        : 'border-gray-200 dark:border-gray-700 opacity-60'
+                                                }`}>
+                                                    <div className="space-y-2">
+                                                        {subcategories.map((sub) => {
+                                                            const subChecked = selectedPermissions.includes(sub.permission);
+                                                            const subCanEdit = canEdit && isChecked;
+                                                            
+                                                            return (
+                                                                <label
+                                                                    key={sub.id}
+                                                                    className={`flex items-start gap-2 p-2 rounded ${
+                                                                        subCanEdit ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800' : 'cursor-not-allowed'
+                                                                    }`}
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                        checked={subChecked}
+                                                                        disabled={!subCanEdit}
+                                                                        onChange={(e) => {
+                                                                            if (!subCanEdit) return;
+                                                                            const shouldEnableSub = e.target.checked;
+                                                                            
+                                                                            setSelectedPermissions(prev => {
+                                                                                const current = Array.isArray(prev) ? [...prev] : [];
+                                                                                
+                                                                                if (shouldEnableSub) {
+                                                                                    if (!current.includes(sub.permission)) {
+                                                                                        current.push(sub.permission);
+                                                                                    }
+                                                                                    if (!current.includes(category.permission)) {
+                                                                                        current.push(category.permission);
+                                                                                    }
+                                                                                    return current;
+                                                                                }
+                                                                                
+                                                                                return current.filter(permissionValue => permissionValue !== sub.permission);
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                    <div className="flex-1">
+                                                                        <p className={`text-sm font-medium ${subCanEdit ? 'text-gray-800 dark:text-gray-200' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                                            {sub.label}
+                                                                        </p>
+                                                                        {sub.description && (
+                                                                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                                                {sub.description}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                    <span className={`text-xs ${subChecked ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                                                        {subChecked ? 'Enabled' : 'Disabled'}
+                                                                    </span>
+                                                                </label>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )}
                                             {isAdminOnly && !isAdmin && (
                                                 <p className="text-xs text-red-600 dark:text-red-400 mt-2">
                                                     <i className="fas fa-lock mr-1"></i>
