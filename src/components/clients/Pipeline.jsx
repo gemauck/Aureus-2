@@ -1242,40 +1242,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
         return items;
     };
 
-    // Calculate pipeline metrics
-    const calculateMetrics = () => {
-        const items = getFilteredItems();
-        
-        const totalValue = items.reduce((sum, item) => sum + item.value, 0);
-        const avgDealSize = items.length > 0 ? totalValue / items.length : 0;
-        
-        const stageBreakdown = pipelineStages.map(stage => {
-            const stageItems = items.filter(item => item.stage === stage.name);
-            const stageValue = stageItems.reduce((sum, item) => sum + item.value, 0);
-            
-            return {
-                stage: stage.name,
-                count: stageItems.length,
-                value: stageValue
-            };
-        });
-
-        // Win rate calculation (mock data - would come from historical data)
-        const closedWon = 0; // Would count closed/won deals
-        const closedLost = 0; // Would count closed/lost deals
-        const winRate = closedWon + closedLost > 0 ? (closedWon / (closedWon + closedLost)) * 100 : 0;
-
-        return {
-            totalDeals: items.length,
-            totalValue,
-            avgDealSize,
-            stageBreakdown,
-            winRate,
-            conversionRate: 0, // Would calculate from historical data
-            avgSalesCycle: 49 // Mock data - would calculate from actual deal durations
-        };
-    };
-
     // Drag and drop handlers
     const handleDragStart = (event, item, type) => {
         if (event?.dataTransfer) {
@@ -1952,7 +1918,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
         }
     };
 
-    const metrics = calculateMetrics();
     const filteredItems = getFilteredItems();
     const LeadDetailModalComponent = window.LeadDetailModal;
     const OpportunityDetailModalComponent = window.OpportunityDetailModal;
@@ -2150,9 +2115,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
     // Combined Deals List View
     const ListView = () => {
         const items = getFilteredItems();
-        const leadCount = items.filter(item => item.type === 'lead').length;
-        const opportunityCount = items.filter(item => item.type !== 'lead').length;
-        const totalValue = items.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
 
         const getAriaSort = (column) => {
             if (listSortColumn !== column) {
@@ -2191,30 +2153,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
 
         return (
             <div className="space-y-4">
-                <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Total Items</div>
-                        <div className="text-2xl font-semibold text-gray-900">{items.length}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                            {leadCount} leads • {opportunityCount} opportunities
-                        </div>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Pipeline Value</div>
-                        <div className="text-2xl font-semibold text-gray-900">{formatCurrency(totalValue)}</div>
-                        <div className="text-xs text-gray-500 mt-1">All leads & opportunities</div>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
-                        <div className="text-xs text-gray-600 uppercase tracking-wide mb-1">Latest Updates</div>
-                        <div className="text-sm text-gray-800 font-medium">
-                            {items[0] ? `${items[0].status || 'Potential'} • ${items[0].stage || 'Unknown Stage'}` : 'No activity'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                            Sorted by {sortBy.includes('date') ? 'created date' : 'current sort'}
-                        </div>
-                    </div>
-                </div>
-
                 {activeColumnFilterCount > 0 && (
                     <div className="flex items-center justify-between px-4 py-2 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-700">
                         <span>{activeColumnFilterCount} column filter{activeColumnFilterCount > 1 ? 's' : ''} active</span>
@@ -2470,25 +2408,6 @@ function doesOpportunityBelongToClient(opportunity, client) {
                         <i className="fas fa-sync-alt mr-2"></i>
                         Refresh
                     </button>
-                </div>
-            </div>
-
-            {/* Metrics Dashboard */}
-            <div className="grid grid-cols-3 gap-4">
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="text-xs text-gray-600 mb-1">Pipeline Value</div>
-                    <div className="text-2xl font-bold text-gray-900">R {metrics.totalValue.toLocaleString('en-ZA')}</div>
-                    <div className="text-xs text-gray-500 mt-1">{metrics.totalDeals} total deals</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="text-xs text-gray-600 mb-1">Avg Deal Size</div>
-                    <div className="text-2xl font-bold text-purple-600">R {Math.round(metrics.avgDealSize).toLocaleString('en-ZA')}</div>
-                    <div className="text-xs text-gray-500 mt-1">{metrics.avgSalesCycle}d avg cycle</div>
-                </div>
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-                    <div className="text-xs text-gray-600 mb-1">Conversion Rate</div>
-                    <div className="text-2xl font-bold text-blue-600">{metrics.conversionRate}%</div>
-                    <div className="text-xs text-gray-500 mt-1">Historical average</div>
                 </div>
             </div>
 

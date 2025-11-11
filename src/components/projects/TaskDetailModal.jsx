@@ -485,6 +485,12 @@ const TaskDetailModal = ({
 
     const subtasks = editedTask.subtasks || [];
 
+    let dueDateDisplay = null;
+    if (editedTask.dueDate) {
+        const dueDateValue = new Date(editedTask.dueDate);
+        dueDateDisplay = isNaN(dueDateValue) ? editedTask.dueDate : dueDateValue.toLocaleDateString();
+    }
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg w-full max-w-5xl max-h-[90vh] flex flex-col">
@@ -535,9 +541,13 @@ const TaskDetailModal = ({
                 </div>
 
                 {/* Content Area */}
-                <div className="flex-1 overflow-hidden flex">
-                    {/* Left Side - Main Content */}
-                    <div ref={leftContentRef} className="flex-1 overflow-y-auto p-4">
+                <div className="flex-1 overflow-hidden bg-gray-50">
+                    <div className="h-full overflow-y-auto">
+                        <div className="max-w-6xl mx-auto px-4 py-6 lg:px-6">
+                            <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)] gap-6">
+                                {/* Left Side - Main Content */}
+                                <div ref={leftContentRef} className="space-y-4">
+                                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
                         {/* Tabs */}
                         <div className="flex gap-3 border-b border-gray-200 mb-4 overflow-x-auto">
                             <button
@@ -1095,202 +1105,232 @@ const TaskDetailModal = ({
                                 </div>
                             </div>
                         )}
-                    </div>
-
-                    {/* Right Sidebar - Task Properties */}
-                    <div className="w-72 border-l border-gray-200 p-4 bg-gray-50 overflow-y-auto">
-                        <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-semibold text-gray-800">Task Properties</h3>
-                            <span className="text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded font-medium">
-                                <i className="fas fa-pencil-alt mr-0.5"></i>
-                                Editable
-                            </span>
-                        </div>
-                        
-                        <div className="space-y-3">
-                            {/* List Selection */}
-                            {isCreating && !parentTask && taskLists && taskLists.length > 0 && (
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                        <i className="fas fa-list mr-1.5 text-gray-400"></i>
-                                        List
-                                    </label>
-                                    <select
-                                        value={editedTask.listId}
-                                        onChange={(e) => setEditedTask({...editedTask, listId: parseInt(e.target.value)})}
-                                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    >
-                                        {taskLists.map(list => (
-                                            <option key={list.id} value={list.id}>{list.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            {/* Status */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-flag mr-1.5 text-gray-400"></i>
-                                    Status
-                                </label>
-                                <select
-                                    value={editedTask.status}
-                                    onChange={(e) => setEditedTask({...editedTask, status: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                    <option>To Do</option>
-                                    <option>In Progress</option>
-                                    <option>Done</option>
-                                </select>
-                                <div className="mt-1.5">
-                                    <span className={`px-1.5 py-0.5 text-[10px] rounded ${getStatusColor(editedTask.status)} font-medium`}>
-                                        {editedTask.status}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Assignee */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-user mr-1.5 text-gray-400"></i>
-                                    Assignee
-                                </label>
-                                <select
-                                    value={editedTask.assignee || ''}
-                                    onChange={(e) => setEditedTask({...editedTask, assignee: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                    <option value="">Unassigned</option>
-                                    {users.map(user => (
-                                        <option key={user.id} value={user.name || user.email}>
-                                            {user.name || user.email}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Due Date */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-calendar mr-1.5 text-gray-400"></i>
-                                    Due Date
-                                </label>
-                                <input
-                                    type="date"
-                                    value={editedTask.dueDate}
-                                    onChange={(e) => setEditedTask({...editedTask, dueDate: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                />
-                            </div>
-
-                            {/* Priority */}
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-exclamation-circle mr-1.5 text-gray-400"></i>
-                                    Priority
-                                </label>
-                                <select
-                                    value={editedTask.priority}
-                                    onChange={(e) => setEditedTask({...editedTask, priority: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                >
-                                    <option>Low</option>
-                                    <option>Medium</option>
-                                    <option>High</option>
-                                </select>
-                                <div className="mt-1.5">
-                                    <span className={`px-1.5 py-0.5 text-[10px] rounded ${getPriorityColor(editedTask.priority)} font-medium`}>
-                                        {editedTask.priority}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {/* Time Tracking */}
-                            <div className="pt-3 border-t border-gray-200">
-                                <h4 className="text-xs font-medium text-gray-700 mb-2">
-                                    <i className="fas fa-clock mr-1.5 text-gray-400"></i>
-                                    Time Tracking
-                                </h4>
-                                <div className="space-y-2">
-                                    <div>
-                                        <label className="block text-[10px] text-gray-600 mb-1">Estimated Hours</label>
-                                        <input
-                                            type="number"
-                                            value={editedTask.estimatedHours}
-                                            onChange={(e) => setEditedTask({...editedTask, estimatedHours: e.target.value})}
-                                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            placeholder="0"
-                                            step="0.5"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] text-gray-600 mb-1">Actual Hours</label>
-                                        <input
-                                            type="number"
-                                            value={editedTask.actualHours}
-                                            onChange={(e) => setEditedTask({...editedTask, actualHours: e.target.value})}
-                                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                            placeholder="0"
-                                            step="0.5"
-                                        />
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Tags */}
-                            <div className="pt-3 border-t border-gray-200">
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-tags mr-1.5 text-gray-400"></i>
-                                    Tags
-                                </label>
-                                <div className="flex gap-1 mb-2">
-                                    <input
-                                        type="text"
-                                        value={newTag}
-                                        onChange={(e) => setNewTag(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
-                                        className="flex-1 px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                        placeholder="Add tag..."
-                                    />
-                                    <button
-                                        onClick={handleAddTag}
-                                        className="px-2.5 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-xs"
-                                    >
-                                        <i className="fas fa-plus"></i>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Blocked By */}
-                            <div className="pt-3 border-t border-gray-200">
-                                <label className="block text-xs font-medium text-gray-700 mb-1.5">
-                                    <i className="fas fa-ban mr-1.5 text-gray-400"></i>
-                                    Blocked By
-                                </label>
-                                <input
-                                    type="text"
-                                    value={editedTask.blockedBy}
-                                    onChange={(e) => setEditedTask({...editedTask, blockedBy: e.target.value})}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                                    placeholder="What's blocking this?"
-                                />
-                            </div>
-
-                            {/* Dates Info */}
-                            {!isCreating && (
-                                <div className="pt-3 border-t border-gray-200">
-                                    <div className="text-[10px] text-gray-500 space-y-0.5">
-                                        <div>
-                                            <i className="fas fa-plus-circle mr-1"></i>
-                                            Created: {new Date(task.id).toLocaleDateString()}
+                                {/* Right Side - Task Properties */}
+                                <aside className="space-y-4">
+                                    <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+                                        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
+                                            <div>
+                                                <p className="text-[11px] uppercase tracking-wide text-gray-500">Task Properties</p>
+                                                <h3 className="text-base font-semibold text-gray-800 mt-0.5">Quick Overview</h3>
+                                            </div>
+                                            <span className="text-[10px] bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded font-medium">
+                                                <i className="fas fa-pencil-alt mr-1 text-[9px]"></i>
+                                                Editable
+                                            </span>
                                         </div>
-                                        <div>
-                                            <i className="fas fa-edit mr-1"></i>
-                                            Last Updated: {new Date().toLocaleDateString()}
+
+                                        <div className="px-4 py-5 space-y-5">
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold ${getStatusColor(editedTask.status)}`}>
+                                                    <i className="fas fa-flag text-[10px]"></i>
+                                                    {editedTask.status}
+                                                </span>
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold ${getPriorityColor(editedTask.priority)}`}>
+                                                    <i className="fas fa-exclamation-circle text-[10px]"></i>
+                                                    {editedTask.priority}
+                                                </span>
+                                                {dueDateDisplay && (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-700">
+                                                        <i className="fas fa-calendar-alt text-[10px]"></i>
+                                                        Due {dueDateDisplay}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* List Selection */}
+                                            {isCreating && !parentTask && taskLists && taskLists.length > 0 && (
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-list text-gray-400"></i>
+                                                            List
+                                                        </span>
+                                                    </label>
+                                                    <select
+                                                        value={editedTask.listId}
+                                                        onChange={(e) => setEditedTask({...editedTask, listId: parseInt(e.target.value)})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    >
+                                                        {taskLists.map(list => (
+                                                            <option key={list.id} value={list.id}>{list.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div className="grid grid-cols-1 gap-4">
+                                                {/* Status */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-flag text-gray-400"></i>
+                                                            Status
+                                                        </span>
+                                                    </label>
+                                                    <select
+                                                        value={editedTask.status}
+                                                        onChange={(e) => setEditedTask({...editedTask, status: e.target.value})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    >
+                                                        <option>To Do</option>
+                                                        <option>In Progress</option>
+                                                        <option>Done</option>
+                                                    </select>
+                                                </div>
+
+                                                {/* Assignee */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-user text-gray-400"></i>
+                                                            Assignee
+                                                        </span>
+                                                    </label>
+                                                    <select
+                                                        value={editedTask.assignee || ''}
+                                                        onChange={(e) => setEditedTask({...editedTask, assignee: e.target.value})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    >
+                                                        <option value="">Unassigned</option>
+                                                        {users.map(user => (
+                                                            <option key={user.id} value={user.name || user.email}>
+                                                                {user.name || user.email}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Due Date */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-calendar text-gray-400"></i>
+                                                            Due Date
+                                                        </span>
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={editedTask.dueDate}
+                                                        onChange={(e) => setEditedTask({...editedTask, dueDate: e.target.value})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    />
+                                                </div>
+
+                                                {/* Priority */}
+                                                <div className="space-y-2">
+                                                    <label className="block text-xs font-semibold text-gray-700">
+                                                        <span className="flex items-center gap-1.5">
+                                                            <i className="fas fa-exclamation-circle text-gray-400"></i>
+                                                            Priority
+                                                        </span>
+                                                    </label>
+                                                    <select
+                                                        value={editedTask.priority}
+                                                        onChange={(e) => setEditedTask({...editedTask, priority: e.target.value})}
+                                                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    >
+                                                        <option>Low</option>
+                                                        <option>Medium</option>
+                                                        <option>High</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Time Tracking */}
+                                            <div className="pt-4 border-t border-gray-200 space-y-3">
+                                                <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                                                    <i className="fas fa-clock text-gray-400"></i>
+                                                    Time Tracking
+                                                </h4>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[11px] text-gray-500 font-medium">Estimated Hours</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editedTask.estimatedHours}
+                                                            onChange={(e) => setEditedTask({...editedTask, estimatedHours: e.target.value})}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                            placeholder="0"
+                                                            step="0.5"
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <label className="block text-[11px] text-gray-500 font-medium">Actual Hours</label>
+                                                        <input
+                                                            type="number"
+                                                            value={editedTask.actualHours}
+                                                            onChange={(e) => setEditedTask({...editedTask, actualHours: e.target.value})}
+                                                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                            placeholder="0"
+                                                            step="0.5"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Tags */}
+                                            <div className="pt-4 border-t border-gray-200 space-y-3">
+                                                <label className="block text-xs font-semibold text-gray-700">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <i className="fas fa-tags text-gray-400"></i>
+                                                        Tags
+                                                    </span>
+                                                </label>
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="text"
+                                                        value={newTag}
+                                                        onChange={(e) => setNewTag(e.target.value)}
+                                                        onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
+                                                        className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                        placeholder="Add tag..."
+                                                    />
+                                                    <button
+                                                        onClick={handleAddTag}
+                                                        className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm shadow-sm"
+                                                    >
+                                                        <i className="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {/* Blocked By */}
+                                            <div className="pt-4 border-t border-gray-200 space-y-2">
+                                                <label className="block text-xs font-semibold text-gray-700">
+                                                    <span className="flex items-center gap-1.5">
+                                                        <i className="fas fa-ban text-gray-400"></i>
+                                                        Blocked By
+                                                    </span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={editedTask.blockedBy}
+                                                    onChange={(e) => setEditedTask({...editedTask, blockedBy: e.target.value})}
+                                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-gray-50 hover:bg-white transition"
+                                                    placeholder="What's slowing this down?"
+                                                />
+                                            </div>
+
+                                            {/* Dates Info */}
+                                            {!isCreating && (
+                                                <div className="pt-4 border-t border-gray-200 text-[11px] text-gray-500 space-y-1.5">
+                                                    <div className="flex items-center gap-2">
+                                                        <i className="fas fa-plus-circle text-gray-400"></i>
+                                                        <span>Created: {new Date(task.id).toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <i className="fas fa-edit text-gray-400"></i>
+                                                        <span>Last Updated: {new Date().toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
-                                </div>
-                            )}
+                                </aside>
+                            </div>
                         </div>
                     </div>
                 </div>

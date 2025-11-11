@@ -152,27 +152,36 @@ try {
   // Build core bundle to reduce initial script requests
   const coreEntryPath = path.join(__dirname, 'src', 'core-entry.js');
   if (fs.existsSync(coreEntryPath)) {
-    console.log('🔗 Building core bundle...');
-    await build({
-      entryPoints: [coreEntryPath],
-      bundle: true,
-      format: 'iife',
-      outfile: path.join(__dirname, 'dist', 'core-bundle.js'),
-      jsx: 'transform',
-      jsxFactory: 'React.createElement',
-      jsxFragment: 'React.Fragment',
-      target: ['es2020'],
-      minify: process.env.NODE_ENV === 'production',
-      sourcemap: false,
-      define: {
-        'process.env.NODE_ENV': `"${process.env.NODE_ENV || 'production'}"`
-      }
-    });
-    console.log('✅ Core bundle built at dist/core-bundle.js');
+      console.log('🔗 Building core bundle...');
+      await build({
+          entryPoints: [coreEntryPath],
+          bundle: true,
+          format: 'iife',
+          outfile: path.join(__dirname, 'dist', 'core-bundle.js'),
+          jsx: 'transform',
+          jsxFactory: 'React.createElement',
+          jsxFragment: 'React.Fragment',
+          target: ['es2020'],
+          minify: process.env.NODE_ENV === 'production',
+          sourcemap: false,
+          define: {
+              'process.env.NODE_ENV': `"${process.env.NODE_ENV || 'production'}"`
+          }
+      });
+      console.log('✅ Core bundle built at dist/core-bundle.js');
   } else {
-    console.warn('⚠️ core-entry.js not found, skipping core bundle build');
+      console.warn('⚠️ core-entry.js not found, skipping core bundle build');
   }
-  
+
+  // Write build version file for cache busting
+  const versionInfo = {
+      version: Date.now().toString(),
+      generatedAt: new Date().toISOString()
+  };
+  const versionFilePath = path.join(__dirname, 'dist', 'build-version.json');
+  fs.writeFileSync(versionFilePath, JSON.stringify(versionInfo, null, 2));
+  console.log(`🧾 Build version file created at dist/build-version.json (version: ${versionInfo.version})`);
+   
   console.log('✨ Build complete!');
 } catch (error) {
   console.error('❌ Build failed:', error);

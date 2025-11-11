@@ -2097,7 +2097,7 @@ function initializeProjectDetail() {
                         </div>
                     </div>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-4">
                     {filteredTaskLists.map(list => {
                         const accentColor = list.color ? `var(--tw-${list.color}-500, #0ea5e9)` : '#0ea5e9';
                         return (

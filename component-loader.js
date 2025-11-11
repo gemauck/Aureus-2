@@ -6,6 +6,57 @@
  */
 
 (function() {
+    let buildVersion = null;
+
+    const sanitizeVersion = (value) => {
+        if (!value) return '';
+        return String(value).replace(/[^a-zA-Z0-9_-]/g, '');
+    };
+
+    const getProjectsCacheTag = () => {
+        const resolved = sanitizeVersion(buildVersion || window.__APP_BUILD_VERSION__);
+        if (resolved) {
+            return `projects-${resolved}`;
+        }
+        return `projects-${Date.now()}`;
+    };
+
+    const resolveBuildVersion = async () => {
+        if (window.__APP_BUILD_VERSION__) {
+            buildVersion = window.__APP_BUILD_VERSION__;
+            return buildVersion;
+        }
+
+        const fallback = () => {
+            const generated = Date.now().toString();
+            buildVersion = generated;
+            window.__APP_BUILD_VERSION__ = generated;
+            return generated;
+        };
+
+        if (typeof fetch !== 'function') {
+            return fallback();
+        }
+
+        try {
+            const response = await fetch(`/dist/build-version.json?v=${Date.now()}`, { cache: 'no-store' });
+            if (!response.ok) {
+                console.warn('⚠️ component-loader: build-version.json response not ok, using fallback');
+                return fallback();
+            }
+
+            const data = await response.json();
+            const resolved = sanitizeVersion(data?.version) || fallback();
+            buildVersion = resolved;
+            window.__APP_BUILD_VERSION__ = resolved;
+            console.log(`🧾 component-loader: Using build version ${resolved}`);
+            return resolved;
+        } catch (error) {
+            console.warn('⚠️ component-loader: Failed to fetch build-version.json, using timestamp fallback', error);
+            return fallback();
+        }
+    };
+
     // Component paths - all components that need to be loaded
     const componentPaths = [
         // Core utilities
@@ -221,7 +272,7 @@
             }
 
             if (path.includes('components/projects/ProjectDetail') || path.includes('components/projects/Projects.jsx')) {
-                applyDynamicCacheBust('projects-workspace-v20251111c');
+                applyDynamicCacheBust(getProjectsCacheTag());
             }
 
             if (path.includes('components/manufacturing/JobCards.jsx')) {
@@ -302,20 +353,38 @@
         }
     }
     
-    // Start loading when ready
-    waitForDependencies(() => {
+    const startLoading = async () => {
+        await resolveBuildVersion();
+
         const isProduction = window.USE_PRODUCTION_BUILD === true;
         console.log(`📦 Loading ${componentPaths.length} components (${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode)...`);
         
         const startTime = performance.now();
         
-        // Load all components
         componentPaths.forEach(loadComponent);
         
-        // Log completion
         setTimeout(() => {
             const loadTime = performance.now() - startTime;
             console.log(`✅ Components loaded in ${loadTime.toFixed(0)}ms`);
         }, 1000);
+    };
+
+    // Start loading when ready
+    waitForDependencies(() => {
+        startLoading().catch((error) => {
+            console.error('❌ component-loader: Failed to start loading components', error);
+            buildVersion = buildVersion || Date.now().toString();
+
+            const isProduction = window.USE_PRODUCTION_BUILD === true;
+            console.log(`📦 Loading ${componentPaths.length} components with fallback version (${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'} mode)...`);
+
+            const startTime = performance.now();
+            componentPaths.forEach(loadComponent);
+
+            setTimeout(() => {
+                const loadTime = performance.now() - startTime;
+                console.log(`✅ Components loaded in ${loadTime.toFixed(0)}ms (fallback)`);
+            }, 1000);
+        });
     });
 })();
